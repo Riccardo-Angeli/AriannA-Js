@@ -305,7 +305,8 @@ export class GIFEncoder {
 }
 
 function _lzwEncode(data: Uint8Array, minCodeSize: number): Uint8Array {
-    const clearCode = 1 << minCodeSize, eoi = clearCode + 1;
+    const clearCode = 1 << minCodeSize;
+    const eoi       = clearCode + 1;
     const table     = new Map<string, number>();
     let   codeSize  = minCodeSize + 1, nextCode = eoi + 1;
     const bits: number[] = [], output: number[] = [];
