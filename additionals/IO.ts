@@ -368,7 +368,11 @@ export const Share = {
 
 export const IO = { FileIO, FSAccess, Http, http, SSE, WebSocketIO, LocalStore, IDBIO, Clipboard, Share };
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'IO', { value: IO, writable: false, enumerable: false, configurable: false });
+if (typeof window !== 'undefined') {
+    // Use try/catch + delete + assign so re-loading the bundle (e.g. HMR, multiple
+    // initialisations during tests) doesn't throw on the second defineProperty.
+    try { delete (window as any).IO; } catch {}
+    try { (window as any).IO = IO; } catch {}
+}
 
 export default IO;

@@ -364,7 +364,11 @@ export const VideoUtils = {
 
 export const Video = { ScreenCapture, CameraCapture, VideoPlayer, VideoCompositor, GIFEncoder, utils: VideoUtils };
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'Video', { value: Video, writable: false, enumerable: false, configurable: false });
+if (typeof window !== 'undefined') {
+    // Use try/catch + delete + assign so re-loading the bundle (e.g. HMR, multiple
+    // initialisations during tests) doesn't throw on the second defineProperty.
+    try { delete (window as any).Video; } catch {}
+    try { (window as any).Video = Video; } catch {}
+}
 
 export default Video;

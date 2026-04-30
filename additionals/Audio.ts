@@ -417,7 +417,12 @@ export const Audio = {
     Sequencer, MIDIEngine,
 };
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'Audio', { value: Audio, writable: false, enumerable: false, configurable: false });
+if (typeof window !== 'undefined') {
+    // Use try/catch + delete + assign because window.Audio is a builtin (HTMLAudioElement
+    // constructor) and Object.defineProperty with configurable:false would throw.
+    // The shadow is intentional: Audio.* takes precedence, but we don't want a hard crash.
+    try { delete (window as any).Audio; } catch {}
+    try { (window as any).Audio = Audio; } catch {}
+}
 
 export default Audio;
