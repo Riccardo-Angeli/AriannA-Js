@@ -124,6 +124,9 @@ export type { BarDataPoint, BarChartOptions }   from './charts/BarChart.ts';
 export type { LineDataPoint, LineChartOptions } from './charts/LineChart.ts';
 export type { PieDataPoint, PieChartOptions }   from './charts/PieChart.ts';
 
+//Composite
+export * from './composite/NodeEditor.ts';
+
 /**
  * Inject all control CSS at once.
  * Call once at application startup.
