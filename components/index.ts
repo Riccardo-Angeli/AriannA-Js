@@ -116,6 +116,17 @@ export type { SnackbarOptions }         from './display/Snackbar.ts';
 export type { TagOptions }              from './display/Tag.ts';
 export type { TooltipOptions }          from './display/Tooltip.ts';
 
+// Audio
+export { PianoRoll }                                     from './audio/PianoRoll.ts';
+export type { PianoRollNote, PianoRollOptions, ExportedSequence as PianoRollExport,
+              MidiEvent, Tool as PianoRollTool, RunState as PianoRollRunState } from './audio/PianoRoll.ts';
+
+// Composite
+export { NodeEditor }                                    from './composite/NodeEditor.ts';
+export type { NodeSchema, NodeInstance, WireInstance, WireStatus, PortSpec,
+              ParamSpec, NodeEditorOptions, ExportedGraph,
+              TypeCheckFn, RunState as NodeEditorRunState } from './composite/NodeEditor.ts';
+
 // Charts
 export { BarChart,  BarChartCSS }  from './charts/BarChart.ts';
 export { LineChart, LineChartCSS } from './charts/LineChart.ts';
@@ -123,9 +134,6 @@ export { PieChart,  PieChartCSS }  from './charts/PieChart.ts';
 export type { BarDataPoint, BarChartOptions }   from './charts/BarChart.ts';
 export type { LineDataPoint, LineChartOptions } from './charts/LineChart.ts';
 export type { PieDataPoint, PieChartOptions }   from './charts/PieChart.ts';
-
-//Composite
-export * from './composite/NodeEditor.ts';
 
 /**
  * Inject all control CSS at once.

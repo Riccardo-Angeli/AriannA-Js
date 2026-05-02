@@ -32,3 +32,47 @@ declare module 'arianna' {
     export type { ComponentMeta }                  from './core/Directive.ts';
     export type { WorkerTask }                     from './core/Workers.ts';
 }
+
+// ── Composite & audio re-exports ─────────────────────────────────────────────
+
+declare module 'arianna/components/audio' {
+    export { PianoRoll } from './components/audio/PianoRoll.ts';
+    export type {
+        PianoRollNote, PianoRollOptions, ExportedSequence,
+        MidiEvent, Tool, RunState,
+    } from './components/audio/PianoRoll.ts';
+}
+
+declare module 'arianna/components/composite' {
+    export { NodeEditor } from './components/composite/NodeEditor.ts';
+    export type {
+        NodeSchema, NodeInstance, WireInstance, WireStatus, PortSpec,
+        ParamSpec, NodeEditorOptions, ExportedGraph, TypeCheckFn, RunState,
+    } from './components/composite/NodeEditor.ts';
+}
+
+// ── 'ariannajs' alias (modern package name) ──────────────────────────────────
+
+declare module 'ariannajs' {
+    export * from 'arianna';
+}
+
+declare module 'ariannajs/components' {
+    export * from './components/index.ts';
+}
+
+declare module 'ariannajs/components/audio' {
+    export { PianoRoll } from './components/audio/PianoRoll.ts';
+    export type {
+        PianoRollNote, PianoRollOptions, ExportedSequence,
+        MidiEvent, Tool, RunState,
+    } from './components/audio/PianoRoll.ts';
+}
+
+declare module 'ariannajs/components/composite' {
+    export { NodeEditor } from './components/composite/NodeEditor.ts';
+    export type {
+        NodeSchema, NodeInstance, WireInstance, WireStatus, PortSpec,
+        ParamSpec, NodeEditorOptions, ExportedGraph, TypeCheckFn, RunState,
+    } from './components/composite/NodeEditor.ts';
+}

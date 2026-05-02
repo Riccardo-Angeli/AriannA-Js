@@ -23,6 +23,10 @@ import type { default as _Sheet } from '../core/Stylesheet.ts';
 import type { default as _Context, ContextEvent } from '../core/Context.ts';
 import type { default as _Namespace } from '../core/Namespace.ts';
 
+// Composite & audio components
+import type { NodeEditor as _NodeEditor } from '../components/composite/NodeEditor.ts';
+import type { PianoRoll  as _PianoRoll  } from '../components/audio/PianoRoll.ts';
+
 declare global {
 
     // ── Constructors / classes available on window ────────────────────────────
@@ -91,6 +95,12 @@ declare global {
 
     // ── Window interface augmentation ─────────────────────────────────────────
 
+    /** PianoRoll — MIDI piano-roll editor with playback. */
+    const PianoRoll: typeof _PianoRoll;
+
+    /** NodeEditor — generic JSON-schema-driven node graph editor. */
+    const NodeEditor: typeof _NodeEditor;
+
     interface Window {
         Core       : typeof _Core;
         Observable : typeof _Observable;
@@ -109,6 +119,8 @@ declare global {
         computed   : <T>(fn: () => T) => ReadonlySignal<T>;
         batch      : (fn: () => void) => void;
         untrack    : <T>(fn: () => T) => T;
+        PianoRoll  : typeof _PianoRoll;
+        NodeEditor : typeof _NodeEditor;
     }
 }
 
