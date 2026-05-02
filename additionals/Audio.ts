@@ -5,8 +5,11 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * A.r.i.a.n.n.A. Audio — Web Audio API engine with MIDI, sequencer, effects.
+ * A.r.i.a.n.n.A. Audio — Web Audio API engine: synthesis, effects, sequencer.
  * Zero dependencies.
+ *
+ * MIDI moved to additionals/Midi.ts (separate addon, supports MPE / MIDI 2.0
+ * binary format and Web MIDI hardware I/O).
  *
  * ── CORE ──────────────────────────────────────────────────────────────────────
  *   AudioEngine   — AudioContext wrapper, master chain, context lifecycle
@@ -28,9 +31,6 @@
  *
  * ── SEQUENCER ────────────────────────────────────────────────────────────────
  *   Sequencer    — step sequencer, BPM clock, pattern scheduling
- *
- * ── MIDI ─────────────────────────────────────────────────────────────────────
- *   MIDIEngine   — Web MIDI API, note on/off, CC, clock
  */
 
 // ── AudioEngine ───────────────────────────────────────────────────────────────
@@ -369,52 +369,13 @@ export class Sequencer {
     get currentStep(): number { return this.#step; }
 }
 
-// ── MIDIEngine ────────────────────────────────────────────────────────────────
-
-export type MIDIHandler = (msg: { type: string; channel: number; note?: number; velocity?: number; control?: number; value?: number }) => void;
-
-export class MIDIEngine {
-    #access  : MIDIAccess | null = null;
-    #handlers: MIDIHandler[] = [];
-
-    async init(): Promise<boolean> {
-        if (!('requestMIDIAccess' in navigator)) return false;
-        try {
-            this.#access = await (navigator as unknown as { requestMIDIAccess(o?: object): Promise<MIDIAccess> }).requestMIDIAccess({ sysex: false });
-            this.#access.inputs.forEach(input => {
-                input.onmidimessage = (e) => this.#parse(e as MIDIMessageEvent);
-            });
-            return true;
-        } catch { return false; }
-    }
-
-    #parse(e: MIDIMessageEvent): void {
-        const data_ = e.data ? Array.from(e.data) : [0,0,0]; const [status, d1, d2] = data_;
-        const type    = status >> 4, ch = status & 0xF;
-        const base    = { channel: ch };
-        let   msg;
-        if      (type === 0x9 && d2 > 0) msg = { ...base, type: 'noteOn',  note: d1, velocity: d2 };
-        else if (type === 0x9 || type === 0x8) msg = { ...base, type: 'noteOff', note: d1 };
-        else if (type === 0xB) msg = { ...base, type: 'cc',   control: d1, value: d2 };
-        else return;
-        this.#handlers.forEach(h => h(msg!));
-    }
-
-    on(handler: MIDIHandler): this { this.#handlers.push(handler); return this; }
-
-    noteToFreq(note: number): number { return 440 * Math.pow(2, (note - 69) / 12); }
-    noteToName(note: number): string { const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; return `${names[note%12]}${Math.floor(note/12)-1}`; }
-
-    get inputs(): MIDIInputMap | null { return this.#access?.inputs ?? null; }
-}
-
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export const Audio = {
     engine: _engine, AudioEngine, AudioPlayer, AudioRecorder,
     Oscillator, NoiseGenerator,
     Reverb, Delay, Filter, Analyser,
-    Sequencer, MIDIEngine,
+    Sequencer,
 };
 
 if (typeof window !== 'undefined') {
