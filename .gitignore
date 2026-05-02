@@ -10,7 +10,7 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
-# ── Linux ────────────────────────────────────────────────────────────────────
+# ── Linux / Unix (editor backups) ────────────────────────────────────────────
 *~
 .directory
 .Trash-*
@@ -20,7 +20,6 @@ $RECYCLE.BIN/
 .vscode/
 *.swp
 *.swo
-*~
 .project
 .settings/
 *.sublime-project
@@ -57,6 +56,3 @@ logs/
 # ── Project-specific ─────────────────────────────────────────────────────────
 PROJECT_STRUCTURE.txt
 REPO_STRUCTURE.md
-
-# ── Self ─────────────────────────────────────────────────────────────────────
-# (don't ignore the .gitignore itself — that line was a bug in the previous version)
