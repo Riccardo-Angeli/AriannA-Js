@@ -7,7 +7,7 @@
  * Mouse drag to move a mesh in world space on a chosen plane.
  */
 
-import { Modifier3D, type MeshLike, type CameraLike, type Vec3Like } from './_base.ts';
+import { Modifier3D, type MeshLike, type CameraLike, type Vec3Like } from './Base.ts';
 
 export type DragCallback3D = (mesh: MeshLike, pos: Vec3Like) => void;
 

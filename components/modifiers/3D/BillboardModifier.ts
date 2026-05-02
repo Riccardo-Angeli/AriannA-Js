@@ -7,7 +7,7 @@
  * Always face the camera — optional per-axis lock.
  */
 
-import { Modifier3D, _vNorm, _vSub, type MeshLike, type CameraLike } from './_base.ts';
+import { Modifier3D, _vNorm, _vSub, type MeshLike, type CameraLike } from './Base.ts';
 
 export class BillboardModifier extends Modifier3D {
     #lockX: boolean;

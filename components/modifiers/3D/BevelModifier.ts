@@ -7,7 +7,7 @@
  * Edge bevel / chamfer — adds loop vertices offset along face normals.
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, _vNorm, _vCross, _vSub, _vAdd, _vScale, type MeshLike } from './_base.ts';
+import { Modifier3D, _cloneGeom, _recomputeNormals, _vNorm, _vCross, _vSub, _vAdd, _vScale, type MeshLike } from './Base.ts';
 
 export class BevelModifier extends Modifier3D {
     #amount  : number;

@@ -7,7 +7,7 @@
  * Mirror geometry on X, Y or Z axis with optional vertex welding on the plane.
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, _vLen, _vSub, type MeshLike, type Vec3Like } from './_base.ts';
+import { Modifier3D, _cloneGeom, _recomputeNormals, _vLen, _vSub, type MeshLike, type Vec3Like } from './Base.ts';
 
 export type MirrorAxis = 'x' | 'y' | 'z';
 

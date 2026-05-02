@@ -7,7 +7,7 @@
  * Bend geometry along an axis by a given angle (radians).
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, type MeshLike } from './_base.ts';
+import { Modifier3D, _cloneGeom, _recomputeNormals, type MeshLike } from './Base.ts';
 
 export class BendModifier extends Modifier3D {
     #angle: number;

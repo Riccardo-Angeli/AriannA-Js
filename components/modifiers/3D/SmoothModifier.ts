@@ -7,7 +7,7 @@
  * Laplacian smoothing — iteratively average vertices toward their neighbors.
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, _vAdd, _vScale, _vLerp, type MeshLike } from './_base.ts';
+import { Modifier3D, _cloneGeom, _recomputeNormals, _vAdd, _vScale, _vLerp, type MeshLike } from './Base.ts';
 
 export class SmoothModifier extends Modifier3D {
     #iterations: number;

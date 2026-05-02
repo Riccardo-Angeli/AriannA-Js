@@ -7,7 +7,7 @@
  * Catmull-Clark subdivision surface.
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, type MeshLike, type Geometry3Like, type Vec3Like } from './_base.ts';
+import { Modifier3D, _cloneGeom, _recomputeNormals, type MeshLike, type Geometry3Like, type Vec3Like } from './Base.ts';
 
 export class SubdivisionModifier extends Modifier3D {
     #iterations: number;

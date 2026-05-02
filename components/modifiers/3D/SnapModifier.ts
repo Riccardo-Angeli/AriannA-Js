@@ -7,7 +7,7 @@
  * Snap position and rotation to a grid.
  */
 
-import { Modifier3D, type MeshLike } from './_base.ts';
+import { Modifier3D, type MeshLike } from './Base.ts';
 
 export class SnapModifier extends Modifier3D {
     #posGrid: number;

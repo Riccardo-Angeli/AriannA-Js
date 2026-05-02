@@ -7,7 +7,7 @@
  * Greedy triangle decimation — reduces polygon count by a target ratio.
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, type MeshLike } from './_base.ts';
+import { Modifier3D, _cloneGeom, _recomputeNormals, type MeshLike } from './Base.ts';
 
 export class DecimateModifier extends Modifier3D {
     #ratio: number;

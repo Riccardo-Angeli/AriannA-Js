@@ -38,8 +38,8 @@ export { FadeModifier }        from './FadeModifier.ts';
 export { BillboardModifier }   from './BillboardModifier.ts';
 
 // ── Base (for extension) ──────────────────────────────────────────────────────
-export { Modifier3D, _cloneGeom, _recomputeNormals, _v3, _vAdd, _vSub, _vScale, _vLen, _vNorm, _vCross, _vLerp } from './_base.ts';
-export type { MeshLike, Geometry3Like, Vec3Like, SceneLike, CameraLike } from './_base.ts';
+export { Modifier3D, _cloneGeom, _recomputeNormals, _v3, _vAdd, _vSub, _vScale, _vLen, _vNorm, _vCross, _vLerp } from './Base.ts';
+export type { MeshLike, Geometry3Like, Vec3Like, SceneLike, CameraLike } from './Base.ts';
 
 // ── Convenience bundle ────────────────────────────────────────────────────────
 

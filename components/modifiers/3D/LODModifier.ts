@@ -7,7 +7,7 @@
  * Level-of-detail — swap geometry based on camera distance.
  */
 
-import { Modifier3D, _vLen, _vSub, type MeshLike, type CameraLike, type Geometry3Like } from './_base.ts';
+import { Modifier3D, _vLen, _vSub, type MeshLike, type CameraLike, type Geometry3Like } from './Base.ts';
 
 export interface LODLevel { distance: number; geometry: Geometry3Like; }
 

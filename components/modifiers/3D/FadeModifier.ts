@@ -7,7 +7,7 @@
  * Distance-based opacity fade — hides mesh beyond a far threshold.
  */
 
-import { Modifier3D, _vLen, _vSub, type MeshLike, type CameraLike } from './_base.ts';
+import { Modifier3D, _vLen, _vSub, type MeshLike, type CameraLike } from './Base.ts';
 
 export class FadeModifier extends Modifier3D {
     #near  : number;

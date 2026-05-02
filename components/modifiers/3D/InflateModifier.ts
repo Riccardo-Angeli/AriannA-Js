@@ -7,7 +7,7 @@
  * Expand geometry along vertex normals.
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, _vAdd, _vScale, _v3, type MeshLike } from './_base.ts';
+import { Modifier3D, _cloneGeom, _recomputeNormals, _vAdd, _vScale, _v3, type MeshLike } from './Base.ts';
 
 export class InflateModifier extends Modifier3D {
     #amount: number;

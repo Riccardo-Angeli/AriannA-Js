@@ -7,7 +7,7 @@
  * Linear or radial instance array of a mesh.
  */
 
-import { Modifier3D, _v3, type MeshLike, type SceneLike, type Vec3Like } from './_base.ts';
+import { Modifier3D, _v3, type MeshLike, type SceneLike, type Vec3Like } from './Base.ts';
 
 export interface ArrayModifierOptions {
     count       : number;

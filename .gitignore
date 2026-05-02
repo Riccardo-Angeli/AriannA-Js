@@ -42,6 +42,18 @@ out/
 .cache/
 .parcel-cache/
 
+# Compiled JS output (generated from .ts sources).
+# Whitelist real .js sources (Vite configs, dist bundles) below.
+additionals/*.js
+components/*.js
+components/**/*.js
+core/*.js
+config/*.js
+
+# Keep these — they are real .js sources or final bundles
+!release/dist/*.js
+!release/benchmarks/**/*.js
+
 # ── Environment / secrets ────────────────────────────────────────────────────
 .env
 .env.local

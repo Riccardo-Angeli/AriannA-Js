@@ -7,7 +7,7 @@
  * Sinusoidal displacement along an axis.
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, type MeshLike } from './_base.ts';
+import { Modifier3D, _cloneGeom, _recomputeNormals, type MeshLike } from './Base.ts';
 
 export interface WaveModifierOptions {
     amplitude?: number;
