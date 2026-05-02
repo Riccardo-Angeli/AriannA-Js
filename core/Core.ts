@@ -695,6 +695,305 @@ export function plugins(): string[]
     return Array.from(_installedPlugins);
 }
 
+// ── Property — enhanced property descriptor ──────────────────────────────────
+
+/**
+ * Type marker for runtime validation in `Property`.
+ * Either a built-in tag, or a custom predicate that returns true if the
+ * value is acceptable.
+ */
+export type PropertyType =
+    | 'string' | 'number' | 'boolean' | 'integer'
+    | 'function' | 'object' | 'array' | 'any'
+    | ((v: unknown) => boolean);
+
+/**
+ * Sync target for `bind` (two-way) or `bound` (one-way mirror).
+ * - attribute(s) — DOM attribute(s) on the host element (or host.element)
+ * - property/properties — sibling JS properties on the host object
+ */
+export interface BindSpec
+{
+    attribute?  : string;
+    attributes? : string[];
+    property?   : string;
+    properties? : string[];
+}
+
+/**
+ * Event emission settings for a Property.
+ * Defaults: private internal EventTarget, cancelable changing, no propagation.
+ */
+export interface ObservableSpec
+{
+    target?         : EventTarget | null;
+    propagation?    : boolean;
+    cancelable?     : boolean;
+    changingEvent?  : string;
+    changedEvent?   : string;
+}
+
+/**
+ * Constructor options for `Property`.
+ *
+ * @example
+ *   new Core.Property('volume', {
+ *     initial: 0, type: 'number',
+ *     validate: v => v >= -120 && v <= 24,
+ *     transform: v => Math.round(v * 10) / 10,
+ *     bind: { attribute: 'data-volume' },
+ *   }).install(host);
+ */
+export interface PropertyOptions
+{
+    initial?      : unknown;
+    enumerable?   : boolean;
+    configurable? : boolean;
+    type?         : PropertyType;
+    validate?     : (v: unknown) => boolean;
+    transform?    : (v: unknown) => unknown;
+    bind?         : BindSpec;
+    bound?        : BindSpec;
+    observable?   : ObservableSpec;
+    silent?       : boolean;
+}
+
+export interface PropertyChangingDetail
+{
+    name     : string;
+    oldValue : unknown;
+    newValue : unknown;
+    /** Set this in a listener to override the value being committed. */
+    override?: unknown;
+}
+
+export interface PropertyChangedDetail
+{
+    name     : string;
+    oldValue : unknown;
+    newValue : unknown;
+    bind     : BindSpec | undefined;
+    bound    : BindSpec | undefined;
+}
+
+function _propertyMatchesType(v: unknown, t: PropertyType): boolean
+{
+    if (typeof t === 'function') return t(v);
+    switch (t)
+    {
+        case 'string'   : return typeof v === 'string';
+        case 'number'   : return typeof v === 'number' && !Number.isNaN(v);
+        case 'integer'  : return typeof v === 'number' && Number.isInteger(v);
+        case 'boolean'  : return typeof v === 'boolean';
+        case 'function' : return typeof v === 'function';
+        case 'object'   : return typeof v === 'object' && v !== null && !Array.isArray(v);
+        case 'array'    : return Array.isArray(v);
+        case 'any'      : return true;
+    }
+}
+
+/**
+ * Resolve the DOM element associated with a host object, if any.
+ * Accepts an HTMLElement directly, or any Real-like wrapper that
+ * exposes `.element` returning an HTMLElement.
+ *
+ * SSR-safe: returns null in environments without `HTMLElement`.
+ */
+function _propertyResolveDomElement(host: object): HTMLElement | null
+{
+    if (typeof HTMLElement === 'undefined') return null;
+    if (host instanceof HTMLElement) return host;
+    const wrapper = host as { element?: unknown };
+    if (wrapper.element instanceof HTMLElement) return wrapper.element;
+    return null;
+}
+
+/**
+ * `Property` — enhanced JavaScript property descriptor.
+ *
+ * Wraps `Object.defineProperty` and adds:
+ *   - runtime `type` validation (built-in tags + custom predicates)
+ *   - `transform` to normalise incoming values
+ *   - `bind` / `bound` two-way / one-way sync to attributes and sibling
+ *     properties on the host (or its `.element` if it's a Real-like)
+ *   - cancelable `${name}Changing` event (preventDefault aborts the set;
+ *     listeners may override via `event.detail.override`)
+ *   - post-set `${name}Changed` event with rich detail
+ *
+ * Install on a host with `descriptor.install(host)`. Reading host[name]
+ * returns the current value; writing host[name] = x routes through all
+ * the layers above.
+ *
+ * The class is the registry for runtime state (current value, listeners,
+ * installed hosts), so multiple installs of the same Property mirror the
+ * same value across hosts.
+ *
+ * @example
+ *   const vol = new Core.Property('volume', {
+ *       initial: 50,
+ *       type: 'number',
+ *       validate: v => v >= 0 && v <= 100,
+ *       bind: { attribute: 'data-volume' },
+ *   });
+ *   vol.install(strip).onChanged(d => console.log('vol →', d.newValue));
+ *   strip.volume = 80;     // event fired, attribute updated
+ *   strip.volume = 999;    // rejected by validator, no event
+ */
+export class Property<T = unknown>
+{
+    public  readonly name : string;
+    public  readonly opts : Readonly<PropertyOptions>;
+    private _value        : T;
+    private _hosts        : Set<object> = new Set();
+    private _eventTarget  : EventTarget;
+    private _changingEvt  : string;
+    private _changedEvt   : string;
+    private _silent       : boolean;
+
+    constructor(name: string, options: PropertyOptions = {})
+    {
+        this.name         = name;
+        this.opts         = Object.freeze({ ...options });
+        this._value       = options.initial as T;
+        this._silent      = options.silent ?? false;
+        const obs         = options.observable ?? {};
+        this._eventTarget = obs.target ?? new EventTarget();
+        this._changingEvt = obs.changingEvent ?? `${name}Changing`;
+        this._changedEvt  = obs.changedEvent  ?? `${name}Changed`;
+    }
+
+    /** Direct read of the current value. */
+    get(): T { return this._value; }
+
+    /**
+     * Direct write through transform → type check → validate → changing event
+     * → commit → sync → changed event. Returns true if applied, false if
+     * rejected (by type/validator/listener preventDefault).
+     */
+    set(value: T): boolean
+    {
+        const opts = this.opts;
+        const old  = this._value;
+
+        let next: T = value;
+        if (opts.transform) next = opts.transform(next) as T;
+
+        if (opts.type !== undefined && !_propertyMatchesType(next, opts.type)) return false;
+        if (opts.validate && !opts.validate(next))                             return false;
+        if (Object.is(old, next))                                              return true;
+
+        if (!this._silent)
+        {
+            const detail: PropertyChangingDetail =
+                { name: this.name, oldValue: old, newValue: next };
+            const cancelable = opts.observable?.cancelable ?? true;
+            const ev = new CustomEvent(this._changingEvt, {
+                detail, cancelable,
+                bubbles: opts.observable?.propagation ?? false,
+            });
+            const ok = this._eventTarget.dispatchEvent(ev);
+            if (!ok && cancelable) return false;
+            if (detail.override !== undefined) next = detail.override as T;
+        }
+
+        this._value = next;
+
+        for (const host of this._hosts) this._sync(host, next);
+
+        if (!this._silent)
+        {
+            const detail: PropertyChangedDetail = {
+                name: this.name, oldValue: old, newValue: next,
+                bind: opts.bind, bound: opts.bound,
+            };
+            const ev = new CustomEvent(this._changedEvt, {
+                detail, cancelable: false,
+                bubbles: opts.observable?.propagation ?? false,
+            });
+            this._eventTarget.dispatchEvent(ev);
+        }
+        return true;
+    }
+
+    /**
+     * Install this Property as a real getter/setter on `host` via
+     * `Object.defineProperty`. Multiple hosts share the same value.
+     * Returns `this` for chaining.
+     */
+    install(host: object): this
+    {
+        const self = this;
+        Object.defineProperty(host, this.name, {
+            enumerable  : this.opts.enumerable   ?? true,
+            configurable: this.opts.configurable ?? true,
+            get(): T { return self._value; },
+            set(v: T): void { self.set(v); },
+        });
+        this._hosts.add(host);
+        this._sync(host, this._value);
+        return this;
+    }
+
+    /** Subscribe to the cancelable changing event. Chainable. */
+    onChanging(cb: (detail: PropertyChangingDetail, ev: Event) => void): this
+    {
+        this._eventTarget.addEventListener(this._changingEvt, ((ev: Event) =>
+        {
+            cb((ev as CustomEvent<PropertyChangingDetail>).detail, ev);
+        }) as EventListener);
+        return this;
+    }
+
+    /** Subscribe to the post-set changed event. Chainable. */
+    onChanged(cb: (detail: PropertyChangedDetail, ev: Event) => void): this
+    {
+        this._eventTarget.addEventListener(this._changedEvt, ((ev: Event) =>
+        {
+            cb((ev as CustomEvent<PropertyChangedDetail>).detail, ev);
+        }) as EventListener);
+        return this;
+    }
+
+    /** The internal EventTarget — for advanced subscription patterns. */
+    get target(): EventTarget { return this._eventTarget; }
+
+    private _sync(host: object, value: T): void
+    {
+        const dom = _propertyResolveDomElement(host);
+
+        const apply = (spec: BindSpec | undefined) =>
+        {
+            if (!spec) return;
+
+            if (dom)
+            {
+                const attrs: string[] = [];
+                if (spec.attribute)  attrs.push(spec.attribute);
+                if (spec.attributes) attrs.push(...spec.attributes);
+                for (const a of attrs)
+                {
+                    const str = value === null || value === undefined ? '' : String(value);
+                    if (dom.getAttribute(a) !== str) dom.setAttribute(a, str);
+                }
+            }
+
+            const props: string[] = [];
+            if (spec.property)   props.push(spec.property);
+            if (spec.properties) props.push(...spec.properties);
+            for (const p of props)
+            {
+                const cur = (host as Record<string, unknown>)[p];
+                if (!Object.is(cur, value))
+                {
+                    (host as Record<string, unknown>)[p] = value;
+                }
+            }
+        };
+        apply(this.opts.bind);
+        apply(this.opts.bound);
+    }
+}
+
 // Forward declaration — _coreApi is assigned after the const block below.
 // eslint-disable-next-line prefer-const
 let _coreApi: ReturnType<typeof _buildCore>;
@@ -713,6 +1012,7 @@ function _buildCore()
         Define,
         Events,
         Observer,
+        Property,
         use,
         plugins,
         Root: typeof document !== 'undefined' ? document.documentElement : null,
@@ -731,6 +1031,10 @@ function _buildCore()
  *   Core.Events.On(el, 'click', handler);
  *   Core.use(MyPlugin, { option: true });
  *   Core.version.string   // "1.0.0"
+ *
+ *   // Enhanced property descriptors:
+ *   const vol = new Core.Property('volume', { type: 'number', initial: 50 });
+ *   vol.install(myObject);
  *
  * Or (browser global):
  *   window.Core.version.string

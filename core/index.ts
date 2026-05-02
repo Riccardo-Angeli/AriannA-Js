@@ -10,9 +10,12 @@
  */
 
 // ── Core kernel ───────────────────────────────────────────────────────────────
-export { default as Core }         from './Core.ts';
-export type { Scope, TypeDescriptor, NamespaceDescriptor, CorePlugin } from './Core.ts';
-
+export { default as Core, Property }    from './Core.ts';
+export type {
+    Scope, TypeDescriptor, NamespaceDescriptor, CorePlugin,
+    PropertyType, PropertyOptions, BindSpec, ObservableSpec,
+    PropertyChangingDetail, PropertyChangedDetail,
+} from './Core.ts';
 // ── Fine-grain reactive primitives ────────────────────────────────────────────
 export {
     signal,

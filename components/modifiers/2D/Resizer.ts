@@ -6,10 +6,28 @@
  *
  * 8-direction resize handles on any HTML element.
  *
- * v1.1 fix: monotonic resize. When the user drags past the minimum size, the
- * handle stops at the limit and does not "ribalta" or wobble back. The clamp
- * is computed against the absolute bounding edges of the element at drag start,
- * not just per-axis delta math.
+ * Cross-anchor behavior
+ * ---------------------
+ * The dragged edge follows the pointer freely. When it crosses the
+ * opposite (anchor) edge, the rectangle keeps resizing on the other
+ * side: width keeps growing, the box appears past the anchor, and
+ * the anchor edge stays nailed to its original position.
+ *
+ * Content is NOT mirrored. The DOM rect simply repositions and resizes.
+ * If you need a visual mirror (Photoshop-style), add scaleX/scaleY
+ * yourself in the onResize callback.
+ *
+ * Math (per axis where the handle moves)
+ * --------------------------------------
+ *   anchor    = position of the edge that stays still (snapshot at mousedown)
+ *   pointer   = position of the dragged edge (follows the cursor)
+ *   width     = | pointer - anchor |
+ *   leftOrTop = min(anchor, pointer)
+ *
+ * That's it. No flip state. No transform manipulation.
+ *
+ * If `allowCross: false` (default true), the dragged edge clamps at
+ * the anchor minus minWidth/minHeight, so the rect cannot pass through.
  */
 
 import { Modifier2D, type ModInput } from './Base.ts';
@@ -22,9 +40,17 @@ export interface ResizerOptions {
     handles?    : ('n'|'s'|'e'|'w'|'ne'|'nw'|'se'|'sw')[];
     handleSize? : number;
     handleColor?: string;
+    /**
+     * Allow the dragged edge to cross past the opposite edge. The rect
+     * keeps resizing on the other side. Default true.
+     * Set false to clamp at minWidth / minHeight on the original side.
+     */
+    allowCross? : boolean;
 }
 
-export type ResizerCallback = (el: HTMLElement, w: number, h: number) => void;
+export type ResizerCallback = (
+    el: HTMLElement, w: number, h: number,
+) => void;
 
 function _handlePos(dir: string, hs: number): string {
     const h = hs / 2;
@@ -47,124 +73,170 @@ export class Resizer extends Modifier2D {
 
     constructor(input: ModInput, opts: ResizerOptions = {}) {
         super(input);
+        const allowCross = opts.allowCross ?? true;
         this.#opts = {
-            minWidth: 40, minHeight: 40, maxWidth: 9999, maxHeight: 9999,
-            handles: ['n','s','e','w','ne','nw','se','sw'],
-            handleSize: 8, handleColor: '#e40c88', ...opts,
+            minWidth:    opts.minWidth    ?? (allowCross ? 0 : 40),
+            minHeight:   opts.minHeight   ?? (allowCross ? 0 : 40),
+            maxWidth:    opts.maxWidth    ?? 9999,
+            maxHeight:   opts.maxHeight   ?? 9999,
+            handles:     opts.handles     ?? ['n','s','e','w','ne','nw','se','sw'],
+            handleSize:  opts.handleSize  ?? 8,
+            handleColor: opts.handleColor ?? '#e40c88',
+            allowCross,
         };
     }
 
+    onResize(cb: ResizerCallback): this { this.#callbacks.push(cb); return this; }
+
     protected _applyTo(el: HTMLElement): void {
         if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
-        const { handleSize: hs, handleColor: hc } = this.#opts;
+
+        const { handleSize: hs, handleColor: hc, allowCross,
+                minWidth: minW, minHeight: minH,
+                maxWidth: maxW, maxHeight: maxH } = this.#opts;
 
         for (const dir of this.#opts.handles) {
-            const h = document.createElement('div');
-            h.dataset['resizeDir'] = dir;
-            h.style.cssText =
+            const handle = document.createElement('div');
+            handle.dataset['resizeDir'] = dir;
+            handle.style.cssText =
                 `position:absolute;width:${hs}px;height:${hs}px;background:${hc};` +
                 `border-radius:50%;z-index:9999;touch-action:none;` +
                 _handlePos(dir, hs);
-            el.appendChild(h);
+            el.appendChild(handle);
 
-            // Drag-start state: snapshot of the rect at mousedown.
-            // We work in terms of absolute edges (left/right/top/bottom),
-            // not per-axis delta-with-clamp, so the math stays monotonic.
-            let startX = 0, startY = 0;
-            let startL = 0, startT = 0;
-            let startW = 0, startH = 0;
-            let startR = 0; // right edge = startL + startW
-            let startB = 0; // bottom edge = startT + startH
-            let pointerId = -1;
+            let pointerId    = -1;
+            let startPx      = 0, startPy   = 0;
+            let anchorX      = 0, pointerStartX = 0;
+            let anchorY      = 0, pointerStartY = 0;
+            let movesX       = false, movesY = false;
 
             const onDown = (e: PointerEvent) => {
                 if (!this.enabled) return;
                 if (e.button !== 0) return;
                 e.preventDefault();
+                e.stopPropagation();
 
-                startX = e.clientX;
-                startY = e.clientY;
-                startW = el.offsetWidth;
-                startH = el.offsetHeight;
-                startT = el.offsetTop;
-                startL = el.offsetLeft;
-                startR = startL + startW;
-                startB = startT + startH;
                 pointerId = e.pointerId;
+                startPx   = e.clientX;
+                startPy   = e.clientY;
 
-                try { h.setPointerCapture(pointerId); } catch {}
+                const w = el.offsetWidth;
+                const h = el.offsetHeight;
+                const l = el.offsetLeft;
+                const t = el.offsetTop;
 
-                h.addEventListener('pointermove', onMove);
-                h.addEventListener('pointerup',     onUp);
-                h.addEventListener('pointercancel', onUp);
+                if (dir.includes('e')) {
+                    anchorX       = l;
+                    pointerStartX = l + w;
+                    movesX        = true;
+                } else if (dir.includes('w')) {
+                    anchorX       = l + w;
+                    pointerStartX = l;
+                    movesX        = true;
+                } else {
+                    movesX        = false;
+                }
+
+                if (dir.includes('s')) {
+                    anchorY       = t;
+                    pointerStartY = t + h;
+                    movesY        = true;
+                } else if (dir.includes('n')) {
+                    anchorY       = t + h;
+                    pointerStartY = t;
+                    movesY        = true;
+                } else {
+                    movesY        = false;
+                }
+
+                try { handle.setPointerCapture(pointerId); } catch {}
+                handle.addEventListener('pointermove',   onMove);
+                handle.addEventListener('pointerup',     onUp);
+                handle.addEventListener('pointercancel', onUp);
             };
 
             const onMove = (ev: PointerEvent) => {
                 if (ev.pointerId !== pointerId) return;
-                const dx = ev.clientX - startX;
-                const dy = ev.clientY - startY;
-                const minW = this.#opts.minWidth;
-                const minH = this.#opts.minHeight;
-                const maxW = this.#opts.maxWidth;
-                const maxH = this.#opts.maxHeight;
+                const dx = ev.clientX - startPx;
+                const dy = ev.clientY - startPy;
 
-                // Compute new edges, then derive width/height/left/top.
-                // This is the key change: we never let an edge cross the opposite edge.
-                let newL = startL, newT = startT;
-                let newR = startR, newB = startB;
+                let w  = el.offsetWidth;
+                let h  = el.offsetHeight;
+                let nl = el.offsetLeft;
+                let nt = el.offsetTop;
 
-                // East edge moves: clamp so newR stays >= startL + minW and <= startL + maxW
-                if (dir.includes('e')) {
-                    newR = startR + dx;
-                    if (newR < startL + minW) newR = startL + minW;  // monotonic stop at min
-                    if (newR > startL + maxW) newR = startL + maxW;
-                }
-                // West edge moves: clamp so newL stays <= startR - minW and >= startR - maxW
-                if (dir.includes('w')) {
-                    newL = startL + dx;
-                    if (newL > startR - minW) newL = startR - minW;  // can't cross/squash past min
-                    if (newL < startR - maxW) newL = startR - maxW;
-                }
-                // South edge moves
-                if (dir.includes('s')) {
-                    newB = startB + dy;
-                    if (newB < startT + minH) newB = startT + minH;
-                    if (newB > startT + maxH) newB = startT + maxH;
-                }
-                // North edge moves
-                if (dir.includes('n')) {
-                    newT = startT + dy;
-                    if (newT > startB - minH) newT = startB - minH;
-                    if (newT < startB - maxH) newT = startB - maxH;
+                if (movesX) {
+                    let pointerX = pointerStartX + dx;
+
+                    if (allowCross) {
+                        // Free movement, only clamp upper bound on either side
+                        const signed = pointerX - anchorX;
+                        if (Math.abs(signed) > maxW) {
+                            pointerX = anchorX + (signed < 0 ? -maxW : maxW);
+                        }
+                    } else {
+                        // Clamp at min on the original side; cannot cross.
+                        const startSigned = pointerStartX - anchorX;
+                        const origSign    = startSigned > 0 ? 1 : -1;
+                        const signed      = pointerX - anchorX;
+                        if (origSign * signed < minW) {
+                            pointerX = anchorX + origSign * minW;
+                        } else if (Math.abs(signed) > maxW) {
+                            pointerX = anchorX + origSign * maxW;
+                        }
+                    }
+
+                    w  = Math.round(Math.abs(pointerX - anchorX));
+                    nl = Math.round(Math.min(anchorX, pointerX));
                 }
 
-                const w  = newR - newL;
-                const ht = newB - newT;
+                if (movesY) {
+                    let pointerY = pointerStartY + dy;
+
+                    if (allowCross) {
+                        const signed = pointerY - anchorY;
+                        if (Math.abs(signed) > maxH) {
+                            pointerY = anchorY + (signed < 0 ? -maxH : maxH);
+                        }
+                    } else {
+                        const startSigned = pointerStartY - anchorY;
+                        const origSign    = startSigned > 0 ? 1 : -1;
+                        const signed      = pointerY - anchorY;
+                        if (origSign * signed < minH) {
+                            pointerY = anchorY + origSign * minH;
+                        } else if (Math.abs(signed) > maxH) {
+                            pointerY = anchorY + origSign * maxH;
+                        }
+                    }
+
+                    h  = Math.round(Math.abs(pointerY - anchorY));
+                    nt = Math.round(Math.min(anchorY, pointerY));
+                }
 
                 el.style.width  = `${w}px`;
-                el.style.height = `${ht}px`;
-                el.style.left   = `${newL}px`;
-                el.style.top    = `${newT}px`;
+                el.style.height = `${h}px`;
+                el.style.left   = `${nl}px`;
+                el.style.top    = `${nt}px`;
 
-                this.#callbacks.forEach(cb => cb(el, w, ht));
+                this.#callbacks.forEach(cb => cb(el, w, h));
             };
 
             const onUp = (ev: PointerEvent) => {
                 if (ev.pointerId !== pointerId) return;
-                try { h.releasePointerCapture(pointerId); } catch {}
-                h.removeEventListener('pointermove', onMove);
-                h.removeEventListener('pointerup',     onUp);
-                h.removeEventListener('pointercancel', onUp);
+                try { handle.releasePointerCapture(pointerId); } catch {}
+                handle.removeEventListener('pointermove',   onMove);
+                handle.removeEventListener('pointerup',     onUp);
+                handle.removeEventListener('pointercancel', onUp);
                 pointerId = -1;
             };
 
-            h.addEventListener('pointerdown', onDown);
+            handle.addEventListener('pointerdown', onDown);
             this.cleanups.push(() => {
-                h.removeEventListener('pointerdown', onDown);
-                h.remove();
+                handle.removeEventListener('pointerdown', onDown);
+                handle.remove();
             });
         }
     }
-
-    onResize(cb: ResizerCallback): this { this.#callbacks.push(cb); return this; }
 }
+
+export default Resizer;
