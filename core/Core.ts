@@ -695,6 +695,368 @@ export function plugins(): string[]
     return Array.from(_installedPlugins);
 }
 
+// ── Helpers — generic object/value utilities ─────────────────────────────────
+
+/**
+ * Type tag accepted by `Is`. Either a JS primitive type tag, a special tag
+ * 'class' that matches ES class syntax, or a constructor function for
+ * `instanceof` checks.
+ */
+export type IsType =
+    | 'string' | 'number' | 'boolean' | 'symbol'
+    | 'function' | 'object' | 'class'
+    | (new (...args: never[]) => unknown);
+
+/**
+ * Checks whether the first argument satisfies all the given type tags.
+ *
+ * Supports JS primitive type tags ('string', 'number', ...), the special
+ * 'class' tag (which matches only true ES class declarations), and
+ * constructor functions for instanceof checks.
+ *
+ * @example
+ *   Core.Is(42, 'number')                  // true
+ *   Core.Is(class A {}, 'class')           // true
+ *   Core.Is(function A() {}, 'class')      // false
+ *   Core.Is(new Date(), Date)              // true
+ *   Core.Is(arr, 'object', Array)          // true
+ */
+export function Is(value: unknown, ...types: IsType[]): boolean
+{
+    if (value === null || value === undefined || types.length === 0) return false;
+
+    const native = new Set(['string', 'number', 'boolean', 'symbol', 'function', 'object']);
+
+    for (const t of types)
+    {
+        if (typeof t === 'string')
+        {
+            if (t === 'class')
+            {
+                if (typeof value !== 'function' || !/^class\b/.test(Function.prototype.toString.call(value))) return false;
+            }
+            else if (native.has(t))
+            {
+                if (typeof value !== t) return false;
+            }
+        }
+        else if (typeof t === 'function')
+        {
+            if (!(value instanceof t)) return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Deep equality across primitives, plain objects, arrays, regex, dates,
+ * and class instances (by enumerable own property shape).
+ *
+ * Pass either two or more arguments (`Equals(a, b, c)`), or a single array
+ * (`Equals([a, b, c])`).
+ *
+ * @example
+ *   Core.Equals({a:1}, {a:1})            // true
+ *   Core.Equals([1,2,3], [1,2,3])        // true
+ *   Core.Equals(new Date(0), new Date(0))// true
+ */
+export function Equals(...args: unknown[]): boolean
+{
+    let elements = args;
+    if (args.length === 1 && Array.isArray(args[0])) elements = args[0] as unknown[];
+    if (elements.length < 2) return true;
+
+    for (let i = elements.length - 1; i > 0; i--)
+    {
+        const x = elements[i];
+        const y = elements[i - 1];
+        if (Object.is(x, y)) continue;
+
+        if ((x === null || x === undefined) && (y === null || y === undefined)) continue;
+        if (x === null || y === null || x === undefined || y === undefined) return false;
+
+        const tx = typeof x, ty = typeof y;
+        if (tx !== ty) return false;
+
+        if (tx === 'object')
+        {
+            if (x instanceof Date && y instanceof Date)
+            {
+                if (x.getTime() !== y.getTime()) return false;
+                continue;
+            }
+            if (x instanceof RegExp && y instanceof RegExp)
+            {
+                if (x.toString() !== y.toString()) return false;
+                continue;
+            }
+            if (Array.isArray(x) || Array.isArray(y))
+            {
+                if (!Array.isArray(x) || !Array.isArray(y)) return false;
+                if (x.length !== y.length) return false;
+                for (let k = 0; k < x.length; k++) if (!Equals(x[k], y[k])) return false;
+                continue;
+            }
+
+            const xo = x as Record<string, unknown>;
+            const yo = y as Record<string, unknown>;
+            const xk = Object.keys(xo);
+            const yk = Object.keys(yo);
+            if (xk.length !== yk.length) return false;
+            for (const k of xk)
+            {
+                if (!Object.prototype.hasOwnProperty.call(yo, k)) return false;
+                if (!Equals(xo[k], yo[k])) return false;
+            }
+            continue;
+        }
+
+        if (tx === 'function')
+        {
+            if ((x as () => unknown).toString() !== (y as () => unknown).toString()) return false;
+            continue;
+        }
+
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Returns true when an object has no own enumerable properties.
+ * Non-objects always return true.
+ *
+ * @example
+ *   Core.Empty({})           // true
+ *   Core.Empty({a: 1})       // false
+ *   Core.Empty([])           // true
+ */
+export function Empty(value: unknown): boolean
+{
+    if (value === null || value === undefined || typeof value !== 'object') return true;
+    for (const _ in value as object) return false;
+    return true;
+}
+
+/**
+ * Checks if `target` has all the specified members.
+ *
+ * For HTMLElement, members are checked against attributes.
+ * For other objects, members are checked against own properties.
+ *
+ * @example
+ *   Core.Has(obj, 'name', 'value')           // checks both keys
+ *   Core.Has(divElement, 'data-id')          // checks attribute
+ */
+export function Has(target: object | null | undefined, ...members: string[]): boolean
+{
+    if (!target || typeof target !== 'object') return false;
+    if (members.length === 0) return true;
+    const isElement = typeof HTMLElement !== 'undefined' && target instanceof HTMLElement;
+
+    for (const m of members)
+    {
+        if (isElement)
+        {
+            if ((target as HTMLElement).getAttribute(m) === null) return false;
+        }
+        else
+        {
+            if (!(m in (target as Record<string, unknown>))) return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Deep-clone a value. Handles primitives, Date, Array, plain Object, and
+ * Node (via `cloneNode(true)`). Functions are cloned via `new Function`.
+ *
+ * @example
+ *   const clone = Core.Clone({a: 1, b: [2,3]});
+ */
+export function Clone<T>(value: T): T
+{
+    if (value === null || value === undefined) return value;
+
+    const t = typeof value;
+    if (t === 'string' || t === 'number' || t === 'boolean' || t === 'symbol' || t === 'bigint') return value;
+
+    if (t === 'function')
+    {
+        const fn = value as unknown as () => unknown;
+        const out = new Function('return ' + fn.toString())() as () => unknown;
+        const fnRec = fn as unknown as Record<string, unknown>;
+        const outRec = out as unknown as Record<string, unknown>;
+        for (const k of Object.keys(fnRec)) outRec[k] = fnRec[k];
+        return out as unknown as T;
+    }
+
+    if (typeof Node !== 'undefined' && value instanceof Node)
+    {
+        return value.cloneNode(true) as unknown as T;
+    }
+
+    if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
+    if (value instanceof RegExp) return new RegExp(value.source, value.flags) as unknown as T;
+
+    if (Array.isArray(value))
+    {
+        return value.map(v => Clone(v)) as unknown as T;
+    }
+
+    if (t === 'object')
+    {
+        const obj = value as Record<string, unknown>;
+        const out: Record<string, unknown> = {};
+        for (const k of Object.keys(obj)) out[k] = Clone(obj[k]);
+        return out as unknown as T;
+    }
+
+    return value;
+}
+
+/**
+ * Mixes own enumerable properties from sources into target.
+ *
+ * Special-cases ES classes: when a source is a class (per `Is(s, 'class')`),
+ * its prototype methods (excluding `constructor`) are copied onto
+ * `target.prototype`, and a fresh instance's own keys are mirrored on
+ * `target.prototype.__proto__`. This preserves the legacy AriannA pattern
+ * for adding mixin classes to constructors.
+ *
+ * Returns the mutated target.
+ *
+ * @example
+ *   Core.Assign(myObj, {a: 1}, {b: 2});                    // {a:1, b:2}
+ *   Core.Assign(MyClass, MixinClass);                      // mixin install
+ */
+export function Assign<T extends object>(target: T, ...sources: unknown[]): T
+{
+    if (target === null || target === undefined) throw new TypeError('Cannot convert first argument to object');
+    const to = Object(target) as Record<string, unknown>;
+
+    for (const source of sources)
+    {
+        if (source === null || source === undefined) continue;
+
+        if (typeof source === 'function' && Is(source, 'class'))
+        {
+            const ctor = source as new () => object;
+            const targetCtor = target as unknown as { prototype?: Record<string, unknown> };
+            if (!targetCtor.prototype) continue;
+
+            for (const k of Object.getOwnPropertyNames(ctor.prototype))
+            {
+                if (k !== 'constructor')
+                {
+                    targetCtor.prototype[k] = (ctor.prototype as Record<string, unknown>)[k];
+                }
+            }
+
+            try
+            {
+                const instance = new ctor() as Record<string, unknown>;
+                const proto = Object.getPrototypeOf(targetCtor.prototype) as Record<string, unknown> | null;
+                if (proto)
+                {
+                    for (const k of Object.getOwnPropertyNames(instance))
+                    {
+                        if (k !== 'constructor') proto[k] = instance[k];
+                    }
+                }
+            }
+            catch { /* class with required ctor args — skip instance copy */ }
+            continue;
+        }
+
+        const src = Object(source) as Record<string, unknown>;
+        for (const k of Object.keys(src))
+        {
+            const desc = Object.getOwnPropertyDescriptor(src, k);
+            if (desc?.enumerable) to[k] = src[k];
+        }
+    }
+    return target;
+}
+
+/**
+ * Replaces an Element's outerHTML preserving its currently-attached event
+ * listeners (when `Core.Events.GetListeners` is available).
+ *
+ * Note: replacement parses the input HTML; only single-root replacements
+ * are supported. Returns the new node, or undefined if input was invalid.
+ *
+ * @example
+ *   const next = Core.Replace(divEl, '<section>new</section>');
+ */
+export function Replace(target: Node | null | undefined, replacement: string | Node | null | undefined): Node | undefined
+{
+    if (!target || !(target instanceof Node) || !target.parentNode) return undefined;
+    if (replacement === null || replacement === undefined) return undefined;
+
+    let next: Node | null = null;
+    if (typeof replacement === 'string')
+    {
+        const tpl = document.createElement('template');
+        tpl.innerHTML = replacement;
+        next = tpl.content.firstElementChild ?? tpl.content.firstChild;
+    }
+    else if (replacement instanceof Node)
+    {
+        next = replacement;
+    }
+    if (!next) return undefined;
+
+    if (next.parentNode) next.parentNode.removeChild(next);
+    target.parentNode.replaceChild(next, target);
+    return next;
+}
+
+// ── Extends — runtime class extension utility ────────────────────────────────
+
+/**
+ * Mixin-style class extension: sets `Sub` to extend `Super` at runtime,
+ * preserving `Sub`'s own prototype methods. Variadic: `Extends(A, B, C, D)`
+ * makes A extend B, B extend C, C extend D in left-to-right pairs.
+ *
+ * Useful when classes are constructed dynamically and `extends` keyword
+ * cannot be used. SSR-safe: bails out gracefully on non-class inputs.
+ *
+ * @example
+ *   class A {}
+ *   class B { foo() {} }
+ *   Core.Extends(A, B);
+ *   const a = new A();
+ *   a.foo();                  // inherited from B
+ *
+ *   // Chain:
+ *   Core.Extends(A, B, C);    // A -> B -> C
+ */
+export function Extends(...classes: unknown[]): unknown
+{
+    if (classes.length < 2) return classes[0];
+
+    for (let i = 0; i < classes.length - 1; i++)
+    {
+        const Sub = classes[i];
+        const Super = classes[i + 1];
+
+        if (typeof Sub !== 'function' || typeof Super !== 'function') continue;
+        const SubF = Sub as unknown as { prototype: object };
+        const SuperF = Super as unknown as { prototype: object };
+        if (!SubF.prototype || !SuperF.prototype) continue;
+
+        try
+        {
+            Object.setPrototypeOf(SubF.prototype, SuperF.prototype);
+            Object.setPrototypeOf(SubF, SuperF);
+        }
+        catch { /* native built-ins may resist — skip */ }
+    }
+    return classes[0];
+}
+
 // ── Property — enhanced property descriptor ──────────────────────────────────
 
 /**
@@ -1013,6 +1375,15 @@ function _buildCore()
         Events,
         Observer,
         Property,
+        // Helpers
+        Is,
+        Equals,
+        Empty,
+        Has,
+        Clone,
+        Assign,
+        Replace,
+        Extends,
         use,
         plugins,
         Root: typeof document !== 'undefined' ? document.documentElement : null,

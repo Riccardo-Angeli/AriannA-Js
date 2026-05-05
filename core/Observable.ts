@@ -352,15 +352,421 @@ function _toTargets(target: EventTarget | EventTarget[] | string): EventTarget[]
 }
 function _toTypes(types: string): string[] { return types.split(/[\s,|]+/).filter(Boolean); }
 
+// ── Reactive deep wrapper ─────────────────────────────────────────────────────
+
+/**
+ * Event detail for Observable reactive change events.
+ *
+ * The Observable instance fires:
+ *   - 'change-before'           — cancelable, fired before the mutation
+ *   - 'change-after'            — non-cancelable, fired after commit
+ *   - '<key>-change-before'     — cancelable, scoped to the changing key
+ *   - '<key>-change-after'      — scoped to the changed key
+ *
+ * For nested mutations the path[] reflects the full key chain from the root.
+ *
+ * @example
+ *   const obs = new Observable(['apple', 'banana']);
+ *   obs.on('change-after', e => console.log(e.Path, e.Old, '→', e.New));
+ *   obs.value[0] = 'mango';   // → ['0'], 'apple', 'mango'
+ */
+export interface ChangeEvent extends AriannAEvent
+{
+    Type   : string;
+    Target : object;          // the immediate parent that mutated
+    Key    : string | symbol; // property/index that changed
+    Path   : (string | symbol)[]; // full path from root
+    Old    : unknown;
+    New    : unknown;
+    Kind   : 'set' | 'delete' | 'mutate';
+}
+
+/**
+ * Mutating method names that must trigger 'change' events when called on
+ * a wrapped Array/Map/Set/WeakMap/WeakSet.
+ */
+const _MUTATING_ARRAY = new Set([
+    'push', 'pop', 'shift', 'unshift',
+    'splice', 'sort', 'reverse', 'fill', 'copyWithin',
+]);
+const _MUTATING_MAP = new Set(['set', 'delete', 'clear']);
+const _MUTATING_SET = new Set(['add', 'delete', 'clear']);
+
+/**
+ * Marker used to retrieve the underlying raw value from a Proxy.
+ * @internal
+ */
+const _RAW = Symbol('arianna.observable.raw');
+
+/**
+ * Cache of raw → proxy so we never wrap the same object twice within a
+ * single observable graph.
+ * @internal
+ */
+type _ProxyCache = WeakMap<object, object>;
+
+/**
+ * Decides whether a value should be deep-wrapped in the reactive graph.
+ * Frozen / sealed objects are passed through untouched.
+ */
+function _isReactiveTarget(v: unknown): v is object
+{
+    if (v === null || typeof v !== 'object') return false;
+    if (Object.isFrozen(v) || Object.isSealed(v)) return false;
+    return true;
+}
+
+/**
+ * Creates a reactive deep wrapper around `root`. All nested objects, arrays,
+ * Maps and Sets become Proxies that emit changes through `emit`. Plain
+ * objects use Object.defineProperty getters/setters so primitive writes
+ * (`obj.name = 'x'`) are intercepted with no Proxy overhead per read.
+ */
+function _makeReactive<T extends object>(
+    root  : T,
+    emit  : (path: (string | symbol)[], target: object, key: string | symbol,
+             oldValue: unknown, newValue: unknown,
+             kind: 'set' | 'delete' | 'mutate') => boolean,
+): T
+{
+    const cache: _ProxyCache = new WeakMap();
+
+    function wrap(value: unknown, path: (string | symbol)[]): unknown
+    {
+        if (!_isReactiveTarget(value)) return value;
+        const cached = cache.get(value);
+        if (cached) return cached;
+
+        // Map / WeakMap / Set / WeakSet — wrap method calls
+        if (value instanceof Map || value instanceof WeakMap
+            || value instanceof Set || value instanceof WeakSet)
+        {
+            const proxy = _wrapCollection(value, path, emit, wrap);
+            cache.set(value, proxy);
+            return proxy;
+        }
+
+        // Array — Proxy with set / deleteProperty traps
+        if (Array.isArray(value))
+        {
+            const proxy = _wrapArray(value, path, emit, wrap);
+            cache.set(value, proxy);
+            return proxy;
+        }
+
+        // Plain object — install getter/setter on every own enumerable key.
+        // Recurse into nested objects/arrays.
+        _installObjectTraps(value as Record<string, unknown>, path, emit, wrap);
+        cache.set(value, value);
+        return value;
+    }
+
+    return wrap(root, []) as T;
+}
+
+/**
+ * Wraps an Array in a Proxy that intercepts index assignment, deletion,
+ * and mutating method calls (push/pop/splice/sort/reverse/fill/copyWithin).
+ */
+function _wrapArray(
+    arr   : unknown[],
+    path  : (string | symbol)[],
+    emit  : (path: (string | symbol)[], target: object, key: string | symbol,
+             oldValue: unknown, newValue: unknown,
+             kind: 'set' | 'delete' | 'mutate') => boolean,
+    wrap  : (v: unknown, path: (string | symbol)[]) => unknown,
+): unknown[]
+{
+    // Pre-wrap existing elements so they too become reactive when mutated.
+    for (let i = 0; i < arr.length; i++)
+    {
+        const w = wrap(arr[i], [...path, String(i)]);
+        if (w !== arr[i]) arr[i] = w;
+    }
+
+    return new Proxy(arr, {
+        get(target, key)
+        {
+            if (key === _RAW) return target;
+
+            const v = (target as unknown as Record<string | symbol, unknown>)[key];
+            if (typeof key === 'string' && _MUTATING_ARRAY.has(key) && typeof v === 'function')
+            {
+                return function(this: unknown, ...args: unknown[])
+                {
+                    const before = target.slice();
+                    const result = (v as (...a: unknown[]) => unknown).apply(target, args);
+                    emit([...path], target, key, before, target.slice(), 'mutate');
+                    // newly-inserted items must become reactive too
+                    for (let i = 0; i < target.length; i++)
+                    {
+                        const w = wrap(target[i], [...path, String(i)]);
+                        if (w !== target[i]) target[i] = w;
+                    }
+                    return result;
+                };
+            }
+            return v;
+        },
+
+        set(target, key, value)
+        {
+            if (key === 'length')
+            {
+                const old = target.length;
+                if (Object.is(old, value)) return true;
+                if (!emit([...path], target, key, old, value, 'set')) return false;
+                (target as unknown as { length: number }).length = value as number;
+                return true;
+            }
+
+            const old = (target as unknown as Record<string | symbol, unknown>)[key];
+            if (Object.is(old, value)) return true;
+
+            if (!emit([...path], target, key, old, value, 'set')) return false;
+
+            const wrapped = wrap(value, [...path, key]);
+            (target as unknown as Record<string | symbol, unknown>)[key] = wrapped;
+            return true;
+        },
+
+        deleteProperty(target, key)
+        {
+            if (!(key in target)) return true;
+            const old = (target as unknown as Record<string | symbol, unknown>)[key];
+            if (!emit([...path], target, key, old, undefined, 'delete')) return false;
+            delete (target as unknown as Record<string | symbol, unknown>)[key];
+            return true;
+        },
+    });
+}
+
+/**
+ * Wraps a Map / WeakMap / Set / WeakSet so mutating methods emit events.
+ * Preserves identity of read methods (get / has / forEach / iterators).
+ */
+function _wrapCollection(
+    coll  : Map<unknown, unknown> | WeakMap<object, unknown> | Set<unknown> | WeakSet<object>,
+    path  : (string | symbol)[],
+    emit  : (path: (string | symbol)[], target: object, key: string | symbol,
+             oldValue: unknown, newValue: unknown,
+             kind: 'set' | 'delete' | 'mutate') => boolean,
+    wrap  : (v: unknown, path: (string | symbol)[]) => unknown,
+): typeof coll
+{
+    const isMap = coll instanceof Map || coll instanceof WeakMap;
+    const mutating = isMap ? _MUTATING_MAP : _MUTATING_SET;
+
+    return new Proxy(coll, {
+        get(target, key)
+        {
+            if (key === _RAW) return target;
+
+            const v = Reflect.get(target, key);
+            if (typeof v !== 'function') return v;
+
+            // Bind native methods to the unwrapped target so internal slots work.
+            if (typeof key === 'string' && mutating.has(key))
+            {
+                return function(this: unknown, ...args: unknown[])
+                {
+                    const before = isMap
+                        ? new Map(target instanceof Map ? target.entries() : [])
+                        : new Set(target instanceof Set ? target.values() : []);
+                    if (isMap && key === 'set' && args.length === 2)
+                    {
+                        args[1] = wrap(args[1], [...path, '<map-value>']);
+                    }
+                    else if (!isMap && key === 'add' && args.length === 1)
+                    {
+                        args[0] = wrap(args[0], [...path, '<set-value>']);
+                    }
+                    const result = (v as (...a: unknown[]) => unknown).apply(target, args);
+                    emit([...path], target, key, before, undefined, 'mutate');
+                    return result;
+                };
+            }
+            return v.bind(target);
+        },
+    });
+}
+
+/**
+ * Installs getter/setter traps on every enumerable own property of an object.
+ * Recursive: nested objects/arrays/collections become reactive too.
+ */
+function _installObjectTraps(
+    obj   : Record<string, unknown>,
+    path  : (string | symbol)[],
+    emit  : (path: (string | symbol)[], target: object, key: string | symbol,
+             oldValue: unknown, newValue: unknown,
+             kind: 'set' | 'delete' | 'mutate') => boolean,
+    wrap  : (v: unknown, path: (string | symbol)[]) => unknown,
+): void
+{
+    for (const key of Object.keys(obj))
+    {
+        const desc = Object.getOwnPropertyDescriptor(obj, key);
+        if (!desc || !desc.configurable) continue;
+        if (desc.get || desc.set) continue;     // already a getter/setter — skip
+
+        let value = wrap(obj[key], [...path, key]);
+
+        Object.defineProperty(obj, key, {
+            enumerable  : true,
+            configurable: true,
+            get() { return value; },
+            set(next: unknown)
+            {
+                if (Object.is(value, next)) return;
+                const old = value;
+                if (!emit([...path], obj, key, old, next, 'set')) return;
+                value = wrap(next, [...path, key]);
+            },
+        });
+    }
+}
+
 // ── Observable class ──────────────────────────────────────────────────────────
+
+/**
+ * Construct options for `new Observable(value, options)`.
+ *
+ * @example
+ *   const obs = new Observable(['apple','banana'], { history: true });
+ *   obs.on('change-after', e => console.log(e.Path, e.Old, '→', e.New));
+ *   obs.value[0] = 'mango';   // → change-after { Path:['0'], Old:'apple', New:'mango' }
+ *   obs.value.push('pear');   // → change-after Kind:'mutate'
+ *   obs.undo();               // → 'mango' becomes 'apple'
+ */
+export interface ObservableOptions
+{
+    /** When true, every change is recorded into a history stack for `undo()`. */
+    history?: boolean;
+    /** Max history entries kept (default 100). Older entries are dropped. */
+    historyLimit?: number;
+}
 
 export class Observable
 {
     readonly #events : Map<string, Set<InstanceListener>> = new Map();
     readonly #target : object;
     readonly #effects: Array<() => void> = [];
+    readonly #opts   : ObservableOptions;
+    readonly #history: Array<{ path: (string|symbol)[]; target: object; key: string|symbol; old: unknown; nw: unknown; kind: string }> = [];
+    #reactive        : unknown;
 
-    constructor(target?: object) { this.#target = target ?? this; }
+    /**
+     * Wraps `value` (or `this`) into a reactive observer.
+     *
+     * - Pass an object/array/Map/Set: it becomes deep-reactive. Read it via
+     *   `obs.value`. All assignments emit 'change-before' (cancelable) and
+     *   'change-after' on the instance, plus '<key>-change-before' /
+     *   '<key>-change-after' scoped events.
+     * - Pass nothing: behaves as the legacy event bus on `this`.
+     */
+    constructor(value?: object, options: ObservableOptions = {})
+    {
+        this.#opts = options;
+        if (value !== undefined && value !== null && typeof value === 'object')
+        {
+            this.#target = value;
+            this.#reactive = _makeReactive(value, (path, target, key, old, nw, kind) =>
+                this.#emit(path, target, key, old, nw, kind));
+        }
+        else
+        {
+            this.#target = this;
+            this.#reactive = undefined;
+        }
+    }
+
+    /**
+     * The reactive view of the wrapped value. Mutations through this
+     * proxy fire 'change-before' / 'change-after' on this Observable.
+     */
+    get value(): unknown { return this.#reactive ?? this.#target; }
+
+    /**
+     * Reverts the most recent change recorded in the history stack.
+     * No-op if history is disabled or empty. Does not fire change events
+     * on undo (silent).
+     */
+    undo(): boolean
+    {
+        const entry = this.#history.pop();
+        if (!entry) return false;
+        const t = entry.target as unknown as Record<string | symbol, unknown>;
+        if (entry.kind === 'set' || entry.kind === 'mutate') t[entry.key] = entry.old;
+        else if (entry.kind === 'delete') t[entry.key] = entry.old;
+        return true;
+    }
+
+    /** Number of recorded entries in the history stack. */
+    get historyLength(): number { return this.#history.length; }
+
+    /**
+     * Internal: fired by the reactive Proxy/setter layer. Emits the
+     * 4-event pattern (change-before, <key>-change-before, change-after,
+     * <key>-change-after) and records to history if enabled.
+     * Returns false if any 'change-before' listener cancels the event.
+     */
+    #emit(
+        path  : (string | symbol)[],
+        target: object,
+        key   : string | symbol,
+        old   : unknown,
+        nw    : unknown,
+        kind  : 'set' | 'delete' | 'mutate',
+    ): boolean
+    {
+        const keyStr = typeof key === 'symbol' ? key.description ?? '' : String(key);
+        const evBefore: ChangeEvent = {
+            Type: 'change-before', Target: target, Key: key, Path: [...path, key],
+            Old: old, New: nw, Kind: kind,
+        };
+        let cancelled = false;
+
+        // 'change-before' (global)
+        for (const l of this.#events.get('change-before') ?? [])
+        {
+            const before = evBefore.New;
+            l.Handler.call(l.Target, evBefore);
+            // listener can cancel by setting Type = '__cancelled__' or by
+            // mutating the New field (override semantics)
+            if ((evBefore as unknown as { Cancelled?: boolean }).Cancelled) cancelled = true;
+            // listeners may rewrite New
+            if (evBefore.New !== before) { /* allowed */ }
+        }
+        // '<key>-change-before' (scoped)
+        if (keyStr) for (const l of this.#events.get(`${keyStr}-change-before`) ?? [])
+        {
+            const ev = { ...evBefore, Type: `${keyStr}-change-before` } as ChangeEvent;
+            l.Handler.call(l.Target, ev);
+            if ((ev as unknown as { Cancelled?: boolean }).Cancelled) cancelled = true;
+        }
+        if (cancelled) return false;
+
+        // record history (using the possibly-rewritten newValue)
+        if (this.#opts.history)
+        {
+            this.#history.push({ path, target, key, old, nw: evBefore.New, kind });
+            const limit = this.#opts.historyLimit ?? 100;
+            if (this.#history.length > limit) this.#history.shift();
+        }
+
+        // 'change-after' (global)
+        const evAfter: ChangeEvent = {
+            Type: 'change-after', Target: target, Key: key, Path: [...path, key],
+            Old: old, New: evBefore.New, Kind: kind,
+        };
+        for (const l of this.#events.get('change-after') ?? [])
+            l.Handler.call(l.Target, evAfter);
+        if (keyStr) for (const l of this.#events.get(`${keyStr}-change-after`) ?? [])
+            l.Handler.call(l.Target, { ...evAfter, Type: `${keyStr}-change-after` } as ChangeEvent);
+
+        return true;
+    }
 
     // ── Instance Signal API ───────────────────────────────────────────────────
 
