@@ -80,7 +80,9 @@
     "docs"        : "typedoc --out docs src/index.ts",
     "prepublish"  : "npm run typecheck",
     "bench"       : "node ./release/benchmarks/run.js",
-    "build"       : "node scripts/build.mjs",
+    "build:components": "node scripts/build.mjs",
+    "build:dist"     : "bash scripts/build-dist.sh",
+    "build"          : "npm run build:components && npm run build:dist",
     "build:min"   : "node scripts/build.mjs --minify"
   },
   "devDependencies": {
