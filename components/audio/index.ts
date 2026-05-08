@@ -18,6 +18,7 @@ export { AudioPlayer }          from './AudioPlayer.ts';
 export { ChannelStrip }         from './ChannelStrip.ts';
 export { AudioTrackEditor }     from './AudioTrackEditor.ts';
 export { AudioEditor }          from './AudioEditor.ts';
+export { TransportBar }          from './TransportBar.ts';
 
 export type { AudioComponentOptions } from './AudioComponent.ts';
 export type {
