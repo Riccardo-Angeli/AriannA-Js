@@ -78,6 +78,7 @@ export class VideoTrackEditor extends AudioComponent<VideoTrackEditorOptions> {
     private _pxPerSec: number;
 
     private _selected = new Set<string>();
+    private _selectedTracks = new Set<string>();
     private _clipboard: VideoClip[] = [];
     private _playhead = 0;
 
@@ -254,9 +255,17 @@ export class VideoTrackEditor extends AudioComponent<VideoTrackEditorOptions> {
     }
 
     deleteSelection(): void {
-        this._clips = this._clips.filter(c => !this._selected.has(c.id));
+        const trackIds = this._selectedTracks;
+        this._clips = this._clips.filter(c => !this._selected.has(c.id) && !trackIds.has(c.trackId));
         this._selected.clear();
-        this._renderClips();
+
+        if (trackIds.size > 0) {
+            this._tracks = this._tracks.filter(t => !trackIds.has(t.id));
+            this._selectedTracks.clear();
+            this._renderTracks();
+        } else {
+            this._renderClips();
+        }
         this._emit('change', { kind: 'delete-selection' });
     }
 
@@ -421,19 +430,30 @@ export class VideoTrackEditor extends AudioComponent<VideoTrackEditorOptions> {
         for (const t of this._tracks) {
             const head = document.createElement('div');
             head.className = 'ar-videotrack__head';
+            if (this._selectedTracks.has(t.id)) head.classList.add('selected');
+            head.dataset.trackId = t.id;
             head.style.borderLeft = `4px solid ${t.color}`;
             head.innerHTML = `
 <div class="ar-videotrack__head-row">
   <span class="ar-videotrack__head-name">${t.name}</span>
-  <button class="ar-videotrack__head-x" data-act="remove">×</button>
+  <button class="ar-videotrack__head-x" data-act="remove" aria-label="Remove track">×</button>
 </div>
 <div class="ar-videotrack__head-row">
   <button class="ar-videotrack__btn-sm mute ${t.muted ? 'active':''}" data-act="mute">M</button>
   <button class="ar-videotrack__btn-sm solo ${t.soloed ? 'active':''}" data-act="solo">S</button>
 </div>`;
-            head.querySelector('[data-act="remove"]')!.addEventListener('click', () => this.removeTrack(t.id));
-            head.querySelector('[data-act="mute"]')!.addEventListener('click',   () => { t.muted  = !t.muted;  this._renderTracks(); });
-            head.querySelector('[data-act="solo"]')!.addEventListener('click',   () => { t.soloed = !t.soloed; this._renderTracks(); });
+            head.addEventListener('pointerdown', (e: PointerEvent) => {
+                const tgt = e.target as HTMLElement;
+                if (tgt.closest('button, input, label')) return;
+                if (!e.shiftKey) this._selectedTracks.clear();
+                if (this._selectedTracks.has(t.id)) this._selectedTracks.delete(t.id);
+                else this._selectedTracks.add(t.id);
+                this._renderTracks();
+                this._emit('change', { kind: 'select-tracks', ids: [...this._selectedTracks] });
+            });
+            head.querySelector('[data-act="remove"]')!.addEventListener('click', (e) => { e.stopPropagation(); this.removeTrack(t.id); });
+            head.querySelector('[data-act="mute"]')!.addEventListener('click',   (e) => { e.stopPropagation(); t.muted  = !t.muted;  this._renderTracks(); });
+            head.querySelector('[data-act="solo"]')!.addEventListener('click',   (e) => { e.stopPropagation(); t.soloed = !t.soloed; this._renderTracks(); });
             this._elTrackHeads.appendChild(head);
         }
         for (const t of this._tracks) {
@@ -758,9 +778,13 @@ export class VideoTrackEditor extends AudioComponent<VideoTrackEditorOptions> {
             if (highlightedRow) highlightedRow.classList.add('ar-videotrack__body--dropping');
         };
 
-        el.setPointerCapture(e.pointerId);
+        // Best-effort pointer capture (kept as belt-and-braces; the real safety
+        // net is the window-level listeners below, which survive any DOM
+        // reparenting we do during cross-track drag).
+        try { el.setPointerCapture(e.pointerId); } catch { /* not supported / detached */ }
 
         const onMove = (ev: PointerEvent) => {
+            if (ev.pointerId !== e.pointerId) return;
             const dx = (ev.clientX - startX) / px;
 
             // ── X axis: time-based move/resize (existing behaviour) ────────
@@ -778,8 +802,10 @@ export class VideoTrackEditor extends AudioComponent<VideoTrackEditorOptions> {
             el.style.left  = (c.start * px) + 'px';
             el.style.width = Math.max(20, c.duration * px) + 'px';
 
-            // ── Y axis: cross-track drag (Task A — new behaviour) ──────────
+            // ── Y axis: cross-track drag ──────────────────────────────────
             // Only when in 'move' mode; resize handles stay locked to row.
+            // Listeners live on window (not on `el`), so reparenting `el`
+            // mid-drag cannot break the gesture.
             if (mode === 'move') {
                 const targetTrackId = rowAt(ev.clientY);
                 if (targetTrackId && targetTrackId !== c.trackId) {
@@ -805,9 +831,15 @@ export class VideoTrackEditor extends AudioComponent<VideoTrackEditorOptions> {
             void (ev.clientY - startY);
         };
 
-        const onUp = () => {
-            el.removeEventListener('pointermove', onMove);
-            el.removeEventListener('pointerup',   onUp);
+        const cleanup = () => {
+            window.removeEventListener('pointermove',   onMove);
+            window.removeEventListener('pointerup',     onUp);
+            window.removeEventListener('pointercancel', onUp);
+            try { el.releasePointerCapture(e.pointerId); } catch { /* may already be released */ }
+        };
+        const onUp = (ev: PointerEvent) => {
+            if (ev.pointerId !== e.pointerId) return;
+            cleanup();
             setHighlight(null);
             this._renderClips();
             // Emit a track-change event when the clip moved between tracks,
@@ -817,8 +849,9 @@ export class VideoTrackEditor extends AudioComponent<VideoTrackEditorOptions> {
             }
             this._emit('change', { kind: mode + '-clip', clip: c });
         };
-        el.addEventListener('pointermove', onMove);
-        el.addEventListener('pointerup',   onUp);
+        window.addEventListener('pointermove',   onMove);
+        window.addEventListener('pointerup',     onUp);
+        window.addEventListener('pointercancel', onUp);
     }
 
     private _renderPlayhead(): void {
@@ -840,24 +873,25 @@ export class VideoTrackEditor extends AudioComponent<VideoTrackEditorOptions> {
 .ar-videotrack__zoom::-webkit-slider-thumb { -webkit-appearance:none; width:10px; height:10px; border-radius:50%; background:#3b82f6; cursor:pointer; }
 .ar-videotrack__main { flex:1; display:flex; min-height:0; overflow:hidden; }
 .ar-videotrack__heads { width:120px; background:#252525; border-right:1px solid #333; overflow-y:auto; flex-shrink:0; }
-.ar-videotrack__head { height:60px; padding:6px 8px; border-bottom:1px solid #333; box-sizing:border-box; }
+.ar-videotrack__head { height:60px; padding:6px 8px; border-bottom:1px solid #333; box-sizing:border-box; cursor:pointer; touch-action:manipulation; }
+.ar-videotrack__head.selected { background:rgba(59,130,246,0.18); box-shadow:inset 0 0 0 2px #3b82f6; }
 .ar-videotrack__head-row { display:flex; align-items:center; gap:4px; margin:2px 0; }
 .ar-videotrack__head-name { flex:1; font-weight:600; font-size:11px; }
-.ar-videotrack__head-x { background:transparent; border:0; color:#666; font-size:14px; cursor:pointer; padding:0 4px; }
-.ar-videotrack__head-x:hover { color:#dc2626; }
-.ar-videotrack__btn-sm { background:transparent; border:1px solid #444; color:#d4d4d4; padding:2px 8px; font:10px sans-serif; font-weight:600; border-radius:2px; cursor:pointer; }
+.ar-videotrack__head-x { background:transparent; border:0; color:#666; font-size:18px; line-height:1; cursor:pointer; padding:6px 10px; min-width:32px; min-height:28px; border-radius:3px; touch-action:manipulation; }
+.ar-videotrack__head-x:hover { color:#dc2626; background:rgba(220,38,38,0.1); }
+.ar-videotrack__btn-sm { background:transparent; border:1px solid #444; color:#d4d4d4; padding:4px 10px; font:10px sans-serif; font-weight:600; border-radius:2px; cursor:pointer; touch-action:manipulation; min-height:24px; }
 .ar-videotrack__btn-sm.mute.active { background:#dc2626; border-color:#dc2626; color:#fff; }
 .ar-videotrack__btn-sm.solo.active { background:#eab308; border-color:#eab308; color:#1f1f1f; }
 .ar-videotrack__rest { flex:1; overflow:auto; }
-.ar-videotrack__ruler { background:#252525; border-bottom:1px solid #333; height:22px; position:relative; }
+.ar-videotrack__ruler { background:#252525; border-bottom:1px solid #333; height:22px; position:relative; touch-action:none; }
 .ar-videotrack__ruler-tick { position:absolute; top:0; bottom:0; width:1px; background:#555; }
 .ar-videotrack__ruler-lbl  { position:absolute; top:4px; font:10px ui-monospace,monospace; color:#999; }
 .ar-videotrack__bodies { position:relative; min-height:200px; cursor:crosshair; }
 .ar-videotrack__body { height:60px; border-bottom:1px solid #333; position:relative; }
-.ar-videotrack__clip { position:absolute; top:4px; bottom:4px; border:1.5px solid #3b82f6; border-radius:3px; cursor:move; overflow:hidden; }
+.ar-videotrack__clip { position:absolute; top:4px; bottom:4px; border:1.5px solid #3b82f6; border-radius:3px; cursor:move; overflow:hidden; touch-action:none; }
 .ar-videotrack__clip.selected { box-shadow:0 0 0 2px #fff inset; }
 .ar-videotrack__clip-lbl { position:absolute; top:2px; left:6px; font:10px sans-serif; color:#fff; pointer-events:none; text-shadow:0 1px 2px rgba(0,0,0,.5); z-index:2; }
-.ar-videotrack__clip-h { position:absolute; top:0; bottom:0; width:6px; cursor:ew-resize; z-index:3; }
+.ar-videotrack__clip-h { position:absolute; top:0; bottom:0; width:10px; cursor:ew-resize; z-index:3; touch-action:none; }
 .ar-videotrack__clip-h.left  { left:0; }
 .ar-videotrack__clip-h.right { right:0; }
 .ar-videotrack__thumbs { position:absolute; inset:0; display:flex; }

@@ -294,6 +294,37 @@ export class AriannATemplate
 
 // ── DOM event type registry ───────────────────────────────────────────────────
 
+/**
+ * Safe global resolver.
+ *
+ * Some DOM event constructors are not exposed as bare identifiers in every
+ * environment: e.g. Firefox desktop without a touch device throws
+ * `ReferenceError: TouchEvent is not defined` when the bundle is parsed,
+ * blocking the entire module from loading. Using `typeof` is the only
+ * operator that does not raise on undeclared identifiers.
+ *
+ * The fallback is a named stub class so `desc.Interface.name` keeps producing
+ * the original interface name (used to build `DOM_INTERFACES`), preserving
+ * the lookup-by-name shape of the registry across all browsers.
+ */
+function _safeEventCtor<T extends abstract new (...a: never[]) => Event>(
+    name: string,
+    resolver: () => T | undefined,
+): T
+{
+    try {
+        const ctor = resolver();
+        if (ctor) return ctor;
+    } catch { /* swallow ReferenceError on undeclared globals */ }
+    // Fallback stub: a class whose .name matches `name`. Never instantiated
+    // at runtime (the registry only reads .name), but kept structurally
+    // compatible with the descriptor type.
+    return ({ [name]: class extends Event {} }[name]) as unknown as T;
+}
+
+const _TouchEvent = _safeEventCtor('TouchEvent', () =>
+    typeof TouchEvent !== 'undefined' ? TouchEvent : undefined);
+
 const DOM_TYPES: Readonly<Record<string, DomEventTypeDescriptor>> = Object.freeze(
 {
     click:{Name:'click',Interface:MouseEvent}, dblclick:{Name:'dblclick',Interface:MouseEvent},
@@ -326,8 +357,8 @@ const DOM_TYPES: Readonly<Record<string, DomEventTypeDescriptor>> = Object.freez
     message:{Name:'message',Interface:Event}, online:{Name:'online',Interface:Event},
     offline:{Name:'offline',Interface:Event}, popstate:{Name:'popstate',Interface:Event},
     hashchange:{Name:'hashchange',Interface:Event}, beforeunload:{Name:'beforeunload',Interface:Event},
-    touchstart:{Name:'touchstart',Interface:TouchEvent}, touchend:{Name:'touchend',Interface:TouchEvent},
-    touchmove:{Name:'touchmove',Interface:TouchEvent}, touchcancel:{Name:'touchcancel',Interface:TouchEvent},
+    touchstart:{Name:'touchstart',Interface:_TouchEvent}, touchend:{Name:'touchend',Interface:_TouchEvent},
+    touchmove:{Name:'touchmove',Interface:_TouchEvent}, touchcancel:{Name:'touchcancel',Interface:_TouchEvent},
     pointerdown:{Name:'pointerdown',Interface:PointerEvent}, pointerup:{Name:'pointerup',Interface:PointerEvent},
     pointermove:{Name:'pointermove',Interface:PointerEvent}, pointercancel:{Name:'pointercancel',Interface:PointerEvent},
     pointerenter:{Name:'pointerenter',Interface:PointerEvent}, pointerleave:{Name:'pointerleave',Interface:PointerEvent},
