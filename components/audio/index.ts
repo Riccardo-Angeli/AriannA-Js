@@ -18,7 +18,7 @@ export { AudioPlayer }          from './AudioPlayer.ts';
 export { ChannelStrip }         from './ChannelStrip.ts';
 export { AudioTrackEditor }     from './AudioTrackEditor.ts';
 export { AudioEditor }          from './AudioEditor.ts';
-export { TransportBar }          from './TransportBar.ts';
+export { TransportBar, parseTimeSig, formatSampleRate, formatSMPTE, formatBars } from './TransportBar.ts';
 
 export type { AudioComponentOptions } from './AudioComponent.ts';
 export type {
@@ -29,3 +29,4 @@ export type { AudioPlayerOptions }                            from './AudioPlaye
 export type { ChannelStripOptions, EQBand, EQBandSettings }   from './ChannelStrip.ts';
 export type { AudioTrack, AudioClip, AudioTrackEditorOptions } from './AudioTrackEditor.ts';
 export type { AudioEditorOptions }                            from './AudioEditor.ts';
+export type { TransportBarOptions, TimecodeMode, Framerate } from './TransportBar.ts';
