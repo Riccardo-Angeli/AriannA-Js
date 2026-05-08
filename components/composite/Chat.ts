@@ -684,8 +684,10 @@ function escapeHtml(s: string): string
 function avatarHtml(name: string, src?: string): string
 {
     if (src) return `<img src="${src}" alt="">`;
-    const initials = name.split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase();
-    return escapeHtml(initials);
+    const safeName = (name ?? '').toString();
+    if (!safeName.trim()) return '?';
+    const initials = safeName.split(/\s+/).map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+    return escapeHtml(initials || '?');
 }
 
 function formatShortTime(at: number, locale?: string): string
