@@ -643,9 +643,14 @@ export const Data = {
     ObservableMap, ObservableArray,
 };
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'Data', {
-        value: Data, writable: false, enumerable: false, configurable: false,
-    });
+if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Data')) {
+    try {
+        Object.defineProperty(window, 'Data', {
+            value: Data, writable: false, enumerable: false, configurable: false,
+        });
+    } catch {
+        // Already registered by another bundle — silent skip.
+    }
+}
 
 export default Data;

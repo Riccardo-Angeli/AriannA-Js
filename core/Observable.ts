@@ -892,7 +892,12 @@ export class Observable
     static template(html: string): AriannATemplate { return new AriannATemplate(html); }
 }
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'Observable', { enumerable: true, configurable: false, writable: false, value: Observable });
+if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Observable')) {
+    try {
+        Object.defineProperty(window, 'Observable', { enumerable: true, configurable: false, writable: false, value: Observable });
+    } catch {
+        // Already registered by another bundle — silent skip.
+    }
+}
 
 export default Observable;

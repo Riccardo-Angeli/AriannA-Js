@@ -796,12 +796,14 @@ export const LateX = {
     version: '1.0.0',
     install(_core: unknown): void
     {
-        try
-        {
-            Object.defineProperty(window, 'Latex', {
-                value: Latex, writable: false, enumerable: false, configurable: false,
-            });
-        } catch {}
+        if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Latex')) {
+            try
+            {
+                Object.defineProperty(window, 'Latex', {
+                    value: Latex, writable: false, enumerable: false, configurable: false,
+                });
+            } catch {}
+        }
     },
 };
 

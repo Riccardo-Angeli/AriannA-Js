@@ -32,12 +32,18 @@ export const Network = {
 
   install(core: typeof Core, opts?: unknown): void {
     // Register Network on Core
-    Object.defineProperty(window, "AriannANetwork", {
-      value       : AriannANetworkAPI,
-      writable    : false,
-      enumerable  : false,
-      configurable: false,
-    });
+    if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'AriannANetwork')) {
+      try {
+        Object.defineProperty(window, "AriannANetwork", {
+          value       : AriannANetworkAPI,
+          writable    : false,
+          enumerable  : false,
+          configurable: false,
+        });
+      } catch {
+        // Already registered by another bundle — silent skip.
+      }
+    }
   },
 };
 

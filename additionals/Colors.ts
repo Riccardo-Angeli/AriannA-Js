@@ -424,13 +424,30 @@ export const Colors = {
 };
 
 // ── Global registration ───────────────────────────────────────────────────────
+//
+// The Colors module is included in two bundles (`arianna-additionals` and
+// `arianna-components`, the latter pulling it in for the ColorPicker family).
+// Whichever bundle loads first locks `window.Colors` as non-configurable; if
+// we attempted the defineProperty unconditionally a second time, the browser
+// would throw `TypeError: can't redefine non-configurable property "Colors"`
+// and abort the entire bundle's execution.
+//
+// The fix is a two-layer guard: skip if already present, and wrap in
+// try/catch so that any future change to the descriptor still cannot break
+// module evaluation. Same pattern as `Latex.ts`.
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'Colors', {
-        value       : Colors,
-        writable    : false,
-        enumerable  : false,
-        configurable: false,
-    });
+if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Colors'))
+{
+    try
+    {
+        Object.defineProperty(window, 'Colors', {
+            value       : Colors,
+            writable    : false,
+            enumerable  : false,
+            configurable: false,
+        });
+    }
+    catch { /* another bundle already locked window.Colors — leave it alone */ }
+}
 
 export default Colors;

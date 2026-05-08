@@ -2660,12 +2660,17 @@ export const Three = {
 
 // ── Global registration ───────────────────────────────────────────────────────
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'Three', {
-        value       : Three,
-        writable    : false,
-        enumerable  : false,
-        configurable: false,
-    });
+if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Three')) {
+    try {
+        Object.defineProperty(window, 'Three', {
+            value       : Three,
+            writable    : false,
+            enumerable  : false,
+            configurable: false,
+        });
+    } catch {
+        // Already registered by another bundle — silent skip.
+    }
+}
 
 export default Three;

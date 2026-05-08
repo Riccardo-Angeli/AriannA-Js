@@ -993,7 +993,12 @@ export const AI = {
     utils: AIUtils,
 };
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'AI', { value: AI, writable: false, enumerable: false, configurable: false });
+if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'AI')) {
+    try {
+        Object.defineProperty(window, 'AI', { value: AI, writable: false, enumerable: false, configurable: false });
+    } catch {
+        // Already registered by another bundle — silent skip.
+    }
+}
 
 export default AI;

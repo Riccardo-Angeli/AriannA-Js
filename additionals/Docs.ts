@@ -1591,12 +1591,17 @@ export const Docs = {
 
 // ── Global registration ───────────────────────────────────────────────────────
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'Docs', {
-        value       : Docs,
-        writable    : false,
-        enumerable  : false,
-        configurable: false,
-    });
+if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Docs')) {
+    try {
+        Object.defineProperty(window, 'Docs', {
+            value       : Docs,
+            writable    : false,
+            enumerable  : false,
+            configurable: false,
+        });
+    } catch {
+        // Already registered by another bundle — silent skip.
+    }
+}
 
 export default Docs;

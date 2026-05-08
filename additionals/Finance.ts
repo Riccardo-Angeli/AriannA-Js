@@ -757,7 +757,12 @@ export const Heston = {
 
 export const Finance = { Indicators, Portfolio, BlackScholes, Bachelier, Heston, MonteCarlo, Backtest };
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'Finance', { value: Finance, writable: false, enumerable: false, configurable: false });
+if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Finance')) {
+    try {
+        Object.defineProperty(window, 'Finance', { value: Finance, writable: false, enumerable: false, configurable: false });
+    } catch {
+        // Already registered by another bundle — silent skip.
+    }
+}
 
 export default Finance;
