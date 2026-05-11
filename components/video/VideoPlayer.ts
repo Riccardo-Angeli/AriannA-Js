@@ -56,8 +56,38 @@ interface ProviderInfo {
 }
 
 /**
+ * Resolve which hostname(s) to declare as Twitch `parent`. Twitch refuses to
+ * load the embed unless the URL contains at least one `parent` query parameter
+ * matching the page's host. Multiple parents can be appended to the URL —
+ * Twitch will accept the iframe if any of them matches the actual host.
+ *
+ * Resolution order:
+ *   1. explicit override (constructor option `twitchParent`),
+ *   2. `location.hostname` if non-empty (anything served over HTTP/HTTPS,
+ *      including `localhost` and `127.0.0.1`),
+ *   3. `'localhost'` as a last resort. This is necessary because pages opened
+ *      directly from disk (`file://`) have an empty hostname; Twitch will then
+ *      fail anyway, but at least the URL is well-formed and the failure mode
+ *      is a visible Twitch error page rather than a silent malformed embed.
+ */
+function resolveTwitchParents(override?: string | string[]): string[]
+{
+    if (override !== undefined)
+    {
+        const list = Array.isArray(override) ? override : [override];
+        const cleaned = list.map(s => s.trim()).filter(Boolean);
+        if (cleaned.length > 0) return cleaned;
+    }
+    const host = (typeof location !== 'undefined' && location.hostname) || '';
+    return host ? [host] : ['localhost'];
+}
+
+/**
  * Identify the provider for a given URL and produce the matching iframe
  * embed URL. Returns null if the URL is a plain video file or unknown.
+ *
+ * `twitchParent` is forwarded to the Twitch embed URL as one or more
+ * `&parent=` parameters. When omitted, the current page's hostname is used.
  *
  * Examples:
  *   - https://youtu.be/dQw4w9WgXcQ                 → youtube
@@ -69,7 +99,7 @@ interface ProviderInfo {
  *   - https://clips.twitch.tv/AwkwardClip          → twitch (clip)
  *   - https://example.com/movie.mp4                → null (native)
  */
-export function detectVideoProvider(url: string): ProviderInfo | null {
+export function detectVideoProvider(url: string, twitchParent?: string | string[]): ProviderInfo | null {
     if (!url) return null;
 
     // YouTube — multiple URL shapes supported
@@ -90,17 +120,19 @@ export function detectVideoProvider(url: string): ProviderInfo | null {
     if (m) return vimeoEmbed(m[1]!);
 
     // Twitch — VOD: twitch.tv/videos/ID, Clip: clips.twitch.tv/ID, Channel: twitch.tv/channelname
+    const parents = resolveTwitchParents(twitchParent);
+
     m = url.match(/^https?:\/\/(?:www\.)?twitch\.tv\/videos\/(\d+)/i);
-    if (m) return twitchEmbed('video', m[1]!);
+    if (m) return twitchEmbed('video', m[1]!, parents);
 
     m = url.match(/^https?:\/\/clips\.twitch\.tv\/([\w-]+)/i);
-    if (m) return twitchEmbed('clip', m[1]!);
+    if (m) return twitchEmbed('clip', m[1]!, parents);
 
     m = url.match(/^https?:\/\/(?:www\.)?twitch\.tv\/([\w-]+)\/clip\/([\w-]+)/i);
-    if (m) return twitchEmbed('clip', m[2]!);
+    if (m) return twitchEmbed('clip', m[2]!, parents);
 
     m = url.match(/^https?:\/\/(?:www\.)?twitch\.tv\/([a-zA-Z0-9_]{3,})$/i);
-    if (m) return twitchEmbed('channel', m[1]!);
+    if (m) return twitchEmbed('channel', m[1]!, parents);
 
     // Plain URL — native <video>
     return null;
@@ -124,17 +156,20 @@ function vimeoEmbed(id: string): ProviderInfo
     };
 }
 
-function twitchEmbed(kind: 'video' | 'clip' | 'channel', id: string): ProviderInfo
+function twitchEmbed(kind: 'video' | 'clip' | 'channel', id: string, parents: string[]): ProviderInfo
 {
-    const host = (typeof location !== 'undefined' && location.hostname) || 'localhost';
     const base = kind === 'clip' ? 'https://clips.twitch.tv/embed' : 'https://player.twitch.tv';
     const param = kind === 'clip'    ? 'clip='
                 : kind === 'channel' ? 'channel='
                 :                      'video=';
+    // Twitch accepts multiple `parent` parameters — useful when the same bundle
+    // is served on apex + www, on multiple environments, or behind Cloudflare
+    // where the front-facing host may differ from the origin.
+    const parentParams = parents.map(p => `&parent=${encodeURIComponent(p)}`).join('');
     return {
         provider: 'twitch',
         id,
-        embed: `${base}/?${param}${encodeURIComponent(id)}&parent=${encodeURIComponent(host)}`,
+        embed: `${base}/?${param}${encodeURIComponent(id)}${parentParams}`,
     };
 }
 
@@ -154,6 +189,20 @@ export interface VideoPlayerOptions extends AudioComponentOptions {
     showControls?  : boolean;
     /** Aspect-ratio for the player. Default '16/9'. */
     aspectRatio?   : string;
+    /**
+     * Override for the Twitch `parent` query parameter (or parameters).
+     * Twitch refuses to load its embed unless the URL declares the host
+     * page's domain. By default we infer it from `location.hostname`, which
+     * works on `localhost` and any HTTP(S)-served page. Set this when:
+     *   • you serve the same page on multiple hostnames (e.g. apex + www);
+     *   • the embed is loaded inside a `file://` document or a sandboxed
+     *     iframe where `location.hostname` is empty;
+     *   • you want to lock the parent regardless of where the bundle runs.
+     *
+     * Pass a single hostname or an array — every entry will be appended as
+     * a separate `&parent=` parameter, which is what Twitch expects.
+     */
+    twitchParent?  : string | string[];
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -235,14 +284,25 @@ export class VideoPlayer extends AudioComponent<VideoPlayerOptions> {
      * Load a new source. Detects the provider, swaps the underlying element
      * (`<video>` ↔ `<iframe>`), and re-applies user options (volume, loop,
      * poster). Returns this for chaining.
+     *
+     * Note on first-load: the constructor leaves `_provider` set to `'native'`
+     * but does NOT actually create a `<video>` element until a Source arrives.
+     * That's why we trigger `_setupNative()` / `_setupEmbed()` either when the
+     * provider changes OR when the corresponding underlying element is still
+     * missing — without the latter, calling `load('movie.mp4')` on a freshly
+     * constructed player would dereference `this._video` before it exists.
      */
     load(url: string, poster?: string): this
     {
-        const info = detectVideoProvider(url);
+        const info = detectVideoProvider(url, this._get<string | string[] | undefined>('twitchParent', undefined));
         const next: VideoProvider = info ? info.provider : 'native';
         this._sourceUrl = url;
 
-        if (next !== this._provider)
+        const needsSetup = next !== this._provider
+            || (next === 'native' && !this._video)
+            || (next !== 'native' && !this._iframe);
+
+        if (needsSetup)
         {
             this._teardownMedia();
             this._provider = next;

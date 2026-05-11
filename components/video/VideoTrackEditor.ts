@@ -745,24 +745,76 @@ export class VideoTrackEditor extends AudioComponent<VideoTrackEditorOptions> {
         // Cross-track drag bookkeeping ──────────────────────────────────────
         // Capture every track row's vertical bounds at the moment drag starts;
         // use these to map clientY → target track on every pointermove event.
-        // We capture once on pointerdown so that scroll / row mutations during
-        // drag don't break the mapping (the editor doesn't allow track add/remove
-        // mid-drag in any case).
-        const rowRects: Array<{ id: string; top: number; bottom: number }> = [];
-        this._elTrackBodies.querySelectorAll<HTMLElement>('[data-track-row]').forEach(row => {
-            const rect = row.getBoundingClientRect();
-            rowRects.push({ id: row.dataset.trackRow!, top: rect.top, bottom: rect.bottom });
-        });
+        // We re-capture whenever a new track is auto-created mid-drag so the
+        // mapping stays accurate.
+        let rowRects: Array<{ id: string; top: number; bottom: number }> = [];
+        const captureRowRects = () => {
+            rowRects = [];
+            this._elTrackBodies.querySelectorAll<HTMLElement>('[data-track-row]').forEach(row => {
+                const rect = row.getBoundingClientRect();
+                rowRects.push({ id: row.dataset.trackRow!, top: rect.top, bottom: rect.bottom });
+            });
+        };
+        captureRowRects();
 
-        /** Find which track row contains a given clientY. Returns null if outside. */
+        // Track auto-creation throttle. We want one new track per drop-below
+        // gesture, not one per pointermove tick — so once we've created a
+        // track for this drag, suppress re-creation until the user drags back
+        // up into existing rows (`autoCreatedThisDrag = false`).
+        let autoCreatedThisDrag = false;
+        const autoCreateTrackBelow = (): string | null => {
+            // Mirror the default-track conventions used in the constructor:
+            // if the editor was set up with a final "Audio" track, the new
+            // one should be inserted *before* it and remain a video track.
+            // To keep this predictable across configurations, we always append
+            // a video track at the end with a fresh id and an "Vn+1" name.
+            const id    = `v${this._tracks.length + 1}`;
+            const idx   = this._tracks.length + 1;
+            const name  = `V${idx}`;
+            // Avoid id collisions if the user previously removed/re-added tracks.
+            let unique  = id;
+            let bump    = idx;
+            while (this._tracks.find(t => t.id === unique)) {
+                bump += 1;
+                unique = `v${bump}`;
+            }
+            // Reparent the dragged clip element off the old row before we mutate
+            // the bodies container, so _renderTracks can't accidentally drop it.
+            const parent = el.parentElement;
+            if (parent) parent.removeChild(el);
+
+            const newTrack = this.addTrack({
+                id   : unique,
+                name : name,
+                color: '#3b82f6',
+                type : 'video',
+            });
+
+            // _renderTracks already ran inside addTrack — re-mount the dragged
+            // clip element under whichever row we're targeting next; the caller
+            // will reparent it once it picks a target. For now park it under
+            // the new row to keep the visual continuous.
+            const newRow = this._elTrackBodies.querySelector<HTMLElement>(`[data-track-row="${newTrack.id}"]`);
+            if (newRow) newRow.appendChild(el);
+
+            // Re-capture row bounds so onMove can map subsequent clientY values
+            // including the freshly added row.
+            captureRowRects();
+            autoCreatedThisDrag = true;
+            return newTrack.id;
+        };
+
+        /**
+         * Find which track row contains a given clientY.
+         *  - inside a row → that row's id
+         *  - above the first row → first row's id (snap)
+         *  - below the last row → null (caller decides whether to auto-create)
+         */
         const rowAt = (clientY: number): string | null => {
-            // Inside an existing row?
             for (const r of rowRects) if (clientY >= r.top && clientY < r.bottom) return r.id;
-            // Above first or below last? Snap to nearest edge so the drag does
-            // something useful even if the cursor leaves the body slightly.
             if (rowRects.length === 0) return null;
-            if (clientY < rowRects[0]!.top)              return rowRects[0]!.id;
-            if (clientY >= rowRects[rowRects.length-1]!.bottom) return rowRects[rowRects.length-1]!.id;
+            if (clientY < rowRects[0]!.top) return rowRects[0]!.id;
+            // Below last row: do NOT snap — let onMove handle auto-create.
             return null;
         };
 
@@ -807,7 +859,22 @@ export class VideoTrackEditor extends AudioComponent<VideoTrackEditorOptions> {
             // Listeners live on window (not on `el`), so reparenting `el`
             // mid-drag cannot break the gesture.
             if (mode === 'move') {
-                const targetTrackId = rowAt(ev.clientY);
+                let targetTrackId = rowAt(ev.clientY);
+
+                // If the cursor is below the last row (and we haven't already
+                // auto-created a track for this gesture), spawn a fresh track
+                // and target it. The throttle prevents creating one track per
+                // pointermove tick when the user holds the cursor far below.
+                const lastBottom = rowRects.length ? rowRects[rowRects.length - 1]!.bottom : 0;
+                if (!targetTrackId && !autoCreatedThisDrag && ev.clientY >= lastBottom) {
+                    targetTrackId = autoCreateTrackBelow();
+                }
+                // If the user dragged back up into the existing rows, lift the
+                // throttle so a subsequent drop below can create another track.
+                if (targetTrackId && rowRects.length > 0 && ev.clientY < lastBottom - 4) {
+                    autoCreatedThisDrag = false;
+                }
+
                 if (targetTrackId && targetTrackId !== c.trackId) {
                     // Move clip data + DOM into the new row
                     c.trackId = targetTrackId;

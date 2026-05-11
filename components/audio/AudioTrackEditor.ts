@@ -718,18 +718,50 @@ export class AudioTrackEditor extends AudioComponent<AudioTrackEditorOptions> {
         const startStart    = c.start, startDur = c.duration, startOffset = c.offset;
         const startTrackId  = c.trackId;
 
-        // Cross-track drag bookkeeping — capture row bounds at start
-        const rowRects: Array<{ id: string; top: number; bottom: number }> = [];
-        this._elTrackBodies.querySelectorAll<HTMLElement>('[data-track-row]').forEach(row => {
-            const rect = row.getBoundingClientRect();
-            rowRects.push({ id: row.dataset.trackRow!, top: rect.top, bottom: rect.bottom });
-        });
+        // Cross-track drag bookkeeping — capture row bounds at start, and
+        // re-capture every time we auto-create a track during the drag so the
+        // clientY → row mapping stays accurate.
+        let rowRects: Array<{ id: string; top: number; bottom: number }> = [];
+        const captureRowRects = () => {
+            rowRects = [];
+            this._elTrackBodies.querySelectorAll<HTMLElement>('[data-track-row]').forEach(row => {
+                const rect = row.getBoundingClientRect();
+                rowRects.push({ id: row.dataset.trackRow!, top: rect.top, bottom: rect.bottom });
+            });
+        };
+        captureRowRects();
+
+        // One-track-per-gesture throttle (see VideoTrackEditor for rationale).
+        let autoCreatedThisDrag = false;
+        const autoCreateTrackBelow = (): string | null => {
+            const idx   = this._tracks.length + 1;
+            // Avoid id collisions if the user previously removed/re-added tracks.
+            let bump   = idx;
+            let unique = `t${bump}`;
+            while (this._tracks.find(t => t.id === unique)) {
+                bump += 1;
+                unique = `t${bump}`;
+            }
+            // Detach the dragged element before addTrack triggers _renderTracks
+            // (which mutates the bodies container).
+            const parent = el.parentElement;
+            if (parent) parent.removeChild(el);
+
+            const newTrack = this.addTrack({ id: unique, name: `Track ${idx}` });
+
+            const newRow = this._elTrackBodies.querySelector<HTMLElement>(`[data-track-row="${newTrack.id}"]`);
+            if (newRow) newRow.appendChild(el);
+
+            captureRowRects();
+            autoCreatedThisDrag = true;
+            return newTrack.id;
+        };
 
         const rowAt = (clientY: number): string | null => {
             for (const r of rowRects) if (clientY >= r.top && clientY < r.bottom) return r.id;
             if (rowRects.length === 0) return null;
-            if (clientY < rowRects[0]!.top)                    return rowRects[0]!.id;
-            if (clientY >= rowRects[rowRects.length-1]!.bottom) return rowRects[rowRects.length-1]!.id;
+            if (clientY < rowRects[0]!.top) return rowRects[0]!.id;
+            // Below last row: do NOT snap — onMove decides whether to auto-create.
             return null;
         };
 
@@ -768,7 +800,19 @@ export class AudioTrackEditor extends AudioComponent<AudioTrackEditorOptions> {
             // Because move/up listeners live on `window`, this reparenting cannot
             // break the drag (which was the bug in the previous implementation).
             if (mode === 'move') {
-                const targetTrackId = rowAt(ev.clientY);
+                let targetTrackId = rowAt(ev.clientY);
+
+                // Drop-below: spawn a new track and target it.
+                const lastBottom = rowRects.length ? rowRects[rowRects.length - 1]!.bottom : 0;
+                if (!targetTrackId && !autoCreatedThisDrag && ev.clientY >= lastBottom) {
+                    targetTrackId = autoCreateTrackBelow();
+                }
+                // Lifted back into existing rows: lift the throttle so the user
+                // can drop below again to spawn another track.
+                if (targetTrackId && rowRects.length > 0 && ev.clientY < lastBottom - 4) {
+                    autoCreatedThisDrag = false;
+                }
+
                 if (targetTrackId && targetTrackId !== c.trackId) {
                     c.trackId = targetTrackId;
                     const newRow = this._elTrackBodies.querySelector<HTMLElement>(`[data-track-row="${targetTrackId}"]`);

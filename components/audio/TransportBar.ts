@@ -410,8 +410,10 @@ ${showIndicators ? `
         const s = document.createElement('style');
         s.id = 'ar-transportbar-styles';
         s.textContent = `
-.ar-transportbar { display:flex; align-items:center; gap:14px; padding:8px 14px; background:#1e1e1e; border:1px solid #333; border-radius:6px; color:#d4d4d4; font:13px -apple-system,system-ui,sans-serif; user-select:none; }
-.ar-transportbar__group { display:flex; align-items:center; gap:4px; }
+.ar-transportbar { display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:8px 14px; background:#1e1e1e; border:1px solid #333; border-radius:6px; color:#d4d4d4; font:13px -apple-system,system-ui,sans-serif; user-select:none; box-sizing:border-box; max-width:100%; }
+.ar-transportbar__group { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+/* Push the indicators block to the right when there is room; on narrow
+   stages the wrap takes over and the auto-margin is harmless. */
 .ar-transportbar__group--meta { gap:6px; margin-left:auto; }
 .ar-transportbar__btn { background:transparent; border:1px solid #444; color:#d4d4d4; padding:4px 10px; font:13px sans-serif; border-radius:3px; cursor:pointer; min-width:34px; transition:background .12s, border-color .12s; }
 .ar-transportbar__btn:hover { background:#2a2a2a; }
@@ -430,6 +432,13 @@ ${showIndicators ? `
 .ar-transportbar__num { width:54px; background:#0d0d0d; border:1px solid #333; color:#d4d4d4; padding:3px 6px; font:13px ui-monospace,monospace; border-radius:3px; }
 .ar-transportbar__sig { width:48px; background:#0d0d0d; border:1px solid #333; color:#d4d4d4; padding:3px 6px; font:13px ui-monospace,monospace; text-align:center; border-radius:3px; }
 .ar-transportbar__sr { font:10px ui-monospace,monospace; color:#888; padding-left:6px; border-left:1px solid #333; }
+/* On very narrow containers the meta row drops below the controls row
+   instead of being pushed to the right edge; the auto-margin still wins
+   on its own line, so there's no extra rule needed. */
+@media (max-width: 600px) {
+  .ar-transportbar { gap:8px; padding:6px 10px; }
+  .ar-transportbar__counter { font-size:16px; min-width:100px; padding:3px 10px; }
+}
 `;
         document.head.appendChild(s);
     }
