@@ -1,722 +1,568 @@
-/**
- * @module    Window
- * @author    Riccardo Angeli
- * @version   1.0.0
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
- *
- * Window — native-style floating window control for AriannA.
- * Dedicated with love to Arianna. ♡
- *
- * A fully draggable, resizable floating window with platform-authentic
- * title-bar chrome. Integrates with State and Observable — every interaction
- * fires a typed event and can drive reactive UI updates.
- *
- * ── CHROME STYLES ────────────────────────────────────────────────────────────
- *   'macos'   → traffic-light buttons (● ● ●), centred title, no border-radius loss
- *   'windows' → Fluent Design header (#0078D4), right-aligned ─ □ ✕ controls
- *   'linux'   → dark header (#2d2d2d), left-aligned ● ● ● circles
- *   'none'    → bare container, no title bar (you supply your own)
- *
- * ── CONSTRUCTOR ──────────────────────────────────────────────────────────────
- *   new Window({ title, chrome, width, height, x, y, content, resizable, ... })
- *
- * ── INSTANCE API (fluent) ─────────────────────────────────────────────────────
- *   .open()           → show (if previously closed)
- *   .close()          → hide + fire 'Window-Close'
- *   .minimize()       → collapse to title bar + fire 'Window-Minimize'
- *   .maximize()       → fill parent + fire 'Window-Maximize'
- *   .restore()        → return to previous size/position
- *   .focus()          → bring to front (z-index)
- *   .moveTo(x, y)     → set position
- *   .center()         → centre in parent
- *   .resize(w, h)     → set size (respects minWidth/minHeight)
- *   .setTitle(str)    → update title bar text
- *   .setContent(html|Real|VirtualNode) → replace body content
- *   .on(type, cb)     → subscribe to Window events
- *   .off(type, cb)    → unsubscribe
- *   .render()         → return underlying HTMLElement
- *   .append(parent)   → mount into a parent element
- *
- * ── EVENTS ────────────────────────────────────────────────────────────────────
- *   'Window-Open'     → { Type, window }
- *   'Window-Close'    → { Type, window }
- *   'Window-Minimize' → { Type, window }
- *   'Window-Maximize' → { Type, window }
- *   'Window-Restore'  → { Type, window }
- *   'Window-Focus'    → { Type, window }
- *   'Window-Move'     → { Type, window, x, y }
- *   'Window-Resize'   → { Type, window, width, height }
- *
- * @example
- *   // macOS-style window
- *   const win = new Window({
- *     title  : 'My Window',
- *     chrome : 'macos',
- *     width  : 640,
- *     height : 480,
- *     content: '<p>Hello from AriannA Window!</p>',
- *   });
- *   win.append('#app');
- *
- * @example
- *   // Windows-style, reactive content
- *   const state = new State({ count: 0 });
- *   const win = new Window({ title: 'Counter', chrome: 'windows', width: 320, height: 200 });
- *   const btn  = new Real('button').set('textContent', '+ Increment')
- *                 .on('click', () => state.State.count++);
- *   win.setContent(btn.render());
- *   win.append('#desktop');
- *
- * @example
- *   // React to window events
- *   win.on('Window-Move',   e => console.log('moved to', e.x, e.y));
- *   win.on('Window-Resize', e => console.log('resized to', e.width, e.height));
- *   win.on('Window-Close',  () => cleanup());
- *
- * @example
- *   // Programmatic control
- *   win.moveTo(200, 100);
- *   win.resize(800, 600);
- *   win.center();
- *   win.minimize();
- *   win.restore();
- *   win.focus();
- */
+// components/layout/Window.ts
+//
+// Window — desktop-style window chrome with draggable title bar, resize
+// handle, minimize / maximize / close controls, optional menu bar, and a
+// dedicated body slot for arbitrary content. Two visual styles match the
+// Dock component:
+//   • 'macos'   — traffic-light buttons (red / yellow / green) on the left,
+//                 centered title, subtle shadow, rounded 10px corners.
+//   • 'windows' — minimize / maximize / close on the right, square corners,
+//                 thin top accent bar.
+//
+// Public API:
+//   • new Window(container, opts)
+//   • setTitle(t), setBody(node|html), setMenu(items), setStyle(s)
+//   • minimize(), maximize(), restore(), close()
+//   • moveTo(x, y), resizeTo(w, h), focus()
+//   • on('close'|'minimize'|'maximize'|'restore'|'focus'|'move'|'resize'|'menu', cb)
 
-import Real               from '../../core/Real.ts';
-import { Observable }     from '../../core/Observable.ts';
-import type { AriannAEvent } from '../../core/Observable.ts';
+import { Control } from '../core/Control';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// Local typed view of Control — keeps this file independent of Control's
+// own TS typings (which vary across the project tree).
+type ControlBase = Control & {
+    el        : HTMLElement;
+    _get<T = unknown>(key: string, fallback?: T): T;
+    _emit(type: string, detail?: unknown, ev?: Event): void;
+    _build(): void;
+};
 
-/** Platform chrome style for the Window title bar. */
-export type WindowChrome = 'macos' | 'windows' | 'linux' | 'none';
+export type WindowStyle = 'macos' | 'windows';
 
-/** Window state machine values. */
-export type WindowState = 'normal' | 'minimized' | 'maximized' | 'closed';
-
-/** Event payload for all Window events. */
-export interface WindowEvent extends AriannAEvent {
-  window : Window;
-  x?     : number;
-  y?     : number;
-  width? : number;
-  height?: number;
+export interface WindowMenuItem {
+    id      : string;
+    label   : string;
+    /** Submenu items (one level deep). */
+    items?  : Array<{ id: string; label: string; shortcut?: string; disabled?: boolean }>;
 }
 
-/** Constructor options for `new Window(opts)`. */
 export interface WindowOptions {
-  /** Title bar label. Default: `'Window'`. */
-  title?     : string;
-  /** Platform chrome style. Default: `'macos'`. */
-  chrome?    : WindowChrome;
-  /** Initial width in px. Default: `640`. */
-  width?     : number;
-  /** Initial height in px. Default: `480`. */
-  height?    : number;
-  /** Initial X position in px. Default: auto-centred. */
-  x?         : number;
-  /** Initial Y position in px. Default: auto-centred. */
-  y?         : number;
-  /** Body content — HTML string, Element, Real, or VirtualNode. */
-  content?   : string | Element | Real | { render(): Element };
-  /** Allow drag-resize from edges and corners. Default: `true`. */
-  resizable? : boolean;
-  /** Allow drag by title bar. Default: `true`. */
-  draggable? : boolean;
-  /** Block interaction outside window (modal overlay). Default: `false`. */
-  modal?     : boolean;
-  /** Minimum width in px. Default: `200`. */
-  minWidth?  : number;
-  /** Minimum height in px. Default: `120`. */
-  minHeight? : number;
-  /** Show window immediately on creation. Default: `true`. */
-  visible?   : boolean;
+    style?     : WindowStyle;
+    title?     : string;
+    /** HTML string OR a DOM node to mount inside the body. */
+    body?      : string | HTMLElement;
+    /** Menu bar items (macOS-style top menu, or Windows in-window menu). */
+    menu?      : WindowMenuItem[];
+    /** Initial position in container coords. Defaults to centered. */
+    x?         : number;
+    y?         : number;
+    /** Initial size. */
+    width?     : number;
+    height?    : number;
+    minWidth?  : number;
+    minHeight? : number;
+    /** Show the resize handle. Default true. */
+    resizable? : boolean;
+    /** Show min/max/close buttons. Default true. */
+    chrome?    : boolean;
+    /** Bring focus when created. Default true. */
+    focused?   : boolean;
+    /** Extra CSS class. */
+    class?     : string;
 }
 
-// ── Chrome builders ───────────────────────────────────────────────────────────
+// Track the highest z-index across all Window instances so a focused window
+// always sits on top of its peers. Reasonable starting value.
+let WIN_Z = 100;
 
-/** Title-bar height per chrome style (px). */
-const CHROME_HEIGHT: Record<WindowChrome, number> = {
-  macos  : 38,
-  windows: 30,
-  linux  : 28,
-  none   : 0,
-};
+export class Window extends Control {
+    private _style    : WindowStyle;
+    private _title    : string;
+    private _menu     : WindowMenuItem[] = [];
+    private _w        : number;
+    private _h        : number;
+    private _x        : number;
+    private _y        : number;
+    private _minW     : number;
+    private _minH     : number;
+    private _maximized: boolean = false;
+    private _minimized: boolean = false;
+    private _prevRect : { x: number; y: number; w: number; h: number } | null = null;
+    private _elTitle! : HTMLElement;
+    private _elBody!  : HTMLElement;
+    private _elMenu?  : HTMLElement;
 
-/** CSS for each chrome. */
-const CHROME_CSS: Record<WindowChrome, string> = {
-  macos  : 'background:#e0e0e0;border-radius:8px 8px 0 0;',
-  windows: 'background:#0078D4;border-radius:4px 4px 0 0;',
-  linux  : 'background:#2d2d2d;border-radius:4px 4px 0 0;',
-  none   : 'display:none;',
-};
-
-/** Border-radius for the outer window per chrome style. */
-const CHROME_RADIUS: Record<WindowChrome, string> = {
-  macos  : '8px',
-  windows: '4px',
-  linux  : '4px',
-  none   : '4px',
-};
-
-/**
- * Build the inner HTML for the title bar.
- * @internal
- */
-function buildTitleBar(chrome: WindowChrome, title: string, id: string): string {
-  const css  = CHROME_CSS[chrome];
-  const base = `class="arianna-win-tb" data-win="${id}" style="${css}display:flex;align-items:center;width:100%;box-sizing:border-box;user-select:none;cursor:move;"`;
-
-  switch (chrome) {
-    case 'macos':
-      return `<div ${base} style="${css}display:flex;align-items:center;padding:0 12px;height:38px;gap:6px;cursor:move;">
-        <button class="arianna-win-btn arianna-win-close" data-action="close" data-win="${id}"
-          style="width:12px;height:12px;border-radius:50%;background:#ff5f57;border:none;cursor:pointer;flex-shrink:0;padding:0;"></button>
-        <button class="arianna-win-btn arianna-win-minimize" data-action="minimize" data-win="${id}"
-          style="width:12px;height:12px;border-radius:50%;background:#febc2e;border:none;cursor:pointer;flex-shrink:0;padding:0;"></button>
-        <button class="arianna-win-btn arianna-win-maximize" data-action="maximize" data-win="${id}"
-          style="width:12px;height:12px;border-radius:50%;background:#28c840;border:none;cursor:pointer;flex-shrink:0;padding:0;"></button>
-        <span class="arianna-win-title" data-win="${id}"
-          style="flex:1;text-align:center;font-size:13px;font-weight:500;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${title}</span>
-      </div>`;
-
-    case 'windows':
-      return `<div ${base} style="${css}display:flex;align-items:center;padding:0 0 0 10px;height:30px;cursor:move;">
-        <span class="arianna-win-title" data-win="${id}"
-          style="flex:1;font-size:12px;font-weight:500;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${title}</span>
-        <button class="arianna-win-btn arianna-win-minimize" data-action="minimize" data-win="${id}"
-          style="background:none;border:none;color:#fff;cursor:pointer;font-size:14px;line-height:1;padding:0 12px;height:30px;">─</button>
-        <button class="arianna-win-btn arianna-win-maximize" data-action="maximize" data-win="${id}"
-          style="background:none;border:none;color:#fff;cursor:pointer;font-size:12px;line-height:1;padding:0 12px;height:30px;">□</button>
-        <button class="arianna-win-btn arianna-win-close" data-action="close" data-win="${id}"
-          style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;line-height:1;padding:0 12px;height:30px;">✕</button>
-      </div>`;
-
-    case 'linux':
-      return `<div ${base} style="${css}display:flex;align-items:center;padding:0 10px;height:28px;gap:6px;cursor:move;">
-        <button class="arianna-win-btn arianna-win-close" data-action="close" data-win="${id}"
-          style="width:10px;height:10px;border-radius:50%;background:#ff5f57;border:none;cursor:pointer;flex-shrink:0;padding:0;"></button>
-        <button class="arianna-win-btn arianna-win-minimize" data-action="minimize" data-win="${id}"
-          style="width:10px;height:10px;border-radius:50%;background:#febc2e;border:none;cursor:pointer;flex-shrink:0;padding:0;"></button>
-        <button class="arianna-win-btn arianna-win-maximize" data-action="maximize" data-win="${id}"
-          style="width:10px;height:10px;border-radius:50%;background:#28c840;border:none;cursor:pointer;flex-shrink:0;padding:0;"></button>
-        <span class="arianna-win-title" data-win="${id}"
-          style="flex:1;text-align:center;font-size:12px;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${title}</span>
-      </div>`;
-
-    default:
-      return '';
-  }
-}
-
-// ── Window ────────────────────────────────────────────────────────────────────
-
-let _winCounter = 0;
-
-/** All Window instances ever created. */
-const _instances: Window[] = [];
-
-export class Window {
-
-  // ── Static ──────────────────────────────────────────────────────────────────
-
-  /** All Window instances. */
-  static get Instances(): Window[] { return _instances; }
-
-  /**
-   * Find a Window instance by its DOM id.
-   *
-   * @example
-   *   Window.GetById('arianna-wip-win-3')  // → Window | undefined
-   */
-  static GetById(id: string): Window | undefined {
-    return _instances.find(w => w.#id === id);
-  }
-
-  /**
-   * Close all open Window instances.
-   *
-   * @example
-   *   Window.CloseAll();
-   */
-  static CloseAll(): void {
-    _instances.forEach(w => { if (w.#state !== 'closed') w.close(); });
-  }
-
-  // ── Private fields ───────────────────────────────────────────────────────────
-
-  readonly #id     : string;
-  readonly #obs    : Observable;
-  readonly #opts   : Required<WindowOptions>;
-
-  #el       : HTMLElement;
-  #tb       : HTMLElement;
-  #body     : HTMLElement;
-  #overlay  : HTMLElement | null = null;
-  #state    : WindowState = 'normal';
-
-  // Saved dimensions for restore after maximize
-  #savedX      : number;
-  #savedY      : number;
-  #savedW      : number;
-  #savedH      : number;
-
-  // ── Constructor ──────────────────────────────────────────────────────────────
-
-  /**
-   * Create a Window.
-   *
-   * @param opts - Window configuration options.
-   *
-   * @example
-   *   const win = new Window({
-   *     title  : 'AriannA Window',
-   *     chrome : 'macos',
-   *     width  : 640,
-   *     height : 480,
-   *   });
-   *   win.append('#desktop');
-   */
-  constructor(opts: WindowOptions = {}) {
-    this.#id  = `arianna-win-${++_winCounter}`;
-    this.#obs = new Observable();
-    this.#opts = {
-      title    : opts.title     ?? 'Window',
-      chrome   : opts.chrome    ?? 'macos',
-      width    : opts.width     ?? 640,
-      height   : opts.height    ?? 480,
-      x        : opts.x         ?? -1,      // -1 = auto-centre on append
-      y        : opts.y         ?? -1,
-      content  : opts.content   ?? '',
-      resizable: opts.resizable ?? true,
-      draggable: opts.draggable ?? true,
-      modal    : opts.modal     ?? false,
-      minWidth : opts.minWidth  ?? 200,
-      minHeight: opts.minHeight ?? 120,
-      visible  : opts.visible   ?? true,
-    };
-
-    this.#savedX = this.#opts.x;
-    this.#savedY = this.#opts.y;
-    this.#savedW = this.#opts.width;
-    this.#savedH = this.#opts.height;
-
-    // ── Build DOM ──────────────────────────────────────────────────────────────
-    const chromeH = CHROME_HEIGHT[this.#opts.chrome];
-    const radius  = CHROME_RADIUS[this.#opts.chrome];
-
-    this.#el = document.createElement('div');
-    this.#el.id = this.#id;
-    this.#el.className = 'arianna-wip-window';
-    this.#el.style.cssText = [
-      `position:absolute`,
-      `width:${this.#opts.width}px`,
-      `height:${this.#opts.height}px`,
-      `border-radius:${radius}`,
-      `overflow:hidden`,
-      `box-shadow:0 8px 32px rgba(0,0,0,.22)`,
-      `border:1px solid rgba(0,0,0,.15)`,
-      `user-select:none`,
-      `display:${this.#opts.visible ? 'flex' : 'none'}`,
-      `flex-direction:column`,
-      `z-index:${1000 + _winCounter}`,
-    ].join(';');
-
-    // Title bar
-    const tbWrap = document.createElement('div');
-    tbWrap.innerHTML = buildTitleBar(this.#opts.chrome, this.#opts.title, this.#id);
-    this.#tb = tbWrap.firstElementChild as HTMLElement;
-    this.#el.appendChild(this.#tb);
-
-    // Body
-    this.#body = document.createElement('div');
-    this.#body.className = 'arianna-wip-window-body';
-    this.#body.style.cssText = `flex:1;overflow:auto;background:var(--bg2,#fff);`;
-    this.#setContent(this.#opts.content);
-    this.#el.appendChild(this.#body);
-
-    // ── Wire interactions ──────────────────────────────────────────────────────
-    this.#wireButtons();
-    if (this.#opts.draggable) this.#wireDrag();
-    if (this.#opts.resizable) this.#wireResize();
-    if (this.#opts.modal)     this.#buildOverlay();
-
-    _instances.push(this);
-  }
-
-  // ── Public API ───────────────────────────────────────────────────────────────
-
-  /** Unique DOM id of this window element. */
-  get id(): string { return this.#id; }
-
-  /** Current window state: `'normal' | 'minimized' | 'maximized' | 'closed'`. */
-  get state(): WindowState { return this.#state; }
-
-  /** Current width in px. */
-  get width(): number  { return this.#el.offsetWidth; }
-
-  /** Current height in px. */
-  get height(): number { return this.#el.offsetHeight; }
-
-  /** Current X position in px relative to parent. */
-  get x(): number { return this.#el.offsetLeft; }
-
-  /** Current Y position in px relative to parent. */
-  get y(): number { return this.#el.offsetTop; }
-
-  /**
-   * Return the underlying window `HTMLElement`.
-   *
-   * @example
-   *   document.body.appendChild(win.render());
-   */
-  render(): HTMLElement { return this.#el; }
-
-  /** Implicit coercion to `HTMLElement`. */
-  valueOf(): HTMLElement { return this.#el; }
-
-  /**
-   * Mount this window into a parent element.
-   * Auto-centres if `x` / `y` were not specified.
-   * Fluent — returns `this`.
-   *
-   * @example
-   *   win.append('#desktop');
-   *   win.append(containerReal);
-   */
-  append(parent: string | Element | Real | { render(): Element }): this {
-    let par: Element | null = null;
-    if (typeof parent === 'string')              par = document.querySelector(parent);
-    else if (parent instanceof Element)          par = parent;
-    else if (parent instanceof Real)             par = parent.render();
-    else if (typeof (parent as { render(): Element }).render === 'function') par = (parent as { render(): Element }).render();
-
-    if (!par) return this;
-    par.appendChild(this.#el);
-
-    // Auto-centre if position not specified
-    if (this.#opts.x === -1 || this.#opts.y === -1) this.center();
-    else { this.#el.style.left = `${this.#opts.x}px`; this.#el.style.top = `${this.#opts.y}px`; }
-
-    if (this.#overlay) par.appendChild(this.#overlay);
-    this.#fire('Window-Open');
-    return this;
-  }
-
-  /**
-   * Show the window (if previously closed or hidden).
-   * Fluent — returns `this`.
-   *
-   * @example
-   *   win.open();
-   */
-  open(): this {
-    if (this.#state === 'closed') {
-      this.#el.style.display = 'flex';
-      this.#state = 'normal';
-      this.#fire('Window-Open');
+    constructor(container: HTMLElement | string, opts: WindowOptions = {}) {
+        super(container as HTMLElement, 'div', {
+            style    : 'macos',
+            title    : 'Untitled',
+            width    : 480,
+            height   : 320,
+            minWidth : 200,
+            minHeight: 120,
+            resizable: true,
+            chrome   : true,
+            focused  : true,
+            ...opts,
+        });
+        const self = this as unknown as ControlBase;
+        this._style = self._get<WindowStyle>('style', 'macos');
+        this._title = self._get<string>('title', 'Untitled');
+        this._menu  = (opts.menu ?? []).map(m => ({ ...m, items: m.items ? [...m.items] : undefined }));
+        this._w     = self._get<number>('width', 480);
+        this._h     = self._get<number>('height', 320);
+        this._minW  = self._get<number>('minWidth', 200);
+        this._minH  = self._get<number>('minHeight', 120);
+        this._x     = opts.x ?? -1;
+        this._y     = opts.y ?? -1;
+        this._injectStyles();
+        this._build();
+        // Apply size + position after _build so the DOM exists.
+        this._applyRect();
+        if (opts.body) this.setBody(opts.body);
+        if (self._get<boolean>('focused', true)) this.focus();
     }
-    return this;
-  }
 
-  /**
-   * Close and hide the window. Fires `'Window-Close'`.
-   * Fluent — returns `this`.
-   *
-   * @example
-   *   win.close();
-   */
-  close(): this {
-    this.#el.style.display = 'none';
-    if (this.#overlay) this.#overlay.style.display = 'none';
-    this.#state = 'closed';
-    this.#fire('Window-Close');
-    return this;
-  }
-
-  /**
-   * Minimize the window (collapse to title-bar height).
-   * Fires `'Window-Minimize'`. Fluent.
-   *
-   * @example
-   *   win.minimize();
-   */
-  minimize(): this {
-    if (this.#state === 'minimized') return this;
-    const chromeH = CHROME_HEIGHT[this.#opts.chrome];
-    this.#body.style.display = 'none';
-    this.#el.style.height    = `${chromeH}px`;
-    this.#el.style.resize    = 'none';
-    this.#state = 'minimized';
-    this.#fire('Window-Minimize');
-    return this;
-  }
-
-  /**
-   * Maximize the window (fill the parent container).
-   * Fires `'Window-Maximize'`. Fluent.
-   *
-   * @example
-   *   win.maximize();
-   */
-  maximize(): this {
-    if (this.#state === 'maximized') return this;
-    // Save current dimensions
-    this.#savedX = this.#el.offsetLeft;
-    this.#savedY = this.#el.offsetTop;
-    this.#savedW = this.#el.offsetWidth;
-    this.#savedH = this.#el.offsetHeight;
-
-    this.#el.style.left   = '0';
-    this.#el.style.top    = '0';
-    this.#el.style.width  = '100%';
-    this.#el.style.height = '100%';
-    this.#body.style.display = '';
-    this.#state = 'maximized';
-    this.#fire('Window-Maximize');
-    return this;
-  }
-
-  /**
-   * Restore the window to its previous size and position.
-   * Fires `'Window-Restore'`. Fluent.
-   *
-   * @example
-   *   win.restore();
-   */
-  restore(): this {
-    this.#el.style.left   = `${this.#savedX}px`;
-    this.#el.style.top    = `${this.#savedY}px`;
-    this.#el.style.width  = `${this.#savedW}px`;
-    this.#el.style.height = `${this.#savedH}px`;
-    this.#body.style.display = '';
-    this.#state = 'normal';
-    this.#fire('Window-Restore');
-    return this;
-  }
-
-  /**
-   * Bring this window to the front (raise z-index).
-   * Fluent — returns `this`.
-   *
-   * @example
-   *   win.focus();
-   */
-  focus(): this {
-    const maxZ = Math.max(..._instances.map(w => parseInt(w.#el.style.zIndex || '0', 10)));
-    this.#el.style.zIndex = String(maxZ + 1);
-    this.#fire('Window-Focus');
-    return this;
-  }
-
-  /**
-   * Move the window to an absolute position within its parent.
-   * Fluent — returns `this`.
-   *
-   * @param x - Left offset in px.
-   * @param y - Top offset in px.
-   *
-   * @example
-   *   win.moveTo(200, 150);
-   */
-  moveTo(x: number, y: number): this {
-    this.#el.style.left = `${x}px`;
-    this.#el.style.top  = `${y}px`;
-    this.#fire('Window-Move', { x, y });
-    return this;
-  }
-
-  /**
-   * Centre the window within its parent element.
-   * Fluent — returns `this`.
-   *
-   * @example
-   *   win.center();
-   */
-  center(): this {
-    const parent = this.#el.parentElement;
-    if (!parent) return this;
-    const px = (parent.clientWidth  - this.#el.offsetWidth)  / 2;
-    const py = (parent.clientHeight - this.#el.offsetHeight) / 2;
-    return this.moveTo(Math.max(0, px), Math.max(0, py));
-  }
-
-  /**
-   * Resize the window. Respects `minWidth` and `minHeight`.
-   * Fluent — returns `this`.
-   *
-   * @param width  - New width in px.
-   * @param height - New height in px.
-   *
-   * @example
-   *   win.resize(800, 600);
-   */
-  resize(width: number, height: number): this {
-    const w = Math.max(this.#opts.minWidth,  width);
-    const h = Math.max(this.#opts.minHeight, height);
-    this.#el.style.width  = `${w}px`;
-    this.#el.style.height = `${h}px`;
-    this.#fire('Window-Resize', { width: w, height: h });
-    return this;
-  }
-
-  /**
-   * Update the title bar label.
-   * Fluent — returns `this`.
-   *
-   * @example
-   *   win.setTitle('New Window Title');
-   */
-  setTitle(title: string): this {
-    this.#el.querySelectorAll(`.arianna-win-title[data-win="${this.#id}"]`).forEach(el => {
-      el.textContent = title;
-    });
-    return this;
-  }
-
-  /**
-   * Replace the window body content.
-   * Accepts an HTML string, a native `Element`, a `Real` node, or any `{render()}` object.
-   * Fluent — returns `this`.
-   *
-   * @example
-   *   win.setContent('<p>New content</p>');
-   *   win.setContent(myRealNode);
-   *   win.setContent(document.createElement('canvas'));
-   */
-  setContent(content: string | Element | Real | { render(): Element }): this {
-    this.#setContent(content);
-    return this;
-  }
-
-  /**
-   * Register a listener for Window events.
-   * Fluent — returns `this`.
-   *
-   * @example
-   *   win.on('Window-Close',  () => cleanup());
-   *   win.on('Window-Move',   e  => console.log(e.x, e.y));
-   *   win.on('Window-Resize', e  => console.log(e.width, e.height));
-   */
-  on(type: string, cb: (e: WindowEvent) => void): this {
-    this.#obs.on(type, cb as (e: AriannAEvent) => void);
-    return this;
-  }
-
-  /**
-   * Remove a Window event listener.
-   * Fluent — returns `this`.
-   *
-   * @example
-   *   win.off('Window-Close', handler);
-   */
-  off(type: string, cb: (e: WindowEvent) => void): this {
-    this.#obs.off(type, cb as (e: AriannAEvent) => void);
-    return this;
-  }
-
-  // ── Private helpers ───────────────────────────────────────────────────────────
-
-  #fire(type: string, extra: Partial<WindowEvent> = {}): void {
-    this.#obs.fire({ Type: type, window: this, ...extra } as AriannAEvent);
-  }
-
-  #setContent(content: string | Element | Real | { render(): Element } | ''): void {
-    this.#body.innerHTML = '';
-    if (!content) return;
-    if (typeof content === 'string') {
-      this.#body.innerHTML = content;
-    } else if (content instanceof Element) {
-      this.#body.appendChild(content);
-    } else if (content instanceof Real) {
-      this.#body.appendChild(content.render());
-    } else if (typeof (content as { render(): Element }).render === 'function') {
-      this.#body.appendChild((content as { render(): Element }).render());
+    // ── Public API ─────────────────────────────────────────────────────────
+    setTitle(t: string): this {
+        this._title = t;
+        if (this._elTitle) this._elTitle.textContent = t;
+        return this;
     }
-  }
+    setBody(content: string | HTMLElement): this {
+        if (!this._elBody) return this;
+        this._elBody.innerHTML = '';
+        if (typeof content === 'string') this._elBody.innerHTML = content;
+        else this._elBody.appendChild(content);
+        return this;
+    }
+    setMenu(items: WindowMenuItem[]): this {
+        this._menu = items.map(m => ({ ...m, items: m.items ? [...m.items] : undefined }));
+        this._renderMenu();
+        return this;
+    }
+    setStyle(s: WindowStyle): this { this._style = s; this._build(); this._applyRect(); return this; }
+    getStyle(): WindowStyle { return this._style; }
+    moveTo(x: number, y: number): this {
+        this._x = x; this._y = y; this._applyRect();
+        (this as unknown as ControlBase)._emit('move', { x, y });
+        return this;
+    }
+    resizeTo(w: number, h: number): this {
+        this._w = Math.max(this._minW, w);
+        this._h = Math.max(this._minH, h);
+        this._applyRect();
+        (this as unknown as ControlBase)._emit('resize', { w: this._w, h: this._h });
+        return this;
+    }
+    focus(): this {
+        WIN_Z += 1;
+        (this as unknown as ControlBase).el.style.zIndex = String(WIN_Z);
+        (this as unknown as ControlBase).el.classList.add('ar-window--focused');
+        // Defocus siblings — every other ar-window in the same parent.
+        const self = this as unknown as ControlBase;
+        const parent = self.el.parentElement;
+        if (parent) {
+            parent.querySelectorAll('.ar-window--focused').forEach((w) => {
+                if (w !== self.el) w.classList.remove('ar-window--focused');
+            });
+        }
+        (this as unknown as ControlBase)._emit('focus', {});
+        return this;
+    }
+    minimize(): this {
+        if (this._minimized) return this;
+        this._minimized = true;
+        (this as unknown as ControlBase).el.classList.add('ar-window--minimized');
+        (this as unknown as ControlBase)._emit('minimize', {});
+        return this;
+    }
+    maximize(): this {
+        if (this._maximized) return this;
+        this._prevRect = { x: this._x, y: this._y, w: this._w, h: this._h };
+        this._maximized = true;
+        const self = this as unknown as ControlBase;
+        self.el.classList.add('ar-window--maximized');
+        const parent = self.el.parentElement;
+        if (parent) {
+            const r = parent.getBoundingClientRect();
+            this._x = 0; this._y = 0;
+            this._w = r.width; this._h = r.height;
+            this._applyRect();
+        }
+        (this as unknown as ControlBase)._emit('maximize', {});
+        return this;
+    }
+    restore(): this {
+        const self = this as unknown as ControlBase;
+        self.el.classList.remove('ar-window--minimized', 'ar-window--maximized');
+        this._minimized = false;
+        this._maximized = false;
+        if (this._prevRect) {
+            ({ x: this._x, y: this._y, w: this._w, h: this._h } = this._prevRect);
+            this._prevRect = null;
+            this._applyRect();
+        }
+        (this as unknown as ControlBase)._emit('restore', {});
+        return this;
+    }
+    close(): this {
+        (this as unknown as ControlBase)._emit('close', {});
+        const self = this as unknown as ControlBase;
+        self.el.parentElement?.removeChild(self.el);
+        return this;
+    }
 
-  #wireButtons(): void {
-    this.#el.addEventListener('click', (e: Event) => {
-      const btn = (e.target as Element).closest('[data-action]') as HTMLElement | null;
-      if (!btn || btn.dataset.win !== this.#id) return;
-      e.stopPropagation();
-      switch (btn.dataset.action) {
-        case 'close':    this.close();    break;
-        case 'minimize': this.#state === 'minimized' ? this.restore() : this.minimize(); break;
-        case 'maximize': this.#state === 'maximized' ? this.restore() : this.maximize(); break;
-      }
-    });
-  }
+    // ── Build ──────────────────────────────────────────────────────────────
+    _build(): void {
+        const self = this as unknown as ControlBase;
+        const showChrome = self._get<boolean>('chrome', true);
+        const resizable  = self._get<boolean>('resizable', true);
+        const cls        = self._get<string>('class', '');
+        self.el.className = `ar-window ar-window--${this._style}${cls ? ' ' + cls : ''}`;
+        self.el.tabIndex = 0;
 
-  #wireDrag(): void {
-    let dragging = false, ox = 0, oy = 0;
+        const trafficLights = this._style === 'macos'
+            ? `<div class="ar-window__lights">
+                 <button class="ar-window__light ar-window__light--close"    data-r="close"    aria-label="Close"></button>
+                 <button class="ar-window__light ar-window__light--minimize" data-r="minimize" aria-label="Minimize"></button>
+                 <button class="ar-window__light ar-window__light--maximize" data-r="maximize" aria-label="Maximize"></button>
+               </div>`
+            : '';
+        const winButtons = this._style === 'windows'
+            ? `<div class="ar-window__btns">
+                 <button class="ar-window__btn" data-r="minimize" aria-label="Minimize">−</button>
+                 <button class="ar-window__btn" data-r="maximize" aria-label="Maximize">▢</button>
+                 <button class="ar-window__btn ar-window__btn--close" data-r="close" aria-label="Close">×</button>
+               </div>`
+            : '';
 
-    this.#tb.addEventListener('mousedown', (e: MouseEvent) => {
-      if ((e.target as Element).closest('[data-action]')) return;
-      if (this.#state === 'maximized') return;
-      dragging = true;
-      ox = e.clientX - this.#el.offsetLeft;
-      oy = e.clientY - this.#el.offsetTop;
-      this.focus();
-      e.preventDefault();
-    });
+        self.el.innerHTML = `
+<header class="ar-window__chrome" data-r="chrome">
+  ${trafficLights}
+  <div class="ar-window__title" data-r="title">${escapeAttr(this._title)}</div>
+  ${winButtons}
+</header>
+<nav class="ar-window__menu" data-r="menu" hidden></nav>
+<section class="ar-window__body" data-r="body"></section>
+${resizable ? `
+<div class="ar-window__edge ar-window__edge--n"  data-r="resize" data-edge="n"  aria-label="Resize north"></div>
+<div class="ar-window__edge ar-window__edge--s"  data-r="resize" data-edge="s"  aria-label="Resize south"></div>
+<div class="ar-window__edge ar-window__edge--w"  data-r="resize" data-edge="w"  aria-label="Resize west"></div>
+<div class="ar-window__edge ar-window__edge--e"  data-r="resize" data-edge="e"  aria-label="Resize east"></div>
+<div class="ar-window__edge ar-window__edge--nw" data-r="resize" data-edge="nw" aria-label="Resize north-west"></div>
+<div class="ar-window__edge ar-window__edge--ne" data-r="resize" data-edge="ne" aria-label="Resize north-east"></div>
+<div class="ar-window__edge ar-window__edge--sw" data-r="resize" data-edge="sw" aria-label="Resize south-west"></div>
+<div class="ar-window__edge ar-window__edge--se" data-r="resize" data-edge="se" aria-label="Resize south-east"></div>` : ''}`;
 
-    document.addEventListener('mousemove', (e: MouseEvent) => {
-      if (!dragging) return;
-      const parent = this.#el.parentElement;
-      const maxX = parent ? parent.clientWidth  - this.#el.offsetWidth  : window.innerWidth;
-      const maxY = parent ? parent.clientHeight - this.#el.offsetHeight : window.innerHeight;
-      const nx = Math.max(0, Math.min(maxX, e.clientX - ox));
-      const ny = Math.max(0, Math.min(maxY, e.clientY - oy));
-      this.#el.style.left = `${nx}px`;
-      this.#el.style.top  = `${ny}px`;
-      this.#fire('Window-Move', { x: nx, y: ny });
-    });
+        this._elTitle = self.el.querySelector('[data-r="title"]') as HTMLElement;
+        this._elBody  = self.el.querySelector('[data-r="body"]')  as HTMLElement;
+        this._elMenu  = self.el.querySelector('[data-r="menu"]')  as HTMLElement;
 
-    document.addEventListener('mouseup', () => { dragging = false; });
-  }
+        if (showChrome) {
+            self.el.querySelector('[data-r="close"]')   ?.addEventListener('click', (e) => { e.stopPropagation(); this.close(); });
+            self.el.querySelector('[data-r="minimize"]')?.addEventListener('click', (e) => { e.stopPropagation(); this.minimize(); });
+            self.el.querySelector('[data-r="maximize"]')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this._maximized) this.restore(); else this.maximize();
+            });
+        }
 
-  #wireResize(): void {
-    // 8-directional resize via a resize handle at bottom-right
-    const handle = document.createElement('div');
-    handle.style.cssText = `position:absolute;bottom:0;right:0;width:12px;height:12px;cursor:se-resize;z-index:10;`;
-    this.#el.style.position = 'absolute';
-    this.#el.appendChild(handle);
+        // Drag by title bar
+        const chrome = self.el.querySelector('[data-r="chrome"]') as HTMLElement;
+        this._wireDrag(chrome);
+        if (resizable) {
+            self.el.querySelectorAll<HTMLElement>('[data-r="resize"]').forEach(h => this._wireResize(h));
+        }
 
-    let resizing = false, startX = 0, startY = 0, startW = 0, startH = 0;
+        // Focus on click
+        self.el.addEventListener('pointerdown', () => this.focus());
 
-    handle.addEventListener('mousedown', (e: MouseEvent) => {
-      resizing = true;
-      startX = e.clientX; startY = e.clientY;
-      startW = this.#el.offsetWidth; startH = this.#el.offsetHeight;
-      e.preventDefault(); e.stopPropagation();
-    });
+        this._renderMenu();
+    }
 
-    document.addEventListener('mousemove', (e: MouseEvent) => {
-      if (!resizing) return;
-      const w = Math.max(this.#opts.minWidth,  startW + (e.clientX - startX));
-      const h = Math.max(this.#opts.minHeight, startH + (e.clientY - startY));
-      this.#el.style.width  = `${w}px`;
-      this.#el.style.height = `${h}px`;
-      this.#fire('Window-Resize', { width: w, height: h });
-    });
+    private _renderMenu(): void {
+        if (!this._elMenu) return;
+        if (this._menu.length === 0) {
+            this._elMenu.hidden = true;
+            return;
+        }
+        this._elMenu.hidden = false;
+        this._elMenu.innerHTML = '';
+        for (const item of this._menu) {
+            const btn = document.createElement('button');
+            btn.className = 'ar-window__menu-item';
+            btn.textContent = item.label;
+            btn.dataset.id = item.id;
+            btn.addEventListener('click', () => {
+                (this as unknown as ControlBase)._emit('menu', { id: item.id, label: item.label });
+            });
+            this._elMenu.appendChild(btn);
+        }
+    }
 
-    document.addEventListener('mouseup', () => { resizing = false; });
-  }
+    private _applyRect(): void {
+        const self = this as unknown as ControlBase;
+        // If x/y < 0 → center within parent.
+        if (this._x < 0 || this._y < 0) {
+            const p = self.el.parentElement?.getBoundingClientRect();
+            if (p) {
+                this._x = Math.max(0, (p.width  - this._w) / 2);
+                this._y = Math.max(0, (p.height - this._h) / 2);
+            } else {
+                this._x = 32; this._y = 32;
+            }
+        }
+        self.el.style.left   = `${this._x}px`;
+        self.el.style.top    = `${this._y}px`;
+        self.el.style.width  = `${this._w}px`;
+        self.el.style.height = `${this._h}px`;
+    }
 
-  #buildOverlay(): void {
-    this.#overlay = document.createElement('div');
-    this.#overlay.style.cssText = `position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:${999 + _winCounter};`;
-    this.#overlay.addEventListener('click', e => e.stopPropagation());
-  }
+    private _wireDrag(handle: HTMLElement): void {
+        let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
+        handle.addEventListener('pointerdown', (e: PointerEvent) => {
+            if ((e.target as HTMLElement).closest('button')) return;
+            if (this._maximized) return;
+            dragging = true;
+            sx = e.clientX; sy = e.clientY; ox = this._x; oy = this._y;
+            handle.setPointerCapture(e.pointerId);
+            e.preventDefault();
+        });
+        handle.addEventListener('pointermove', (e: PointerEvent) => {
+            if (!dragging) return;
+            this._x = ox + (e.clientX - sx);
+            this._y = Math.max(0, oy + (e.clientY - sy));
+            this._applyRect();
+            (this as unknown as ControlBase)._emit('move', { x: this._x, y: this._y });
+        });
+        const stop = (e: PointerEvent) => {
+            if (!dragging) return;
+            dragging = false;
+            try { handle.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+        };
+        handle.addEventListener('pointerup', stop);
+        handle.addEventListener('pointercancel', stop);
+    }
+
+    private _wireResize(handle: HTMLElement): void {
+        // Edge encoding: each handle carries data-edge ∈ {n,s,w,e,nw,ne,sw,se}.
+        // For an edge that includes 'n' we move the top of the rect (decrease y
+        // by the dy, increase h by -dy). For 's' we just grow h by +dy. Mirror
+        // for w/e on the x axis. Corner handles combine both axes.
+        // Min size is enforced per axis; when the minimum is hit on a 'n' or
+        // 'w' edge we hold the opposite side fixed so the window doesn't drift.
+        const edge = handle.dataset.edge ?? 'se';
+        const moveTop    = edge.includes('n');
+        const moveBottom = edge.includes('s');
+        const moveLeft   = edge.includes('w');
+        const moveRight  = edge.includes('e');
+
+        let sx = 0, sy = 0, ow = 0, oh = 0, ox = 0, oy = 0, dragging = false;
+
+        handle.addEventListener('pointerdown', (e: PointerEvent) => {
+            if (this._maximized) return;
+            dragging = true;
+            sx = e.clientX; sy = e.clientY;
+            ow = this._w;   oh = this._h;
+            ox = this._x;   oy = this._y;
+            handle.setPointerCapture(e.pointerId);
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        handle.addEventListener('pointermove', (e: PointerEvent) => {
+            if (!dragging) return;
+            const dx = e.clientX - sx;
+            const dy = e.clientY - sy;
+
+            if (moveRight) {
+                this._w = Math.max(this._minW, ow + dx);
+            }
+            if (moveLeft) {
+                // Pulling left grows the window; pulling right shrinks it.
+                // Cap the shift so we never go below minW (the right edge
+                // stays anchored — we compute the largest x shift that keeps
+                // ow - dx ≥ minW, i.e. dx ≤ ow - minW).
+                const clampedDx = Math.min(dx, ow - this._minW);
+                this._w = ow - clampedDx;
+                this._x = ox + clampedDx;
+            }
+            if (moveBottom) {
+                this._h = Math.max(this._minH, oh + dy);
+            }
+            if (moveTop) {
+                // Same mirror logic on the Y axis. Also clamp y ≥ 0 so the
+                // title bar never slides above the viewport.
+                let clampedDy = Math.min(dy, oh - this._minH);
+                if (oy + clampedDy < 0) clampedDy = -oy;
+                this._h = oh - clampedDy;
+                this._y = oy + clampedDy;
+            }
+
+            this._applyRect();
+            (this as unknown as ControlBase)._emit('resize', { w: this._w, h: this._h });
+            if (moveLeft || moveTop) {
+                (this as unknown as ControlBase)._emit('move', { x: this._x, y: this._y });
+            }
+        });
+
+        const stop = (e: PointerEvent) => {
+            if (!dragging) return;
+            dragging = false;
+            try { handle.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+        };
+        handle.addEventListener('pointerup', stop);
+        handle.addEventListener('pointercancel', stop);
+    }
+
+    private _injectStyles(): void {
+        if (document.getElementById('ar-window-styles')) return;
+        const s = document.createElement('style');
+        s.id = 'ar-window-styles';
+        s.textContent = `
+.ar-window {
+    position: absolute;
+    display: flex; flex-direction: column;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font: 13px -apple-system, system-ui, sans-serif;
+    box-shadow: 0 8px 32px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
+    overflow: hidden;
+    user-select: none;
+}
+.ar-window:not(.ar-window--focused) { opacity: 0.92; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+.ar-window__chrome {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px;
+    height: 30px; flex-shrink: 0;
+    background: #2a2a2c;
+    border-bottom: 1px solid #1a1a1a;
+    cursor: grab;
+    position: relative;
+}
+.ar-window__chrome:active { cursor: grabbing; }
+.ar-window__title {
+    flex: 1;
+    text-align: center;
+    font: 600 12px sans-serif;
+    color: #d4d4d4;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    pointer-events: none;
+}
+.ar-window__menu {
+    display: flex; align-items: center; gap: 14px;
+    height: 26px; padding: 0 12px;
+    background: #1f1f21;
+    border-bottom: 1px solid #1a1a1a;
+    font: 11px sans-serif;
+}
+.ar-window__menu-item {
+    background: none; border: 0; color: #d4d4d4;
+    padding: 2px 6px;
+    cursor: pointer;
+    border-radius: 3px;
+    font: 11px sans-serif;
+}
+.ar-window__menu-item:hover { background: rgba(255,255,255,.08); }
+.ar-window__body {
+    flex: 1; min-height: 0;
+    overflow: auto;
+    background: #1e1e1e;
+    user-select: text;
+}
+.ar-window__edge {
+    position: absolute;
+    /* Default invisible — handles are interaction-only hit areas. The corner
+     * grips are drawn via the body's border-radius/box-shadow visuals; users
+     * locate them by cursor change, not by a visible glyph. */
+    background: transparent;
+    z-index: 2;
+    touch-action: none;
+}
+/* Edge strips — 6px wide along each side, slightly inset from corners so
+ * they don't fight with the 12×12 corner handles for pointer capture. */
+.ar-window__edge--n { top:    -3px; left:  10px; right: 10px; height: 6px;  cursor: ns-resize; }
+.ar-window__edge--s { bottom: -3px; left:  10px; right: 10px; height: 6px;  cursor: ns-resize; }
+.ar-window__edge--w { left:   -3px; top:   10px; bottom: 10px; width: 6px;  cursor: ew-resize; }
+.ar-window__edge--e { right:  -3px; top:   10px; bottom: 10px; width: 6px;  cursor: ew-resize; }
+/* Corner squares — 12×12 hit boxes overlapping the edges, so the four
+ * corners win the pointer when the user lands within ~6px of each. */
+.ar-window__edge--nw { top:    -3px; left:   -3px; width: 14px; height: 14px; cursor: nwse-resize; }
+.ar-window__edge--ne { top:    -3px; right:  -3px; width: 14px; height: 14px; cursor: nesw-resize; }
+.ar-window__edge--sw { bottom: -3px; left:   -3px; width: 14px; height: 14px; cursor: nesw-resize; }
+.ar-window__edge--se { bottom: -3px; right:  -3px; width: 14px; height: 14px; cursor: nwse-resize;
+    /* Keep the classic SE corner grip glyph visible — it's the universal
+     * "this can be resized" affordance most users look for. */
+    background:
+        linear-gradient(135deg, transparent 0%, transparent 40%, #555 41%, #555 50%, transparent 51%, transparent 65%, #555 66%, #555 75%, transparent 76%);
 }
 
-// ── Window registration ───────────────────────────────────────────────────────
+/* ── macOS style ─────────────────────────────────────────────────────── */
+.ar-window--macos {
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.05);
+}
+.ar-window--macos .ar-window__chrome {
+    background: linear-gradient(180deg, #3a3a3c 0%, #2a2a2c 100%);
+    height: 28px;
+    border-radius: 10px 10px 0 0;
+}
+.ar-window--macos .ar-window__lights {
+    display: flex; gap: 6px; align-items: center;
+    position: relative; z-index: 1;
+}
+.ar-window__light {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 0; cursor: pointer; padding: 0;
+    transition: filter .12s;
+}
+.ar-window__light:hover { filter: brightness(1.15); }
+.ar-window__light--close    { background: #ff5f57; }
+.ar-window__light--minimize { background: #ffbd2e; }
+.ar-window__light--maximize { background: #28c940; }
+.ar-window--macos:not(.ar-window--focused) .ar-window__light { background: #555; }
 
-if (typeof window !== 'undefined')
-  Object.defineProperty(window, 'Window', {
-    enumerable: true, configurable: false, writable: false, value: Window,
-  });
+/* ── Windows style ───────────────────────────────────────────────────── */
+.ar-window--windows {
+    border-radius: 0;
+    border: 1px solid #444;
+}
+.ar-window--windows .ar-window__chrome {
+    background: #1f1f23;
+    border-bottom: 1px solid #444;
+    height: 32px;
+    padding-left: 12px;
+    padding-right: 0;
+}
+.ar-window--windows .ar-window__title { text-align: left; }
+.ar-window--windows .ar-window__btns {
+    display: flex; height: 100%;
+}
+.ar-window__btn {
+    background: none; border: 0; color: #d4d4d4;
+    width: 44px; height: 100%;
+    cursor: pointer;
+    font: 14px sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .12s;
+}
+.ar-window__btn:hover { background: rgba(255,255,255,.08); }
+.ar-window__btn--close:hover { background: #c42b1c; color: #fff; }
 
-export default Window;
+/* ── States ──────────────────────────────────────────────────────────── */
+.ar-window--minimized { display: none; }
+.ar-window--maximized {
+    border-radius: 0;
+    box-shadow: none;
+}
+.ar-window--focused {
+    box-shadow: 0 12px 40px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4);
+}
+
+@media (max-width: 600px) {
+    .ar-window__chrome { height: 26px; padding: 0 8px; }
+    .ar-window__title { font-size: 11px; }
+    .ar-window__btn { width: 36px; }
+    .ar-window__menu { height: 22px; padding: 0 8px; gap: 10px; }
+    .ar-window__menu-item { font-size: 10px; }
+}
+`;
+        document.head.appendChild(s);
+    }
+}
+
+function escapeAttr(s: string): string {
+    return s.replace(/[&<>"']/g, (c: string) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+}

@@ -1,6 +1,6 @@
 /**
  * @file arianna.d.ts
- * @description Global window declarations for AriannA Framework v1.3.0
+ * @description Global window declarations for AriannA Framework v1.4.0
  * @author Riccardo Angeli
  * @copyright Riccardo Angeli 2012–2026
  *
@@ -22,6 +22,16 @@ import type { Rule as _Rule, CssState as _CssState, CSSProperties } from '../cor
 import type { default as _Sheet } from '../core/Stylesheet.ts';
 import type { default as _Context, ContextEvent } from '../core/Context.ts';
 import type { default as _Namespace } from '../core/Namespace.ts';
+
+// ── New May-2026 component groups ─────────────────────────────────────────
+import type { Calendar      as _Calendar      } from '../components/inputs/Calendar.ts';
+import type { Dock          as _Dock          } from '../components/layout/Dock.ts';
+import type { Window        as _Window        } from '../components/layout/Window.ts';
+import type { MapEmbed      as _MapEmbed,
+              GoogleMap     as _GoogleMap,
+              OpenStreetMap as _OpenStreetMap,
+              AppleMap      as _AppleMap,
+              BingMap       as _BingMap       } from '../components/maps/MapEmbed.ts';
 
 declare global {
 
@@ -89,26 +99,61 @@ declare global {
     /** Read Signals without tracking dependencies. */
     function untrack<T>(fn: () => T): T;
 
+    // ── New May-2026 components (also on window) ──────────────────────────────
+
+    /** Calendar — month/week/day views with event placement, also usable as a date picker. */
+    const Calendar: typeof _Calendar;
+
+    /** Dock — desktop launcher with two switchable styles ('macos' | 'windows'). */
+    const Dock: typeof _Dock;
+
+    /** Window — desktop-style window chrome with draggable title bar, resize, min/max/close. */
+    const Window: typeof _Window;
+
+    /** MapEmbed — abstract base for the four map embedders. */
+    const MapEmbed: typeof _MapEmbed;
+
+    /** GoogleMap — Google Maps iframe embedder (no API key required for basic map). */
+    const GoogleMap: typeof _GoogleMap;
+
+    /** OpenStreetMap — OSM iframe embedder using the public export endpoint. */
+    const OpenStreetMap: typeof _OpenStreetMap;
+
+    /** AppleMap — Apple Maps embedder (renders on Apple platforms; fallback card elsewhere). */
+    const AppleMap: typeof _AppleMap;
+
+    /** BingMap — Microsoft Bing Maps iframe embedder. */
+    const BingMap: typeof _BingMap;
+
     // ── Window interface augmentation ─────────────────────────────────────────
 
     interface Window {
-        Core       : typeof _Core;
-        Observable : typeof _Observable;
-        State      : typeof _State;
-        Real       : typeof _Real;
-        Virtual    : typeof VirtualNode;
-        Component  : typeof _Component;
-        Directive  : typeof _Directive;
-        Rule       : typeof _Rule;
-        Sheet      : typeof _Sheet;
-        Context    : typeof _Context;
-        Namespace  : typeof _Namespace;
-        signal     : <T>(value: T) => Signal<T>;
-        signalMono : <T>(value: T) => SignalMono<T>;
-        effect     : (fn: () => void) => () => void;
-        computed   : <T>(fn: () => T) => ReadonlySignal<T>;
-        batch      : (fn: () => void) => void;
-        untrack    : <T>(fn: () => T) => T;
+        Core          : typeof _Core;
+        Observable    : typeof _Observable;
+        State         : typeof _State;
+        Real          : typeof _Real;
+        Virtual       : typeof VirtualNode;
+        Component     : typeof _Component;
+        Directive     : typeof _Directive;
+        Rule          : typeof _Rule;
+        Sheet         : typeof _Sheet;
+        Context       : typeof _Context;
+        Namespace     : typeof _Namespace;
+        signal        : <T>(value: T) => Signal<T>;
+        signalMono    : <T>(value: T) => SignalMono<T>;
+        effect        : (fn: () => void) => () => void;
+        computed      : <T>(fn: () => T) => ReadonlySignal<T>;
+        batch         : (fn: () => void) => void;
+        untrack       : <T>(fn: () => T) => T;
+        // ── New May-2026 components ───────────────────────────────────────────
+        Calendar      : typeof _Calendar;
+        Dock          : typeof _Dock;
+        Window        : typeof _Window;
+        MapEmbed      : typeof _MapEmbed;
+        GoogleMap     : typeof _GoogleMap;
+        OpenStreetMap : typeof _OpenStreetMap;
+        AppleMap      : typeof _AppleMap;
+        BingMap       : typeof _BingMap;
     }
 }
 

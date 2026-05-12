@@ -3,12 +3,14 @@
  * @description Module augmentation for the 'arianna' package. Extends the
  *              base `arianna` module with the Pipeline 6 component family
  *              (audio/video/composite/chat/graphics/payments/shipments)
- *              and the Colors addon under `additionals/`.
+ *              and the Colors addon under `additionals/`. Also covers the
+ *              new May-2026 groups: `input` (Calendar), `layout` (Dock,
+ *              Window) and `maps` (Google / OSM / Apple / Bing).
  * @author Riccardo Angeli
  * @copyright Riccardo Angeli 2012–2026
  */
 
-declare module 'arianna' {
+declare module 'types/arianna' {
     // ── Core (unchanged from baseline) ─────────────────────────────────────
     export { default as Core } from './core/Core.ts';
     export { default as Observable, signal, signalMono, effect, computed,
@@ -45,6 +47,9 @@ declare module 'arianna' {
 //
 //   import { PaymentGateway } from 'arianna/components/payments';
 //   import { TrackingMulti }  from 'arianna/components/shipments';
+//   import { Calendar }       from 'arianna/components/inputs';
+//   import { Dock, Window }   from 'arianna/components/layout';
+//   import { GoogleMap }      from 'arianna/components/maps';
 
 declare module 'arianna/components' {
     export * from './components/audio/index.ts';
@@ -55,6 +60,10 @@ declare module 'arianna/components' {
     export * from './components/graphics/colors/index.ts';
     export * from './components/payments/index.ts';
     export * from './components/shipments/index.ts';
+    // New May-2026 groups
+    export * from './components/inputs/index.ts';
+    export * from './components/layout/index.ts';
+    export * from './components/maps/index.ts';
 }
 
 declare module 'arianna/components/audio' {
@@ -87,6 +96,41 @@ declare module 'arianna/components/payments' {
 
 declare module 'arianna/components/shipments' {
     export * from './components/shipments/index.ts';
+}
+
+// ── New May-2026 sub-paths ─────────────────────────────────────────────────
+
+declare module 'arianna/components/inputs' {
+    export * from './components/inputs/index.ts';
+}
+
+declare module 'arianna/components/layout' {
+    export * from './components/layout/index.ts';
+}
+
+declare module 'arianna/components/maps' {
+    export * from './components/maps/index.ts';
+}
+
+// Individual file imports (for tree-shaking — each maps provider its own path)
+declare module 'arianna/components/maps/GoogleMaps' {
+    export { GoogleMap } from './components/maps/GoogleMaps.ts';
+    export type { LatLng, MapEmbedOptions, MapProvider } from './components/maps/MapEmbed.ts';
+}
+
+declare module 'arianna/components/maps/OpenStreetMaps' {
+    export { OpenStreetMap } from './components/maps/OpenStreetMaps.ts';
+    export type { LatLng, MapEmbedOptions, MapProvider } from './components/maps/MapEmbed.ts';
+}
+
+declare module 'arianna/components/maps/AppleMaps' {
+    export { AppleMap } from './components/maps/AppleMaps.ts';
+    export type { LatLng, MapEmbedOptions, MapProvider } from './components/maps/MapEmbed.ts';
+}
+
+declare module 'arianna/components/maps/BingMaps' {
+    export { BingMap } from './components/maps/BingMaps.ts';
+    export type { LatLng, MapEmbedOptions, MapProvider } from './components/maps/MapEmbed.ts';
 }
 
 // ── Additionals — Colors addon ─────────────────────────────────────────────
