@@ -1,7 +1,9 @@
 import Core, { type TypeDescriptor } from './Core.ts';
 import { signal, signalMono, sinkText, effect, computed, batch, untrack, AriannATemplate, type Signal, type SignalMono, type ReadonlySignal } from './Observable.ts';
 import Rule from './Rule.ts';
-import Sheet from './Stylesheet.ts';
+import { Sheet } from './Sheet.ts';
+import { readDottedPath, writeDottedPath, makeSubAccessor, type SubAccessor } from './Real.ts';
+export type { SubAccessor };
 export type { Signal, SignalMono, ReadonlySignal };
 export type VAttrs = Record<string, string | number | boolean | null>;
 export type VChild = VirtualNode | string | number | boolean | null | undefined;
@@ -42,6 +44,7 @@ export class VirtualNode {
     #id: string; #tag: string; #attrs: VAttrs; #children: VirtualNode[]; #text: string;
     #dom: Element | null = null; #parent: VirtualNode | null = null; #mounted = false;
     #domQueue: QueuedListener[] = []; #effects: Array<() => void> = []; #sinks: PendingSink[] = [];
+    #sheet: Sheet | null = null; #styleNode: HTMLStyleElement | null = null; #instanceId: string = ''; #sheetSync: (() => void) | null = null;
     static readonly Instances: VirtualNode[] = [];
     constructor(def: VNodeDef | string | AriannATemplate, attrs?: VAttrs, ...children: VChild[]) {
         if (def instanceof AriannATemplate) { const el = def.clone(); this.#tag = el.tagName.toLowerCase(); this.#attrs = {}; this.#children = []; this.#text = ''; this.#id = uid(); _nodes[this.#id] = this; VirtualNode.Instances.push(this); this.#dom = el; return; }
@@ -51,8 +54,15 @@ export class VirtualNode {
     }
     render(): Element {
         if (this.#dom) return this.#dom;
-        const d = Core.GetDescriptor(this.#tag) as TypeDescriptor & { Namespace?: { functions?: { create?(tag: string): Element | false } } } | false;
-        this.#dom = (d && d.Namespace?.functions?.create) ? d.Namespace.functions.create(this.#tag) as Element : document.createElement(this.#tag);
+        // namespace.Create — via functions.create — returns the fully upgraded
+        // element (prototype splice + style + body for FUNCTION, or full
+        // class instantiation via Reflect.construct for CLASS). No upgrade
+        // logic in Virtual itself.
+        const d = Core.GetDescriptor(this.#tag) as (TypeDescriptor & { Namespace?: { functions?: { create?(tag: string): Element | false } } }) | false;
+        this.#dom = (d && d.Namespace?.functions?.create)
+            ? d.Namespace.functions.create(this.#tag) as Element
+            : document.createElement(this.#tag);
+
         for (const [k, v] of Object.entries(this.#attrs)) if (v !== null) this.#dom!.setAttribute(k, String(v));
         if (this.#text) this.#dom!.textContent = this.#text;
         for (const child of this.#children) this.#dom!.appendChild(child.render());
@@ -95,8 +105,45 @@ export class VirtualNode {
     remove(...targets: (string | number | VirtualNode)[]): this { for (const t of targets) { if (typeof t === 'number') { const vn = this.#children.splice(t,1)[0]; if (vn) { const el = vn.render(); el.parentNode?.removeChild(el); } } else if (typeof t === 'string') { const el = this.#dom?.querySelector(t); el?.parentNode?.removeChild(el); } else if (t instanceof VirtualNode) { const i = this.#children.indexOf(t); if (i >= 0) this.#children.splice(i,1); if (t.#dom) t.#dom.parentNode?.removeChild(t.#dom); } } return this; }
     shift(n = 1): this { for (let i = 0; i < n; i++) { const vn = this.#children.shift(); if (vn) { const el = vn.render(); el.parentNode?.removeChild(el); } } return this; }
     pop(n = 1): this   { for (let i = 0; i < n; i++) { const vn = this.#children.pop();   if (vn) { const el = vn.render(); el.parentNode?.removeChild(el); } } return this; }
-    get(name: string): string | undefined { return this.#dom?.getAttribute(name) ?? (this.#attrs[name] !== undefined && this.#attrs[name] !== null ? String(this.#attrs[name]) : undefined); }
-    set(name: string, value: string | number | boolean | null): this { if (this.#dom) { if (name in (this.#dom as unknown as Record<string, unknown>)) (this.#dom as unknown as Record<string, unknown>)[name] = value; else if (value !== null) this.#dom.setAttribute(name, String(value)); else this.#dom.removeAttribute(name); } else this.#attrs[name] = value; return this; }
+    get(name: string): string | undefined {
+        if (name.indexOf('.') !== -1) {
+            // Dotted-path read — prefer DOM if rendered, else attrs buffer
+            const root = (this.#dom ?? this.#attrs) as unknown as Record<string, unknown>;
+            const v = readDottedPath(root, name);
+            return v === undefined ? undefined : (typeof v === 'string' ? v : String(v));
+        }
+        return this.#dom?.getAttribute(name) ?? (this.#attrs[name] !== undefined && this.#attrs[name] !== null ? String(this.#attrs[name]) : undefined);
+    }
+    set(name: string, value: string | number | boolean | null | unknown): this {
+        if (name.indexOf('.') !== -1) {
+            // Dotted-path write
+            if (this.#dom) {
+                writeDottedPath(this.#dom as unknown as Record<string, unknown>, name, value);
+            } else {
+                writeDottedPath(this.#attrs as unknown as Record<string, unknown>, name, value);
+            }
+            return this;
+        }
+        if (this.#dom) {
+            if (name in (this.#dom as unknown as Record<string, unknown>)) (this.#dom as unknown as Record<string, unknown>)[name] = value;
+            else if (value !== null) this.#dom.setAttribute(name, String(value));
+            else this.#dom.removeAttribute(name);
+        } else this.#attrs[name] = value as string | number | boolean | null;
+        return this;
+    }
+
+    /**
+     * Returns a fluent sub-property accessor. Works both pre- and post-render:
+     * before render() the path is written into the attrs buffer; after, into
+     * the live DOM element.
+     *
+     *   new VirtualNode('div').sub('style').set('background', 'orange');
+     */
+    sub(path: string): SubAccessor {
+        const root = (this.#dom ?? this.#attrs) as unknown as Record<string, unknown>;
+        return makeSubAccessor(root, path, this);
+    }
+
     css(prop: string, val: string): this { if (this.#dom) (this.#dom as HTMLElement).style.setProperty(prop, val); return this; }
     show(): this { this.css('display', ''); return this; }
     hide(): this { this.css('display', 'none'); return this; }
@@ -120,7 +167,78 @@ export class VirtualNode {
     prop(name: string, getter: Getter<unknown>): this { if (this.#dom) { const rec = this.#dom as unknown as Record<string, unknown>; this.#effects.push(effect(() => { rec[name] = getter(); })); } else this.#sinks.push({ type: 'prop', getter, name }); return this; }
     style(prop: string, getter: Getter<string>): this { if (this.#dom) { const el = this.#dom as HTMLElement; const p = prop.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`); this.#effects.push(effect(() => { el.style.setProperty(p, getter()); })); } else this.#sinks.push({ type: 'style', getter, name: prop }); return this; }
     bind(getter: Getter<string>, setter?: (v: string) => void): this { this.prop('value', getter); if (setter) this.on('input', e => setter((e.target as HTMLInputElement).value)); return this; }
-    destroy(): this { this.#effects.forEach(s => s()); this.#effects = []; this.#sinks = []; return this; }
+    destroy(): this { this.#effects.forEach(s => s()); this.#effects = []; this.#sinks = []; this.Sheet = null; return this; }
+
+    /**
+     * Scoped Sheet for this VirtualNode instance.
+     *
+     * Mirrors `Real.Sheet`: assigning a Sheet attaches it to the rendered
+     * host element. Each rule's `:root` selector (and `&`) is rewritten
+     * to target THIS element via an auto-generated class (`__vn-…`), or
+     * `:host` when a shadow root is present.
+     *
+     * If the VirtualNode has not been rendered yet (`#dom === null`), the
+     * Sheet is stored and applied on first `render()`. Subsequent
+     * `Sheet.Rules.add/remove/...` mutations re-flush automatically.
+     *
+     *   const v = new VirtualNode('div', { class: 'Fancy' });
+     *   v.Sheet = new Sheet(new Rule(':root', { background: 'yellow' }));
+     *   v.append(stage);
+     */
+    get Sheet(): Sheet | null { return this.#sheet; }
+    set Sheet(next: Sheet | null)
+    {
+        if (this.#sheet && this.#sheetSync)
+            this.#sheet.off('Sheet-Changed', this.#sheetSync);
+        if (this.#styleNode && this.#styleNode.parentNode)
+            this.#styleNode.parentNode.removeChild(this.#styleNode);
+        this.#styleNode = null;
+        this.#sheetSync = null;
+        this.#sheet     = next;
+        if (!next) return;
+
+        if (!this.#instanceId)
+            this.#instanceId = 'vn-' + Math.random().toString(36).slice(2, 10);
+
+        const apply = () => {
+            if (!this.#sheet) return;
+            // Ensure the host element exists — render lazily if needed
+            const el = this.#dom ?? this.render();
+            if (!el) return;
+
+            const useShadow = !!(el as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot;
+            let   replace   : string;
+            if (useShadow) replace = ':host';
+            else {
+                const cls = '__' + this.#instanceId;
+                el.classList.add(cls);
+                replace = '.' + cls;
+            }
+
+            let css = '';
+            for (const r of this.#sheet.Rules)
+            {
+                const scoped = r.Text.replace(/(^|,\s*|\s)(:root|&)(?![\w-])/g, (_m, pre: string) => pre + replace);
+                css += scoped + '\n';
+            }
+
+            if (!this.#styleNode) {
+                this.#styleNode = document.createElement('style');
+                this.#styleNode.setAttribute('data-arianna-sheet',    el.tagName.toLowerCase());
+                this.#styleNode.setAttribute('data-arianna-instance', this.#instanceId);
+                if (useShadow)
+                    (el as Element & { shadowRoot: ShadowRoot }).shadowRoot.appendChild(this.#styleNode);
+                else
+                    (document.head ?? document.documentElement).appendChild(this.#styleNode);
+            }
+            this.#styleNode.textContent = css;
+        };
+
+        apply();
+        this.#sheetSync = apply;
+        next.on('Sheet-Changed', apply);
+    }
+
     static signal     = signal;
     static signalMono = signalMono;
     static sinkText   = sinkText;

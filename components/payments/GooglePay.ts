@@ -4,279 +4,269 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Google Pay button + sheet integration. Uses the Google Pay JS API
- * (`pay.js`) loaded on demand from `pay.google.com/gp/p/js/pay.js`. The
- * widget is renderer-agnostic and only emits events; the merchant's server
- * is responsible for forwarding the encrypted payment token to its PSP.
+ * Google Pay button + sheet integration. Uses Google's official Pay JS API
+ * (`https://pay.google.com/gp/p/js/pay.js`) when available; otherwise falls
+ * back to the cross-browser W3C `PaymentRequest` with the Google Pay
+ * payment method (`https://google.com/pay`).
  *
- * The button follows Google Pay's brand guidelines (black, white, plain).
+ * REQUIREMENTS for live Google Pay:
+ *   • HTTPS
+ *   • Google Pay business account + merchant identifier
+ *   • Gateway integration (Stripe / Adyen / Braintree / etc.) configured
+ *     in the Google Pay & Wallet Console
  *
- * REQUIREMENTS for Google Pay to actually work in production:
- *   • Served over HTTPS (or localhost during development)
- *   • Merchant registered in the Google Pay Business Console
- *   • Gateway integration set up (Stripe, Adyen, Worldpay, …) — Google Pay
- *     is a *wallet*, not a *gateway* — the merchant still needs a PSP
+ * @example HTML
+ *   <arianna-google-pay merchant-id="01234567" merchant-name="My Shop"
+ *                       country-code="IT" currency="EUR" amount="99.00"
+ *                       gateway="stripe" gateway-merchant-id="acct_1"></arianna-google-pay>
  *
- * @example
- *   import { GooglePay } from 'ariannajs/components/payments';
+ * Events:
+ *   arianna:payment-success  detail: { method: 'googlePay', token: unknown }
+ *   arianna:payment-error    detail: { method: 'googlePay', message: string }
+ *   arianna:payment-cancel   detail: { method: 'googlePay' }
  *
- *   const gp = new GooglePay('#gpay', {
- *       merchantId    : '01234567890123456789',
- *       merchantName  : 'AriannA',
- *       amount        : 99.00,
- *       currency      : 'EUR',
- *       countryCode   : 'IT',
- *       gateway       : 'stripe',
- *       gatewayMerchantId: 'acct_1A2B3C',
- *       allowedCardNetworks: ['VISA', 'MASTERCARD', 'AMEX'],
- *   });
- *   gp.on('success', e => api.processGooglePayToken(e.token));
- *   gp.on('cancel',  () => console.log('User cancelled'));
+ * Attrs: merchant-id, merchant-name, country-code, currency, amount,
+ *        gateway, gateway-merchant-id, environment, button-color, button-type
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+export type GooglePayEnvironment = 'TEST' | 'PRODUCTION';
+export type GooglePayButtonColor = 'default' | 'black' | 'white';
+export type GooglePayButtonType  =
+    'buy' | 'book' | 'checkout' | 'donate' | 'order' | 'pay' | 'plain' | 'subscribe';
 
-export type GPayCardNetwork = 'AMEX' | 'DISCOVER' | 'JCB' | 'MASTERCARD' | 'VISA' | 'INTERAC';
-export type GPayAuthMethod  = 'PAN_ONLY' | 'CRYPTOGRAM_3DS';
-
-export interface GooglePayOptions extends CtrlOptions
-{
-    /** Google Pay merchant ID from the Business Console. */
-    merchantId         : string;
-    merchantName       : string;
-    amount             : number;
-    /** ISO 4217. */
-    currency           : string;
-    /** ISO 3166-1 alpha-2 country code of the merchant. */
-    countryCode        : string;
-    /** PSP token-handler name. e.g. 'stripe', 'adyen', 'worldpay'. */
-    gateway            : string;
-    /** Per-PSP merchant id (Stripe acct, Adyen merchantAccount, etc.). */
-    gatewayMerchantId  : string;
-    /** Card networks accepted. Default ['VISA','MASTERCARD','AMEX']. */
-    allowedCardNetworks? : GPayCardNetwork[];
-    /** Auth methods. Default ['PAN_ONLY','CRYPTOGRAM_3DS']. */
-    allowedAuthMethods?  : GPayAuthMethod[];
-    /** Test environment. Default true so devs can sandbox-test. Set false in prod. */
-    test?              : boolean;
-    /** Button color. Default 'black'. */
-    buttonColor?       : 'black' | 'white';
-    /** Button type. Default 'buy'. */
-    buttonType?        : 'book' | 'buy' | 'checkout' | 'donate' | 'order' | 'pay' | 'plain' | 'subscribe';
+export interface GooglePayOptions {
+    merchantId        : string;
+    merchantName      : string;
+    countryCode       : string;
+    currency          : string;
+    amount            : number;
+    gateway           : string;
+    gatewayMerchantId : string;
+    environment?      : GooglePayEnvironment;
+    buttonColor?      : GooglePayButtonColor;
+    buttonType?       : GooglePayButtonType;
+    supportedNetworks?: string[];
+    supportedAuthMethods?: Array<'PAN_ONLY' | 'CRYPTOGRAM_3DS'>;
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+const GPAY_LOGO = `<svg viewBox="0 0 40 16" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><path d="M18.93 1.79v3.4h2.1c.5 0 .92-.17 1.25-.51.34-.34.51-.74.51-1.19 0-.45-.17-.84-.51-1.18-.33-.34-.74-.52-1.25-.52h-2.1zm0 4.51v3.94H17.8V.68h3.21c.81 0 1.5.27 2.07.82.59.55.88 1.21.88 2 0 .8-.29 1.47-.88 2.01-.57.54-1.26.79-2.07.79h-2.08zM27.4 8.07c0 .43.18.79.55 1.08.37.29.8.43 1.29.43.7 0 1.31-.26 1.85-.78.54-.51.81-1.12.81-1.82-.4-.32-.97-.48-1.7-.48-.53 0-.97.13-1.32.38-.36.26-.54.6-.54.99zm1.46-4.41c1.04 0 1.86.28 2.46.83.6.55.9 1.31.9 2.27v4.58h-1.07V10.5h-.05c-.46.69-1.08 1.04-1.86 1.04-.66 0-1.21-.2-1.65-.6-.45-.4-.67-.89-.67-1.49 0-.63.24-1.13.71-1.5.48-.37 1.11-.56 1.91-.56.68 0 1.24.13 1.68.39v-.27c0-.49-.19-.91-.58-1.25-.39-.34-.84-.51-1.36-.51-.78 0-1.4.33-1.85.99l-.99-.62c.68-.97 1.68-1.46 3.02-1.46zM39 3.94l-4.43 10.18h-1.18l1.65-3.56-2.92-6.62h1.23l2.11 5.09h.02l2.05-5.09z"/><path d="M14.32 6.16c0-.34-.03-.67-.08-.99H7.32v1.88h3.93c-.16.91-.66 1.69-1.42 2.21v1.82h2.3c1.34-1.24 2.12-3.07 2.12-5.24z"/><path d="M7.32 13.32c1.92 0 3.54-.63 4.71-1.71l-2.3-1.82c-.64.43-1.46.68-2.41.68-1.85 0-3.42-1.25-3.98-2.93h-2.37v1.88c1.18 2.35 3.59 3.9 6.35 3.9z" fill="#34a853"/><path d="M3.34 7.54c-.14-.43-.22-.88-.22-1.35 0-.47.08-.92.22-1.35V2.96H.97C.46 3.96.18 5.07.18 6.19s.28 2.23.79 3.23z" fill="#fabb05"/><path d="M7.32 1.91c1.05 0 1.99.36 2.73 1.06l2.03-2.03C10.85.46 9.25-.16 7.32-.16 4.56-.16 2.15 1.39.97 3.74L3.34 5.62c.56-1.68 2.13-2.93 3.98-2.93z" fill="#e94235"/></g></svg>`;
 
-export class GooglePay extends Control<GooglePayOptions>
+export class GooglePay extends Component('arianna-google-pay', HTMLElement, {}, {
+    attrs : [
+        'merchant-id', 'merchant-name', 'country-code', 'currency', 'amount',
+        'gateway', 'gateway-merchant-id', 'environment',
+        'button-color', 'button-type', 'supported-networks', 'supported-auth-methods',
+    ],
+    shadow: false,
+})
 {
-    private _elBtnHost! : HTMLElement;
-    private _elFallback!: HTMLElement;
-    private _client    : unknown = null;
+    available$: Signal<boolean> = signal<boolean>(false);
+    busy$     : Signal<boolean> = signal<boolean>(false);
 
-    constructor(container: string | HTMLElement | null, opts: GooglePayOptions)
+    build(_opts: GooglePayOptions = {} as GooglePayOptions)
     {
-        super(container, 'div', {
-            allowedCardNetworks : ['VISA', 'MASTERCARD', 'AMEX'],
-            allowedAuthMethods  : ['PAN_ONLY', 'CRYPTOGRAM_3DS'],
-            test                : true,
-            buttonColor         : 'black',
-            buttonType          : 'buy',
-            ...opts,
-        });
+        const colorAttr = this.attrSignal('button-color');
+        const typeAttr  = this.attrSignal('button-type');
 
-        this.el.className = `ar-gpay${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
-    }
-
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    /** Trigger the Google Pay sheet programmatically. */
-    pay(): Promise<void> { return this._pay(); }
-
-    /** Whether Google Pay JS API is loaded and a client is ready. */
-    isReady(): boolean { return this._client !== null; }
-
-    // ── Internal ───────────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        this.el.innerHTML = `
-<div class="ar-gpay__btn-host" data-r="btn"></div>
-<div class="ar-gpay__fallback" data-r="fallback" style="display:none">
-  Google Pay is not available.
-</div>`;
-        this._elBtnHost  = this.el.querySelector<HTMLElement>('[data-r="btn"]')!;
-        this._elFallback = this.el.querySelector<HTMLElement>('[data-r="fallback"]')!;
-
-        void this._loadAndInit();
-    }
-
-    private async _loadAndInit(): Promise<void>
-    {
-        try { await loadGooglePayScript(); }
-        catch (e) {
-            this._showFallback();
-            this._emit('error', { message: 'Failed to load Google Pay script: ' + (e as Error).message });
-            return;
-        }
-
-        const w = window as unknown as { google?: { payments?: { api?: { PaymentsClient: new (cfg: unknown) => unknown } } } };
-        if (!w.google?.payments?.api?.PaymentsClient)
-        {
-            this._showFallback();
-            this._emit('error', { message: 'Google Pay API not present after load' });
-            return;
-        }
-
-        const test = this._get<boolean>('test', true);
-        const Client = w.google.payments.api.PaymentsClient;
-        this._client = new Client({ environment: test ? 'TEST' : 'PRODUCTION' });
-
-        // Check readiness
-        const isReady = (this._client as { isReadyToPay: (req: unknown) => Promise<{ result: boolean }> })
-            .isReadyToPay(this._isReadyRequest());
-        try
-        {
-            const res = await isReady;
-            if (!res.result)
-            {
-                this._showFallback();
-                this._emit('ready', { available: false });
-                return;
+        this.btnCls = () => {
+            const color = colorAttr.get() ?? 'default';
+            const kind  = typeAttr.get()  ?? 'pay';
+            return `ar-gpay__btn ar-gpay__btn--${color} ar-gpay__btn--${kind}`
+                + (this.busy$.get() ? ' ar-gpay__btn--busy' : '');
+        };
+        this.btnLabel = () => {
+            const kind = typeAttr.get() ?? 'pay';
+            switch (kind) {
+                case 'buy':       return 'Buy with';
+                case 'book':      return 'Book with';
+                case 'checkout':  return 'Checkout with';
+                case 'donate':    return 'Donate with';
+                case 'order':     return 'Order with';
+                case 'subscribe': return 'Subscribe with';
+                case 'plain':     return '';
+                default:          return 'Pay with';
             }
-            this._renderButton();
-            this._emit('ready', { available: true });
-        }
-        catch (e)
-        {
-            this._showFallback();
-            this._emit('error', { message: 'isReadyToPay failed: ' + (e as Error).message });
-        }
-    }
-
-    private _renderButton(): void
-    {
-        const c = this._client as { createButton: (cfg: unknown) => HTMLElement };
-        const btn = c.createButton({
-            buttonColor : this._get<string>('buttonColor', 'black'),
-            buttonType  : this._get<string>('buttonType', 'buy'),
-            buttonSizeMode: 'fill',
-            onClick     : () => { void this._pay(); },
-        });
-        this._elBtnHost.innerHTML = '';
-        this._elBtnHost.appendChild(btn);
-    }
-
-    private async _pay(): Promise<void>
-    {
-        if (!this._client)
-        {
-            this._emit('error', { message: 'Google Pay client not ready' });
-            return;
-        }
-        const c = this._client as { loadPaymentData: (req: unknown) => Promise<unknown> };
-        try
-        {
-            const data = await c.loadPaymentData(this._paymentDataRequest());
-            this._emit('success', { token: (data as { paymentMethodData?: unknown }).paymentMethodData });
-        }
-        catch (e)
-        {
-            const err = e as { statusCode?: string; message?: string };
-            if (err.statusCode === 'CANCELED') this._emit('cancel', {});
-            else this._emit('error', { message: err.message || 'Google Pay failed' });
-        }
-    }
-
-    private _baseCardPaymentMethod(): unknown
-    {
-        return {
-            type: 'CARD',
-            parameters: {
-                allowedAuthMethods: this._get<GPayAuthMethod[]>('allowedAuthMethods', ['PAN_ONLY', 'CRYPTOGRAM_3DS']),
-                allowedCardNetworks: this._get<GPayCardNetwork[]>('allowedCardNetworks', ['VISA', 'MASTERCARD', 'AMEX']),
-            },
         };
+
+        this.onClick = () => { void this.pay(); };
+
+        this.template = html`
+            <button type="button"
+                    :class="this.btnCls()"
+                    a-if="this.available$.get()"
+                    @click="this.onClick">
+                <span class="ar-gpay__label">{{ this.btnLabel() }}</span>
+                <span class="ar-gpay__logo">${GPAY_LOGO}</span>
+            </button>
+            <div class="ar-gpay__fallback" a-if="!this.available$.get()">
+                Google Pay isn't available on this device.
+            </div>
+        `;
+
+        this.Sheet = GooglePay.DefaultSheet();
     }
 
-    private _isReadyRequest(): unknown
-    {
-        return {
-            apiVersion: 2,
-            apiVersionMinor: 0,
-            allowedPaymentMethods: [this._baseCardPaymentMethod()],
-        };
+    async pay(): Promise<void> {
+        if (this.busy$.get()) return;
+        this.busy$.set(true);
+        try {
+            const merchantId        = this.getAttribute('merchant-id')         ?? '';
+            const merchantName      = this.getAttribute('merchant-name')       ?? '';
+            const countryCode       = this.getAttribute('country-code')        ?? 'US';
+            const currency          = this.getAttribute('currency')            ?? 'USD';
+            const amount            = parseFloat(this.getAttribute('amount') ?? '0') || 0;
+            const gateway           = this.getAttribute('gateway')             ?? '';
+            const gatewayMerchantId = this.getAttribute('gateway-merchant-id') ?? '';
+            const environment       = (this.getAttribute('environment') ?? 'TEST') as GooglePayEnvironment;
+            const networks          = (this.getAttribute('supported-networks') ?? 'VISA,MASTERCARD,AMEX')
+                                        .split(',').map(s => s.trim()).filter(Boolean);
+            const authMethods       = (this.getAttribute('supported-auth-methods') ?? 'PAN_ONLY,CRYPTOGRAM_3DS')
+                                        .split(',').map(s => s.trim()).filter(Boolean);
+
+            const w = window as unknown as { google?: { payments?: { api?: { PaymentsClient: new (cfg: { environment: string }) => unknown } } } };
+            if (w.google?.payments?.api?.PaymentsClient) {
+                const client = new w.google.payments.api.PaymentsClient({ environment }) as {
+                    loadPaymentData(req: unknown): Promise<unknown>;
+                };
+                const paymentDataRequest = {
+                    apiVersion: 2, apiVersionMinor: 0,
+                    allowedPaymentMethods: [{
+                        type: 'CARD',
+                        parameters: { allowedAuthMethods: authMethods, allowedCardNetworks: networks },
+                        tokenizationSpecification: {
+                            type: 'PAYMENT_GATEWAY',
+                            parameters: { gateway, gatewayMerchantId },
+                        },
+                    }],
+                    merchantInfo: { merchantId, merchantName },
+                    transactionInfo: {
+                        countryCode, currencyCode: currency,
+                        totalPriceStatus: 'FINAL',
+                        totalPrice: amount.toFixed(2),
+                    },
+                };
+                const data = await client.loadPaymentData(paymentDataRequest);
+                this.dispatchEvent(new CustomEvent('arianna:payment-success', {
+                    bubbles: true, detail: { method: 'googlePay', token: data },
+                }));
+            } else {
+                // PaymentRequest fallback
+                const PR = (window as unknown as { PaymentRequest?: typeof PaymentRequest }).PaymentRequest;
+                if (typeof PR !== 'function') throw new Error('Google Pay API and PaymentRequest both unavailable');
+                const methodData: PaymentMethodData[] = [{
+                    supportedMethods: 'https://google.com/pay',
+                    data: {
+                        environment, apiVersion: 2,
+                        merchantInfo: { merchantId, merchantName },
+                        allowedPaymentMethods: [{
+                            type: 'CARD',
+                            parameters: { allowedAuthMethods: authMethods, allowedCardNetworks: networks },
+                            tokenizationSpecification: {
+                                type: 'PAYMENT_GATEWAY',
+                                parameters: { gateway, gatewayMerchantId },
+                            },
+                        }],
+                    },
+                }];
+                const details: PaymentDetailsInit = {
+                    total: { label: merchantName || 'Total', amount: { currency, value: amount.toFixed(2) } },
+                };
+                const req = new PR(methodData, details);
+                const resp = await req.show();
+                await resp.complete('success');
+                this.dispatchEvent(new CustomEvent('arianna:payment-success', {
+                    bubbles: true, detail: { method: 'googlePay', token: resp.details },
+                }));
+            }
+        } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') {
+                this.dispatchEvent(new CustomEvent('arianna:payment-cancel', {
+                    bubbles: true, detail: { method: 'googlePay' },
+                }));
+            } else {
+                this.dispatchEvent(new CustomEvent('arianna:payment-error', {
+                    bubbles: true,
+                    detail: { method: 'googlePay', message: err instanceof Error ? err.message : String(err) },
+                }));
+            }
+        } finally {
+            this.busy$.set(false);
+        }
     }
 
-    private _paymentDataRequest(): unknown
-    {
-        const card = this._baseCardPaymentMethod() as { parameters: object; tokenizationSpecification?: unknown };
-        card.tokenizationSpecification = {
-            type: 'PAYMENT_GATEWAY',
-            parameters: {
-                gateway: this._get<string>('gateway', ''),
-                gatewayMerchantId: this._get<string>('gatewayMerchantId', ''),
-            },
-        };
-        return {
-            apiVersion: 2,
-            apiVersionMinor: 0,
-            allowedPaymentMethods: [card],
-            transactionInfo: {
-                totalPriceStatus: 'FINAL',
-                totalPrice: this._get<number>('amount', 0).toFixed(2),
-                currencyCode: this._get<string>('currency', 'EUR'),
-                countryCode: this._get<string>('countryCode', 'IT'),
-            },
-            merchantInfo: {
-                merchantId  : this._get<string>('merchantId', ''),
-                merchantName: this._get<string>('merchantName', ''),
-            },
-        };
+    static async isAvailable(): Promise<boolean> {
+        if (typeof window === 'undefined') return false;
+        const w = window as unknown as { google?: { payments?: { api?: unknown } }; PaymentRequest?: unknown };
+        if (w.google?.payments?.api) return true;
+        if (typeof w.PaymentRequest !== 'undefined') return true;
+        return false;
     }
 
-    private _showFallback(): void
-    {
-        this._elBtnHost.style.display = 'none';
-        this._elFallback.style.display = '';
+    onCreated()       {}
+    onBeforeMount()   {}
+    async onMount()   {
+        this.available$.set(await GooglePay.isAvailable());
     }
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
 
-    private _injectStyles(): void
+    private btnCls  : () => string  = () => 'ar-gpay__btn ar-gpay__btn--default ar-gpay__btn--pay';
+    private btnLabel: () => string  = () => 'Pay with';
+    private onClick : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
     {
-        if (document.getElementById('ar-gpay-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-gpay-styles';
-        s.textContent = `
-.ar-gpay { display:inline-block; min-width:200px; }
-.ar-gpay__btn-host { display:inline-block; }
-.ar-gpay__fallback { color:#888; font:12px sans-serif; padding:6px 10px; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', { display: 'inline-block' }),
+                new Rule('.ar-gpay__btn', {
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    minWidth: '160px',
+                    minHeight: '44px',
+                    padding: '0 18px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    font: '500 14px "Google Sans", "Roboto", system-ui, sans-serif',
+                    transition: 'opacity 0.15s',
+                }),
+                new Rule('.ar-gpay__btn:hover', { opacity: '0.9' }),
+                new Rule('.ar-gpay__btn--busy', { opacity: '0.6', cursor: 'wait' }),
+                new Rule('.ar-gpay__btn--default, .ar-gpay__btn--black', {
+                    background: '#000', color: '#fff',
+                }),
+                new Rule('.ar-gpay__btn--white', {
+                    background: '#fff', color: '#3c4043',
+                    border: '1px solid #d8d8d8',
+                }),
+                new Rule('.ar-gpay__logo', { display: 'inline-flex', height: '18px' }),
+                new Rule('.ar-gpay__logo svg', { height: '100%' }),
+                new Rule('.ar-gpay__fallback', {
+                    fontSize: '12px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    padding: '8px',
+                }),
+            ]
+        );
     }
 }
 
-// ── Script loader (cached across instances) ─────────────────────────────────
-
-let _gpayPromise: Promise<void> | null = null;
-function loadGooglePayScript(): Promise<void>
-{
-    if (_gpayPromise) return _gpayPromise;
-    _gpayPromise = new Promise((resolve, reject) => {
-        if (typeof document === 'undefined') { reject(new Error('no document')); return; }
-
-        // Already loaded?
-        const w = window as unknown as { google?: { payments?: unknown } };
-        if (w.google?.payments) { resolve(); return; }
-
-        const s = document.createElement('script');
-        s.src = 'https://pay.google.com/gp/p/js/pay.js';
-        s.async = true;
-        s.onload  = () => resolve();
-        s.onerror = () => reject(new Error('script load failed'));
-        document.head.appendChild(s);
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'GooglePay', {
+        value: GooglePay, writable: false, enumerable: false, configurable: false,
     });
-    return _gpayPromise;
 }
+
+export default GooglePay;

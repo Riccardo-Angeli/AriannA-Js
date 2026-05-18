@@ -4,527 +4,470 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Generic credit/debit card form. Detects the brand from the card number
- * (Visa, Mastercard, Amex, Maestro), validates with Luhn, formats input as
- * the user types, and emits a `submit` event with the (un-tokenised) card
- * data when the form is valid.
+ * Credit / debit card form with live validation (number Luhn-check, expiry,
+ * CVV) and a 3D card preview that updates in real time as the user types.
+ * Detects card brand (Visa / Mastercard / Amex / Discover / Maestro / Diners
+ * / JCB / UnionPay / CartesBancaires / Mada) from the BIN prefix.
  *
- * IMPORTANT — PCI compliance: this component handles raw PAN/CVV in memory.
- * Production deployments MUST tokenise via the gateway (Stripe Elements,
- * Adyen Web Components, etc.) before transmitting to your servers, or be
- * served via a PCI-compliant iframe. This component is intended for:
+ * SECURITY NOTE: this widget renders a form locally and emits the card data
+ * on `arianna:payment-success`. For PCI-DSS compliance most apps should
+ * instead embed a hosted-fields iframe from their PSP (Stripe.js Elements,
+ * Adyen Web Drop-in, Braintree Hosted Fields, etc). This widget is suitable
+ * for: (a) demos / mockups, (b) merchants whose PSP accepts raw cards
+ * server-to-server and who have completed SAQ-D, or (c) integrations using
+ * a payment vault on the merchant's own infrastructure.
  *
- *   • UI prototyping
- *   • Self-hosted closed-loop gift cards / loyalty
- *   • Developer environments with sandbox-only flows
- *   • Internal admin tooling where PCI scope is already managed
+ * @example HTML
+ *   <arianna-credit-card amount="99.00" currency="EUR" save-option></arianna-credit-card>
  *
- * Visual layout (Illustrator-style card preview + form fields):
+ * Events:
+ *   arianna:payment-success  detail: { method: 'card', card: CardData }
+ *   arianna:payment-error    detail: { method: 'card', message: string }
+ *   arianna:card-change      detail: { card: Partial<CardData>, valid: boolean }
  *
- *   ┌─────────────────────────────┐
- *   │  ╔═══════════════════════╗  │
- *   │  ║      VISA / MC        ║  │  ← live preview of brand
- *   │  ║  •••• •••• •••• 4242  ║  │
- *   │  ║  CARDHOLDER     12/28 ║  │
- *   │  ╚═══════════════════════╝  │
- *   │                             │
- *   │  Card number  [____________]│
- *   │  Cardholder   [____________]│
- *   │  MM/YY [__]   CVV [___]     │
- *   │  Country [▾]  ZIP [_____]   │
- *   │  ☐ Save card                │
- *   │  [    PAY EUR 99.00      ]  │
- *   └─────────────────────────────┘
- *
- * Built-in brands: Visa, Mastercard, American Express, Maestro. The
- * `detectBrand` helper is exported so consumers can apply the same logic
- * elsewhere.
- *
- * @example
- *   import { CreditCard } from 'ariannajs/components/payments';
- *
- *   const cc = new CreditCard('#pay', {
- *       amount: 99.00,
- *       currency: 'EUR',
- *       saveOption: true,
- *   });
- *   cc.on('submit', e => api.charge(e.card));
- *   cc.on('error',  e => showToast(e.message));
+ * Attrs: amount, currency, save-option, holder-name-required
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+export type CardBrand =
+    | 'visa' | 'mastercard' | 'amex' | 'discover' | 'maestro'
+    | 'diners' | 'jcb' | 'unionpay' | 'cartesbancaires' | 'mada' | 'unknown';
 
-export type CardBrand = 'visa' | 'mastercard' | 'amex' | 'maestro' | 'unknown';
-
-export interface CardData
-{
-    /** Raw PAN — digits only. */
+export interface CardData {
     number     : string;
-    cardholder : string;
-    /** 2-digit month, 1-12. */
-    expMonth   : string;
-    /** 4-digit year. */
-    expYear    : string;
-    /** 3 digits (Visa/MC/Maestro) or 4 digits (Amex). */
+    holder?    : string;
+    expMonth   : number;
+    expYear    : number;
     cvv        : string;
-    /** ISO 3166-1 alpha-2 country code. */
-    country?   : string;
-    zip?       : string;
     brand      : CardBrand;
-    /** True if the user opted into "save this card". */
     save?      : boolean;
 }
 
-export interface CreditCardOptions extends CtrlOptions
-{
-    /** Amount to charge. Used only for the button label. */
-    amount    : number;
-    /** ISO 4217 currency code. Default 'EUR'. */
-    currency? : string;
-    /** Show the country / ZIP fields. Default true. */
-    showAddress? : boolean;
-    /** Show the "save card" checkbox. Default false. */
-    saveOption?  : boolean;
-    /** Lock the cardholder name and pre-fill it. */
-    cardholder?  : string;
-    /** Restrict accepted brands; everything else triggers an error. */
-    allowedBrands? : CardBrand[];
-    /** Locale for the button label and validation messages. Default 'en'. */
-    locale?      : string;
+export interface CreditCardOptions {
+    amount             : number;
+    currency           : string;
+    saveOption?        : boolean;
+    holderNameRequired?: boolean;
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
-
-export class CreditCard extends Control<CreditCardOptions>
-{
-    private _brand : CardBrand = 'unknown';
-    private _save  = false;
-
-    // DOM
-    private _elPreview!  : HTMLElement;
-    private _elBrandLogo!: HTMLElement;
-    private _elPreviewNumber!  : HTMLElement;
-    private _elPreviewName!    : HTMLElement;
-    private _elPreviewExp!     : HTMLElement;
-    private _elNumber!   : HTMLInputElement;
-    private _elName!     : HTMLInputElement;
-    private _elExp!      : HTMLInputElement;
-    private _elCvv!      : HTMLInputElement;
-    private _elCountry?  : HTMLInputElement;
-    private _elZip?      : HTMLInputElement;
-    private _elSave?     : HTMLInputElement;
-    private _elBtn!      : HTMLButtonElement;
-    private _elError!    : HTMLElement;
-
-    constructor(container: string | HTMLElement | null, opts: CreditCardOptions)
-    {
-        super(container, 'div', {
-            currency       : 'EUR',
-            showAddress    : true,
-            saveOption     : false,
-            allowedBrands  : ['visa', 'mastercard', 'amex', 'maestro'],
-            locale         : 'en',
-            ...opts,
-        });
-
-        this.el.className = `ar-cc${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
-        this._refreshPreview();
-    }
-
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    /**
-     * Get the current card data. Returns a deep clone — the caller may
-     * inspect or mutate without affecting the form.
-     */
-    getCard(): CardData
-    {
-        return {
-            number     : this._elNumber.value.replace(/\s+/g, ''),
-            cardholder : this._elName.value.trim(),
-            expMonth   : this._expParts().mm,
-            expYear    : this._expParts().yyyy,
-            cvv        : this._elCvv.value,
-            country    : this._elCountry?.value.trim().toUpperCase() || undefined,
-            zip        : this._elZip?.value.trim() || undefined,
-            brand      : this._brand,
-            save       : this._save,
-        };
-    }
-
-    /** Programmatically set field values. */
-    setCard(data: Partial<CardData>): this
-    {
-        if (data.number !== undefined)
-        {
-            this._elNumber.value = formatCardNumber(data.number, data.brand ?? detectBrand(data.number));
-            this._brand = data.brand ?? detectBrand(data.number);
-        }
-        if (data.cardholder !== undefined) this._elName.value = data.cardholder;
-        if (data.expMonth !== undefined && data.expYear !== undefined)
-        {
-            const yy = data.expYear.length === 4 ? data.expYear.slice(2) : data.expYear;
-            this._elExp.value = `${data.expMonth.padStart(2, '0')}/${yy.padStart(2, '0')}`;
-        }
-        if (data.cvv !== undefined) this._elCvv.value = data.cvv;
-        if (data.country !== undefined && this._elCountry) this._elCountry.value = data.country;
-        if (data.zip !== undefined && this._elZip)         this._elZip.value     = data.zip;
-        this._refreshPreview();
-        return this;
-    }
-
-    /**
-     * Trigger validation + submission programmatically. Equivalent to clicking
-     * the "Pay" button.
-     */
-    pay(): this { this._submit(); return this; }
-
-    /** Validate the current input. Returns null if valid, error message if not. */
-    validate(): string | null
-    {
-        const c = this.getCard();
-        if (!validateLuhn(c.number)) return 'Invalid card number';
-        if (this._brand === 'unknown') return 'Unknown card brand';
-        const allowed = this._get<CardBrand[]>('allowedBrands', []);
-        if (allowed.length && !allowed.includes(this._brand))
-            return `${this._brand} cards are not accepted`;
-        if (!c.cardholder) return 'Cardholder name required';
-        if (!c.expMonth || !c.expYear) return 'Expiry date required';
-        const m = parseInt(c.expMonth, 10), y = parseInt(c.expYear, 10);
-        if (!(m >= 1 && m <= 12)) return 'Invalid expiry month';
-        const now = new Date();
-        const expEnd = new Date(y, m, 0, 23, 59, 59);  // last day of expiry month
-        if (expEnd < now) return 'Card has expired';
-        const cvvLen = this._brand === 'amex' ? 4 : 3;
-        if (c.cvv.length !== cvvLen) return `CVV must be ${cvvLen} digits`;
-        return null;
-    }
-
-    // ── Build + render ─────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        const showAddress = this._get<boolean>('showAddress', true);
-        const saveOption  = this._get<boolean>('saveOption', false);
-        const cardholder  = this._get<string>('cardholder', '');
-
-        this.el.innerHTML = `
-<div class="ar-cc__preview" data-r="preview">
-  <div class="ar-cc__preview-top">
-    <span class="ar-cc__chip">▣</span>
-    <span class="ar-cc__brand-logo" data-r="brand-logo">CARD</span>
-  </div>
-  <div class="ar-cc__preview-number" data-r="preview-number">•••• •••• •••• ••••</div>
-  <div class="ar-cc__preview-bottom">
-    <div>
-      <div class="ar-cc__lbl">CARDHOLDER</div>
-      <div class="ar-cc__preview-name" data-r="preview-name">YOUR NAME</div>
-    </div>
-    <div>
-      <div class="ar-cc__lbl">EXPIRES</div>
-      <div class="ar-cc__preview-exp" data-r="preview-exp">MM/YY</div>
-    </div>
-  </div>
-</div>
-
-<div class="ar-cc__form">
-  <label class="ar-cc__field ar-cc__field--full">
-    <span>Card number</span>
-    <input data-r="number" type="text" inputmode="numeric" maxlength="23" placeholder="1234 5678 9012 3456" autocomplete="cc-number">
-  </label>
-  <label class="ar-cc__field ar-cc__field--full">
-    <span>Cardholder</span>
-    <input data-r="name" type="text" placeholder="Name on card" autocomplete="cc-name" value="${escapeHtml(cardholder)}">
-  </label>
-  <label class="ar-cc__field">
-    <span>MM/YY</span>
-    <input data-r="exp" type="text" inputmode="numeric" maxlength="5" placeholder="12/28" autocomplete="cc-exp">
-  </label>
-  <label class="ar-cc__field">
-    <span>CVV</span>
-    <input data-r="cvv" type="text" inputmode="numeric" maxlength="4" placeholder="123" autocomplete="cc-csc">
-  </label>
-  ${showAddress ? `
-  <label class="ar-cc__field">
-    <span>Country</span>
-    <input data-r="country" type="text" maxlength="2" placeholder="IT" autocomplete="country">
-  </label>
-  <label class="ar-cc__field">
-    <span>ZIP</span>
-    <input data-r="zip" type="text" maxlength="10" placeholder="00100" autocomplete="postal-code">
-  </label>` : ''}
-  ${saveOption ? `
-  <label class="ar-cc__save ar-cc__field--full">
-    <input data-r="save" type="checkbox">
-    <span>Save card for future purchases</span>
-  </label>` : ''}
-  <div class="ar-cc__error" data-r="error" style="display:none"></div>
-  <button class="ar-cc__btn" data-r="btn">${this._buttonLabel()}</button>
-</div>`;
-
-        const r = (n: string) => this.el.querySelector<HTMLElement>(`[data-r="${n}"]`)!;
-        this._elPreview         = r('preview');
-        this._elBrandLogo       = r('brand-logo');
-        this._elPreviewNumber   = r('preview-number');
-        this._elPreviewName     = r('preview-name');
-        this._elPreviewExp      = r('preview-exp');
-        this._elNumber          = r('number') as HTMLInputElement;
-        this._elName            = r('name')   as HTMLInputElement;
-        this._elExp             = r('exp')    as HTMLInputElement;
-        this._elCvv             = r('cvv')    as HTMLInputElement;
-        if (showAddress) {
-            this._elCountry     = r('country') as HTMLInputElement;
-            this._elZip         = r('zip')     as HTMLInputElement;
-        }
-        if (saveOption) this._elSave = r('save') as HTMLInputElement;
-        this._elBtn             = r('btn')   as HTMLButtonElement;
-        this._elError           = r('error');
-
-        this._wireEvents();
-    }
-
-    private _wireEvents(): void
-    {
-        // Live formatting
-        this._elNumber.addEventListener('input', () => {
-            const raw = this._elNumber.value.replace(/\D/g, '');
-            this._brand = detectBrand(raw);
-            this._elNumber.value = formatCardNumber(raw, this._brand);
-            // Adjust CVV maxlength based on brand
-            this._elCvv.maxLength = this._brand === 'amex' ? 4 : 3;
-            this._refreshPreview();
-        });
-
-        this._elName.addEventListener('input', () => this._refreshPreview());
-
-        this._elExp.addEventListener('input', () => {
-            // Auto-insert "/" after 2 digits
-            const raw = this._elExp.value.replace(/\D/g, '').slice(0, 4);
-            this._elExp.value = raw.length >= 3 ? `${raw.slice(0, 2)}/${raw.slice(2)}` : raw;
-            this._refreshPreview();
-        });
-
-        this._elCvv.addEventListener('input', () => {
-            this._elCvv.value = this._elCvv.value.replace(/\D/g, '');
-        });
-
-        if (this._elSave) this._elSave.addEventListener('change', () => {
-            this._save = this._elSave!.checked;
-        });
-
-        this._elBtn.addEventListener('click', () => this._submit());
-    }
-
-    private _submit(): void
-    {
-        const err = this.validate();
-        if (err)
-        {
-            this._showError(err);
-            this._emit('error', { message: err });
-            return;
-        }
-        this._showError(null);
-        this._emit('submit', { card: this.getCard() });
-    }
-
-    private _showError(msg: string | null): void
-    {
-        if (!msg) { this._elError.style.display = 'none'; this._elError.textContent = ''; return; }
-        this._elError.style.display = '';
-        this._elError.textContent = msg;
-    }
-
-    private _refreshPreview(): void
-    {
-        // Brand logo on the card preview
-        this._elBrandLogo.textContent = brandLogoText(this._brand);
-        this._elBrandLogo.className = 'ar-cc__brand-logo ar-cc__brand-logo--' + this._brand;
-        this._elPreview.className = 'ar-cc__preview ar-cc__preview--' + this._brand;
-
-        // Number — last 4 digits visible, rest masked
-        const raw = this._elNumber.value.replace(/\s+/g, '');
-        if (raw.length === 0)
-        {
-            this._elPreviewNumber.textContent = this._brand === 'amex'
-                ? '•••• •••••• •••••'
-                : '•••• •••• •••• ••••';
-        }
-        else
-        {
-            this._elPreviewNumber.textContent = formatCardPreview(raw, this._brand);
-        }
-
-        this._elPreviewName.textContent = (this._elName.value || 'YOUR NAME').toUpperCase().slice(0, 26);
-        this._elPreviewExp.textContent  = this._elExp.value || 'MM/YY';
-    }
-
-    private _expParts(): { mm: string; yyyy: string }
-    {
-        const v = this._elExp.value.trim();
-        const m = /^(\d{1,2})\s*\/\s*(\d{1,4})$/.exec(v);
-        if (!m) return { mm: '', yyyy: '' };
-        const mm = m[1]!.padStart(2, '0');
-        let yy = m[2]!;
-        if (yy.length === 2) yy = '20' + yy;
-        return { mm, yyyy: yy };
-    }
-
-    private _buttonLabel(): string
-    {
-        const amount = this._get<number>('amount', 0);
-        const cur    = this._get<string>('currency', 'EUR');
-        const loc    = this._get<string>('locale', 'en');
-        try
-        {
-            const fmt = new Intl.NumberFormat(loc, { style: 'currency', currency: cur });
-            return `Pay ${fmt.format(amount)}`;
-        }
-        catch { return `Pay ${cur} ${amount.toFixed(2)}`; }
-    }
-
-    private _injectStyles(): void
-    {
-        if (document.getElementById('ar-cc-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-cc-styles';
-        s.textContent = `
-.ar-cc { display:flex; flex-direction:column; gap:18px; padding:20px; background:#1e1e1e; border:1px solid #333; border-radius:8px; color:#d4d4d4; font:13px -apple-system,system-ui,sans-serif; max-width:420px; }
-.ar-cc__preview { background:linear-gradient(135deg, #1f2937 0%, #111827 100%); border-radius:10px; padding:18px 20px; color:#fff; aspect-ratio:1.586; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 4px 12px rgba(0,0,0,0.4); transition:background .25s; }
-.ar-cc__preview--visa       { background:linear-gradient(135deg, #1a3d8f 0%, #0d1f4d 100%); }
-.ar-cc__preview--mastercard { background:linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%); }
-.ar-cc__preview--amex       { background:linear-gradient(135deg, #006fcf 0%, #003e6b 100%); }
-.ar-cc__preview--maestro    { background:linear-gradient(135deg, #0099df 0%, #ed1c2e 100%); }
-.ar-cc__preview-top { display:flex; justify-content:space-between; align-items:center; }
-.ar-cc__chip { font-size:24px; color:#facc15; }
-.ar-cc__brand-logo { font:700 14px sans-serif; letter-spacing:.1em; padding:3px 10px; border-radius:3px; background:rgba(255,255,255,0.15); }
-.ar-cc__brand-logo--unknown { opacity:0.4; }
-.ar-cc__preview-number { font:600 19px ui-monospace,monospace; letter-spacing:.12em; }
-.ar-cc__preview-bottom { display:flex; justify-content:space-between; }
-.ar-cc__lbl { font:9px sans-serif; opacity:0.7; letter-spacing:.08em; }
-.ar-cc__preview-name, .ar-cc__preview-exp { font:600 12px sans-serif; letter-spacing:.05em; }
-
-.ar-cc__form { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-.ar-cc__field { display:flex; flex-direction:column; gap:4px; }
-.ar-cc__field--full { grid-column:1 / -1; }
-.ar-cc__field span { font:10px sans-serif; color:#888; letter-spacing:.06em; text-transform:uppercase; }
-.ar-cc__field input { background:#0d0d0d; border:1px solid #333; color:#d4d4d4; padding:8px 10px; font:13px ui-monospace,monospace; border-radius:3px; }
-.ar-cc__field input:focus { outline:none; border-color:#e40c88; }
-.ar-cc__save { display:flex; align-items:center; gap:8px; font:12px sans-serif; color:#888; cursor:pointer; }
-.ar-cc__error { grid-column:1 / -1; padding:8px 12px; background:rgba(220,38,38,0.15); border:1px solid #dc2626; border-radius:3px; color:#fca5a5; font-size:12px; }
-.ar-cc__btn { grid-column:1 / -1; background:#e40c88; color:#fff; border:0; padding:12px; font:600 14px sans-serif; border-radius:4px; cursor:pointer; transition:background .12s; }
-.ar-cc__btn:hover { background:#c30b75; }
-.ar-cc__btn:disabled { background:#555; cursor:not-allowed; }
-`;
-        document.head.appendChild(s);
-    }
+interface CardFormState {
+    number   : string;
+    holder   : string;
+    expMonth : string;
+    expYear  : string;
+    cvv      : string;
+    save     : boolean;
+    flipped  : boolean;
 }
 
-// ── Pure helpers (exported) ─────────────────────────────────────────────────
+// ── Brand detection (BIN-based) ────────────────────────────────────────────
 
-/**
- * Detect card brand from a (possibly partial) PAN. Uses standard IIN ranges:
- *
- *   • Visa        4xxxxxxxxxxxxx{xxx}      13 / 16 / 19 digits
- *   • Mastercard  5[1-5]xxxxxxxxxxxx       16 digits
- *                 OR 2221-2720 BIN range   16 digits  (2017+ expansion)
- *   • Amex        3[47]xxxxxxxxxxxx        15 digits
- *   • Maestro     50, 56-58, 6xxxxx        12-19 digits (mostly debit EU)
- */
-export function detectBrand(pan: string): CardBrand
-{
-    const n = pan.replace(/\D/g, '');
-    if (!n) return 'unknown';
+const BRAND_PATTERNS: Array<{ brand: CardBrand; re: RegExp; lengths: number[]; cvvLen: number }> = [
+    { brand: 'amex',            re: /^3[47]/,             lengths: [15], cvvLen: 4 },
+    { brand: 'mastercard',      re: /^(5[1-5]|2[2-7])/,   lengths: [16], cvvLen: 3 },
+    { brand: 'visa',            re: /^4/,                 lengths: [13, 16, 19], cvvLen: 3 },
+    { brand: 'discover',        re: /^6(?:011|5)/,        lengths: [16], cvvLen: 3 },
+    { brand: 'diners',          re: /^3(?:0[0-5]|[68])/,  lengths: [14, 16, 19], cvvLen: 3 },
+    { brand: 'jcb',             re: /^35/,                lengths: [16, 19], cvvLen: 3 },
+    { brand: 'unionpay',        re: /^62/,                lengths: [16, 17, 18, 19], cvvLen: 3 },
+    { brand: 'maestro',         re: /^(50|5[6-9]|6)/,     lengths: [12, 13, 14, 15, 16, 17, 18, 19], cvvLen: 3 },
+    { brand: 'cartesbancaires', re: /^4[0-9]{5}/,         lengths: [16], cvvLen: 3 },
+    { brand: 'mada',            re: /^(440533|446672)/,   lengths: [16], cvvLen: 3 },
+];
 
-    // Visa
-    if (/^4/.test(n)) return 'visa';
-
-    // Amex
-    if (/^3[47]/.test(n)) return 'amex';
-
-    // Mastercard
-    if (/^5[1-5]/.test(n)) return 'mastercard';
-    // 2221-2720 expansion range
-    if (/^2[2-7]/.test(n))
-    {
-        const four = parseInt(n.slice(0, 4), 10);
-        if (n.length >= 4 && four >= 2221 && four <= 2720) return 'mastercard';
-        if (n.length < 4) return 'mastercard';
+function detectBrand(num: string): { brand: CardBrand; lengths: number[]; cvvLen: number } {
+    const stripped = num.replace(/\D/g, '');
+    for (const p of BRAND_PATTERNS) {
+        if (p.re.test(stripped)) return { brand: p.brand, lengths: p.lengths, cvvLen: p.cvvLen };
     }
-
-    // Maestro  (50, 56, 57, 58, 6) — 6 also overlaps Discover; for MVP we
-    // tag it as Maestro since Discover isn't in our supported set yet.
-    if (/^(50|5[6-8]|6)/.test(n)) return 'maestro';
-
-    return 'unknown';
+    return { brand: 'unknown', lengths: [13, 14, 15, 16, 17, 18, 19], cvvLen: 3 };
 }
 
-/**
- * Luhn checksum validator. Accepts a string of digits (already cleaned).
- * Returns false on empty input.
- */
-export function validateLuhn(pan: string): boolean
-{
-    const n = pan.replace(/\D/g, '');
-    if (n.length < 12) return false;
+function luhnCheck(num: string): boolean {
+    const s = num.replace(/\D/g, '');
+    if (s.length < 12) return false;
     let sum = 0, alt = false;
-    for (let i = n.length - 1; i >= 0; i--)
-    {
-        let d = n.charCodeAt(i) - 48;       // 0-9
-        if (alt)
-        {
-            d *= 2;
-            if (d > 9) d -= 9;
-        }
-        sum += d;
+    for (let i = s.length - 1; i >= 0; i--) {
+        let n = parseInt(s[i]!, 10);
+        if (alt) { n *= 2; if (n > 9) n -= 9; }
+        sum += n;
         alt = !alt;
     }
     return sum % 10 === 0;
 }
 
-/**
- * Format the PAN with brand-appropriate spacing for input fields.
- *   Visa/MC/Maestro: 4-4-4-4
- *   Amex:            4-6-5
- */
-export function formatCardNumber(pan: string, brand: CardBrand): string
-{
-    const n = pan.replace(/\D/g, '').slice(0, brand === 'amex' ? 15 : 19);
-    if (brand === 'amex')
-    {
-        const a = n.slice(0, 4), b = n.slice(4, 10), c = n.slice(10, 15);
-        return [a, b, c].filter(Boolean).join(' ');
+function formatCardNumber(num: string, brand: CardBrand): string {
+    const s = num.replace(/\D/g, '').slice(0, 19);
+    if (brand === 'amex') {
+        // 4-6-5
+        return s.replace(/^(\d{4})(\d{0,6})(\d{0,5}).*$/, (_m, a, b, c) =>
+            [a, b, c].filter(Boolean).join(' '));
     }
-    return n.match(/.{1,4}/g)?.join(' ') ?? n;
+    return s.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
 }
 
-/** Render the card-preview number with last 4 visible, rest masked. */
-function formatCardPreview(pan: string, brand: CardBrand): string
+export class CreditCard extends Component('arianna-credit-card', HTMLElement, {}, {
+    attrs : ['amount', 'currency', 'save-option', 'holder-name-required'],
+    shadow: false,
+})
 {
-    const last4 = pan.slice(-4).padStart(4, '•');
-    if (brand === 'amex') return `•••• •••••• •${last4}`;
-    return `•••• •••• •••• ${last4}`;
-}
+    form$: Signal<CardFormState> = signal<CardFormState>({
+        number: '', holder: '', expMonth: '', expYear: '', cvv: '',
+        save: false, flipped: false,
+    });
 
-function brandLogoText(brand: CardBrand): string
-{
-    switch (brand)
+    build(_opts: CreditCardOptions = {} as CreditCardOptions)
     {
-        case 'visa':       return 'VISA';
-        case 'mastercard': return 'MC';
-        case 'amex':       return 'AMEX';
-        case 'maestro':    return 'MAESTRO';
-        default:           return 'CARD';
+        const amountAttr = this.attrSignal('amount');
+        const currencyAttr = this.attrSignal('currency');
+
+        this.brandInfo = () => detectBrand(this.form$.get().number);
+        this.brand     = (): CardBrand => this.brandInfo().brand;
+
+        this.numberDisplay = () => {
+            const f = this.form$.get();
+            return formatCardNumber(f.number, this.brand());
+        };
+        this.cvvMaxLen = () => this.brandInfo().cvvLen;
+        this.numberMaxLen = () => {
+            const info = this.brandInfo();
+            const maxRaw = Math.max(...info.lengths);
+            // Add space chars for formatting
+            return info.brand === 'amex'
+                ? maxRaw + 2
+                : maxRaw + Math.floor(maxRaw / 4);
+        };
+
+        this.cardPreviewCls = () => 'ar-cc__preview ar-cc__preview--' + this.brand()
+            + (this.form$.get().flipped ? ' ar-cc__preview--flipped' : '');
+
+        this.previewNumber = () => this.numberDisplay() || '•••• •••• •••• ••••';
+        this.previewHolder = () => this.form$.get().holder.toUpperCase() || 'CARDHOLDER NAME';
+        this.previewExp    = () => {
+            const f = this.form$.get();
+            return (f.expMonth || 'MM') + '/' + (f.expYear || 'YY');
+        };
+        this.previewBrand  = () => this.brand().toUpperCase();
+        this.previewCvv    = () => this.form$.get().cvv || '•••';
+
+        this.valid = () => {
+            const f = this.form$.get();
+            const info = this.brandInfo();
+            const numRaw = f.number.replace(/\D/g, '');
+            if (!info.lengths.includes(numRaw.length)) return false;
+            if (!luhnCheck(numRaw)) return false;
+            const m = parseInt(f.expMonth, 10);
+            const y = parseInt(f.expYear, 10);
+            if (!(m >= 1 && m <= 12)) return false;
+            if (!(y >= 0 && y <= 99)) return false;
+            if (f.cvv.length !== info.cvvLen) return false;
+            if (this.hasAttribute('holder-name-required') && !f.holder.trim()) return false;
+            return true;
+        };
+
+        this.payLabel = () => {
+            const a = parseFloat(amountAttr.get() ?? '0') || 0;
+            const c = currencyAttr.get() ?? 'EUR';
+            return `Pay ${c} ${a.toFixed(2)}`;
+        };
+
+        // ── Handlers ────────────────────────────────────────────────────
+        this.onNumber = (e: Event) => {
+            const v = (e.target as HTMLInputElement).value;
+            const cur = this.form$.get();
+            this.form$.set({ ...cur, number: v.replace(/\D/g, '').slice(0, 19) });
+            this.#fireChange();
+        };
+        this.onHolder = (e: Event) => {
+            const cur = this.form$.get();
+            this.form$.set({ ...cur, holder: (e.target as HTMLInputElement).value });
+            this.#fireChange();
+        };
+        this.onExpMonth = (e: Event) => {
+            const v = (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 2);
+            const cur = this.form$.get();
+            this.form$.set({ ...cur, expMonth: v });
+            this.#fireChange();
+        };
+        this.onExpYear = (e: Event) => {
+            const v = (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 2);
+            const cur = this.form$.get();
+            this.form$.set({ ...cur, expYear: v });
+            this.#fireChange();
+        };
+        this.onCvv = (e: Event) => {
+            const v = (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, this.cvvMaxLen());
+            const cur = this.form$.get();
+            this.form$.set({ ...cur, cvv: v });
+            this.#fireChange();
+        };
+        this.onCvvFocus = () => {
+            this.form$.set({ ...this.form$.get(), flipped: true });
+        };
+        this.onCvvBlur = () => {
+            this.form$.set({ ...this.form$.get(), flipped: false });
+        };
+        this.onSave = (e: Event) => {
+            this.form$.set({ ...this.form$.get(), save: (e.target as HTMLInputElement).checked });
+        };
+        this.onSubmit = () => { void this.pay(); };
+
+        this.template = html`
+            <div class="ar-cc">
+                <div :class="this.cardPreviewCls()">
+                    <div class="ar-cc__preview-face ar-cc__preview-front">
+                        <div class="ar-cc__preview-brand">{{ this.previewBrand() }}</div>
+                        <div class="ar-cc__preview-chip">▦</div>
+                        <div class="ar-cc__preview-number">{{ this.previewNumber() }}</div>
+                        <div class="ar-cc__preview-row">
+                            <div>
+                                <div class="ar-cc__preview-meta">HOLDER</div>
+                                <div class="ar-cc__preview-holder">{{ this.previewHolder() }}</div>
+                            </div>
+                            <div>
+                                <div class="ar-cc__preview-meta">EXP</div>
+                                <div class="ar-cc__preview-exp">{{ this.previewExp() }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ar-cc__preview-face ar-cc__preview-back">
+                        <div class="ar-cc__preview-strip"></div>
+                        <div class="ar-cc__preview-cvv-box">{{ this.previewCvv() }}</div>
+                    </div>
+                </div>
+                <div class="ar-cc__form">
+                    <label class="ar-cc__field">
+                        <span>Card number</span>
+                        <input type="text" inputmode="numeric" autocomplete="cc-number"
+                               :value="this.numberDisplay()"
+                               @input="this.onNumber"/>
+                    </label>
+                    <label class="ar-cc__field">
+                        <span>Cardholder</span>
+                        <input type="text" autocomplete="cc-name"
+                               :value="this.form$.get().holder"
+                               @input="this.onHolder"/>
+                    </label>
+                    <div class="ar-cc__row">
+                        <label class="ar-cc__field">
+                            <span>Month</span>
+                            <input type="text" inputmode="numeric" autocomplete="cc-exp-month" placeholder="MM"
+                                   :value="this.form$.get().expMonth"
+                                   @input="this.onExpMonth"/>
+                        </label>
+                        <label class="ar-cc__field">
+                            <span>Year</span>
+                            <input type="text" inputmode="numeric" autocomplete="cc-exp-year" placeholder="YY"
+                                   :value="this.form$.get().expYear"
+                                   @input="this.onExpYear"/>
+                        </label>
+                        <label class="ar-cc__field">
+                            <span>CVV</span>
+                            <input type="text" inputmode="numeric" autocomplete="cc-csc"
+                                   :value="this.form$.get().cvv"
+                                   @input="this.onCvv"
+                                   @focus="this.onCvvFocus"
+                                   @blur="this.onCvvBlur"/>
+                        </label>
+                    </div>
+                    <label class="ar-cc__save" a-if="this.hasAttribute('save-option')">
+                        <input type="checkbox" :checked="this.form$.get().save" @change="this.onSave"/>
+                        <span>Save this card for future payments</span>
+                    </label>
+                    <button type="button" class="ar-cc__pay"
+                            :disabled="!this.valid()"
+                            @click="this.onSubmit">{{ this.payLabel() }}</button>
+                </div>
+            </div>
+        `;
+
+        this.Sheet = CreditCard.DefaultSheet();
+    }
+
+    async pay(): Promise<void> {
+        if (!this.valid()) {
+            this.dispatchEvent(new CustomEvent('arianna:payment-error', {
+                bubbles: true, detail: { method: 'card', message: 'Invalid card details' },
+            }));
+            return;
+        }
+        const f = this.form$.get();
+        const card: CardData = {
+            number   : f.number.replace(/\D/g, ''),
+            holder   : f.holder.trim() || undefined,
+            expMonth : parseInt(f.expMonth, 10),
+            expYear  : 2000 + parseInt(f.expYear, 10),
+            cvv      : f.cvv,
+            brand    : this.brand(),
+            save     : f.save,
+        };
+        this.dispatchEvent(new CustomEvent('arianna:payment-success', {
+            bubbles: true, detail: { method: 'card', card },
+        }));
+    }
+
+    getCard(): Partial<CardData> {
+        const f = this.form$.get();
+        return {
+            number  : f.number,
+            holder  : f.holder,
+            expMonth: parseInt(f.expMonth, 10),
+            expYear : f.expYear ? 2000 + parseInt(f.expYear, 10) : 0,
+            cvv     : f.cvv,
+            brand   : this.brand(),
+            save    : f.save,
+        };
+    }
+
+    #fireChange(): void {
+        this.dispatchEvent(new CustomEvent('arianna:card-change', {
+            bubbles: true, detail: { card: this.getCard(), valid: this.valid() },
+        }));
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    private brandInfo     : () => { brand: CardBrand; lengths: number[]; cvvLen: number } = () => ({ brand: 'unknown', lengths: [16], cvvLen: 3 });
+    private brand         : () => CardBrand = () => 'unknown';
+    private numberDisplay : () => string = () => '';
+    private cvvMaxLen     : () => number = () => 3;
+    private numberMaxLen  : () => number = () => 19;
+    private cardPreviewCls: () => string = () => 'ar-cc__preview';
+    private previewNumber : () => string = () => '•••• •••• •••• ••••';
+    private previewHolder : () => string = () => 'CARDHOLDER NAME';
+    private previewExp    : () => string = () => 'MM/YY';
+    private previewBrand  : () => string = () => 'CARD';
+    private previewCvv    : () => string = () => '•••';
+    private valid         : () => boolean = () => false;
+    private payLabel      : () => string = () => 'Pay';
+    private onNumber      : (e: Event) => void = () => {};
+    private onHolder      : (e: Event) => void = () => {};
+    private onExpMonth    : (e: Event) => void = () => {};
+    private onExpYear     : (e: Event) => void = () => {};
+    private onCvv         : (e: Event) => void = () => {};
+    private onCvvFocus    : (e: Event) => void = () => {};
+    private onCvvBlur     : (e: Event) => void = () => {};
+    private onSave        : (e: Event) => void = () => {};
+    private onSubmit      : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    display: 'inline-block',
+                    fontFamily: '-apple-system, system-ui, sans-serif',
+                    fontSize: '13px',
+                    color: 'var(--arianna-text, #1f2328)',
+                }),
+                new Rule('.ar-cc', {
+                    display: 'flex', flexDirection: 'column', gap: '14px',
+                    padding: '14px',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 8px)',
+                    width: '320px',
+                }),
+                new Rule('.ar-cc__preview', {
+                    position: 'relative',
+                    width: '100%', aspectRatio: '1.586',
+                    perspective: '1000px',
+                    transformStyle: 'preserve-3d',
+                }),
+                new Rule('.ar-cc__preview-face', {
+                    position: 'absolute', inset: '0',
+                    borderRadius: '10px',
+                    padding: '16px',
+                    color: '#fff',
+                    backfaceVisibility: 'hidden',
+                    transition: 'transform 0.5s',
+                    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+                }),
+                new Rule('.ar-cc__preview-front', {
+                    display: 'flex', flexDirection: 'column',
+                    justifyContent: 'space-between',
+                }),
+                new Rule('.ar-cc__preview--visa .ar-cc__preview-front',       { background: 'linear-gradient(135deg, #1a1f71 0%, #1e3c8f 100%)' }),
+                new Rule('.ar-cc__preview--mastercard .ar-cc__preview-front', { background: 'linear-gradient(135deg, #eb001b 0%, #f79e1b 100%)' }),
+                new Rule('.ar-cc__preview--amex .ar-cc__preview-front',       { background: 'linear-gradient(135deg, #2671b9 0%, #006fcf 100%)' }),
+                new Rule('.ar-cc__preview--discover .ar-cc__preview-front',   { background: 'linear-gradient(135deg, #ff6000 0%, #ff8c00 100%)' }),
+                new Rule('.ar-cc__preview--maestro .ar-cc__preview-front',    { background: 'linear-gradient(135deg, #0099df 0%, #ed0006 100%)' }),
+                new Rule('.ar-cc__preview-back', {
+                    transform: 'rotateY(180deg)',
+                    display: 'flex', flexDirection: 'column',
+                }),
+                new Rule('.ar-cc__preview--flipped .ar-cc__preview-front', { transform: 'rotateY(180deg)' }),
+                new Rule('.ar-cc__preview--flipped .ar-cc__preview-back',  { transform: 'rotateY(360deg)' }),
+                new Rule('.ar-cc__preview-brand', { fontSize: '11px', fontWeight: '700', letterSpacing: '0.15em' }),
+                new Rule('.ar-cc__preview-chip', { fontSize: '24px', color: '#ffd700' }),
+                new Rule('.ar-cc__preview-number', { fontSize: '18px', fontFamily: 'ui-monospace, monospace', letterSpacing: '0.08em' }),
+                new Rule('.ar-cc__preview-row', { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }),
+                new Rule('.ar-cc__preview-meta', { fontSize: '9px', opacity: '0.7', letterSpacing: '0.1em' }),
+                new Rule('.ar-cc__preview-holder', { fontSize: '12px', letterSpacing: '0.05em' }),
+                new Rule('.ar-cc__preview-exp', { fontSize: '12px', fontFamily: 'ui-monospace, monospace' }),
+                new Rule('.ar-cc__preview-strip', { marginTop: '16px', height: '34px', background: '#000' }),
+                new Rule('.ar-cc__preview-cvv-box', {
+                    marginTop: '12px', alignSelf: 'flex-end',
+                    background: '#fff', color: '#000',
+                    padding: '4px 12px', borderRadius: '3px',
+                    fontFamily: 'ui-monospace, monospace',
+                    minWidth: '60px', textAlign: 'right',
+                }),
+                new Rule('.ar-cc__form', { display: 'flex', flexDirection: 'column', gap: '10px' }),
+                new Rule('.ar-cc__field', { display: 'flex', flexDirection: 'column', gap: '4px' }),
+                new Rule('.ar-cc__field span', {
+                    fontSize: '10px', textTransform: 'uppercase',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    letterSpacing: '0.06em',
+                }),
+                new Rule('.ar-cc__field input', {
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    color: 'var(--arianna-text, #1f2328)',
+                    padding: '8px 10px',
+                    font: '13px ui-monospace, monospace',
+                    borderRadius: '4px',
+                }),
+                new Rule('.ar-cc__field input:focus', {
+                    outline: 'none',
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                }),
+                new Rule('.ar-cc__row', { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }),
+                new Rule('.ar-cc__save', { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }),
+                new Rule('.ar-cc__pay', {
+                    marginTop: '4px',
+                    padding: '11px',
+                    background: 'var(--arianna-primary, #1f6feb)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                }),
+                new Rule('.ar-cc__pay:hover:not(:disabled)', { background: 'var(--arianna-primary-hover, #1858c4)' }),
+                new Rule('.ar-cc__pay:disabled', { opacity: '0.4', cursor: 'not-allowed' }),
+            ]
+        );
     }
 }
 
-function escapeHtml(s: string): string
-{
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'CreditCard', {
+        value: CreditCard, writable: false, enumerable: false, configurable: false,
+    });
 }
+
+export default CreditCard;

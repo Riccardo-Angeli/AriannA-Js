@@ -1,36 +1,128 @@
 /**
+ * @module    components/navigation/Header
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Header — application top bar with logo / title / actions slots and optional
+ * sticky positioning.
+ *
+ * @example JS
+ *   const h = new Header();
+ *   h.title = 'AriannA';
+ *   h.sticky = true;
+ *
+ * @example HTML
+ *   <arianna-header sticky title="My App">
+ *     <img slot="logo" src="/logo.svg" alt="logo">
+ *     <button slot="actions">Sign in</button>
+ *   </arianna-header>
+ *
+ * Events: (none)
+ * Slots:  logo, actions (default ignored when title attr present)
+ * Attrs:  title, sticky
  */
 
-import { Control } from '../core/Control.ts';
-/**
- * Application header bar.
- * @example
- *   const header = new Header('#root');
- *   header.title = 'AriannA';
- *   header.logo  = '<img src="/logo.svg" alt="logo">';
- *   header.actions = '<button>Sign in</button>';
- */
-export interface HeaderOptions { sticky?: boolean; class?: string; }
-export class Header extends Control<HeaderOptions> {
-  private _title   = '';
-  private _logo: string|HTMLElement = '';
-  private _actions: string|HTMLElement = '';
-  constructor(container: string | HTMLElement | null = null, opts: HeaderOptions = {}) {
-    super(container, 'header', opts);
-    this.el.className = `ar-header${opts.sticky?' ar-header--sticky':''}${opts.class?' '+opts.class:''}`;
-  }
-  set title(v: string)               { this._title   = v; this._build(); }
-  set logo(v: string|HTMLElement)    { this._logo    = v; this._build(); }
-  set actions(v: string|HTMLElement) { this._actions = v; this._build(); }
-  protected _build() {
-    this.el.innerHTML = '';
-    const inner = this._el('div', 'ar-header__inner', this.el);
-    if (this._logo) { const l = this._el('div', 'ar-header__logo', inner); if (typeof this._logo === 'string') l.innerHTML = this._logo; else l.appendChild(this._logo); }
-    if (this._title) { const t = this._el('span', 'ar-header__title', inner); t.textContent = this._title; }
-    this._el('div', 'ar-header__spacer', inner);
-    if (this._actions) { const a = this._el('div', 'ar-header__actions', inner); if (typeof this._actions === 'string') a.innerHTML = this._actions; else a.appendChild(this._actions); }
-  }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
+
+export interface HeaderOptions {
+    title?  : string;
+    sticky? : boolean;
 }
-export const HeaderCSS = `.ar-header{background:var(--ar-bg2);border-bottom:1px solid var(--ar-border)}.ar-header--sticky{position:sticky;top:0;z-index:100}.ar-header__inner{align-items:center;display:flex;gap:12px;height:52px;margin:0 auto;max-width:100%;padding:0 16px}.ar-header__logo{display:flex;align-items:center}.ar-header__title{font-size:.95rem;font-weight:700;white-space:nowrap}.ar-header__spacer{flex:1}.ar-header__actions{align-items:center;display:flex;gap:8px}`;
+
+export class Header extends Component('arianna-header', HTMLElement, {}, {
+    attrs : ['title', 'sticky'],
+    shadow: false,
+})
+{
+    build(_opts: HeaderOptions = {})
+    {
+        const title = this.attrSignal('title');
+
+        this.hasTitle  = () => !!title.get();
+        this.titleText = () => title.get() ?? '';
+
+        this.template = html`
+            <div class="ar-header__inner">
+                <div class="ar-header__logo"><slot name="logo"></slot></div>
+                <span class="ar-header__title" a-if="this.hasTitle()">{{ this.titleText() }}</span>
+                <div class="ar-header__spacer"></div>
+                <div class="ar-header__actions"><slot name="actions"></slot></div>
+            </div>
+        `;
+
+        this.Sheet = Header.DefaultSheet();
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get title(): string  { return this.getAttribute('title') ?? ''; }
+    set title(v: string) { v ? this.setAttribute('title', v) : this.removeAttribute('title'); }
+
+    get sticky(): boolean  { return this.hasAttribute('sticky'); }
+    set sticky(v: boolean) { v ? this.setAttribute('sticky', '') : this.removeAttribute('sticky'); }
+
+    private hasTitle : () => boolean = () => false;
+    private titleText: () => string  = () => '';
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    background  : 'var(--arianna-bg, #ffffff)',
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    display     : 'block',
+                }),
+                new Rule(':root[sticky]', {
+                    position: 'sticky',
+                    top     : '0',
+                    zIndex  : '100',
+                }),
+                new Rule('.ar-header__inner', {
+                    alignItems: 'center',
+                    display   : 'flex',
+                    gap       : '12px',
+                    height    : '52px',
+                    margin    : '0 auto',
+                    maxWidth  : '100%',
+                    padding   : '0 16px',
+                }),
+                new Rule('.ar-header__logo', {
+                    display    : 'flex',
+                    alignItems : 'center',
+                }),
+                new Rule('.ar-header__logo:empty', { display: 'none' }),
+                new Rule('.ar-header__title', {
+                    fontSize  : '0.95rem',
+                    fontWeight: '700',
+                    whiteSpace: 'nowrap',
+                }),
+                new Rule('.ar-header__spacer', { flex: '1' }),
+                new Rule('.ar-header__actions', {
+                    alignItems: 'center',
+                    display   : 'flex',
+                    gap       : '8px',
+                }),
+                new Rule('.ar-header__actions:empty', { display: 'none' }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Header', {
+        value: Header, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default Header;

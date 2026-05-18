@@ -4,240 +4,226 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Stripe Elements wrapper. Loads Stripe.js on demand
- * (`js.stripe.com/v3/`) and mounts the unified `payment` element which
- * Stripe routes to the appropriate UI (card, SEPA, iDEAL, …) based on the
- * customer's country and the payment intent's `payment_method_types`.
+ * Stripe Payment Element widget. Loads Stripe.js
+ * (https://js.stripe.com/v3/) on demand and mounts the unified Payment
+ * Element using a `client-secret` that the merchant's server obtains via
+ * the `/v1/payment_intents` REST endpoint.
  *
- * The widget needs a Payment Intent to be created server-side first; the
- * client-side just confirms the intent. The flow is:
+ * The Payment Element supports cards, SEPA debit, iDEAL, Bancontact,
+ * Sofort, Klarna, Afterpay and many other methods automatically — what
+ * shows up depends on the PaymentIntent's `payment_method_types` and the
+ * Stripe account's region settings.
  *
- *   1. Server creates PaymentIntent → returns `client_secret`
- *   2. Browser instantiates this widget with `clientSecret`
- *   3. User fills the card form (Stripe-hosted iframe → PCI-safe)
- *   4. User clicks Pay → `stripe.confirmPayment(clientSecret)`
- *   5. Stripe redirects (3DS) or returns success/error inline
+ * REQUIREMENTS:
+ *   • Stripe account + publishable key
+ *   • A PaymentIntent created server-side, its `client_secret` passed in
+ *   • A `return-url` for confirmation on 3DS challenges
  *
- * @example
- *   import { Stripe } from 'ariannajs/components/payments';
+ * @example HTML
+ *   <arianna-stripe publishable-key="pk_test_..."
+ *                   client-secret="pi_..._secret_..."
+ *                   return-url="https://shop.example.com/return"></arianna-stripe>
  *
- *   // 1. Backend creates PaymentIntent and returns client_secret
- *   const { clientSecret } = await api.createIntent({ amount: 9900, currency: 'eur' });
+ * Events:
+ *   arianna:payment-success  detail: { method: 'stripe', paymentIntent: unknown }
+ *   arianna:payment-error    detail: { method: 'stripe', message: string }
  *
- *   // 2. Mount widget
- *   const sp = new Stripe('#stripe', {
- *       publishableKey: 'pk_test_…',
- *       clientSecret  : clientSecret,
- *       returnUrl     : 'https://example.com/checkout/return',
- *   });
- *   sp.on('success', e => api.confirmOrder(e.intent.id));
- *   sp.on('error',   e => showToast(e.message));
+ * Attrs: publishable-key, client-secret, return-url, locale, appearance-theme
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface StripeOptions extends CtrlOptions
-{
-    /** Publishable key from the Stripe dashboard (`pk_test_…` or `pk_live_…`). */
-    publishableKey : string;
-    /** Client secret of the PaymentIntent (or SetupIntent). */
-    clientSecret   : string;
-    /** URL to redirect to after authentication / 3DS. */
-    returnUrl      : string;
-    /** Stripe Elements appearance object. */
-    appearance?    : Record<string, unknown>;
-    /** Stripe Elements locale. Default 'auto'. */
-    locale?        : string;
-    /** Button label. Default 'Pay'. */
-    buttonLabel?   : string;
-    /** Pin the API version (production: pin to a known version). */
-    apiVersion?    : string;
+export interface StripeOptions {
+    publishableKey   : string;
+    clientSecret     : string;
+    returnUrl        : string;
+    locale?          : string;
+    appearanceTheme? : 'stripe' | 'flat' | 'night';
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+const SDK_URL = 'https://js.stripe.com/v3/';
+let sdkLoadPromise: Promise<unknown> | null = null;
 
-export class Stripe extends Control<StripeOptions>
-{
-    private _stripe   : unknown = null;
-    private _elements : unknown = null;
-    private _paymentEl: unknown = null;
-
-    private _elMount! : HTMLElement;
-    private _elBtn!   : HTMLButtonElement;
-    private _elError! : HTMLElement;
-
-    constructor(container: string | HTMLElement | null, opts: StripeOptions)
-    {
-        super(container, 'div', {
-            locale       : 'auto',
-            buttonLabel  : 'Pay',
-            ...opts,
-        });
-
-        this.el.className = `ar-stripe${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
-    }
-
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    /** Confirm the PaymentIntent. Equivalent to clicking the Pay button. */
-    pay(): Promise<void> { return this._confirm(); }
-
-    /** True once Stripe.js has loaded and the payment element has mounted. */
-    isReady(): boolean { return this._paymentEl !== null; }
-
-    // ── Internal ───────────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        this.el.innerHTML = `
-<div class="ar-stripe__mount" data-r="mount"></div>
-<div class="ar-stripe__error" data-r="error" style="display:none"></div>
-<button class="ar-stripe__btn" data-r="btn" disabled>${escapeHtml(this._get<string>('buttonLabel', 'Pay'))}</button>`;
-
-        this._elMount = this.el.querySelector<HTMLElement>('[data-r="mount"]')!;
-        this._elError = this.el.querySelector<HTMLElement>('[data-r="error"]')!;
-        this._elBtn   = this.el.querySelector<HTMLButtonElement>('[data-r="btn"]')!;
-        this._elBtn.addEventListener('click', () => { void this._confirm(); });
-
-        void this._loadAndMount();
-    }
-
-    private async _loadAndMount(): Promise<void>
-    {
-        try { await loadStripeScript(); }
-        catch (e) {
-            this._showError('Failed to load Stripe: ' + (e as Error).message);
-            return;
-        }
-
-        const Stripe = (window as unknown as { Stripe?: (key: string, opts?: Record<string, unknown>) => unknown }).Stripe;
-        if (!Stripe)
-        {
-            this._showError('Stripe.js not available');
-            return;
-        }
-
-        const apiVersion = this._get<string>('apiVersion', '');
-        this._stripe = Stripe(
-            this._get<string>('publishableKey', ''),
-            apiVersion ? { apiVersion } : {},
-        );
-
-        const elementsCfg: Record<string, unknown> = {
-            clientSecret: this._get<string>('clientSecret', ''),
-            locale      : this._get<string>('locale', 'auto'),
-        };
-        const appearance = this._get<Record<string, unknown>>('appearance', {});
-        if (Object.keys(appearance).length) elementsCfg.appearance = appearance;
-
-        const stripe = this._stripe as { elements: (cfg: unknown) => { create: (kind: string) => { mount: (el: HTMLElement) => void } } };
-        this._elements = stripe.elements(elementsCfg);
-        const elements = this._elements as { create: (kind: string) => { mount: (el: HTMLElement) => void } };
-
-        this._paymentEl = elements.create('payment');
-        const paymentEl = this._paymentEl as { mount: (el: HTMLElement) => void };
-        paymentEl.mount(this._elMount);
-
-        this._elBtn.disabled = false;
-        this._emit('ready', {});
-    }
-
-    private async _confirm(): Promise<void>
-    {
-        if (!this._stripe || !this._elements)
-        {
-            this._showError('Not ready yet');
-            return;
-        }
-        this._showError(null);
-        this._elBtn.disabled = true;
-
-        const stripe = this._stripe as {
-            confirmPayment: (cfg: { elements: unknown; confirmParams: { return_url: string }; redirect: 'if_required' }) => Promise<{ error?: { message?: string }; paymentIntent?: { id: string; status: string } }>;
-        };
-
-        try
-        {
-            const { error, paymentIntent } = await stripe.confirmPayment({
-                elements: this._elements,
-                confirmParams: { return_url: this._get<string>('returnUrl', '') },
-                redirect: 'if_required',
-            });
-            this._elBtn.disabled = false;
-            if (error)
-            {
-                this._showError(error.message || 'Payment failed');
-                this._emit('error', { message: error.message });
-                return;
-            }
-            if (paymentIntent && (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture'))
-            {
-                this._emit('success', { intent: paymentIntent });
-            }
-            else
-            {
-                this._emit('pending', { intent: paymentIntent });
-            }
-        }
-        catch (e)
-        {
-            this._elBtn.disabled = false;
-            this._showError((e as Error).message || 'Unexpected error');
-            this._emit('error', { message: (e as Error).message });
-        }
-    }
-
-    private _showError(msg: string | null): void
-    {
-        if (!msg) { this._elError.style.display = 'none'; this._elError.textContent = ''; return; }
-        this._elError.style.display = '';
-        this._elError.textContent = msg;
-    }
-
-    private _injectStyles(): void
-    {
-        if (document.getElementById('ar-stripe-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-stripe-styles';
-        s.textContent = `
-.ar-stripe { display:flex; flex-direction:column; gap:12px; padding:16px; background:#1e1e1e; border:1px solid #333; border-radius:8px; max-width:420px; }
-.ar-stripe__mount { background:#fff; padding:14px; border-radius:6px; min-height:80px; }
-.ar-stripe__error { padding:8px 12px; background:rgba(220,38,38,0.15); border:1px solid #dc2626; border-radius:3px; color:#fca5a5; font:12px sans-serif; }
-.ar-stripe__btn { background:#635bff; color:#fff; border:0; padding:12px; font:600 14px sans-serif; border-radius:4px; cursor:pointer; transition:background .12s; }
-.ar-stripe__btn:hover:not(:disabled) { background:#4f46e5; }
-.ar-stripe__btn:disabled { background:#555; cursor:not-allowed; }
-`;
-        document.head.appendChild(s);
-    }
-}
-
-// ── Script loader ───────────────────────────────────────────────────────────
-
-let _stripePromise: Promise<void> | null = null;
-function loadStripeScript(): Promise<void>
-{
-    if (_stripePromise) return _stripePromise;
-    _stripePromise = new Promise((resolve, reject) => {
-        if (typeof document === 'undefined') { reject(new Error('no document')); return; }
-        if ((window as unknown as { Stripe?: unknown }).Stripe) { resolve(); return; }
-
+function loadStripeSDK(): Promise<unknown> {
+    if (sdkLoadPromise) return sdkLoadPromise;
+    sdkLoadPromise = new Promise((resolve, reject) => {
+        const w = window as unknown as { Stripe?: unknown };
+        if (w.Stripe) { resolve(w.Stripe); return; }
         const s = document.createElement('script');
-        s.src = 'https://js.stripe.com/v3/';
+        s.src = SDK_URL;
         s.async = true;
-        s.onload  = () => resolve();
-        s.onerror = () => reject(new Error('script load failed'));
+        s.onload = () => resolve((window as unknown as { Stripe?: unknown }).Stripe);
+        s.onerror = () => reject(new Error('Stripe SDK failed to load'));
         document.head.appendChild(s);
     });
-    return _stripePromise;
+    return sdkLoadPromise;
 }
 
-function escapeHtml(s: string): string
+export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
+    attrs : ['publishable-key', 'client-secret', 'return-url', 'locale', 'appearance-theme'],
+    shadow: false,
+})
 {
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
+    ready$: Signal<boolean> = signal<boolean>(false);
+    error$: Signal<string | null> = signal<string | null>(null);
+    busy$ : Signal<boolean> = signal<boolean>(false);
+
+    #stripe: unknown = null;
+    #elements: unknown = null;
+
+    build(_opts: StripeOptions = {} as StripeOptions)
+    {
+        this.statusMsg = () => this.error$.get() ?? (this.ready$.get() ? '' : 'Loading Stripe…');
+        this.payDisabled = () => !this.ready$.get() || this.busy$.get();
+        this.payLabel = () => this.busy$.get() ? 'Processing…' : 'Pay';
+
+        this.onPay = () => { void this.pay(); };
+
+        this.template = html`
+            <div class="ar-stripe">
+                <div class="ar-stripe__mount" data-r="mount"></div>
+                <div class="ar-stripe__status" a-if="this.statusMsg()">{{ this.statusMsg() }}</div>
+                <button type="button" class="ar-stripe__pay"
+                        :disabled="this.payDisabled()"
+                        @click="this.onPay">{{ this.payLabel() }}</button>
+            </div>
+        `;
+
+        this.Sheet = Stripe.DefaultSheet();
+    }
+
+    async pay(): Promise<void> {
+        if (!this.ready$.get() || this.busy$.get()) return;
+        this.busy$.set(true);
+        try {
+            const stripe = this.#stripe as {
+                confirmPayment(opts: { elements: unknown; confirmParams: { return_url: string }; redirect?: 'if_required' | 'always' }): Promise<{ error?: { message?: string }; paymentIntent?: unknown }>;
+            };
+            const result = await stripe.confirmPayment({
+                elements: this.#elements,
+                confirmParams: { return_url: this.getAttribute('return-url') ?? window.location.href },
+                redirect: 'if_required',
+            });
+            if (result.error) {
+                this.dispatchEvent(new CustomEvent('arianna:payment-error', {
+                    bubbles: true,
+                    detail: { method: 'stripe', message: result.error.message ?? 'Stripe confirmation failed' },
+                }));
+            } else {
+                this.dispatchEvent(new CustomEvent('arianna:payment-success', {
+                    bubbles: true,
+                    detail: { method: 'stripe', paymentIntent: result.paymentIntent },
+                }));
+            }
+        } catch (err) {
+            this.dispatchEvent(new CustomEvent('arianna:payment-error', {
+                bubbles: true,
+                detail: { method: 'stripe', message: err instanceof Error ? err.message : String(err) },
+            }));
+        } finally {
+            this.busy$.set(false);
+        }
+    }
+
+    async #initStripe(): Promise<void> {
+        const pk = this.getAttribute('publishable-key');
+        const cs = this.getAttribute('client-secret');
+        if (!pk || !cs) {
+            this.error$.set('Missing publishable-key or client-secret');
+            return;
+        }
+        try {
+            const StripeCtor = await loadStripeSDK() as (key: string, opts?: unknown) => unknown;
+            this.#stripe = StripeCtor(pk, {
+                locale: this.getAttribute('locale') ?? 'auto',
+            });
+            const stripe = this.#stripe as {
+                elements(opts: unknown): {
+                    create(type: string, opts?: unknown): { mount(selOrEl: HTMLElement | string): void };
+                };
+            };
+            this.#elements = stripe.elements({
+                clientSecret: cs,
+                appearance: { theme: (this.getAttribute('appearance-theme') ?? 'stripe') as 'stripe' | 'flat' | 'night' },
+            });
+            const paymentEl = (this.#elements as {
+                create(type: string, opts?: unknown): { mount(selOrEl: HTMLElement | string): void };
+            }).create('payment');
+            const host = this.querySelector<HTMLElement>('[data-r="mount"]');
+            if (host) {
+                paymentEl.mount(host);
+                this.ready$.set(true);
+            }
+        } catch (err) {
+            this.error$.set(err instanceof Error ? err.message : String(err));
+        }
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    async onMount() {
+        await this.#initStripe();
+    }
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    private statusMsg  : () => string = () => '';
+    private payDisabled: () => boolean = () => true;
+    private payLabel   : () => string = () => 'Pay';
+    private onPay      : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    display: 'block',
+                    width: '100%', maxWidth: '420px',
+                    fontFamily: '-apple-system, system-ui, sans-serif',
+                    fontSize: '13px',
+                    color: 'var(--arianna-text, #1f2328)',
+                }),
+                new Rule('.ar-stripe', {
+                    display: 'flex', flexDirection: 'column', gap: '12px',
+                    padding: '14px',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 8px)',
+                }),
+                new Rule('.ar-stripe__mount', { minHeight: '60px' }),
+                new Rule('.ar-stripe__status', {
+                    fontSize: '11px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    textAlign: 'center',
+                }),
+                new Rule('.ar-stripe__pay', {
+                    padding: '11px',
+                    background: '#635bff',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                }),
+                new Rule('.ar-stripe__pay:hover:not(:disabled)', { background: '#5a52e8' }),
+                new Rule('.ar-stripe__pay:disabled', { opacity: '0.4', cursor: 'not-allowed' }),
+            ]
+        );
+    }
 }
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Stripe', {
+        value: Stripe, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default Stripe;

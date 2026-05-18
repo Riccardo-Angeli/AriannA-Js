@@ -1,21 +1,51 @@
-// components/layout/index.ts — public surface of the Layout component group.
-//
-// Containers and chrome that arrange other components on screen: panels,
-// modals, drawers, dock launcher, and full window chrome.
+/**
+ * @module    components/layout
+ * @author    Riccardo Angeli
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Barrel — all 10 layout components (Batch 4 of the Component 2.0 migration).
+ * Importing this module side-effect-registers all 11 custom elements (10
+ * layout + Tab co-located inside Tabs.ts) so the tags become available in
+ * HTML markup, plus re-exports the classes and types for JS usage.
+ *
+ * Tags registered:
+ *   arianna-card, arianna-drawer, arianna-modal, arianna-panel,
+ *   arianna-splitter, arianna-tabs, arianna-tab,
+ *   arianna-accordion, arianna-dock, arianna-window, arianna-table
+ *
+ * Some layout components use modifiers internally:
+ *   • Accordion (resizable mode) → <arianna-resizer>
+ *   • Window                      → <arianna-mover> + <arianna-resizer>
+ * Make sure the modifiers/2D barrel is imported alongside this one when
+ * mounting those components.
+ */
 
-// ── Pre-existing layout components ─────────────────────────────────────────
-export { Accordion }      from './Accordion';
-export { Card }           from './Card';
-export { Drawer }         from './Drawer';
-export { Modal }          from './Modal';
-export { Panel }          from './Panel';
-export { Splitter }       from './Splitter';
-export { Table }          from './Table';
-export { Tabs }           from './Tabs';
+export { Card }      from './Card.ts';
+export { Drawer }    from './Drawer.ts';
+export { Modal }     from './Modal.ts';
+export { Panel }     from './Panel.ts';
+export { Splitter }  from './Splitter.ts';
+export { Tabs, Tab } from './Tabs.ts';
+export { Accordion } from './Accordion.ts';
+export { Dock }      from './Dock.ts';
+export { Window }    from './Window.ts';
+export { Table }     from './Table.ts';
 
-// ── New May-2026: desktop launcher + draggable window chrome ───────────────
-export { Dock }   from './Dock';
-export { Window } from './Window';
-
-export type { DockStyle, DockItem, DockOptions } from './Dock';
-export type { WindowStyle, WindowOptions, WindowMenuItem } from './Window';
+export type { CardOptions }                 from './Card.ts';
+export type { DrawerOptions }               from './Drawer.ts';
+export type { ModalOptions }                from './Modal.ts';
+export type { PanelOptions }                from './Panel.ts';
+export type { SplitterOptions }             from './Splitter.ts';
+export type { TabsOptions, TabOptions }     from './Tabs.ts';
+export type {
+    AccordionItem, AccordionOptions, AccordionIconStyle,
+} from './Accordion.ts';
+export type { DockItem, DockOptions, DockStyle } from './Dock.ts';
+export type {
+    WindowOptions, WindowStyle, WindowMenuItem,
+} from './Window.ts';
+export type {
+    Row, SortDir, SortState, SelectMode,
+    TableColumn, TableOptions,
+} from './Table.ts';

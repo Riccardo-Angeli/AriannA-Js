@@ -50,8 +50,10 @@
  *   console.log(ray.intersectAABB(box)); // → { hit: true, t: 4 }
  */
 
-import { Core } from "../core";
 import { Vector2, Vector3, Matrix4, Quaternion } from "./Math.ts";
+
+// Note: `Core.use(Geometry)` mentioned in JSDoc is a legacy convention; no
+// runtime Core import is required here — Geometry depends only on Math.ts.
 
 // ── Angle ─────────────────────────────────────────────────────────────────────
 // Original Geometry.Angle — all units and trig values preserved
@@ -761,7 +763,7 @@ export class BVH {
 export const Geometry = {
   name   : 'Geometry',
   version: '1.0.0',
-  install(_core: typeof Core): void {
+  install(_core?: unknown): void {
     try {
       Object.assign(window, {
         Angle, Rotation, Size, Point, Matrix, Transform, AABB, Ray, Plane3D, BVH,

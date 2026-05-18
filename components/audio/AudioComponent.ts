@@ -1,28 +1,62 @@
 /**
- * @module    AudioComponent
+ * @module    components/audio/AudioComponent
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
  *
- * Base class for all AriannA audio components. Provides a shared
- * AudioContext, common .connect()/.disconnect() routing API, and
- * standard input/output AudioNode references.
+ * Abstract base class for all AriannA audio widgets. Provides:
  *
- * Subclasses override _buildAudioGraph() to construct their internal
- * Web Audio graph and assign this._input / this._output.
+ *   • A shared, lazy-initialised `AudioContext` (one per page)
+ *   • `connect()` / `disconnect()` routing API (chainable)
+ *   • `_input` / `_output` AudioNode references that subclasses populate
+ *     inside `#buildAudioGraph()`
+ *   • A static `resume()` helper for the browser autoplay-policy gesture
+ *   • Lifecycle hooks aligned with the rest of the v2 component system
  *
- * @example
- *   const mic    = new AudioInput();
- *   const strip  = new ChannelStrip('#strip');
- *   const player = new AudioPlayer('#play', { src: 'song.mp3' });
+ * AudioComponent itself is a v2 `Component` — it extends `Component(...)`
+ * with a generic tag `arianna-audio-base`. The tag is registered but the
+ * class is `abstract`, so it cannot be instantiated directly; concrete
+ * subclasses each declare their own tag (e.g. `arianna-channel-strip`,
+ * `arianna-audio-player`, `arianna-piano-roll`, …).
  *
- *   // Routing: each component returns `this` for chaining
- *   mic.connect(strip).connect(AudioComponent.context.destination);
- *   player.connect(strip);
+ * NOTE — single-extends rule:
+ * A class can only extend a Component factory once. The audio widgets in
+ * the audio/ folder extend AudioComponent directly. VideoPlayer (video/
+ * folder) does NOT extend AudioComponent because it already extends
+ * `Component('arianna-video-player', …)`; instead it composes an
+ * AudioComponent via a helper field when Web Audio routing is required.
  *
- *   strip.on('change', e => console.log(e.gain, e.pan));
+ * @example minimal subclass
+ *   import { AudioComponent } from './AudioComponent.ts';
+ *
+ *   export class Gain extends AudioComponent {
+ *       protected _buildAudioGraph(): void {
+ *           const g = this._audioCtx.createGain();
+ *           g.gain.value = 1.0;
+ *           this._input  = g;
+ *           this._output = g;
+ *       }
+ *   }
+ *
+ * @example routing
+ *   await AudioComponent.resume();           // unlock after user gesture
+ *   const player = new AudioPlayer();
+ *   const strip  = new ChannelStrip();
+ *   player.connect(strip).connect(AudioComponent.context.destination);
+ *
+ *
+ * INTEGRATION NOTE:
+ *
+ * This file lives outside the payments/shipments/video folders because it
+ * will be installed (manually) into the `audio/` folder once the audio
+ * batch arrives. Until then, VideoPlayer does NOT import this module — it
+ * uses native `<video>` element listeners only. When AudioComponent is in
+ * place, the optional Web Audio bridge can be added by composing one of
+ * its concrete subclasses as a field of VideoPlayer (no inheritance
+ * required, no double-extends).
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
 
 // ── Shared AudioContext ─────────────────────────────────────────────────────
 // One context per page. Created lazily on first access (autoplay policy).
@@ -38,98 +72,124 @@ function getSharedContext(): AudioContext {
     return _sharedCtx;
 }
 
-// ── Common options ──────────────────────────────────────────────────────────
+// ── Options ────────────────────────────────────────────────────────────────
 
-export interface AudioComponentOptions extends CtrlOptions {
+export interface AudioComponentOptions {
     /** Use a custom AudioContext instead of the shared one. */
     audioContext? : AudioContext;
 }
 
-// ── Base class ──────────────────────────────────────────────────────────────
+// ── Base class ─────────────────────────────────────────────────────────────
 
-export abstract class AudioComponent<O extends AudioComponentOptions = AudioComponentOptions>
-    extends Control<O>
+/**
+ * Abstract base — declares its own concrete tag `arianna-audio-base` because
+ * a Component factory expects a tag, but the class is `abstract` so nothing
+ * can ever directly instantiate it. Each concrete audio subclass will
+ * declare its own tag via its own `Component(…)` chain — see "single-extends
+ * rule" in the module docblock.
+ */
+export abstract class AudioComponent extends Component('arianna-audio-base', HTMLElement, {}, {
+    attrs : [],
+    shadow: false,
+})
 {
     /** Static accessor for the shared AudioContext. */
     static get context(): AudioContext { return getSharedContext(); }
 
-    /** Resume the shared context (call after user gesture). */
+    /** Resume the shared context (call after a user gesture). */
     static async resume(): Promise<void> {
         const ctx = getSharedContext();
         if (ctx.state === 'suspended') await ctx.resume();
     }
 
-    /** Per-instance context (defaults to shared). */
-    protected _audioCtx: AudioContext;
+    /** Per-instance context (defaults to shared). Set in `#bindAudioContext`. */
+    protected _audioCtx: AudioContext = undefined as unknown as AudioContext;
 
-    /** Where signals enter this component. */
-    protected _input?: AudioNode;
+    /** Where signals enter this component. Subclasses assign in `_buildAudioGraph`. */
+    protected _input?  : AudioNode;
 
-    /** Where signals leave this component. */
-    protected _output?: AudioNode;
+    /** Where signals leave this component. Subclasses assign in `_buildAudioGraph`. */
+    protected _output? : AudioNode;
 
     /** Track active downstream connections for clean disconnect. */
-    private _downstream: Set<AudioNode> = new Set();
+    #downstream: Set<AudioNode> = new Set();
 
-    constructor(container: string | HTMLElement | null, tag: string, opts: O) {
-        super(container, tag, opts);
-        this._audioCtx = opts.audioContext ?? getSharedContext();
-    }
+    /** Subclasses override this to construct their internal Web Audio graph
+     *  and assign `this._input` / `this._output`. Called once from `onMount`
+     *  unless the subclass overrides `onMount` and forgets to call super. */
+    protected _buildAudioGraph(): void { /* override in subclass */ }
 
-    /**
-     * Connect this component's output to another audio destination.
-     * Returns the destination so calls can chain:
-     *   mic.connect(strip).connect(destination)
-     */
-    connect(target: AudioComponent | AudioNode): AudioComponent | AudioNode {
-        if (!this._output) {
-            console.warn('[AudioComponent] no output node defined; subclass must assign this._output');
-            return target;
-        }
-        const dst = (target instanceof AudioComponent) ? target.getInput() : target;
-        if (!dst) {
-            console.warn('[AudioComponent] target has no input');
-            return target;
-        }
-        this._output.connect(dst);
-        this._downstream.add(dst);
-        return target;
-    }
-
-    /** Disconnect from all downstream targets. */
-    disconnect(): this {
+    /** Connect this component's output to another audio destination.
+     *  Accepts another AudioComponent (in which case its `_input` is used),
+     *  a raw AudioNode, or the AudioContext's destination. Chainable. */
+    connect(target: AudioNode | AudioComponent): this {
         if (!this._output) return this;
-        for (const dst of this._downstream) {
-            try { this._output.disconnect(dst); } catch { /* already gone */ }
-        }
-        this._downstream.clear();
+        const node: AudioNode | undefined =
+              target instanceof AudioComponent
+                ? target._input
+                : target;
+        if (!node) return this;
+        this._output.connect(node);
+        this.#downstream.add(node);
         return this;
     }
 
-    /** Get the input node for routing into this component. */
-    getInput(): AudioNode | undefined { return this._input; }
+    /** Disconnect from a specific destination, or from all if no arg. */
+    disconnect(target?: AudioNode | AudioComponent): this {
+        if (!this._output) return this;
+        if (target == null) {
+            this._output.disconnect();
+            this.#downstream.clear();
+            return this;
+        }
+        const node: AudioNode | undefined =
+              target instanceof AudioComponent
+                ? target._input
+                : target;
+        if (!node) return this;
+        try { this._output.disconnect(node); } catch { /* not connected — ignore */ }
+        this.#downstream.delete(node);
+        return this;
+    }
 
-    /** Get the output node for routing out of this component. */
+    /** Get the output AudioNode of this component, or undefined if the
+     *  graph hasn't been built yet (or this widget has no audio output). */
     getOutput(): AudioNode | undefined { return this._output; }
 
-    /** Get the shared/instance context. */
-    getContext(): AudioContext { return this._audioCtx; }
+    /** Get the input AudioNode of this component, or undefined. */
+    getInput(): AudioNode | undefined { return this._input; }
 
-    /**
-     * Subclasses build their Web Audio graph here and assign
-     * this._input and/or this._output.
-     */
-    protected abstract _buildAudioGraph(): void;
+    /** Bind the AudioContext from `audioContext` option (if present) or
+     *  fall back to the shared one. Subclasses should call this once during
+     *  `onBeforeMount` or override `onBeforeMount` and forward. */
+    protected _bindAudioContext(ctx?: AudioContext): void {
+        this._audioCtx = ctx ?? getSharedContext();
+    }
+
+    // ── Lifecycle defaults — concrete subclasses override as needed ────────
+
+    onCreated()       {}
+    onBeforeMount() {
+        if (!this._audioCtx) this._bindAudioContext();
+    }
+    onMount() {
+        if (!this._output && !this._input) this._buildAudioGraph();
+    }
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount() {
+        if (this._output) {
+            try { this._output.disconnect(); } catch { /* ignore */ }
+        }
+        this.#downstream.clear();
+    }
 }
 
-// ── Helpers exported for subclasses & user code ─────────────────────────────
-
-/** Resume the shared AudioContext (call after a user gesture). */
-export async function resumeAudio(): Promise<void> {
-    return AudioComponent.resume();
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'AudioComponent', {
+        value: AudioComponent, writable: false, enumerable: false, configurable: false,
+    });
 }
 
-/** Get the shared AudioContext. */
-export function audioContext(): AudioContext {
-    return AudioComponent.context;
-}
+export default AudioComponent;

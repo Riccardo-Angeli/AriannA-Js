@@ -1,202 +1,337 @@
 /**
- * @module    components/graphics/2D/RadialGradientEditor
+ * @module    components/graphics/colors/RadialGradientEditor
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Radial gradient editor — Illustrator/Photoshop style. On top of the
- * shared stop strip from `GradientEditorBase`, exposes the geometry
- * specific to a CSS `radial-gradient(...)`:
+ * RadialGradientEditor — radial gradient with shape (circle | ellipse),
+ * size hint (closest/farthest side|corner), centre (cx%, cy%), and stops
+ * shared from `GradientEditor`.
  *
- *   • Shape: `circle` or `ellipse`
- *   • Size :  `closest-side`, `farthest-side`, `closest-corner`, `farthest-corner`,
- *             or explicit `length-percentage` pair
- *   • Center: `cx%, cy%` — interactive picker on a small canvas
- *   • Aspect ratio : ellipse only — separate radius-x / radius-y
+ * @example HTML
+ *   <arianna-radial-gradient-editor shape="ellipse" cx="60" cy="40"></arianna-radial-gradient-editor>
  *
- *   ┌──────────────────────────────────┬────────────────────┐
- *   │ ████████████████████████████████ │ Color [#e40c88]    │
- *   │ ▣  ◆  ▣          ▣            ▣ │ Position [42.0]%   │
- *   ├──────────────────────────────────┤ Alpha   [1.00]     │
- *   │ Shape [circle ▾]  Size [farthest-corner ▾] │            │
- *   │ Center: [50]% [50]%   ◯ ← drag in preview │            │
- *   ├──────────────────────────────────┤                    │
- *   │ Preview swatch                   │                    │
- *   └──────────────────────────────────┴────────────────────┘
+ * Events: arianna:change  detail: { stops, shape, size, cx, cy, css }
+ * Attrs:  shape, size, cx, cy, interp
  */
 
-import { GradientEditorBase, type GradientEditorOptions } from './GradientEditor.ts';
-
-// ── Options ────────────────────────────────────────────────────────────────
+import { Component } from '../../../core/Component.ts';
+import { html }      from '../../../core/Template.ts';
+import { LinearGradientEditor } from './LinearGradientEditor.ts';
+import {
+    type GradientStop,
+    makeStopState, stopsToCss, clamp01,
+    colorFieldHex, parseColorString,
+} from './GradientEditor.ts';
 
 export type RadialShape = 'circle' | 'ellipse';
 export type RadialSize  = 'closest-side' | 'farthest-side' | 'closest-corner' | 'farthest-corner';
 
-export interface RadialGradientEditorOptions extends GradientEditorOptions
-{
-    /** Default 'circle'. */
-    shape?  : RadialShape;
-    /** Default 'farthest-corner'. */
-    size?   : RadialSize;
-    /** Centre X in % (0-100). Default 50. */
-    cx?     : number;
-    /** Centre Y in % (0-100). Default 50. */
-    cy?     : number;
-    /** Interpolation space. Default 'srgb'. */
-    interp? : 'srgb' | 'oklab' | 'oklch' | 'hsl';
+export interface RadialGradientEditorOptions {
+    stops? : GradientStop[];
+    shape? : RadialShape;
+    size?  : RadialSize;
+    cx?    : number;
+    cy?    : number;
+    interp?: 'srgb' | 'oklab' | 'oklch' | 'hsl';
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
-
-export class RadialGradientEditor extends GradientEditorBase<RadialGradientEditorOptions>
+export class RadialGradientEditor extends Component('arianna-radial-gradient-editor', HTMLElement, {}, {
+    attrs : ['shape', 'size', 'cx', 'cy', 'interp'],
+    shadow: false,
+})
 {
-    private _shape  : RadialShape;
-    private _size   : RadialSize;
-    private _cx     : number;
-    private _cy     : number;
-    private _interp : RadialGradientEditorOptions['interp'];
+    state = makeStopState();
 
-    private _elPreview!       : HTMLElement;
-    private _elInspectorHost! : HTMLElement;
-
-    constructor(container: string | HTMLElement | null, opts: RadialGradientEditorOptions = {})
+    build(_opts: RadialGradientEditorOptions = {})
     {
-        super(container, 'div', {
-            shape: 'circle', size: 'farthest-corner', cx: 50, cy: 50, interp: 'srgb',
-            ...opts,
-        });
-        this._shape  = this._get<RadialShape>('shape', 'circle');
-        this._size   = this._get<RadialSize>('size',  'farthest-corner');
-        this._cx     = this._get<number>('cx', 50);
-        this._cy     = this._get<number>('cy', 50);
-        this._interp = this._get<RadialGradientEditorOptions['interp']>('interp', 'srgb');
+        const shapeAttr = this.attrSignal('shape');
+        const sizeAttr  = this.attrSignal('size');
+        const cxAttr    = this.attrSignal('cx');
+        const cyAttr    = this.attrSignal('cy');
+        const interpAttr = this.attrSignal('interp');
 
-        this.el.className = `ar-grad ar-grad--radial${opts.class ? ' ' + opts.class : ''}`;
-        this._injectGradientStyles();
-        this._build();
+        const shape  = (): RadialShape => (shapeAttr.get() as RadialShape | null) ?? 'circle';
+        const size   = (): RadialSize  => (sizeAttr.get()  as RadialSize  | null) ?? 'farthest-corner';
+        const cx     = () => parseFloat(cxAttr.get() ?? '50') || 0;
+        const cy     = () => parseFloat(cyAttr.get() ?? '50') || 0;
+        const interp = (): 'srgb' | 'oklab' | 'oklch' | 'hsl' =>
+            (interpAttr.get() as 'srgb' | 'oklab' | 'oklch' | 'hsl' | null) ?? 'srgb';
+
+        this.stripBg   = () => `background: linear-gradient(to right, ${stopsToCss(this.state.stops$.get())})`;
+        this.previewBg = () => `background: ${this.toCSS()}`;
+
+        this.shapeIs = (v: string) => shape() === v;
+        this.sizeIs  = (v: string) => size()  === v;
+        this.interpIs = (v: string) => interp() === v;
+
+        this.cxVal = () => String(cx());
+        this.cyVal = () => String(cy());
+        this.centerDotStyle = () => `left: ${cx()}%; top: ${cy()}%`;
+
+        this.pins = () => {
+            const sel = this.state.selected$.get();
+            return this.state.stops$.get().map((s, i) => ({
+                left: `left: ${s.t * 100}%; background: ${colorFieldHex(s.color)}`,
+                cls : 'ar-grad__pin' + (i === sel ? ' ar-grad__pin--sel' : ''),
+                title: `${colorFieldHex(s.color)} @ ${(s.t * 100).toFixed(1)}%`,
+                idx : i,
+            }));
+        };
+
+        this.hasSel = () => this.state.stops$.get().length > 0;
+        this.selStop = () => this.state.stops$.get()[this.state.selected$.get()] ?? this.state.stops$.get()[0]!;
+        this.selHex = () => colorFieldHex(this.selStop().color);
+        this.selT   = () => (this.selStop().t * 100).toFixed(1);
+        this.selA   = () => (this.selStop().color.a ?? 1).toFixed(2);
+
+        // ── Handlers ────────────────────────────────────────────────────
+        this.onStripClick = (e: Event) => {
+            const me = e as MouseEvent;
+            const target = me.target as HTMLElement;
+            if (target.classList.contains('ar-grad__pin')) return;
+            const strip = me.currentTarget as HTMLElement;
+            const rect = strip.getBoundingClientRect();
+            this.state.addStop((me.clientX - rect.left) / rect.width);
+            this.#fire();
+        };
+        this.onPinPointer = (e: Event) => {
+            const me = e as PointerEvent;
+            me.stopPropagation();
+            const pin = me.currentTarget as HTMLElement;
+            const idx = parseInt(pin.dataset.idx ?? '0', 10);
+            if (me.type === 'pointerdown') {
+                pin.setPointerCapture?.(me.pointerId);
+                this.state.selected$.set(idx);
+            } else if (!(me.buttons & 1)) return;
+            const strip = pin.parentElement?.previousElementSibling as HTMLElement | null;
+            if (!strip) return;
+            const rect = strip.getBoundingClientRect();
+            this.state.updateStop(idx, { t: clamp01((me.clientX - rect.left) / rect.width) });
+            this.#fire();
+        };
+        this.onPinDblClick = (e: Event) => {
+            const me = e as MouseEvent;
+            me.stopPropagation();
+            const idx = parseInt((me.currentTarget as HTMLElement).dataset.idx ?? '0', 10);
+            this.state.removeStop(idx);
+            this.#fire();
+        };
+
+        this.onShapeChange = (e: Event) => this.setShape((e.target as HTMLSelectElement).value as RadialShape);
+        this.onSizeChange  = (e: Event) => this.setSize((e.target as HTMLSelectElement).value as RadialSize);
+        this.onInterpChange = (e: Event) =>
+            this.setInterp((e.target as HTMLSelectElement).value as 'srgb' | 'oklab' | 'oklch' | 'hsl');
+        this.onCxChange = (e: Event) => this.setCenter(parseFloat((e.target as HTMLInputElement).value) || 0, cy());
+        this.onCyChange = (e: Event) => this.setCenter(cx(), parseFloat((e.target as HTMLInputElement).value) || 0);
+
+        this.onCenterPad = (e: Event) => {
+            const me = e as PointerEvent;
+            if (me.type === 'pointerdown') {
+                (me.currentTarget as HTMLElement).setPointerCapture?.(me.pointerId);
+            } else if (!(me.buttons & 1)) return;
+            const rect = (me.currentTarget as HTMLElement).getBoundingClientRect();
+            const nx = Math.max(0, Math.min(100, ((me.clientX - rect.left) / rect.width) * 100));
+            const ny = Math.max(0, Math.min(100, ((me.clientY - rect.top)  / rect.height) * 100));
+            this.setCenter(nx, ny);
+        };
+
+        this.onSelColorChange = (e: Event) => {
+            const v = (e.target as HTMLInputElement).value;
+            const c = parseColorString(v);
+            if (c) {
+                const cur = this.selStop();
+                this.state.updateStop(this.state.selected$.get(), { color: { ...c, a: cur.color.a } });
+                this.#fire();
+            }
+        };
+        this.onSelPosChange = (e: Event) => {
+            this.state.updateStop(this.state.selected$.get(), {
+                t: clamp01(parseFloat((e.target as HTMLInputElement).value) / 100),
+            });
+            this.#fire();
+        };
+        this.onSelAlphaChange = (e: Event) => {
+            const cur = this.selStop();
+            this.state.updateStop(this.state.selected$.get(), {
+                color: { ...cur.color, a: Math.max(0, Math.min(1, parseFloat((e.target as HTMLInputElement).value))) },
+            });
+            this.#fire();
+        };
+        this.onRemove = () => {
+            this.state.removeStop(this.state.selected$.get());
+            this.#fire();
+        };
+
+        this.template = html`
+            <div class="ar-grad__row">
+                <div class="ar-grad__col">
+                    <div class="ar-grad__strip" :style="this.stripBg()" @click="this.onStripClick"></div>
+                    <div class="ar-grad__pins">
+                        <div a-for="p in this.pins()"
+                             :class="p.cls" :style="p.left" :data-idx="p.idx" :title="p.title"
+                             @pointerdown="this.onPinPointer"
+                             @pointermove="this.onPinPointer"
+                             @dblclick="this.onPinDblClick"></div>
+                    </div>
+                    <div class="ar-grad__field" style="margin-top:10px">
+                        <span>Shape</span>
+                        <select @change="this.onShapeChange">
+                            <option value="circle"  :selected="this.shapeIs('circle')">Circle</option>
+                            <option value="ellipse" :selected="this.shapeIs('ellipse')">Ellipse</option>
+                        </select>
+                        <span style="margin-left:10px">Size</span>
+                        <select @change="this.onSizeChange">
+                            <option value="closest-side"    :selected="this.sizeIs('closest-side')">Closest side</option>
+                            <option value="farthest-side"   :selected="this.sizeIs('farthest-side')">Farthest side</option>
+                            <option value="closest-corner"  :selected="this.sizeIs('closest-corner')">Closest corner</option>
+                            <option value="farthest-corner" :selected="this.sizeIs('farthest-corner')">Farthest corner</option>
+                        </select>
+                    </div>
+                    <div class="ar-grad__field">
+                        <span>Center</span>
+                        <input type="number" min="0" max="100" step="1"
+                               :value="this.cxVal()" @change="this.onCxChange"/>%
+                        <input type="number" min="0" max="100" step="1"
+                               :value="this.cyVal()" @change="this.onCyChange"/>%
+                    </div>
+                    <div class="ar-grad__field">
+                        <span>Space</span>
+                        <select @change="this.onInterpChange">
+                            <option value="srgb"  :selected="this.interpIs('srgb')">sRGB</option>
+                            <option value="oklab" :selected="this.interpIs('oklab')">OKLab</option>
+                            <option value="oklch" :selected="this.interpIs('oklch')">OKLCH</option>
+                            <option value="hsl"   :selected="this.interpIs('hsl')">HSL</option>
+                        </select>
+                    </div>
+                    <div class="ar-grad__center-pad"
+                         :style="this.previewBg()"
+                         @pointerdown="this.onCenterPad"
+                         @pointermove="this.onCenterPad">
+                        <div class="ar-grad__center-dot" :style="this.centerDotStyle()"></div>
+                    </div>
+                </div>
+                <div class="ar-grad__inspector" a-if="this.hasSel()">
+                    <label class="ar-grad__field">
+                        <span>Color</span>
+                        <input type="color" :value="this.selHex()" @input="this.onSelColorChange"/>
+                        <input type="text"  :value="this.selHex()" @change="this.onSelColorChange"/>
+                    </label>
+                    <label class="ar-grad__field">
+                        <span>Position</span>
+                        <input type="number" min="0" max="100" step="0.1"
+                               :value="this.selT()" @change="this.onSelPosChange"/>%
+                    </label>
+                    <label class="ar-grad__field">
+                        <span>Alpha</span>
+                        <input type="number" min="0" max="1" step="0.01"
+                               :value="this.selA()" @change="this.onSelAlphaChange"/>
+                    </label>
+                    <div class="ar-grad__btns">
+                        <button type="button" class="ar-grad__btn ar-grad__btn--danger"
+                                @click="this.onRemove">Remove stop</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.Sheet = LinearGradientEditor.SharedSheet();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
+    // ── Public API ───────────────────────────────────────────────────────────
 
-    setShape(shape: RadialShape): this { this._shape = shape; this._render(); this._fireChange(); return this; }
-    setSize(size: RadialSize): this    { this._size  = size;  this._render(); this._fireChange(); return this; }
-    setCenter(cx: number, cy: number): this
-    {
-        this._cx = Math.max(0, Math.min(100, cx));
-        this._cy = Math.max(0, Math.min(100, cy));
-        this._render();
-        this._fireChange();
+    setShape(v: RadialShape): this { this.setAttribute('shape', v); this.#fire(); return this; }
+    setSize(v: RadialSize): this   { this.setAttribute('size',  v); this.#fire(); return this; }
+    setCenter(cx: number, cy: number): this {
+        this.setAttribute('cx', String(Math.max(0, Math.min(100, cx))));
+        this.setAttribute('cy', String(Math.max(0, Math.min(100, cy))));
+        this.#fire();
         return this;
     }
-
-    getCenter(): { cx: number; cy: number } { return { cx: this._cx, cy: this._cy }; }
-    getShape(): RadialShape { return this._shape; }
-    getSize() : RadialSize  { return this._size; }
-
-    toCSS(): string
-    {
-        const stops = this._stopsToCss();
-        const space = this._interp === 'srgb' ? '' : ` in ${this._interp}`;
-        return `radial-gradient(${this._shape} ${this._size} at ${this._cx}% ${this._cy}%${space}, ${stops})`;
+    setInterp(s: 'srgb' | 'oklab' | 'oklch' | 'hsl'): this {
+        this.setAttribute('interp', s); this.#fire(); return this;
     }
 
-    // ── Internal ───────────────────────────────────────────────────────────
-
-    private _fireChange(): void
-    {
-        this._emit('change', {
-            stops: this.getStops(),
-            shape: this._shape, size: this._size, cx: this._cx, cy: this._cy, interp: this._interp,
-        });
+    getShape() : RadialShape { return (this.getAttribute('shape') as RadialShape) || 'circle'; }
+    getSize()  : RadialSize  { return (this.getAttribute('size')  as RadialSize)  || 'farthest-corner'; }
+    getCenter(): { cx: number; cy: number } {
+        return {
+            cx: parseFloat(this.getAttribute('cx') ?? '50') || 0,
+            cy: parseFloat(this.getAttribute('cy') ?? '50') || 0,
+        };
+    }
+    getInterp(): 'srgb' | 'oklab' | 'oklch' | 'hsl' {
+        return (this.getAttribute('interp') as 'srgb' | 'oklab' | 'oklch' | 'hsl') || 'srgb';
     }
 
-    protected _build(): void
-    {
-        this.el.innerHTML = `
-<div class="ar-grad__row">
-  <div class="ar-grad__col">
-    <div data-r="strip-host"></div>
-    <div class="ar-grad__field" style="margin-top:10px">
-      <span>Shape</span>
-      <select data-r="shape">
-        <option value="circle"  ${this._shape === 'circle'  ? 'selected' : ''}>Circle</option>
-        <option value="ellipse" ${this._shape === 'ellipse' ? 'selected' : ''}>Ellipse</option>
-      </select>
-      <span style="margin-left:10px">Size</span>
-      <select data-r="size">
-        <option value="closest-side"     ${this._size === 'closest-side'     ? 'selected' : ''}>Closest side</option>
-        <option value="farthest-side"    ${this._size === 'farthest-side'    ? 'selected' : ''}>Farthest side</option>
-        <option value="closest-corner"   ${this._size === 'closest-corner'   ? 'selected' : ''}>Closest corner</option>
-        <option value="farthest-corner"  ${this._size === 'farthest-corner'  ? 'selected' : ''}>Farthest corner</option>
-      </select>
-    </div>
-    <div class="ar-grad__field">
-      <span>Center</span>
-      <input data-r="cx" type="number" min="0" max="100" step="1" value="${this._cx}">%
-      <input data-r="cy" type="number" min="0" max="100" step="1" value="${this._cy}">%
-      <span style="margin-left:10px">Space</span>
-      <select data-r="interp">
-        <option value="srgb"  ${this._interp === 'srgb'  ? 'selected' : ''}>sRGB</option>
-        <option value="oklab" ${this._interp === 'oklab' ? 'selected' : ''}>OKLab</option>
-        <option value="oklch" ${this._interp === 'oklch' ? 'selected' : ''}>OKLCH</option>
-      </select>
-    </div>
-    <div class="ar-grad__preview" data-r="preview" style="margin-top:10px;cursor:crosshair;position:relative;height:160px"></div>
-  </div>
-  <div class="ar-grad__inspector" data-r="inspector"></div>
-</div>`;
+    setStops(s: GradientStop[]): this { this.state.setStops(s); this.#fire(); return this; }
+    getStops(): GradientStop[] { return this.state.stops$.get().map(x => ({ ...x, color: { ...x.color } })); }
 
-        const stripHost = this.el.querySelector<HTMLElement>('[data-r="strip-host"]')!;
-        this._elInspectorHost = this.el.querySelector<HTMLElement>('[data-r="inspector"]')!;
-        this._elPreview = this.el.querySelector<HTMLElement>('[data-r="preview"]')!;
-
-        this._renderStripDom(stripHost, `linear-gradient(to right, ${this._stopsToCss()})`);
-
-        const shapeSel  = this.el.querySelector<HTMLSelectElement>('[data-r="shape"]')!;
-        const sizeSel   = this.el.querySelector<HTMLSelectElement>('[data-r="size"]')!;
-        const cxInp     = this.el.querySelector<HTMLInputElement>('[data-r="cx"]')!;
-        const cyInp     = this.el.querySelector<HTMLInputElement>('[data-r="cy"]')!;
-        const interpSel = this.el.querySelector<HTMLSelectElement>('[data-r="interp"]')!;
-
-        shapeSel.addEventListener('change', () => this.setShape(shapeSel.value as RadialShape));
-        sizeSel .addEventListener('change', () => this.setSize(sizeSel.value as RadialSize));
-        cxInp   .addEventListener('change', () => this.setCenter(parseFloat(cxInp.value), this._cy));
-        cyInp   .addEventListener('change', () => this.setCenter(this._cx, parseFloat(cyInp.value)));
-        interpSel.addEventListener('change', () => {
-            this._interp = interpSel.value as RadialGradientEditorOptions['interp'];
-            this._render();
-            this._fireChange();
-        });
-
-        // Drag inside preview to move centre
-        this._elPreview.addEventListener('pointerdown', e => {
-            this._elPreview.setPointerCapture?.(e.pointerId);
-            const handle = (ev: PointerEvent) => {
-                const rect = this._elPreview.getBoundingClientRect();
-                const cx = ((ev.clientX - rect.left) / rect.width)  * 100;
-                const cy = ((ev.clientY - rect.top)  / rect.height) * 100;
-                cxInp.value = cx.toFixed(0);
-                cyInp.value = cy.toFixed(0);
-                this.setCenter(cx, cy);
-            };
-            handle(e);
-            this._elPreview.addEventListener('pointermove', handle);
-            this._elPreview.addEventListener('pointerup', () => {
-                this._elPreview.removeEventListener('pointermove', handle);
-            }, { once: true });
-        });
-
-        this._render();
+    toCSS(): string {
+        const stops  = stopsToCss(this.state.stops$.get());
+        const interp = this.getInterp();
+        const space  = interp === 'srgb' ? '' : ` in ${interp}`;
+        const c      = this.getCenter();
+        return `radial-gradient(${this.getShape()} ${this.getSize()} at ${c.cx}% ${c.cy}%${space}, ${stops})`;
     }
 
-    protected _render(): void
-    {
-        if (this._elStrip)
-        {
-            const stripHost = this.el.querySelector<HTMLElement>('[data-r="strip-host"]');
-            if (stripHost) this._renderStripDom(stripHost, `linear-gradient(to right, ${this._stopsToCss()})`);
-        }
-        if (this._elPreview) this._elPreview.style.background = this.toCSS();
-        if (this._elInspectorHost) this._renderInspector(this._elInspectorHost);
+    #fire(): void {
+        const c = this.getCenter();
+        this.dispatchEvent(new CustomEvent('arianna:change', {
+            bubbles: true,
+            detail: {
+                stops : this.getStops(),
+                shape : this.getShape(),
+                size  : this.getSize(),
+                cx: c.cx, cy: c.cy,
+                interp: this.getInterp(),
+                css   : this.toCSS(),
+            },
+        }));
     }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    // Template helpers (filled in build)
+    private stripBg     : () => string = () => '';
+    private previewBg   : () => string = () => '';
+    private shapeIs     : (v: string) => boolean = () => false;
+    private sizeIs      : (v: string) => boolean = () => false;
+    private interpIs    : (v: string) => boolean = () => false;
+    private cxVal       : () => string = () => '50';
+    private cyVal       : () => string = () => '50';
+    private centerDotStyle: () => string = () => '';
+    private pins        : () => Array<{ left: string; cls: string; title: string; idx: number }> = () => [];
+    private hasSel      : () => boolean = () => false;
+    private selStop     : () => GradientStop = () => ({ t: 0, color: { r: 0, g: 0, b: 0, a: 1 } });
+    private selHex      : () => string = () => '#000000';
+    private selT        : () => string = () => '0';
+    private selA        : () => string = () => '1';
+    private onStripClick: (e: Event) => void = () => {};
+    private onPinPointer: (e: Event) => void = () => {};
+    private onPinDblClick: (e: Event) => void = () => {};
+    private onShapeChange: (e: Event) => void = () => {};
+    private onSizeChange : (e: Event) => void = () => {};
+    private onInterpChange: (e: Event) => void = () => {};
+    private onCxChange   : (e: Event) => void = () => {};
+    private onCyChange   : (e: Event) => void = () => {};
+    private onCenterPad  : (e: Event) => void = () => {};
+    private onSelColorChange: (e: Event) => void = () => {};
+    private onSelPosChange  : (e: Event) => void = () => {};
+    private onSelAlphaChange: (e: Event) => void = () => {};
+    private onRemove        : (e: Event) => void = () => {};
 }
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'RadialGradientEditor', {
+        value: RadialGradientEditor, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default RadialGradientEditor;

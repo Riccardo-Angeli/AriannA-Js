@@ -1,40 +1,149 @@
 /**
+ * @module    components/inputs/Switch
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Switch — on/off toggle with optional label.
+ *
+ * @example HTML
+ *   <arianna-switch label="Dark mode" checked></arianna-switch>
+ *
+ * Events: arianna:change  detail: { checked }
+ * Attrs:  label, label-position, checked, disabled
  */
 
-/**
- * @module Switch
- * @example
- *   const sw = new Switch('#root', { label: 'Dark mode' });
- *   sw.checked = true;
- *   sw.on('change', ({ checked }) => applyTheme(checked));
- */
-import { Control } from '../core/Control.ts';
-export interface SwitchOptions { label?: string; labelPosition?: 'left'|'right'; disabled?: boolean; class?: string; }
-export class Switch extends Control<SwitchOptions> {
-  private _checked = false;
-  private _input!: HTMLInputElement;
-  constructor(container: string | HTMLElement | null = null, opts: SwitchOptions = {}) {
-    super(container, 'label', opts);
-    this.el.className = `ar-switch${opts.labelPosition==='left'?' ar-switch--label-left':''}${opts.class?' '+opts.class:''}`;
-  }
-  set checked(v: boolean)  { this._checked = v; if (this._input) this._input.checked = v; }
-  get checked()            { return this._input?.checked ?? this._checked; }
-  set disabled(v: boolean) { if (this._input) this._input.disabled = v; }
-  protected _build() {
-    this.el.innerHTML = '';
-    const lbl = this._get('label', '') as string;
-    const pos = this._get('labelPosition', 'right') as string;
-    if (lbl && pos === 'left') this._el('span', 'ar-switch__label', this.el).textContent = lbl;
-    this._input = document.createElement('input');
-    this._input.type = 'checkbox'; this._input.className = 'ar-switch__input';
-    this._input.checked  = this._checked;
-    this._input.disabled = this._get('disabled', false) as boolean;
-    this._input.addEventListener('change', () => { this._checked = this._input.checked; this._emit('change', { checked: this._checked }); });
-    this.el.appendChild(this._input);
-    this._el('span', 'ar-switch__track', this.el);
-    if (lbl && pos !== 'left') this._el('span', 'ar-switch__label', this.el).textContent = lbl;
-  }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
+
+export interface SwitchOptions {
+    label?         : string;
+    labelPosition? : 'left' | 'right';
+    checked?       : boolean;
+    disabled?      : boolean;
 }
-export const SwitchCSS = `.ar-switch{align-items:center;cursor:pointer;display:inline-flex;gap:8px;user-select:none}.ar-switch--label-left{flex-direction:row-reverse}.ar-switch__input{height:0;opacity:0;position:absolute;width:0}.ar-switch__track{background:var(--ar-bg4);border-radius:12px;flex-shrink:0;height:22px;position:relative;transition:background var(--ar-transition);width:40px}.ar-switch__track::after{background:#fff;border-radius:50%;content:'';height:16px;left:3px;position:absolute;top:3px;transition:transform var(--ar-transition);width:16px}.ar-switch__input:checked+.ar-switch__track{background:var(--ar-primary)}.ar-switch__input:checked+.ar-switch__track::after{transform:translateX(18px)}.ar-switch__label{font-size:.82rem}`;
+
+export class Switch extends Component('arianna-switch', HTMLElement, {}, {
+    attrs : ['label', 'label-position', 'checked', 'disabled'],
+    shadow: false,
+})
+{
+    build(_opts: SwitchOptions = {})
+    {
+        const label = this.attrSignal('label');
+        const pos   = this.attrSignal('label-position');
+
+        this.hasLabel    = () => !!label.get();
+        this.labelText   = () => label.get() ?? '';
+        this.labelLeft   = () => pos.get() === 'left' && !!label.get();
+        this.labelRight  = () => pos.get() !== 'left' && !!label.get();
+        this.isChecked   = () => this.hasAttribute('checked');
+        this.isDisabled  = () => this.hasAttribute('disabled');
+
+        this.onChange = (e: Event) => {
+            const inp = e.target as HTMLInputElement;
+            if (inp.checked) this.setAttribute('checked', '');
+            else             this.removeAttribute('checked');
+            this.dispatchEvent(new CustomEvent('arianna:change', {
+                bubbles: true, detail: { checked: inp.checked },
+            }));
+        };
+
+        this.template = html`
+            <label class="ar-switch__row">
+                <span class="ar-switch__label" a-if="this.labelLeft()">{{ this.labelText() }}</span>
+                <input class="ar-switch__input"
+                       type="checkbox"
+                       :checked="this.isChecked()"
+                       :disabled="this.isDisabled()"
+                       @change="this.onChange"/>
+                <span class="ar-switch__track"></span>
+                <span class="ar-switch__label" a-if="this.labelRight()">{{ this.labelText() }}</span>
+            </label>
+        `;
+
+        this.Sheet = Switch.DefaultSheet();
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get checked(): boolean  { return this.hasAttribute('checked'); }
+    set checked(v: boolean) { v ? this.setAttribute('checked', '') : this.removeAttribute('checked'); }
+
+    get disabled(): boolean  { return this.hasAttribute('disabled'); }
+    set disabled(v: boolean) { v ? this.setAttribute('disabled', '') : this.removeAttribute('disabled'); }
+
+    get label(): string  { return this.getAttribute('label') ?? ''; }
+    set label(v: string) { v ? this.setAttribute('label', v) : this.removeAttribute('label'); }
+
+    private hasLabel  : () => boolean = () => false;
+    private labelText : () => string = () => '';
+    private labelLeft : () => boolean = () => false;
+    private labelRight: () => boolean = () => false;
+    private isChecked : () => boolean = () => false;
+    private isDisabled: () => boolean = () => false;
+    private onChange  : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', { display: 'inline-block' }),
+                new Rule('.ar-switch__row', {
+                    alignItems: 'center',
+                    cursor    : 'pointer',
+                    display   : 'inline-flex',
+                    gap       : '8px',
+                    userSelect: 'none',
+                }),
+                new Rule('.ar-switch__input', {
+                    height  : '0',
+                    opacity : '0',
+                    position: 'absolute',
+                    width   : '0',
+                }),
+                new Rule('.ar-switch__track', {
+                    background  : 'var(--arianna-bg-4, #d8d8d8)',
+                    borderRadius: '12px',
+                    flexShrink  : '0',
+                    height      : '22px',
+                    position    : 'relative',
+                    transition  : 'background 0.18s ease',
+                    width       : '40px',
+                }),
+                new Rule('.ar-switch__track::after', {
+                    background  : '#ffffff',
+                    borderRadius: '50%',
+                    content     : '""',
+                    height      : '16px',
+                    left        : '3px',
+                    position    : 'absolute',
+                    top         : '3px',
+                    transition  : 'transform 0.18s ease',
+                    width       : '16px',
+                }),
+                new Rule('.ar-switch__input:checked + .ar-switch__track', {
+                    background: 'var(--arianna-primary, #1f6feb)',
+                }),
+                new Rule('.ar-switch__input:checked + .ar-switch__track::after', {
+                    transform: 'translateX(18px)',
+                }),
+                new Rule('.ar-switch__label', { fontSize: '0.82rem' }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Switch', { value: Switch, writable: false, enumerable: false, configurable: false });
+}
+
+export default Switch;

@@ -4,145 +4,131 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Satispay payment integration. Satispay (Italian wallet, 4M+ users) uses
- * a server-driven flow: the merchant creates a payment via the Satispay
- * Business API and receives a `redirect_url`. The user clicks the button,
- * is redirected to the Satispay app (or web flow on desktop), authorises,
- * then comes back to the merchant via `redirect_url`.
+ * Satispay redirect button. Satispay does NOT expose a browser SDK — the
+ * merchant's server creates a payment via the Satispay Business API, gets
+ * back a `redirect_url`, and the widget opens that URL in a new tab or
+ * in-place. On return the merchant's server confirms outcome via webhook.
  *
- * Like AliPay this widget is a button + redirect — the actual payment
- * creation happens server-side. The Satispay-Business-API requires:
- *   • Activation Code from the Satispay Dashboard
- *   • RSA key pair for request signing (server-only)
+ * The widget renders a branded button. Confirmation of payment is NEVER
+ * obtained client-side — `arianna:payment-success` is not emitted by this
+ * widget; merchants subscribe to Satispay webhooks server-side.
  *
- * @example
- *   import { Satispay } from 'ariannajs/components/payments';
+ * @example HTML
+ *   <arianna-satispay redirect-url="https://online.satispay.com/pay/xxx"
+ *                     amount="9.90" currency="EUR"></arianna-satispay>
  *
- *   // 1. Backend: POST /api/v1/payments → returns { redirect_url, payment_id }
- *   const { redirect_url, payment_id } = await api.createSatispayPayment(amount);
+ * Events:
+ *   arianna:payment-redirect  detail: { method: 'satispay', url: string }
+ *   arianna:payment-error     detail: { method: 'satispay', message: string }
  *
- *   // 2. Mount widget
- *   const sp = new Satispay('#satispay', {
- *       redirectUrl: redirect_url,
- *       amount     : 99.00,
- *   });
- *   sp.on('click', () => analytics.track('satispay_clicked', { payment_id }));
+ * Attrs: redirect-url, amount, currency, target (_blank | _self)
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface SatispayOptions extends CtrlOptions
-{
-    /** URL returned by the Satispay /payments API. */
+export interface SatispayOptions {
     redirectUrl : string;
     amount      : number;
-    /** ISO 4217. Satispay only supports EUR. Default 'EUR'. */
-    currency?   : string;
-    /** Button label override. */
-    buttonLabel?: string;
-    /** Optional QR code image URL/data URL for desktop scanning. */
-    qrCode?     : string;
-    /** Display mode. Default 'button'. */
-    mode?       : 'button' | 'qr' | 'both';
-    /** Locale: 'it' | 'en'. Default browser default → 'it' or 'en'. */
-    locale?     : 'it' | 'en';
+    currency    : string;
+    target?     : '_blank' | '_self';
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+const SATISPAY_LOGO = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="11" fill="#ff3a44"/><circle cx="12" cy="12" r="4.5" fill="#fff"/></svg>`;
 
-export class Satispay extends Control<SatispayOptions>
+export class Satispay extends Component('arianna-satispay', HTMLElement, {}, {
+    attrs : ['redirect-url', 'amount', 'currency', 'target'],
+    shadow: false,
+})
 {
-    constructor(container: string | HTMLElement | null, opts: SatispayOptions)
+    build(_opts: SatispayOptions = {} as SatispayOptions)
     {
-        super(container, 'div', {
-            currency : 'EUR',
-            mode     : 'button',
-            locale   : detectItOrEn(),
-            ...opts,
-        });
+        const amountAttr = this.attrSignal('amount');
+        const currencyAttr = this.attrSignal('currency');
 
-        this.el.className = `ar-satispay${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
+        this.btnLabel = () => {
+            const a = parseFloat(amountAttr.get() ?? '0') || 0;
+            const c = currencyAttr.get() ?? 'EUR';
+            return `Pay ${c} ${a.toFixed(2)} with Satispay`;
+        };
+
+        this.onClick = () => { void this.pay(); };
+
+        this.template = html`
+            <button type="button" class="ar-satispay__btn" @click="this.onClick">
+                <span class="ar-satispay__logo">${SATISPAY_LOGO}</span>
+                <span>{{ this.btnLabel() }}</span>
+            </button>
+        `;
+
+        this.Sheet = Satispay.DefaultSheet();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    pay(): this
-    {
-        const url = this._get<string>('redirectUrl', '');
-        if (!url) { this._emit('error', { message: 'redirectUrl not configured' }); return this; }
-        this._emit('click', {});
-        window.location.href = url;
-        return this;
-    }
-
-    // ── Internal ───────────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        const mode   = this._get<'button' | 'qr' | 'both'>('mode', 'button');
-        const locale = this._get<'it' | 'en'>('locale', 'it');
-        const label  = this._get<string>('buttonLabel', '') || (locale === 'it' ? 'Paga con Satispay' : 'Pay with Satispay');
-        const qr     = this._get<string>('qrCode', '');
-
-        let html = '';
-        if (mode === 'button' || mode === 'both')
-        {
-            html += `
-<button class="ar-satispay__btn" data-r="btn" type="button">
-  <span class="ar-satispay__logo">${SATISPAY_LOGO}</span>
-  <span>${escapeHtml(label)}</span>
-</button>`;
+    async pay(): Promise<void> {
+        const url = this.getAttribute('redirect-url');
+        if (!url) {
+            this.dispatchEvent(new CustomEvent('arianna:payment-error', {
+                bubbles: true, detail: { method: 'satispay', message: 'Missing redirect-url' },
+            }));
+            return;
         }
-        if ((mode === 'qr' || mode === 'both') && qr)
-        {
-            html += `
-<div class="ar-satispay__qr-wrap">
-  <img class="ar-satispay__qr" src="${qr}" alt="Satispay QR">
-  <div class="ar-satispay__qr-label">${escapeHtml(locale === 'it' ? 'Scansiona con Satispay' : 'Scan with Satispay')}</div>
-</div>`;
-        }
-        this.el.innerHTML = html;
-        this.el.querySelector<HTMLButtonElement>('[data-r="btn"]')?.addEventListener('click', () => this.pay());
-        this._emit('ready', { mode });
+        this.dispatchEvent(new CustomEvent('arianna:payment-redirect', {
+            bubbles: true, detail: { method: 'satispay', url },
+        }));
+        const target = (this.getAttribute('target') ?? '_blank') as '_blank' | '_self';
+        if (target === '_self') window.location.href = url;
+        else window.open(url, '_blank', 'noopener');
     }
 
-    private _injectStyles(): void
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    private btnLabel: () => string = () => 'Pay with Satispay';
+    private onClick : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
     {
-        if (document.getElementById('ar-satispay-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-satispay-styles';
-        // Satispay brand: red #e2336b (close to AriannA fuchsia, intentionally aligned)
-        s.textContent = `
-.ar-satispay { display:inline-flex; gap:14px; align-items:center; }
-.ar-satispay__btn { display:inline-flex; align-items:center; gap:8px; min-width:200px; padding:11px 20px; background:#ff4081; color:#fff; border:0; border-radius:6px; font:600 15px -apple-system,system-ui,sans-serif; cursor:pointer; transition:background .12s; }
-.ar-satispay__btn:hover { background:#e91e63; }
-.ar-satispay__logo svg { display:block; height:18px; width:auto; }
-.ar-satispay__qr-wrap { display:inline-flex; flex-direction:column; align-items:center; gap:8px; padding:14px; background:#fff; border:2px solid #ff4081; border-radius:8px; }
-.ar-satispay__qr { width:180px; height:180px; display:block; }
-.ar-satispay__qr-label { font:13px sans-serif; color:#ff4081; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', { display: 'inline-block' }),
+                new Rule('.ar-satispay__btn', {
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    minWidth: '200px',
+                    minHeight: '44px',
+                    padding: '0 18px',
+                    background: '#ff3a44',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    font: '600 14px -apple-system, system-ui, sans-serif',
+                    transition: 'background 0.15s',
+                }),
+                new Rule('.ar-satispay__btn:hover', { background: '#e0333c' }),
+                new Rule('.ar-satispay__logo', {
+                    display: 'inline-flex',
+                    width: '22px', height: '22px',
+                }),
+                new Rule('.ar-satispay__logo svg', { width: '100%', height: '100%' }),
+            ]
+        );
     }
 }
 
-const SATISPAY_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" aria-hidden="true">
-<rect width="32" height="32" rx="8" fill="#fff"/>
-<path d="M16 8a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 13a5 5 0 1 1 0-10 5 5 0 0 1 0 10z" fill="#ff4081"/>
-</svg>`;
-
-function detectItOrEn(): 'it' | 'en'
-{
-    if (typeof navigator !== 'undefined' && navigator.language?.startsWith('it')) return 'it';
-    return 'en';
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Satispay', {
+        value: Satispay, writable: false, enumerable: false, configurable: false,
+    });
 }
 
-function escapeHtml(s: string): string
-{
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
-}
+export default Satispay;

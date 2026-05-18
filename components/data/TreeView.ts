@@ -1,263 +1,535 @@
 /**
+ * @module    components/data/TreeView
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
- */
-
-/**
- * @module TreeView
- * Hierarchical tree control.
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
  *
- * @example
- *   const tree = new TreeView('#sidebar', { selectable: 'single' });
+ * TreeView — hierarchical tree control with expand/collapse, single/multi
+ * selection, checkboxes, badges, lazy children loading, search filter,
+ * drag-and-drop, and keyboard navigation (arrow keys + Enter).
+ *
+ * @example JS
+ *   const tree = new TreeView();
+ *   tree.selectable = 'single';
  *   tree.nodes = [
  *     { id: '1', label: 'Root', children: [
  *       { id: '1.1', label: 'Child A', icon: '📄' },
  *       { id: '1.2', label: 'Child B', lazy: true },
  *     ]},
  *   ];
- *   tree.on('select',  ({ node }) => console.log(node));
- *   tree.on('expand',  ({ node }) => console.log(node));
- *   tree.on('load',    ({ node, resolve }) => fetchChildren(node).then(resolve));
- *   tree.on('drop',    ({ sourceId, targetId }) => move(sourceId, targetId));
+ *   tree.addEventListener('arianna:select', e => console.log(e.detail.node));
+ *   tree.addEventListener('arianna:load',   e => fetchChildren(e.detail.node).then(e.detail.resolve));
+ *   tree.addEventListener('arianna:drop',   e => move(e.detail.sourceId, e.detail.targetId));
+ *
+ * @example HTML
+ *   <arianna-tree-view selectable="multi" checkboxes searchable draggable></arianna-tree-view>
+ *
+ * Events:
+ *   - arianna:select   detail: { node, selected }
+ *   - arianna:expand   detail: { node }
+ *   - arianna:collapse detail: { node }
+ *   - arianna:check    detail: { node, checked }
+ *   - arianna:load     detail: { node, resolve(children) }   (lazy nodes)
+ *   - arianna:drop     detail: { sourceId, targetId }
+ *
+ * Slots:  (none)
+ *
+ * Attrs:
+ *   selectable ('none' | 'single' | 'multi'), checkboxes, icons, badges,
+ *   indent, row-height, draggable, keyboard, expand-on-select, searchable,
+ *   class
  */
-import { Control } from '../core/Control.ts';
+
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
 export interface TreeNode {
-  id         : string;
-  label      : string;
-  icon?      : string;
-  badge?     : string | number;
-  children?  : TreeNode[];
-  lazy?      : boolean;
-  expanded?  : boolean;
-  selected?  : boolean;
-  checked?   : boolean;
-  selectable?: boolean;
-  data?      : unknown;
-  class?     : string;
+    id          : string;
+    label       : string;
+    icon?       : string;
+    badge?      : string | number;
+    children?   : TreeNode[];
+    lazy?       : boolean;
+    expanded?   : boolean;
+    selected?   : boolean;
+    checked?    : boolean;
+    selectable? : boolean;
+    data?       : unknown;
+    class?      : string;
 }
 
 export interface TreeViewOptions {
-  selectable?    : 'none' | 'single' | 'multi';
-  checkboxes?    : boolean;
-  icons?         : boolean;
-  badges?        : boolean;
-  indent?        : number;
-  rowHeight?     : number;
-  draggable?     : boolean;
-  keyboard?      : boolean;
-  expandOnSelect?: boolean;
-  search?        : boolean;
-  class?         : string;
+    nodes?          : TreeNode[];
+    selectable?     : 'none' | 'single' | 'multi';
+    checkboxes?     : boolean;
+    icons?          : boolean;
+    badges?         : boolean;
+    indent?         : number;
+    rowHeight?      : number;
+    draggable?      : boolean;
+    keyboard?       : boolean;
+    expandOnSelect? : boolean;
+    searchable?     : boolean;
 }
 
-interface NS {
-  node     : TreeNode;
-  expanded : boolean;
-  selected : boolean;
-  checked  : boolean;
-  loading  : boolean;
-  loaded   : boolean;
-  depth    : number;
-  parent   : NS | null;
-  children : NS[];
-  el?      : HTMLElement;
+/** Internal node state record (the "NS" of legacy). */
+interface NodeState {
+    node     : TreeNode;
+    expanded : boolean;
+    selected : boolean;
+    checked  : boolean;
+    loading  : boolean;
+    loaded   : boolean;
+    depth    : number;
+    parent   : NodeState | null;
+    children : NodeState[];
+    visible  : boolean;
 }
 
-export class TreeView extends Control<TreeViewOptions> {
-  private _roots : NS[]          = [];
-  private _map   = new Map<string, NS>();
-  private _focus : NS | null     = null;
-  private _q     = '';
-  private _list! : HTMLElement;
-
-  constructor(container: string | HTMLElement | null = null, opts: TreeViewOptions = {}) {
-    super(container, 'div', {
-      selectable: 'single', icons: true, badges: true,
-      indent: 20, rowHeight: 32, keyboard: true, search: true,
-      draggable: false, checkboxes: false, expandOnSelect: false, ...opts
-    });
-    this.el.className = `ar-tree${opts.class?' '+opts.class:''}`;
-    this.el.setAttribute('role', 'tree'); this.el.tabIndex = 0;
-  }
-
-  set nodes(v: TreeNode[]) { this._roots = []; this._map.clear(); this._roots = v.map(n => this._ns(n, null, 0)); this._build(); }
-  get nodes()              { return this._roots.map(s => s.node); }
-
-  expand(id: string)   { const s = this._map.get(id); if (s && !s.expanded) this._expand(s); }
-  collapse(id: string) { const s = this._map.get(id); if (s &&  s.expanded) this._collapse(s); }
-  expandAll()          { this._map.forEach(s => { if (!s.expanded) this._expand(s); }); }
-  collapseAll()        { this._map.forEach(s => { if ( s.expanded) this._collapse(s); }); }
-
-  select(id: string) {
-    const s = this._map.get(id); if (!s || s.node.selectable === false) return;
-    if (this._get('selectable', 'single') === 'single') this._clearSel();
-    this._setSel(s, true);
-  }
-  deselect(id: string) { const s = this._map.get(id); if (s) this._setSel(s, false); }
-  getSelected()        { return [...this._map.values()].filter(s => s.selected).map(s => s.node); }
-
-  check(id: string, v = true) { const s = this._map.get(id); if (s) this._setChecked(s, v); }
-  getChecked()                { return [...this._map.values()].filter(s => s.checked).map(s => s.node); }
-
-  search(q: string) { this._q = q.toLowerCase().trim(); this._applyFilter(); }
-
-  protected _build() {
-    this.el.innerHTML = '';
-    const opts = this._state.State;
-    if (opts.search) {
-      const inp = document.createElement('input');
-      inp.type = 'text'; inp.className = 'ar-tree__search'; inp.placeholder = 'Search…'; inp.value = this._q;
-      inp.addEventListener('input', () => { this._q = inp.value.toLowerCase().trim(); this._applyFilter(); });
-      this.el.appendChild(inp);
-    }
-    this._list = this._el('ul', 'ar-tree__list', this.el);
-    this._list.setAttribute('role', 'group');
-    this._roots.forEach(s => this._renderNode(s, this._list));
-    if (opts.keyboard) this._on(this.el, 'keydown', (e: KeyboardEvent) => this._onKey(e));
-  }
-
-  private _renderNode(s: NS, parent: HTMLElement) {
-    const opts = this._state.State;
-    const hasChildren = (s.node.children?.length ?? 0) > 0 || s.node.lazy;
-    const li = this._el('li', 'ar-tree__node', parent);
-    li.setAttribute('role', 'treeitem'); li.setAttribute('aria-expanded', String(s.expanded)); li.setAttribute('aria-selected', String(s.selected));
-    li.dataset.id = s.node.id; if (s.node.class) li.classList.add(...s.node.class.split(' '));
-    s.el = li;
-
-    const row = this._el('div', `ar-tree__row${s.selected?' ar-tree__row--on':''}`, li);
-    row.style.paddingLeft = (s.depth * (opts.indent ?? 20) + 8) + 'px';
-    row.style.height      = (opts.rowHeight ?? 32) + 'px';
-
-    const arrow = this._el('span', 'ar-tree__arrow', row);
-    if (hasChildren) {
-      arrow.textContent = s.loading ? '⟳' : s.expanded ? '▾' : '▸';
-      arrow.addEventListener('click', e => { e.stopPropagation(); s.expanded ? this._collapse(s) : this._expand(s); });
-    }
-    if (opts.checkboxes) {
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'ar-tree__cb'; cb.checked = s.checked;
-      cb.addEventListener('change', () => this._setChecked(s, cb.checked)); row.appendChild(cb);
-    }
-    if (opts.icons && s.node.icon) this._el('span', 'ar-tree__icon', row).textContent = s.node.icon;
-    this._el('span', 'ar-tree__label', row).textContent = s.node.label;
-    if (opts.badges && s.node.badge !== undefined) this._el('span', 'ar-tree__badge', row).textContent = String(s.node.badge);
-
-    if (s.node.selectable !== false) {
-      row.addEventListener('click', e => {
-        const mode = this._get('selectable', 'single') as string;
-        if (mode === 'none') return;
-        if (mode === 'single') this._clearSel();
-        this._setSel(s, !s.selected);
-        if (opts.expandOnSelect && hasChildren) s.expanded ? this._collapse(s) : this._expand(s);
-        this._focus = s; this._emit('select', { node: s.node, selected: s.selected }, e as Event);
-      });
-    }
-    if (opts.draggable) this._drag(s, li, row);
-
-    if (hasChildren) {
-      const ul = this._el('ul', 'ar-tree__children', li); ul.setAttribute('role', 'group');
-      ul.style.display = s.expanded ? '' : 'none';
-      if (s.expanded && s.loaded) s.children.forEach(c => this._renderNode(c, ul));
-    }
-  }
-
-  private _expand(s: NS) {
-    if (s.node.lazy && !s.loaded) {
-      s.loading = true; this._updateRow(s);
-      let resolved = false;
-      this._emit('load', { node: s.node, resolve: (children: TreeNode[]) => {
-        if (resolved) return; resolved = true;
-        s.children = children.map(c => this._ns(c, s, s.depth + 1));
-        s.node.children = children; s.loaded = true; s.loading = false; s.expanded = true;
-        this._updateRow(s); this._emit('expand', { node: s.node });
-      }});
-      return;
-    }
-    s.expanded = true; this._updateRow(s); this._emit('expand', { node: s.node });
-  }
-
-  private _collapse(s: NS) { s.expanded = false; this._updateRow(s); this._emit('collapse', { node: s.node }); }
-
-  private _updateRow(s: NS) {
-    if (!s.el) return;
-    const li = s.el; const opts = this._state.State;
-    const hasChildren = (s.node.children?.length ?? 0) > 0 || s.node.lazy;
-    li.setAttribute('aria-expanded', String(s.expanded));
-    const oldRow = li.querySelector('.ar-tree__row'); if (oldRow) oldRow.remove();
-    const row = this._el('div', `ar-tree__row${s.selected?' ar-tree__row--on':''}`, li);
-    row.style.paddingLeft = (s.depth * (opts.indent ?? 20) + 8) + 'px';
-    row.style.height = (opts.rowHeight ?? 32) + 'px';
-    if (li.firstChild && li.firstChild !== row) li.insertBefore(row, li.firstChild);
-    const arrow = this._el('span', 'ar-tree__arrow', row);
-    if (hasChildren) { arrow.textContent = s.loading ? '⟳' : s.expanded ? '▾' : '▸'; arrow.addEventListener('click', e => { e.stopPropagation(); s.expanded ? this._collapse(s) : this._expand(s); }); }
-    if (opts.icons && s.node.icon) this._el('span', 'ar-tree__icon', row).textContent = s.node.icon;
-    this._el('span', 'ar-tree__label', row).textContent = s.node.label;
-    if (opts.badges && s.node.badge !== undefined) this._el('span', 'ar-tree__badge', row).textContent = String(s.node.badge);
-    row.addEventListener('click', e => { if (s.node.selectable === false) return; const mode = this._get('selectable', 'single') as string; if (mode === 'none') return; if (mode === 'single') this._clearSel(); this._setSel(s, !s.selected); this._emit('select', { node: s.node, selected: s.selected }, e as Event); });
-    let ul = li.querySelector<HTMLElement>('.ar-tree__children');
-    if (!ul && hasChildren) { ul = this._el('ul', 'ar-tree__children') as HTMLElement; ul.setAttribute('role','group'); li.appendChild(ul); }
-    if (ul) { if (s.expanded) { ul.style.display = ''; if (s.loaded && !ul.children.length) s.children.forEach(c => this._renderNode(c, ul!)); } else ul.style.display = 'none'; }
-  }
-
-  private _clearSel() { this._map.forEach(s => { if (s.selected) this._setSel(s, false); }); }
-  private _setSel(s: NS, v: boolean) {
-    s.selected = v; if (!s.el) return;
-    const row = s.el.querySelector<HTMLElement>('.ar-tree__row');
-    if (row) { if (v) row.classList.add('ar-tree__row--on'); else row.classList.remove('ar-tree__row--on'); }
-    s.el.setAttribute('aria-selected', String(v));
-  }
-  private _setChecked(s: NS, v: boolean) { s.checked = s.node.checked = v; const cb = s.el?.querySelector<HTMLInputElement>('.ar-tree__cb'); if (cb) cb.checked = v; this._emit('check', { node: s.node, checked: v }); }
-
-  private _applyFilter() {
-    const q = this._q;
-    this._map.forEach(s => { if (s.el) (s.el as HTMLElement).style.display = q ? (s.node.label.toLowerCase().includes(q) ? '' : 'none') : ''; });
-    if (q) this._map.forEach(s => { if (s.node.label.toLowerCase().includes(q)) { let p = s.parent; while (p) { if (p.el) (p.el as HTMLElement).style.display = ''; p = p.parent; } } });
-  }
-
-  private _visible(): NS[] {
-    const out: NS[] = [];
-    const walk = (nodes: NS[]) => { for (const s of nodes) { if (s.el?.style.display === 'none') continue; out.push(s); if (s.expanded && s.children.length) walk(s.children); } };
-    walk(this._roots); return out;
-  }
-
-  private _onKey(e: KeyboardEvent) {
-    const vis = this._visible(); const idx = this._focus ? vis.indexOf(this._focus) : -1;
-    if (e.key === 'ArrowDown') { e.preventDefault(); const n = vis[idx+1]; if (n) { this._focus = n; n.el?.focus(); } }
-    if (e.key === 'ArrowUp')   { e.preventDefault(); const n = vis[idx-1]; if (n) { this._focus = n; n.el?.focus(); } }
-    if (e.key === 'ArrowRight'){ e.preventDefault(); if (this._focus && !this._focus.expanded) this._expand(this._focus); }
-    if (e.key === 'ArrowLeft') { e.preventDefault(); if (this._focus?.expanded) this._collapse(this._focus); else if (this._focus?.parent) { this._focus = this._focus.parent; this._focus.el?.focus(); } }
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (this._focus) { const mode = this._get('selectable','single') as string; if (mode !== 'none') { if (mode === 'single') this._clearSel(); this._setSel(this._focus, !this._focus.selected); this._emit('select', { node: this._focus.node, selected: this._focus.selected }); } } }
-  }
-
-  private _drag(s: NS, li: HTMLElement, row: HTMLElement) {
-    li.draggable = true;
-    li.addEventListener('dragstart', e => { e.dataTransfer?.setData('text/plain', s.node.id); li.classList.add('ar-tree__node--drag'); });
-    li.addEventListener('dragend',   () => li.classList.remove('ar-tree__node--drag'));
-    row.addEventListener('dragover', e => { e.preventDefault(); row.classList.add('ar-tree__row--drop'); });
-    row.addEventListener('dragleave',() => row.classList.remove('ar-tree__row--drop'));
-    row.addEventListener('drop', e  => { e.preventDefault(); row.classList.remove('ar-tree__row--drop'); const src = e.dataTransfer?.getData('text/plain'); if (src && src !== s.node.id) this._emit('drop', { sourceId: src, targetId: s.node.id }); });
-  }
-
-  private _ns(node: TreeNode, parent: NS | null, depth: number): NS {
-    const s: NS = { node, expanded: node.expanded ?? false, selected: node.selected ?? false, checked: node.checked ?? false, loading: false, loaded: !node.lazy, depth, parent, children: [] };
-    this._map.set(node.id, s);
-    if (node.children) s.children = node.children.map(c => this._ns(c, s, depth + 1));
-    return s;
-  }
+/** Flattened row used for rendering. */
+interface FlatRow {
+    state       : NodeState;
+    hasChildren : boolean;
+    arrow       : string;
+    rowCls      : string;
+    rowStyle    : string;
+    indentPx    : number;
 }
 
-export const TreeViewCSS = `
-.ar-tree{background:transparent;font-size:.82rem;outline:none;overflow-y:auto;user-select:none}
-.ar-tree__search{background:var(--ar-bg3);border:1px solid var(--ar-border);border-radius:var(--ar-radius);box-sizing:border-box;color:var(--ar-text);font:inherit;font-size:.82rem;margin:4px 8px;outline:none;padding:4px 8px;width:calc(100% - 16px)}
-.ar-tree__search:focus{border-color:var(--ar-primary)}
-.ar-tree__list,.ar-tree__children{list-style:none;margin:0;padding:0}
-.ar-tree__row{align-items:center;border-radius:4px;box-sizing:border-box;cursor:pointer;display:flex;gap:6px;transition:background var(--ar-transition)}
-.ar-tree__row:hover{background:var(--ar-bg3)}
-.ar-tree__row--on{background:var(--ar-primary)!important;color:var(--ar-primary-text)}
-.ar-tree__arrow{color:var(--ar-muted);flex-shrink:0;font-size:.7rem;text-align:center;width:14px}
-.ar-tree__icon{flex-shrink:0}
-.ar-tree__label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ar-tree__badge{background:var(--ar-warning);border-radius:8px;color:#000;flex-shrink:0;font-size:.65rem;padding:1px 5px}
-.ar-tree__node--drag{opacity:.4}
-.ar-tree__row--drop{outline:2px dashed var(--ar-primary)}
-`;
+export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
+    attrs : [
+        'selectable', 'checkboxes', 'icons', 'badges',
+        'indent', 'row-height', 'draggable', 'keyboard',
+        'expand-on-select', 'searchable',
+    ],
+    shadow: false,
+})
+{
+    roots$  : Signal<NodeState[]>      = signal<NodeState[]>([]);
+    query$  : Signal<string>           = signal<string>('');
+    /** Bump to force a re-render after internal NodeState mutation. */
+    tick$   : Signal<number>           = signal<number>(0);
+
+    #map   = new Map<string, NodeState>();
+    #focus : NodeState | null = null;
+
+    build(_opts: TreeViewOptions = {})
+    {
+        this.setAttribute('role', 'tree');
+        this.tabIndex = 0;
+
+        this.isSearchable = () => this.getAttribute('searchable') !== 'false';
+        this.searchValue  = () => this.query$.get();
+        this.showCheckboxes = () => this.hasAttribute('checkboxes');
+        this.showIcons      = () => this.getAttribute('icons')  !== 'false';
+        this.showBadges     = () => this.getAttribute('badges') !== 'false';
+        this.indentPx       = () => parseInt(this.getAttribute('indent') ?? '20', 10) || 20;
+        this.rowHeightPx    = () => parseInt(this.getAttribute('row-height') ?? '32', 10) || 32;
+        this.isDraggable    = () => this.hasAttribute('draggable');
+
+        this.rows = (): FlatRow[] => {
+            // Tick$ read forces re-render when internal mutation calls bump().
+            void this.tick$.get();
+            const q = this.query$.get();
+            const out: FlatRow[] = [];
+            const walk = (states: NodeState[]) => {
+                for (const s of states) {
+                    // Filter: show if matches OR has a descendant that matches.
+                    if (q) {
+                        s.visible = this.#nodeMatchesQuery(s, q);
+                    } else {
+                        s.visible = true;
+                    }
+                    if (!s.visible) continue;
+                    const hasChildren = (s.node.children?.length ?? 0) > 0 || !!s.node.lazy;
+                    out.push({
+                        state      : s,
+                        hasChildren,
+                        arrow      : hasChildren ? (s.loading ? '⟳' : (s.expanded ? '▾' : '▸')) : '',
+                        rowCls     : 'ar-tree__row' + (s.selected ? ' ar-tree__row--on' : ''),
+                        rowStyle   : `padding-left: ${s.depth * this.indentPx() + 8}px; height: ${this.rowHeightPx()}px`,
+                        indentPx   : s.depth * this.indentPx() + 8,
+                    });
+                    if (s.expanded && s.children.length) walk(s.children);
+                }
+            };
+            walk(this.roots$.get());
+            return out;
+        };
+
+        // Event handlers (set before template registration)
+        this.onArrowClick = (r: FlatRow, e: Event) => {
+            e.stopPropagation();
+            if (!r.hasChildren) return;
+            if (r.state.expanded) this.#collapse(r.state);
+            else                  this.#expand(r.state);
+        };
+        this.onCheckChange = (r: FlatRow, e: Event) => {
+            e.stopPropagation();
+            this.#setChecked(r.state, (e.target as HTMLInputElement).checked);
+        };
+        this.onRowClick = (r: FlatRow) => {
+            if (r.state.node.selectable === false) return;
+            const mode = (this.getAttribute('selectable') ?? 'single') as 'none' | 'single' | 'multi';
+            if (mode === 'none') return;
+            if (mode === 'single') this.#clearSel();
+            this.#setSel(r.state, !r.state.selected);
+            this.#focus = r.state;
+            if (this.hasAttribute('expand-on-select') && r.hasChildren) {
+                if (r.state.expanded) this.#collapse(r.state);
+                else                  this.#expand(r.state);
+            }
+            this.dispatchEvent(new CustomEvent('arianna:select', {
+                bubbles: true, detail: { node: r.state.node, selected: r.state.selected },
+            }));
+        };
+        this.onSearchInput = (e: Event) => {
+            this.query$.set((e.target as HTMLInputElement).value.toLowerCase().trim());
+        };
+
+        // Drag & drop handlers — attached only when draggable attr is set
+        this.onDragStart = (r: FlatRow, e: Event) => {
+            (e as DragEvent).dataTransfer?.setData('text/plain', r.state.node.id);
+        };
+        this.onDragOver = (e: Event) => { e.preventDefault(); };
+        this.onDrop = (r: FlatRow, e: Event) => {
+            e.preventDefault();
+            const src = (e as DragEvent).dataTransfer?.getData('text/plain');
+            if (src && src !== r.state.node.id) {
+                this.dispatchEvent(new CustomEvent('arianna:drop', {
+                    bubbles: true, detail: { sourceId: src, targetId: r.state.node.id },
+                }));
+            }
+        };
+
+        // Keyboard navigation
+        this.addEventListener('keydown', (ev: Event) => {
+            const e = ev as KeyboardEvent;
+            if (this.getAttribute('keyboard') === 'false') return;
+            const flat = this.rows();
+            const idx = this.#focus ? flat.findIndex(r => r.state === this.#focus) : -1;
+            switch (e.key) {
+                case 'ArrowDown': {
+                    e.preventDefault();
+                    const n = flat[idx + 1];
+                    if (n) this.#focus = n.state;
+                    this.#bump();
+                    break;
+                }
+                case 'ArrowUp': {
+                    e.preventDefault();
+                    const n = flat[idx - 1];
+                    if (n) this.#focus = n.state;
+                    this.#bump();
+                    break;
+                }
+                case 'ArrowRight': {
+                    e.preventDefault();
+                    if (this.#focus && !this.#focus.expanded) this.#expand(this.#focus);
+                    break;
+                }
+                case 'ArrowLeft': {
+                    e.preventDefault();
+                    if (this.#focus?.expanded) this.#collapse(this.#focus);
+                    else if (this.#focus?.parent) { this.#focus = this.#focus.parent; this.#bump(); }
+                    break;
+                }
+                case 'Enter':
+                case ' ': {
+                    e.preventDefault();
+                    if (this.#focus) {
+                        const mode = (this.getAttribute('selectable') ?? 'single') as 'none' | 'single' | 'multi';
+                        if (mode !== 'none') {
+                            if (mode === 'single') this.#clearSel();
+                            this.#setSel(this.#focus, !this.#focus.selected);
+                            this.dispatchEvent(new CustomEvent('arianna:select', {
+                                bubbles: true,
+                                detail : { node: this.#focus.node, selected: this.#focus.selected },
+                            }));
+                        }
+                    }
+                    break;
+                }
+            }
+        });
+
+        this.template = html`
+            <input class="ar-tree__search"
+                   a-if="this.isSearchable()"
+                   type="text"
+                   placeholder="Search…"
+                   :value="this.searchValue()"
+                   @input="this.onSearchInput"/>
+            <ul class="ar-tree__list" role="group">
+                <li class="ar-tree__node"
+                    a-for="r in this.rows()"
+                    :data-id="r.state.node.id"
+                    :draggable="this.isDraggable()"
+                    @dragstart="(e) => this.onDragStart(r, e)"
+                    @dragover="this.onDragOver"
+                    @drop="(e) => this.onDrop(r, e)">
+                    <div :class="r.rowCls"
+                         :style="r.rowStyle"
+                         @click="(e) => this.onRowClick(r)">
+                        <span class="ar-tree__arrow"
+                              @click="(e) => this.onArrowClick(r, e)">{{ r.arrow }}</span>
+                        <input class="ar-tree__cb"
+                               a-if="this.showCheckboxes()"
+                               type="checkbox"
+                               :checked="r.state.checked"
+                               @change="(e) => this.onCheckChange(r, e)"
+                               @click="(e) => e.stopPropagation()"/>
+                        <span class="ar-tree__icon"
+                              a-if="this.showIcons() && r.state.node.icon">{{ r.state.node.icon }}</span>
+                        <span class="ar-tree__label">{{ r.state.node.label }}</span>
+                        <span class="ar-tree__badge"
+                              a-if="this.showBadges() && r.state.node.badge !== undefined">{{ r.state.node.badge }}</span>
+                    </div>
+                </li>
+            </ul>
+        `;
+
+        this.Sheet = TreeView.DefaultSheet();
+    }
+
+    // ── Public API ───────────────────────────────────────────────────────────
+
+    set nodes(v: TreeNode[]) {
+        this.#map.clear();
+        const states = (v ?? []).map(n => this.#makeState(n, null, 0));
+        this.roots$.set(states);
+    }
+    get nodes(): TreeNode[] { return this.roots$.get().map(s => s.node); }
+
+    expand(id: string): this   { const s = this.#map.get(id); if (s && !s.expanded) this.#expand(s);   return this; }
+    collapse(id: string): this { const s = this.#map.get(id); if (s &&  s.expanded) this.#collapse(s); return this; }
+    expandAll(): this   { this.#map.forEach(s => { if (!s.expanded) this.#expand(s); });   return this; }
+    collapseAll(): this { this.#map.forEach(s => { if ( s.expanded) this.#collapse(s); }); return this; }
+
+    select(id: string): this {
+        const s = this.#map.get(id);
+        if (!s || s.node.selectable === false) return this;
+        if ((this.getAttribute('selectable') ?? 'single') === 'single') this.#clearSel();
+        this.#setSel(s, true);
+        return this;
+    }
+    deselect(id: string): this { const s = this.#map.get(id); if (s) this.#setSel(s, false); return this; }
+    getSelected(): TreeNode[]  { return [...this.#map.values()].filter(s => s.selected).map(s => s.node); }
+
+    check(id: string, value = true): this { const s = this.#map.get(id); if (s) this.#setChecked(s, value); return this; }
+    getChecked(): TreeNode[]              { return [...this.#map.values()].filter(s => s.checked).map(s => s.node); }
+
+    search(q: string): this { this.query$.set(q.toLowerCase().trim()); return this; }
+
+    // ── Internal helpers ─────────────────────────────────────────────────────
+
+    #makeState(node: TreeNode, parent: NodeState | null, depth: number): NodeState {
+        const s: NodeState = {
+            node,
+            expanded : node.expanded ?? false,
+            selected : node.selected ?? false,
+            checked  : node.checked ?? false,
+            loading  : false,
+            loaded   : !node.lazy,
+            depth,
+            parent,
+            children : [],
+            visible  : true,
+        };
+        this.#map.set(node.id, s);
+        if (node.children) {
+            s.children = node.children.map(c => this.#makeState(c, s, depth + 1));
+        }
+        return s;
+    }
+
+    #expand(s: NodeState): void {
+        if (s.node.lazy && !s.loaded) {
+            s.loading = true;
+            this.#bump();
+            let resolved = false;
+            const resolve = (children: TreeNode[]) => {
+                if (resolved) return;
+                resolved = true;
+                s.children = children.map(c => this.#makeState(c, s, s.depth + 1));
+                s.node.children = children;
+                s.loaded = true;
+                s.loading = false;
+                s.expanded = true;
+                this.#bump();
+                this.dispatchEvent(new CustomEvent('arianna:expand', {
+                    bubbles: true, detail: { node: s.node },
+                }));
+            };
+            this.dispatchEvent(new CustomEvent('arianna:load', {
+                bubbles: true, detail: { node: s.node, resolve },
+            }));
+            return;
+        }
+        s.expanded = true;
+        this.#bump();
+        this.dispatchEvent(new CustomEvent('arianna:expand', {
+            bubbles: true, detail: { node: s.node },
+        }));
+    }
+
+    #collapse(s: NodeState): void {
+        s.expanded = false;
+        this.#bump();
+        this.dispatchEvent(new CustomEvent('arianna:collapse', {
+            bubbles: true, detail: { node: s.node },
+        }));
+    }
+
+    #clearSel(): void {
+        this.#map.forEach(s => {
+            if (s.selected) s.selected = false;
+        });
+    }
+
+    #setSel(s: NodeState, v: boolean): void {
+        s.selected = v;
+        this.#bump();
+    }
+
+    #setChecked(s: NodeState, v: boolean): void {
+        s.checked = v;
+        s.node.checked = v;
+        this.#bump();
+        this.dispatchEvent(new CustomEvent('arianna:check', {
+            bubbles: true, detail: { node: s.node, checked: v },
+        }));
+    }
+
+    #nodeMatchesQuery(s: NodeState, q: string): boolean {
+        if (s.node.label.toLowerCase().includes(q)) return true;
+        return s.children.some(c => this.#nodeMatchesQuery(c, q));
+    }
+
+    /** Bump the tick signal to force a template re-render. */
+    #bump(): void { this.tick$.set(this.tick$.get() + 1); }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    // ── Attr getters / setters ───────────────────────────────────────────────
+
+    get selectable(): 'none' | 'single' | 'multi'  { return (this.getAttribute('selectable') ?? 'single') as never; }
+    set selectable(v: 'none' | 'single' | 'multi') { this.setAttribute('selectable', v); }
+
+    get checkboxes(): boolean  { return this.hasAttribute('checkboxes'); }
+    set checkboxes(v: boolean) { v ? this.setAttribute('checkboxes', '') : this.removeAttribute('checkboxes'); }
+
+    get draggable(): boolean  { return this.hasAttribute('draggable'); }
+    set draggable(v: boolean) { v ? this.setAttribute('draggable', '') : this.removeAttribute('draggable'); }
+
+    get searchable(): boolean  { return this.getAttribute('searchable') !== 'false'; }
+    set searchable(v: boolean) { this.setAttribute('searchable', v ? 'true' : 'false'); }
+
+    // ── Template helpers (set in build) ──────────────────────────────────────
+
+    private isSearchable  : () => boolean = () => true;
+    private searchValue   : () => string = () => '';
+    private showCheckboxes: () => boolean = () => false;
+    private showIcons     : () => boolean = () => true;
+    private showBadges    : () => boolean = () => true;
+    private indentPx      : () => number = () => 20;
+    private rowHeightPx   : () => number = () => 32;
+    private isDraggable   : () => boolean = () => false;
+    private rows          : () => FlatRow[] = () => [];
+    private onArrowClick  : (r: FlatRow, e: Event) => void = () => {};
+    private onCheckChange : (r: FlatRow, e: Event) => void = () => {};
+    private onRowClick    : (r: FlatRow) => void = () => {};
+    private onSearchInput : (e: Event) => void = () => {};
+    private onDragStart   : (r: FlatRow, e: Event) => void = () => {};
+    private onDragOver    : (e: Event) => void = () => {};
+    private onDrop        : (r: FlatRow, e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    background : 'transparent',
+                    color      : 'var(--arianna-text, #1f2328)',
+                    display    : 'block',
+                    fontSize   : '0.82rem',
+                    outline    : 'none',
+                    overflowY  : 'auto',
+                    userSelect : 'none',
+                }),
+                new Rule('.ar-tree__search', {
+                    background  : 'var(--arianna-bg, #ffffff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    boxSizing   : 'border-box',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    font        : 'inherit',
+                    fontSize    : '0.82rem',
+                    margin      : '4px 8px',
+                    outline     : 'none',
+                    padding     : '4px 8px',
+                    width       : 'calc(100% - 16px)',
+                }),
+                new Rule('.ar-tree__search:focus', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
+                new Rule('.ar-tree__list', {
+                    listStyle: 'none', margin: '0', padding: '0',
+                }),
+                new Rule('.ar-tree__node', { listStyle: 'none' }),
+                new Rule('.ar-tree__row', {
+                    alignItems  : 'center',
+                    borderRadius: '4px',
+                    boxSizing   : 'border-box',
+                    cursor      : 'pointer',
+                    display     : 'flex',
+                    gap         : '6px',
+                    transition  : 'background 0.14s ease',
+                }),
+                new Rule('.ar-tree__row:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+                new Rule('.ar-tree__row--on', {
+                    background: 'var(--arianna-primary, #1f6feb)',
+                    color     : '#ffffff',
+                }),
+                new Rule('.ar-tree__arrow', {
+                    color     : 'var(--arianna-muted, #6e6b62)',
+                    flexShrink: '0',
+                    fontSize  : '0.7rem',
+                    textAlign : 'center',
+                    width     : '14px',
+                }),
+                new Rule('.ar-tree__row--on .ar-tree__arrow', { color: '#ffffff' }),
+                new Rule('.ar-tree__cb',    { flexShrink: '0', margin: '0' }),
+                new Rule('.ar-tree__icon',  { flexShrink: '0' }),
+                new Rule('.ar-tree__label', {
+                    flex        : '1',
+                    overflow    : 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace  : 'nowrap',
+                }),
+                new Rule('.ar-tree__badge', {
+                    background  : 'var(--arianna-warning, #f5a623)',
+                    borderRadius: '8px',
+                    color       : '#000000',
+                    flexShrink  : '0',
+                    fontSize    : '0.65rem',
+                    padding     : '1px 5px',
+                }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'TreeView', { value: TreeView, writable: false, enumerable: false, configurable: false });
+}
+
+export default TreeView;

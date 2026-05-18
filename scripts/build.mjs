@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * AriannA build script
+ * AriannA build script — v2 (clean external resolution)
  * ──────────────────────────────────────────────────────────────────────────────
  *
  * Usage:
@@ -25,12 +25,22 @@
  *   • release/dist/AriannA.ts             (single-file source aggregator — drop-in TS)
  *   • release/dist/package.json + README + LICENSE + CHANGELOG (publish-ready)
  *
- * The hand-written declaration files in `types/` (arianna.d.ts +
- * arianna-globals.d.ts) live there as the package's permanent declaration
- * surface — they are NOT copied into release/dist/. The tsc-generated
- * declarations live next to them under types/dist/. release/dist/ is
- * reserved for compiled bundles and the AriannA.ts aggregator; everything
- * type-related sits in types/.
+ * ── KEY DESIGN: 3 lightweight bundles, no duplicated core ─────────────────
+ *
+ * Sources use relative imports like `'../../core/Component.ts'`. esbuild's
+ * `external` array only matches bare specifiers (e.g. `'arianna'`), so we
+ * cannot rely on it alone to externalize core. Instead we install an
+ * onResolve plugin that intercepts ANY import whose final path lands
+ * inside `<root>/core/` and rewrites it to a runtime-relative
+ * `./arianna.js` import marked external.
+ *
+ * Result:
+ *   arianna-components.js starts with:
+ *      import { Component, Real, signal, effect, Sheet, Rule, … } from './arianna.js';
+ *   and contains zero copies of core.
+ *
+ * Same plugin is applied to arianna-additionals.js even though it doesn't
+ * currently import core — defensive in case it grows a dependency later.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync,
@@ -54,34 +64,80 @@ const skipSingle = args.includes('--skip-single') || watch;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot  = resolve(__dirname, '..');
 const outDir    = resolve(repoRoot, 'release', 'dist');
-// tsc-generated .d.ts files live under types/dist/ (alongside the hand-written
-// types/arianna.d.ts and types/arianna-globals.d.ts). release/dist/ is reserved
-// for compiled JS bundles, their gzipped twins, and the AriannA.ts aggregator.
 const typesOut  = resolve(repoRoot, 'types', 'dist');
 
 if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
 
+// ── External-core plugin ──────────────────────────────────────────────────────
+//
+// Intercept any import whose path resolves inside `<repoRoot>/core/` and
+// replace it with a runtime-relative `./arianna.js` import marked external.
+// This is the ONLY way to externalize relative imports — esbuild's `external`
+// array works on specifiers, not on resolved paths.
+//
+// Also handles the bare specifier `'arianna'` for downstream consumers
+// that use it explicitly.
+
+const coreDir = resolve(repoRoot, 'core');
+
+const externalizeCore = {
+    name: 'externalize-core',
+    setup(build) {
+        // Bare specifier 'arianna' → ./arianna.js (external)
+        build.onResolve({ filter: /^arianna$/ }, () => ({
+            path: './arianna.js',
+            external: true,
+        }));
+
+        // Any relative or absolute import that lands under <repoRoot>/core/
+        // → ./arianna.js (external). Filter matches '/core/' segments to
+        // pre-filter; we confirm with a resolved-path check.
+        build.onResolve({ filter: /(^|\/)core\// }, args => {
+            if (args.kind === 'entry-point') return null;
+            // Resolve the absolute path the import would land on
+            let abs;
+            if (args.path.startsWith('.')) {
+                abs = resolve(dirname(args.importer), args.path);
+            } else if (args.path.startsWith('/')) {
+                abs = args.path;
+            } else {
+                return null;
+            }
+            // Strip extension/.ts/.js for the directory check
+            const noExt = abs.replace(/\.(ts|js|mjs|cjs|tsx|jsx)$/, '');
+            if (noExt.startsWith(coreDir + sep) || noExt === coreDir) {
+                return { path: './arianna.js', external: true };
+            }
+            return null;
+        });
+    },
+};
+
 // ── Bundles ───────────────────────────────────────────────────────────────────
 //
-// `external` keeps cross-bundle imports as runtime imports so each file stays
-// independent. components and additionals both depend on the core kernel,
-// and reference `arianna` so consumers must also load `arianna.js` first.
+// arianna.js is the kernel — no externals (everything inlined).
+// arianna-components.js + arianna-additionals.js use the plugin above to
+// externalize core. additionals doesn't import core today but we apply the
+// plugin defensively in case that changes.
 
 const bundles = [
     {
         name    : 'arianna',
         entry   : 'core/index.ts',
         external: ['@tauri-apps/*'],
+        plugins : [],
     },
     {
         name    : 'arianna-components',
         entry   : 'components/index.ts',
-        external: ['arianna', '@tauri-apps/*'],
+        external: ['@tauri-apps/*'],
+        plugins : [externalizeCore],
     },
     {
         name    : 'arianna-additionals',
         entry   : 'additionals/index.ts',
-        external: ['arianna', '@tauri-apps/*'],
+        external: ['@tauri-apps/*'],
+        plugins : [externalizeCore],
     },
 ];
 
@@ -102,10 +158,6 @@ const writeGzip = (srcPath) => {
     return gzipped.length;
 };
 
-/** Recursively list every .ts file under `dir`, ignoring node_modules and
- *  build outputs. Returns absolute paths sorted deterministically so the
- *  AriannA.ts aggregator and the tsc input list don't reshuffle between
- *  runs (helpful for diff stability and gzip ratio). */
 const listTsFiles = (dir, acc = []) => {
     if (!existsSync(dir)) return acc;
     for (const name of readdirSync(dir).sort()) {
@@ -136,6 +188,7 @@ async function buildBundle(bundle) {
         target       : 'es2022',
         outfile,
         external     : bundle.external,
+        plugins      : bundle.plugins,
         sourcemap    : false,
         legalComments: 'eof',
         absWorkingDir: repoRoot,
@@ -188,24 +241,16 @@ async function buildBundle(bundle) {
 }
 
 // ── 4. Generate per-module .d.ts via `tsc --emitDeclarationOnly` ─────────────
-// Produces release/dist/types/<sourcePath>.d.ts mirroring the source layout.
-// This complements the hand-written types/*.d.ts which stay the primary
-// entrypoint declared in package.json. Failures here don't kill the build
-// (declarations are nice-to-have for IDE intellisense; the bundles work
-// regardless).
 function generateDeclarations() {
     if (skipTypes) return;
     console.log('');
     console.log('── declarations ─────────────────────────────────────');
 
-    // Clean previous emission to avoid stale .d.ts left over from removed files.
     if (existsSync(typesOut)) {
         try { rmSync(typesOut, { recursive: true, force: true }); } catch {}
     }
     mkdirSync(typesOut, { recursive: true });
 
-    // Collect all .ts entry points. We pass them on the CLI so this works
-    // even in repos that don't have a tsconfig.json with `include` set.
     const tsFiles = [
         ...listTsFiles(resolve(repoRoot, 'core')),
         ...listTsFiles(resolve(repoRoot, 'components')),
@@ -225,50 +270,41 @@ function generateDeclarations() {
         '--module',         'esnext',
         '--moduleResolution', 'bundler',
         '--allowImportingTsExtensions',
-        '--strict', 'false',          // be lenient — declarations only need to type-check loosely
+        '--strict', 'false',
         '--skipLibCheck',
         '--noEmitOnError', 'false',
         ...tsFiles.map(f => relative(repoRoot, f)),
     ];
 
-    const res = spawnSync('npx', ['--no-install', 'tsc', ...tscArgs], {
+    // ── Path resolution for tsc ─────────────────────────────────────────
+    // We avoid `shell: true` because the repo path may contain spaces
+    // (e.g. "RA Software Projects") and the shell would split the command.
+    // Instead we resolve tsc explicitly from node_modules/.bin so spawnSync
+    // can invoke it directly with the argv array preserving spaces.
+    const isWin   = process.platform === 'win32';
+    const tscBin  = resolve(repoRoot, 'node_modules', '.bin', isWin ? 'tsc.cmd' : 'tsc');
+    const tscCmd  = existsSync(tscBin) ? tscBin : 'tsc';
+
+    const res = spawnSync(tscCmd, tscArgs, {
         cwd     : repoRoot,
         stdio   : ['ignore', 'pipe', 'pipe'],
         encoding: 'utf8',
-        shell   : true,
+        shell   : false,   // critical: spaces in repoRoot must not be split
     });
 
     if (res.status !== 0) {
-        // Show a brief tail of tsc output so the user can see what went wrong
-        // without losing the rest of the build. tsc still emits .d.ts files
-        // for the parts it could process, so we keep what's there.
         const out = (res.stdout || '') + (res.stderr || '');
         const tail = out.split('\n').slice(-15).join('\n');
         console.log('⚠  tsc reported issues during declaration emit (build continues):');
         console.log(tail.replace(/^/gm, '   '));
     }
 
-    // Count emitted .d.ts files
-    const emitted = listTsFiles(typesOut, []).length // listTsFiles only picks .ts (not .d.ts)
-        + readdirSync(typesOut, { recursive: true }).filter(f => typeof f === 'string' && f.endsWith('.d.ts')).length;
+    const emitted = readdirSync(typesOut, { recursive: true })
+        .filter(f => typeof f === 'string' && f.endsWith('.d.ts')).length;
     console.log(`✓ tsc     → types/dist/*.d.ts  (${emitted} files)`);
-
-    // Note: the hand-written types/arianna.d.ts and types/arianna-globals.d.ts
-    // are NOT copied here. They live permanently in types/ as the public API
-    // declaration surface for the package; release/dist/ is reserved for the
-    // JS bundles (+ .gz) and the AriannA.ts single-file aggregator.
 }
 
 // ── 5. Generate AriannA.ts single-file aggregator ────────────────────────────
-// Concatenates every source .ts file (sorted core → components → additionals)
-// into a single drop-in TypeScript bundle. Useful for:
-//   • Embedding the whole framework into a single <script type="module">
-//     when a bundler isn't available.
-//   • Producing a paste-into-Playground snapshot for reproductions.
-//   • Auditing the entire surface from one place.
-//
-// Each file is preceded by a header comment that records its original
-// repo-relative path, mirroring how esbuild's own output is annotated.
 function generateAriannATs() {
     if (skipSingle) return;
     console.log('');
@@ -351,7 +387,6 @@ function copyMetaFiles() {
             console.log('');
         }
 
-        // Type declarations + single-file aggregator only in non-watch mode.
         if (!watch) {
             generateDeclarations();
             generateAriannATs();

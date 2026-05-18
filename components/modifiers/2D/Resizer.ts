@@ -4,57 +4,61 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * 8-direction resize handles on any HTML element.
+ * Resizer — 8-direction (or custom subset) resize handles for any HTML target.
  *
- * Cross-anchor behavior
- * ---------------------
- * The dragged edge follows the pointer freely. When it crosses the
- * opposite (anchor) edge, the rectangle keeps resizing on the other
- * side: width keeps growing, the box appears past the anchor, and
- * the anchor edge stays nailed to its original position.
+ * Declarative usage as a custom element:
  *
- * Content is NOT mirrored. The DOM rect simply repositions and resizes.
- * If you need a visual mirror (Photoshop-style), add scaleX/scaleY
- * yourself in the onResize callback.
+ * @example HTML
+ *   <arianna-window>
+ *     <arianna-resizer handles="se,sw,ne,nw" min-width="120" min-height="80"></arianna-resizer>
+ *     <div>window content</div>
+ *   </arianna-window>
  *
- * Math (per axis where the handle moves)
- * --------------------------------------
+ *   <arianna-accordion>
+ *     <arianna-resizer handles="e,w" min-width="200"></arianna-resizer>
+ *     <!-- sections -->
+ *   </arianna-accordion>
+ *
+ * Cross-anchor math
+ * -----------------
+ * The dragged edge follows the pointer freely. When it crosses the opposite
+ * (anchor) edge, the rect keeps resizing on the other side: width keeps
+ * growing, the box appears past the anchor, anchor edge stays nailed in
+ * place. Set `allow-cross="false"` to clamp at min on the original side.
+ *
  *   anchor    = position of the edge that stays still (snapshot at mousedown)
  *   pointer   = position of the dragged edge (follows the cursor)
  *   width     = | pointer - anchor |
  *   leftOrTop = min(anchor, pointer)
  *
- * That's it. No flip state. No transform manipulation.
+ * Events:
+ *   - arianna:resize   detail: { width, height, target }
  *
- * If `allowCross: false` (default true), the dragged edge clamps at
- * the anchor minus minWidth/minHeight, so the rect cannot pass through.
+ * Attrs:
+ *   handles, min-width, min-height, max-width, max-height,
+ *   handle-size, handle-color, allow-cross, disabled
  */
 
-import { Modifier2D, type ModInput } from './Base.ts';
+import { Component } from '../../../core/Component.ts';
+import { Modifier2D } from './Base.ts';
+
+export type ResizeDir = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 export interface ResizerOptions {
-    minWidth?   : number;
-    minHeight?  : number;
-    maxWidth?   : number;
-    maxHeight?  : number;
-    handles?    : ('n'|'s'|'e'|'w'|'ne'|'nw'|'se'|'sw')[];
-    handleSize? : number;
-    handleColor?: string;
-    /**
-     * Allow the dragged edge to cross past the opposite edge. The rect
-     * keeps resizing on the other side. Default true.
-     * Set false to clamp at minWidth / minHeight on the original side.
-     */
-    allowCross? : boolean;
+    handles?     : ResizeDir[];
+    minWidth?    : number;
+    minHeight?   : number;
+    maxWidth?    : number;
+    maxHeight?   : number;
+    handleSize?  : number;
+    handleColor? : string;
+    allowCross?  : boolean;
 }
 
-export type ResizerCallback = (
-    el: HTMLElement, w: number, h: number,
-) => void;
-
-function _handlePos(dir: string, hs: number): string {
+function handleStyle(dir: ResizeDir, hs: number): string
+{
     const h = hs / 2;
-    const map: Record<string, string> = {
+    const map: Record<ResizeDir, string> = {
         n:  `top:-${h}px;left:50%;transform:translateX(-50%);cursor:n-resize;`,
         s:  `bottom:-${h}px;left:50%;transform:translateX(-50%);cursor:s-resize;`,
         e:  `right:-${h}px;top:50%;transform:translateY(-50%);cursor:e-resize;`,
@@ -67,51 +71,49 @@ function _handlePos(dir: string, hs: number): string {
     return map[dir] ?? '';
 }
 
-export class Resizer extends Modifier2D {
-    #opts     : Required<ResizerOptions>;
-    #callbacks: ResizerCallback[] = [];
+export class Resizer extends (Component('arianna-resizer', HTMLElement, {}, {
+    attrs : [
+        'handles', 'min-width', 'min-height', 'max-width', 'max-height',
+        'handle-size', 'handle-color', 'allow-cross', 'disabled',
+    ],
+    shadow: false,
+}) as typeof Modifier2D)
+{
+    protected applyTo(target: HTMLElement): void
+    {
+        if (getComputedStyle(target).position === 'static') target.style.position = 'relative';
 
-    constructor(input: ModInput, opts: ResizerOptions = {}) {
-        super(input);
-        const allowCross = opts.allowCross ?? true;
-        this.#opts = {
-            minWidth:    opts.minWidth    ?? (allowCross ? 0 : 40),
-            minHeight:   opts.minHeight   ?? (allowCross ? 0 : 40),
-            maxWidth:    opts.maxWidth    ?? 9999,
-            maxHeight:   opts.maxHeight   ?? 9999,
-            handles:     opts.handles     ?? ['n','s','e','w','ne','nw','se','sw'],
-            handleSize:  opts.handleSize  ?? 8,
-            handleColor: opts.handleColor ?? '#e40c88',
-            allowCross,
-        };
-    }
+        const handlesAttr = this.getAttribute('handles');
+        const handles: ResizeDir[] = handlesAttr
+            ? handlesAttr.split(',').map(s => s.trim() as ResizeDir).filter(s => /^(n|s|e|w|ne|nw|se|sw)$/.test(s))
+            : ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
-    onResize(cb: ResizerCallback): this { this.#callbacks.push(cb); return this; }
+        const hs        = parseInt(this.getAttribute('handle-size')  ?? '8', 10) || 8;
+        const hc        = this.getAttribute('handle-color')          ?? 'var(--arianna-primary, #1f6feb)';
+        const allowCross = this.getAttribute('allow-cross')          !== 'false';
+        const minW      = parseInt(this.getAttribute('min-width')    ?? (allowCross ? '0'    : '40'), 10) || (allowCross ? 0    : 40);
+        const minH      = parseInt(this.getAttribute('min-height')   ?? (allowCross ? '0'    : '40'), 10) || (allowCross ? 0    : 40);
+        const maxW      = parseInt(this.getAttribute('max-width')    ?? '9999', 10) || 9999;
+        const maxH      = parseInt(this.getAttribute('max-height')   ?? '9999', 10) || 9999;
 
-    protected _applyTo(el: HTMLElement): void {
-        if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
-
-        const { handleSize: hs, handleColor: hc, allowCross,
-                minWidth: minW, minHeight: minH,
-                maxWidth: maxW, maxHeight: maxH } = this.#opts;
-
-        for (const dir of this.#opts.handles) {
+        for (const dir of handles) {
             const handle = document.createElement('div');
             handle.dataset['resizeDir'] = dir;
+            handle.className = 'ar-resizer-handle';
             handle.style.cssText =
                 `position:absolute;width:${hs}px;height:${hs}px;background:${hc};` +
                 `border-radius:50%;z-index:9999;touch-action:none;` +
-                _handlePos(dir, hs);
-            el.appendChild(handle);
+                handleStyle(dir, hs);
+            target.appendChild(handle);
 
             let pointerId    = -1;
-            let startPx      = 0, startPy   = 0;
+            let startPx      = 0, startPy = 0;
             let anchorX      = 0, pointerStartX = 0;
             let anchorY      = 0, pointerStartY = 0;
             let movesX       = false, movesY = false;
 
             const onDown = (e: PointerEvent) => {
-                if (!this.enabled) return;
+                if (!this.isEnabled) return;
                 if (e.button !== 0) return;
                 e.preventDefault();
                 e.stopPropagation();
@@ -120,36 +122,28 @@ export class Resizer extends Modifier2D {
                 startPx   = e.clientX;
                 startPy   = e.clientY;
 
-                const w = el.offsetWidth;
-                const h = el.offsetHeight;
-                const l = el.offsetLeft;
-                const t = el.offsetTop;
+                const w = target.offsetWidth;
+                const h = target.offsetHeight;
+                const l = target.offsetLeft;
+                const t = target.offsetTop;
 
                 if (dir.includes('e')) {
-                    anchorX       = l;
-                    pointerStartX = l + w;
-                    movesX        = true;
+                    anchorX = l; pointerStartX = l + w; movesX = true;
                 } else if (dir.includes('w')) {
-                    anchorX       = l + w;
-                    pointerStartX = l;
-                    movesX        = true;
+                    anchorX = l + w; pointerStartX = l; movesX = true;
                 } else {
-                    movesX        = false;
+                    movesX = false;
                 }
 
                 if (dir.includes('s')) {
-                    anchorY       = t;
-                    pointerStartY = t + h;
-                    movesY        = true;
+                    anchorY = t; pointerStartY = t + h; movesY = true;
                 } else if (dir.includes('n')) {
-                    anchorY       = t + h;
-                    pointerStartY = t;
-                    movesY        = true;
+                    anchorY = t + h; pointerStartY = t; movesY = true;
                 } else {
-                    movesY        = false;
+                    movesY = false;
                 }
 
-                try { handle.setPointerCapture(pointerId); } catch {}
+                try { handle.setPointerCapture(pointerId); } catch { /* ignore */ }
                 handle.addEventListener('pointermove',   onMove);
                 handle.addEventListener('pointerup',     onUp);
                 handle.addEventListener('pointercancel', onUp);
@@ -160,70 +154,59 @@ export class Resizer extends Modifier2D {
                 const dx = ev.clientX - startPx;
                 const dy = ev.clientY - startPy;
 
-                let w  = el.offsetWidth;
-                let h  = el.offsetHeight;
-                let nl = el.offsetLeft;
-                let nt = el.offsetTop;
+                let w  = target.offsetWidth;
+                let h  = target.offsetHeight;
+                let nl = target.offsetLeft;
+                let nt = target.offsetTop;
 
                 if (movesX) {
                     let pointerX = pointerStartX + dx;
-
                     if (allowCross) {
-                        // Free movement, only clamp upper bound on either side
                         const signed = pointerX - anchorX;
                         if (Math.abs(signed) > maxW) {
                             pointerX = anchorX + (signed < 0 ? -maxW : maxW);
                         }
                     } else {
-                        // Clamp at min on the original side; cannot cross.
-                        const startSigned = pointerStartX - anchorX;
-                        const origSign    = startSigned > 0 ? 1 : -1;
-                        const signed      = pointerX - anchorX;
-                        if (origSign * signed < minW) {
-                            pointerX = anchorX + origSign * minW;
-                        } else if (Math.abs(signed) > maxW) {
-                            pointerX = anchorX + origSign * maxW;
-                        }
+                        const origSign = (pointerStartX - anchorX) > 0 ? 1 : -1;
+                        const signed   = pointerX - anchorX;
+                        if (origSign * signed < minW)       pointerX = anchorX + origSign * minW;
+                        else if (Math.abs(signed) > maxW)   pointerX = anchorX + origSign * maxW;
                     }
-
                     w  = Math.round(Math.abs(pointerX - anchorX));
                     nl = Math.round(Math.min(anchorX, pointerX));
                 }
 
                 if (movesY) {
                     let pointerY = pointerStartY + dy;
-
                     if (allowCross) {
                         const signed = pointerY - anchorY;
                         if (Math.abs(signed) > maxH) {
                             pointerY = anchorY + (signed < 0 ? -maxH : maxH);
                         }
                     } else {
-                        const startSigned = pointerStartY - anchorY;
-                        const origSign    = startSigned > 0 ? 1 : -1;
-                        const signed      = pointerY - anchorY;
-                        if (origSign * signed < minH) {
-                            pointerY = anchorY + origSign * minH;
-                        } else if (Math.abs(signed) > maxH) {
-                            pointerY = anchorY + origSign * maxH;
-                        }
+                        const origSign = (pointerStartY - anchorY) > 0 ? 1 : -1;
+                        const signed   = pointerY - anchorY;
+                        if (origSign * signed < minH)       pointerY = anchorY + origSign * minH;
+                        else if (Math.abs(signed) > maxH)   pointerY = anchorY + origSign * maxH;
                     }
-
                     h  = Math.round(Math.abs(pointerY - anchorY));
                     nt = Math.round(Math.min(anchorY, pointerY));
                 }
 
-                el.style.width  = `${w}px`;
-                el.style.height = `${h}px`;
-                el.style.left   = `${nl}px`;
-                el.style.top    = `${nt}px`;
+                target.style.width  = `${w}px`;
+                target.style.height = `${h}px`;
+                target.style.left   = `${nl}px`;
+                target.style.top    = `${nt}px`;
 
-                this.#callbacks.forEach(cb => cb(el, w, h));
+                target.dispatchEvent(new CustomEvent('arianna:resize', {
+                    bubbles: true,
+                    detail : { width: w, height: h, target },
+                }));
             };
 
             const onUp = (ev: PointerEvent) => {
                 if (ev.pointerId !== pointerId) return;
-                try { handle.releasePointerCapture(pointerId); } catch {}
+                try { handle.releasePointerCapture(pointerId); } catch { /* ignore */ }
                 handle.removeEventListener('pointermove',   onMove);
                 handle.removeEventListener('pointerup',     onUp);
                 handle.removeEventListener('pointercancel', onUp);
@@ -237,6 +220,12 @@ export class Resizer extends Modifier2D {
             });
         }
     }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Resizer', {
+        value: Resizer, writable: false, enumerable: false, configurable: false,
+    });
 }
 
 export default Resizer;

@@ -1,37 +1,219 @@
 /**
+ * @module    components/layout/Tabs
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Tabs / Tab — tabbed navigation. Two co-located custom elements:
+ *
+ *   • `arianna-tabs`  — parent, owns the active index, renders header strip
+ *                       (tab triggers projected via `slot="header"`) and body
+ *                       region (panel projected via default slot).
+ *   • `arianna-tab`   — child trigger; registers with the nearest
+ *                       `arianna-tabs` ancestor via `def.bus`.
+ *
+ * The parent listens for child clicks and updates its `active` attribute.
+ * Children read the parent's active state to highlight themselves.
+ *
+ * @example JS
+ *   const tabs = new Tabs();
+ *   tabs.active = 0;
+ *   document.body.append(tabs);
+ *   // header
+ *   for (const label of ['One', 'Two', 'Three']) {
+ *     const t = new Tab(); t.label = label; t.slot = 'header'; tabs.append(t);
+ *   }
+ *   // body
+ *   const body = document.createElement('div'); body.textContent = 'Active body';
+ *   tabs.append(body);
+ *
+ * @example HTML
+ *   <arianna-tabs active="0">
+ *     <arianna-tab slot="header" label="Overview"></arianna-tab>
+ *     <arianna-tab slot="header" label="Detail"></arianna-tab>
+ *     <arianna-tab slot="header" label="Logs" disabled></arianna-tab>
+ *     <section>Body for the currently-active tab</section>
+ *   </arianna-tabs>
+ *
+ * Events:
+ *   - arianna:tab-select   (child) detail: { source }
+ *   - arianna:change       (parent) detail: { active, source }
+ *
+ * Slots:  header (tab triggers), default (panel body)
+ * Attrs:  Tab    → label, disabled, active
+ *         Tabs   → active
  */
 
-import { Control } from '../core/Control.ts';
-export interface TabItem { id: string; label: string; content: string|HTMLElement; icon?: string; disabled?: boolean; badge?: string|number; }
-export interface TabsOptions { variant?: 'line'|'pill'|'contained'; class?: string; }
-export class Tabs extends Control<TabsOptions> {
-  private _items: TabItem[] = [];
-  private _active = '';
-  constructor(container: string | HTMLElement | null = null, opts: TabsOptions = {}) {
-    super(container, 'div', { variant: 'line', ...opts });
-    this.el.className = `ar-tabs ar-tabs--${opts.variant??'line'}${opts.class?' '+opts.class:''}`;
-  }
-  set items(v: TabItem[]) { this._items = v; if (!this._active && v.length) this._active = v[0].id; this._set('items' as never, v as never); }
-  set active(id: string)  { this._active = id; this._build(); }
-  get active()            { return this._active; }
-  protected _build() {
-    this.el.innerHTML = '';
-    const nav  = this._el('div', 'ar-tabs__nav',  this.el);
-    const body = this._el('div', 'ar-tabs__body', this.el);
-    this._items.forEach(item => {
-      const btn = this._el('button', `ar-tabs__tab${item.id===this._active?' ar-tabs__tab--active':''}${item.disabled?' ar-tabs__tab--disabled':''}`, nav) as HTMLButtonElement;
-      btn.disabled = !!item.disabled;
-      if (item.icon) { const ic = this._el('span', 'ar-tabs__icon', btn); ic.textContent = item.icon; }
-      const l = this._el('span', '', btn); l.textContent = item.label;
-      if (item.badge !== undefined) { const b = this._el('span', 'ar-tabs__badge', btn); b.textContent = String(item.badge); }
-      btn.addEventListener('click', () => { if (!item.disabled) { this._active = item.id; this._emit('change', { id: item.id }); this._build(); } });
-      if (item.id === this._active) {
-        const pane = this._el('div', 'ar-tabs__pane', body);
-        if (typeof item.content === 'string') pane.innerHTML = item.content; else pane.appendChild(item.content);
-      }
-    });
-  }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
+
+export interface TabsOptions { active?: number; }
+export interface TabOptions  { label?: string; disabled?: boolean; active?: boolean; }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Tab (child, registers into parent's children bus)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class Tab extends Component('arianna-tab', HTMLElement, {}, {
+    attrs : ['label', 'disabled', 'active'],
+    shadow: false,
+    bus   : 'arianna-tabs',
+})
+{
+    build(_opts: TabOptions = {})
+    {
+        const label = this.attrSignal('label');
+
+        this.labelText = () => label.get() ?? '';
+        this.hasLabel  = () => !!label.get();
+        this.onClick   = () => {
+            if (this.hasAttribute('disabled')) return;
+            this.dispatchEvent(new CustomEvent('arianna:tab-select', {
+                bubbles: true, detail: { source: this },
+            }));
+        };
+
+        this.template = html`
+            <span a-if="this.hasLabel()" @click="this.onClick">{{ this.labelText() }}</span>
+            <span a-if="!this.hasLabel()" @click="this.onClick"><slot></slot></span>
+        `;
+
+        this.Sheet = Tab.DefaultSheet();
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get label(): string  { return this.getAttribute('label') ?? ''; }
+    set label(v: string) { v ? this.setAttribute('label', v) : this.removeAttribute('label'); }
+
+    get disabled(): boolean  { return this.hasAttribute('disabled'); }
+    set disabled(v: boolean) { v ? this.setAttribute('disabled', '') : this.removeAttribute('disabled'); }
+
+    get active(): boolean  { return this.hasAttribute('active'); }
+    set active(v: boolean) { v ? this.setAttribute('active', '') : this.removeAttribute('active'); }
+
+    private labelText: () => string  = () => '';
+    private hasLabel : () => boolean = () => false;
+    private onClick  : () => void    = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    cursor      : 'pointer',
+                    display     : 'inline-block',
+                    padding     : '8px 14px',
+                    borderBottom: '2px solid transparent',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    transition  : 'all 0.15s ease',
+                    userSelect  : 'none',
+                    fontSize    : '0.85rem',
+                }),
+                new Rule(':root:hover', { color: 'var(--arianna-primary, #1f6feb)' }),
+                new Rule(':root[active]', {
+                    borderBottomColor: 'var(--arianna-primary, #1f6feb)',
+                    color            : 'var(--arianna-primary, #1f6feb)',
+                    fontWeight       : '600',
+                }),
+                new Rule(':root[disabled]', { cursor: 'not-allowed', opacity: '0.45' }),
+            ]
+        );
+    }
 }
-export const TabsCSS = `.ar-tabs{display:flex;flex-direction:column}.ar-tabs__nav{display:flex;border-bottom:1px solid var(--ar-border);overflow-x:auto}.ar-tabs__tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--ar-muted);cursor:pointer;display:flex;align-items:center;gap:6px;font:inherit;font-size:.82rem;margin-bottom:-1px;padding:8px 16px;transition:color var(--ar-transition),border-color var(--ar-transition);white-space:nowrap;flex-shrink:0}.ar-tabs__tab:hover:not(:disabled){color:var(--ar-text)}.ar-tabs__tab--active{border-bottom-color:var(--ar-primary);color:var(--ar-primary)}.ar-tabs__tab--disabled{opacity:.4;cursor:not-allowed}.ar-tabs--pill .ar-tabs__nav{border-bottom:none;gap:4px;padding:4px}.ar-tabs--pill .ar-tabs__tab{border:1px solid transparent;border-bottom-width:1px;border-radius:var(--ar-radius);margin-bottom:0}.ar-tabs--pill .ar-tabs__tab--active{background:var(--ar-primary);border-color:var(--ar-primary);color:var(--ar-primary-text)}.ar-tabs__badge{background:var(--ar-warning);border-radius:8px;color:#000;font-size:.65rem;min-width:16px;padding:1px 4px;text-align:center}.ar-tabs__body{flex:1;padding:12px 0}.ar-tabs__pane{animation:ar-fadein .18s ease}@keyframes ar-fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Tabs (parent, owns the active index)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class Tabs extends Component('arianna-tabs', HTMLElement, {}, {
+    attrs : ['active'],
+    shadow: false,
+})
+{
+    build(_opts: TabsOptions = {})
+    {
+        // Listen for child triggers (event bubbles up from arianna-tab clicks)
+        this.addEventListener('arianna:tab-select', (e: Event) => {
+            const ev = e as CustomEvent<{ source: Tab }>;
+            const source = ev.detail?.source;
+            if (!source) return;
+            const triggers = Array.from(this.querySelectorAll('arianna-tab'));
+            const idx = triggers.indexOf(source);
+            if (idx >= 0) {
+                this.setAttribute('active', String(idx));
+                this.#syncChildren();
+                this.dispatchEvent(new CustomEvent('arianna:change', {
+                    bubbles: true, detail: { active: idx, source: this },
+                }));
+            }
+        });
+
+        this.template = html`
+            <header class="ar-tabs__header"><slot name="header"></slot></header>
+            <section class="ar-tabs__body"><slot></slot></section>
+        `;
+
+        // Initial sync (deferred so children mount first)
+        setTimeout(() => this.#syncChildren(), 0);
+
+        this.Sheet = Tabs.DefaultSheet();
+    }
+
+    /** Propagate the parent's `active` index down to children's `[active]` attr. */
+    #syncChildren(): void
+    {
+        const i = parseInt(this.getAttribute('active') ?? '0', 10) || 0;
+        const triggers = Array.from(this.querySelectorAll('arianna-tab'));
+        triggers.forEach((t, idx) => {
+            if (idx === i) t.setAttribute('active', '');
+            else           t.removeAttribute('active');
+        });
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount() {
+        // Re-sync after mount in case children attached during build
+        this.#syncChildren();
+    }
+    onBeforeUpdate()  {}
+    onUpdate() {
+        this.#syncChildren();
+    }
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get active(): number  { return parseInt(this.getAttribute('active') ?? '0', 10); }
+    set active(v: number) { this.setAttribute('active', String(v)); this.#syncChildren(); }
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', { display: 'block' }),
+                new Rule('.ar-tabs__header', {
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    display     : 'flex',
+                    gap         : '4px',
+                }),
+                new Rule('.ar-tabs__body', { padding: '12px 0' }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Tab',  { value: Tab,  writable: false, enumerable: false, configurable: false });
+    Object.defineProperty(window, 'Tabs', { value: Tabs, writable: false, enumerable: false, configurable: false });
+}
+
+export default Tabs;

@@ -4,57 +4,119 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Flip / mirror buttons with animated CSS transform.
+ * Reflector — H / V flip buttons next to the target. Modifies
+ * `target.style.transform` with a `scale(±1, ±1)` factor.
+ *
+ * @example HTML
+ *   <div class="canvas-image">
+ *     <arianna-reflector axis="both"></arianna-reflector>
+ *     <img src="...">
+ *   </div>
+ *
+ * Events:
+ *   - arianna:reflect   detail: { x, y, target }   (x/y: boolean current state)
+ *
+ * Attrs:
+ *   axis          'x' | 'y' | 'both' (default 'x')
+ *   handle-color  default var(--arianna-primary)
+ *   animate       'true' | 'false' — apply 0.2s CSS transition (default true)
+ *   disabled
  */
 
-import { Modifier2D, type ModInput } from './Base.ts';
+import { Component } from '../../../core/Component.ts';
+import { Modifier2D } from './Base.ts';
 
 export interface ReflectorOptions {
-    axis?       : 'x' | 'y' | 'both';
-    handleColor?: string;
-    animate?    : boolean;
+    axis?        : 'x' | 'y' | 'both';
+    handleColor? : string;
+    animate?     : boolean;
 }
 
-export class Reflector extends Modifier2D {
-    #opts  : Required<ReflectorOptions>;
-    #state : Map<HTMLElement, { x: boolean; y: boolean }> = new Map();
+export class Reflector extends (Component('arianna-reflector', HTMLElement, {}, {
+    attrs : ['axis', 'handle-color', 'animate', 'disabled'],
+    shadow: false,
+}) as typeof Modifier2D)
+{
+    #state = { x: false, y: false };
 
-    constructor(input: ModInput, opts: ReflectorOptions = {}) {
-        super(input);
-        this.#opts = { axis: 'x', handleColor: '#e40c88', animate: true, ...opts };
-    }
+    protected applyTo(target: HTMLElement): void
+    {
+        if (getComputedStyle(target).position === 'static') target.style.position = 'relative';
 
-    protected _applyTo(el: HTMLElement): void {
-        if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
-        this.#state.set(el, { x: false, y: false });
-        if (this.#opts.animate) el.style.transition = 'transform 0.2s ease';
+        const axis    = (this.getAttribute('axis') ?? 'x') as 'x' | 'y' | 'both';
+        const hc      = this.getAttribute('handle-color') ?? 'var(--arianna-primary, #1f6feb)';
+        const animate = this.getAttribute('animate') !== 'false';
 
-        if (this.#opts.axis === 'x' || this.#opts.axis === 'both') {
-            const hx = this.#makeBtn(el, 'H', 'right:-28px;top:50%;transform:translateY(-50%);');
-            hx.addEventListener('click', () => { const s = this.#state.get(el)!; s.x = !s.x; this.#applyTransform(el); });
-            this.cleanups.push(() => hx.remove());
+        if (animate) target.style.transition = 'transform 0.2s ease';
+
+        const makeBtn = (label: string, pos: string): HTMLButtonElement => {
+            const b = document.createElement('button');
+            b.textContent = label;
+            b.className = 'ar-reflector-btn';
+            b.style.cssText =
+                `position:absolute;${pos}background:${hc};color:#fff;border:none;` +
+                `border-radius:4px;width:22px;height:22px;cursor:pointer;` +
+                `font-size:10px;font-weight:700;z-index:9999;`;
+            target.appendChild(b);
+            return b;
+        };
+
+        if (axis === 'x' || axis === 'both') {
+            const hx = makeBtn('H', 'right:-28px;top:50%;transform:translateY(-50%);');
+            const onClickX = () => {
+                if (!this.isEnabled) return;
+                this.#state.x = !this.#state.x;
+                this.#apply(target);
+            };
+            hx.addEventListener('click', onClickX);
+            this.cleanups.push(() => { hx.removeEventListener('click', onClickX); hx.remove(); });
         }
-        if (this.#opts.axis === 'y' || this.#opts.axis === 'both') {
-            const hy = this.#makeBtn(el, 'V', 'top:-28px;left:50%;transform:translateX(-50%);');
-            hy.addEventListener('click', () => { const s = this.#state.get(el)!; s.y = !s.y; this.#applyTransform(el); });
-            this.cleanups.push(() => hy.remove());
+        if (axis === 'y' || axis === 'both') {
+            const hy = makeBtn('V', 'top:-28px;left:50%;transform:translateX(-50%);');
+            const onClickY = () => {
+                if (!this.isEnabled) return;
+                this.#state.y = !this.#state.y;
+                this.#apply(target);
+            };
+            hy.addEventListener('click', onClickY);
+            this.cleanups.push(() => { hy.removeEventListener('click', onClickY); hy.remove(); });
         }
     }
 
-    #makeBtn(el: HTMLElement, label: string, pos: string): HTMLElement {
-        const h       = document.createElement('button');
-        h.textContent = label;
-        h.style.cssText = `position:absolute;${pos}background:${this.#opts.handleColor};color:#fff;border:none;border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:10px;font-weight:700;z-index:9999;`;
-        el.appendChild(h);
-        return h;
+    #apply(target: HTMLElement): void
+    {
+        target.style.transform = `scale(${this.#state.x ? -1 : 1},${this.#state.y ? -1 : 1})`;
+        target.dispatchEvent(new CustomEvent('arianna:reflect', {
+            bubbles: true,
+            detail : { x: this.#state.x, y: this.#state.y, target },
+        }));
     }
 
-    #applyTransform(el: HTMLElement): void {
-        const s  = this.#state.get(el) ?? { x: false, y: false };
-        el.style.transform = `scale(${s.x ? -1 : 1},${s.y ? -1 : 1})`;
+    /** Programmatic flip on X axis. */
+    flipX(): this { if (this.target) { this.#state.x = !this.#state.x; this.#apply(this.target); } return this; }
+    /** Programmatic flip on Y axis. */
+    flipY(): this { if (this.target) { this.#state.y = !this.#state.y; this.#apply(this.target); } return this; }
+    /** Reset to identity. */
+    reset(): this {
+        this.#state = { x: false, y: false };
+        if (this.target) {
+            this.target.style.transform = '';
+            this.target.dispatchEvent(new CustomEvent('arianna:reflect', {
+                bubbles: true,
+                detail : { x: false, y: false, target: this.target },
+            }));
+        }
+        return this;
     }
 
-    flipX(el: HTMLElement): this { const s = this.#state.get(el); if (s) { s.x = !s.x; this.#applyTransform(el); } return this; }
-    flipY(el: HTMLElement): this { const s = this.#state.get(el); if (s) { s.y = !s.y; this.#applyTransform(el); } return this; }
-    reset(el: HTMLElement): this { this.#state.set(el, { x: false, y: false }); el.style.transform = ''; return this; }
+    /** Current flip state. */
+    getState(): { x: boolean; y: boolean } { return { ...this.#state }; }
 }
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Reflector', {
+        value: Reflector, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default Reflector;

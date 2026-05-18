@@ -1,568 +1,447 @@
-// components/layout/Window.ts
-//
-// Window — desktop-style window chrome with draggable title bar, resize
-// handle, minimize / maximize / close controls, optional menu bar, and a
-// dedicated body slot for arbitrary content. Two visual styles match the
-// Dock component:
-//   • 'macos'   — traffic-light buttons (red / yellow / green) on the left,
-//                 centered title, subtle shadow, rounded 10px corners.
-//   • 'windows' — minimize / maximize / close on the right, square corners,
-//                 thin top accent bar.
-//
-// Public API:
-//   • new Window(container, opts)
-//   • setTitle(t), setBody(node|html), setMenu(items), setStyle(s)
-//   • minimize(), maximize(), restore(), close()
-//   • moveTo(x, y), resizeTo(w, h), focus()
-//   • on('close'|'minimize'|'maximize'|'restore'|'focus'|'move'|'resize'|'menu', cb)
+/**
+ * @module    components/layout/Window
+ * @author    Riccardo Angeli
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Window — desktop-style window chrome. Title bar (draggable), optional menu
+ * bar, traffic-light or min/max/close controls, body slot, and 8-direction
+ * resize. Two visual styles match the Dock:
+ *   • 'macos'   — traffic-light buttons (red/yellow/green) on the left,
+ *                 centered title, subtle shadow, rounded 10px corners.
+ *   • 'windows' — minimize / maximize / close on the right, square corners,
+ *                 thin top accent bar.
+ *
+ * Drag & resize are delegated to the modifier custom elements:
+ *   • <arianna-mover handle-selector=".ar-window__titlebar">
+ *   • <arianna-resizer handles="n,s,e,w,ne,nw,se,sw">
+ *
+ * @example JS
+ *   const w = new Window();
+ *   w.title  = 'My App';
+ *   w.style  = 'macos';
+ *   w.x = 100; w.y = 100; w.width = 480; w.height = 320;
+ *   const body = document.createElement('div');
+ *   body.innerHTML = '<p>Hello</p>';
+ *   body.slot = 'body';
+ *   w.append(body);
+ *   document.body.append(w);
+ *
+ * @example HTML
+ *   <arianna-window style="macos" title="My App" x="100" y="100" width="480" height="320">
+ *     <ul slot="menu" data-id="file" data-label="File"></ul>
+ *     <div slot="body">Window content</div>
+ *   </arianna-window>
+ *
+ * Events:
+ *   - arianna:close
+ *   - arianna:minimize
+ *   - arianna:maximize
+ *   - arianna:restore
+ *   - arianna:focus
+ *   - arianna:move      (bubbles from arianna-mover)
+ *   - arianna:resize    (bubbles from arianna-resizer)
+ *
+ * Slots: titlebar (overrides default title), menu, body
+ *
+ * Attrs:
+ *   style ('macos'|'windows'), title, x, y, width, height,
+ *   min-width, min-height, resizable, chrome, focused, maximized, minimized
+ */
 
-import { Control } from '../core/Control';
-
-// Local typed view of Control — keeps this file independent of Control's
-// own TS typings (which vary across the project tree).
-type ControlBase = Control & {
-    el        : HTMLElement;
-    _get<T = unknown>(key: string, fallback?: T): T;
-    _emit(type: string, detail?: unknown, ev?: Event): void;
-    _build(): void;
-};
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
 export type WindowStyle = 'macos' | 'windows';
 
 export interface WindowMenuItem {
-    id      : string;
-    label   : string;
-    /** Submenu items (one level deep). */
-    items?  : Array<{ id: string; label: string; shortcut?: string; disabled?: boolean }>;
+    id    : string;
+    label : string;
+    items?: Array<{ id: string; label: string; shortcut?: string; disabled?: boolean }>;
 }
 
 export interface WindowOptions {
     style?     : WindowStyle;
     title?     : string;
-    /** HTML string OR a DOM node to mount inside the body. */
-    body?      : string | HTMLElement;
-    /** Menu bar items (macOS-style top menu, or Windows in-window menu). */
-    menu?      : WindowMenuItem[];
-    /** Initial position in container coords. Defaults to centered. */
     x?         : number;
     y?         : number;
-    /** Initial size. */
     width?     : number;
     height?    : number;
     minWidth?  : number;
     minHeight? : number;
-    /** Show the resize handle. Default true. */
     resizable? : boolean;
-    /** Show min/max/close buttons. Default true. */
     chrome?    : boolean;
-    /** Bring focus when created. Default true. */
     focused?   : boolean;
-    /** Extra CSS class. */
-    class?     : string;
 }
 
-// Track the highest z-index across all Window instances so a focused window
-// always sits on top of its peers. Reasonable starting value.
+// Global z-index counter so a focused window always sits on top of its peers.
 let WIN_Z = 100;
 
-export class Window extends Control {
-    private _style    : WindowStyle;
-    private _title    : string;
-    private _menu     : WindowMenuItem[] = [];
-    private _w        : number;
-    private _h        : number;
-    private _x        : number;
-    private _y        : number;
-    private _minW     : number;
-    private _minH     : number;
-    private _maximized: boolean = false;
-    private _minimized: boolean = false;
-    private _prevRect : { x: number; y: number; w: number; h: number } | null = null;
-    private _elTitle! : HTMLElement;
-    private _elBody!  : HTMLElement;
-    private _elMenu?  : HTMLElement;
+export class Window extends Component('arianna-window', HTMLElement, {}, {
+    attrs : [
+        'variant', 'title', 'x', 'y', 'width', 'height',
+        'min-width', 'min-height', 'resizable', 'chrome',
+        'focused', 'maximized', 'minimized',
+    ],
+    shadow: false,
+})
+{
+    #prevRect: { x: number; y: number; w: number; h: number } | null = null;
 
-    constructor(container: HTMLElement | string, opts: WindowOptions = {}) {
-        super(container as HTMLElement, 'div', {
-            style    : 'macos',
-            title    : 'Untitled',
-            width    : 480,
-            height   : 320,
-            minWidth : 200,
-            minHeight: 120,
-            resizable: true,
-            chrome   : true,
-            focused  : true,
-            ...opts,
+    build(_opts: WindowOptions = {})
+    {
+        // Default positioning + sizing on first build if not specified
+        if (!this.hasAttribute('width'))  this.setAttribute('width',  '480');
+        if (!this.hasAttribute('height')) this.setAttribute('height', '320');
+        if (!this.hasAttribute('style'))  this.setAttribute('style',  'macos');
+
+        const titleSig = this.attrSignal('title');
+        const styleAttr = this.attrSignal('variant');
+
+        const applyGeometry = () => {
+            const x = parseInt(this.getAttribute('x') ?? '', 10);
+            const y = parseInt(this.getAttribute('y') ?? '', 10);
+            const w = parseInt(this.getAttribute('width')  ?? '480', 10) || 480;
+            const h = parseInt(this.getAttribute('height') ?? '320', 10) || 320;
+            this.style.position = 'absolute';
+            if (!isNaN(x)) this.style.left = x + 'px';
+            if (!isNaN(y)) this.style.top  = y + 'px';
+            this.style.width  = w + 'px';
+            this.style.height = h + 'px';
+        };
+        applyGeometry();
+        this.addEventListener('arianna:attr-x',      applyGeometry);
+        this.addEventListener('arianna:attr-y',      applyGeometry);
+        this.addEventListener('arianna:attr-width',  applyGeometry);
+        this.addEventListener('arianna:attr-height', applyGeometry);
+
+        // Update internal state on resize/move modifier events; sync attrs back
+        this.addEventListener('arianna:resize', (e: Event) => {
+            const ev = e as CustomEvent<{ width: number; height: number }>;
+            const d = ev.detail;
+            if (d?.width)  this.setAttribute('width',  String(d.width));
+            if (d?.height) this.setAttribute('height', String(d.height));
         });
-        const self = this as unknown as ControlBase;
-        this._style = self._get<WindowStyle>('style', 'macos');
-        this._title = self._get<string>('title', 'Untitled');
-        this._menu  = (opts.menu ?? []).map(m => ({ ...m, items: m.items ? [...m.items] : undefined }));
-        this._w     = self._get<number>('width', 480);
-        this._h     = self._get<number>('height', 320);
-        this._minW  = self._get<number>('minWidth', 200);
-        this._minH  = self._get<number>('minHeight', 120);
-        this._x     = opts.x ?? -1;
-        this._y     = opts.y ?? -1;
-        this._injectStyles();
-        this._build();
-        // Apply size + position after _build so the DOM exists.
-        this._applyRect();
-        if (opts.body) this.setBody(opts.body);
-        if (self._get<boolean>('focused', true)) this.focus();
+        this.addEventListener('arianna:move', (e: Event) => {
+            const ev = e as CustomEvent<{ x: number; y: number }>;
+            const d = ev.detail;
+            if (typeof d?.x === 'number') this.setAttribute('x', String(d.x));
+            if (typeof d?.y === 'number') this.setAttribute('y', String(d.y));
+        });
+
+        // Click-to-focus
+        const onFocus = () => this.focus_();
+        this.addEventListener('pointerdown', onFocus, true);
+
+        this.titleText = () => titleSig.get() ?? '';
+        this.dockStyle = () => (styleAttr.get() ?? 'macos') as WindowStyle;
+        this.isMacOS   = () => this.dockStyle() === 'macos';
+        this.isWindows = () => this.dockStyle() === 'windows';
+        this.hasChrome = () => this.getAttribute('chrome') !== 'false';
+        this.isResizable = () => this.getAttribute('resizable') !== 'false';
+
+        this.minW = () => parseInt(this.getAttribute('min-width')  ?? '200', 10) || 200;
+        this.minH = () => parseInt(this.getAttribute('min-height') ?? '120', 10) || 120;
+
+        this.onCloseClick = () => {
+            this.dispatchEvent(new CustomEvent('arianna:close', { bubbles: true, detail: {} }));
+        };
+        this.onMinClick = () => this.minimize();
+        this.onMaxClick = () => this.hasAttribute('maximized') ? this.restore() : this.maximize();
+
+        this.template = html`
+            <div class="ar-window__titlebar">
+                <!-- macOS traffic lights left -->
+                <div class="ar-window__traffic" a-if="this.isMacOS() && this.hasChrome()">
+                    <button class="ar-window__btn ar-window__btn--close"    @click="this.onCloseClick" aria-label="Close"></button>
+                    <button class="ar-window__btn ar-window__btn--minimize" @click="this.onMinClick"   aria-label="Minimize"></button>
+                    <button class="ar-window__btn ar-window__btn--maximize" @click="this.onMaxClick"   aria-label="Maximize"></button>
+                </div>
+
+                <span class="ar-window__title"><slot name="title">{{ this.titleText() }}</slot></span>
+
+                <!-- Windows-style chrome right -->
+                <div class="ar-window__chrome" a-if="this.isWindows() && this.hasChrome()">
+                    <button class="ar-window__chrome-btn" @click="this.onMinClick"   aria-label="Minimize">─</button>
+                    <button class="ar-window__chrome-btn" @click="this.onMaxClick"   aria-label="Maximize">▢</button>
+                    <button class="ar-window__chrome-btn ar-window__chrome-btn--close"
+                            @click="this.onCloseClick" aria-label="Close">✕</button>
+                </div>
+            </div>
+
+            <div class="ar-window__menu"><slot name="menu"></slot></div>
+
+            <div class="ar-window__body">
+                <slot name="body"></slot>
+                <slot></slot>
+            </div>
+
+            <!-- Modifiers: drag the titlebar; resize from any edge / corner -->
+            <arianna-mover handle-selector=".ar-window__titlebar" bounds="none"></arianna-mover>
+            <arianna-resizer a-if="this.isResizable()"
+                             handles="n,s,e,w,ne,nw,se,sw"
+                             :min-width="String(this.minW())"
+                             :min-height="String(this.minH())"
+                             allow-cross="false"></arianna-resizer>
+        `;
+
+        this.Sheet = Window.DefaultSheet();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
-    setTitle(t: string): this {
-        this._title = t;
-        if (this._elTitle) this._elTitle.textContent = t;
-        return this;
-    }
-    setBody(content: string | HTMLElement): this {
-        if (!this._elBody) return this;
-        this._elBody.innerHTML = '';
-        if (typeof content === 'string') this._elBody.innerHTML = content;
-        else this._elBody.appendChild(content);
-        return this;
-    }
-    setMenu(items: WindowMenuItem[]): this {
-        this._menu = items.map(m => ({ ...m, items: m.items ? [...m.items] : undefined }));
-        this._renderMenu();
-        return this;
-    }
-    setStyle(s: WindowStyle): this { this._style = s; this._build(); this._applyRect(); return this; }
-    getStyle(): WindowStyle { return this._style; }
-    moveTo(x: number, y: number): this {
-        this._x = x; this._y = y; this._applyRect();
-        (this as unknown as ControlBase)._emit('move', { x, y });
-        return this;
-    }
-    resizeTo(w: number, h: number): this {
-        this._w = Math.max(this._minW, w);
-        this._h = Math.max(this._minH, h);
-        this._applyRect();
-        (this as unknown as ControlBase)._emit('resize', { w: this._w, h: this._h });
-        return this;
-    }
-    focus(): this {
-        WIN_Z += 1;
-        (this as unknown as ControlBase).el.style.zIndex = String(WIN_Z);
-        (this as unknown as ControlBase).el.classList.add('ar-window--focused');
-        // Defocus siblings — every other ar-window in the same parent.
-        const self = this as unknown as ControlBase;
-        const parent = self.el.parentElement;
-        if (parent) {
-            parent.querySelectorAll('.ar-window--focused').forEach((w) => {
-                if (w !== self.el) w.classList.remove('ar-window--focused');
-            });
-        }
-        (this as unknown as ControlBase)._emit('focus', {});
-        return this;
-    }
+    // ── Public API ───────────────────────────────────────────────────────────
+
     minimize(): this {
-        if (this._minimized) return this;
-        this._minimized = true;
-        (this as unknown as ControlBase).el.classList.add('ar-window--minimized');
-        (this as unknown as ControlBase)._emit('minimize', {});
+        this.setAttribute('minimized', '');
+        this.style.display = 'none';
+        this.dispatchEvent(new CustomEvent('arianna:minimize', { bubbles: true, detail: {} }));
         return this;
     }
+
     maximize(): this {
-        if (this._maximized) return this;
-        this._prevRect = { x: this._x, y: this._y, w: this._w, h: this._h };
-        this._maximized = true;
-        const self = this as unknown as ControlBase;
-        self.el.classList.add('ar-window--maximized');
-        const parent = self.el.parentElement;
-        if (parent) {
-            const r = parent.getBoundingClientRect();
-            this._x = 0; this._y = 0;
-            this._w = r.width; this._h = r.height;
-            this._applyRect();
-        }
-        (this as unknown as ControlBase)._emit('maximize', {});
+        if (this.hasAttribute('maximized')) return this;
+        // Save current geometry to restore later
+        this.#prevRect = {
+            x: this.offsetLeft, y: this.offsetTop,
+            w: this.offsetWidth, h: this.offsetHeight,
+        };
+        this.setAttribute('maximized', '');
+        this.style.left = '0';
+        this.style.top  = '0';
+        this.style.width  = '100%';
+        this.style.height = '100%';
+        this.dispatchEvent(new CustomEvent('arianna:maximize', { bubbles: true, detail: {} }));
         return this;
     }
+
     restore(): this {
-        const self = this as unknown as ControlBase;
-        self.el.classList.remove('ar-window--minimized', 'ar-window--maximized');
-        this._minimized = false;
-        this._maximized = false;
-        if (this._prevRect) {
-            ({ x: this._x, y: this._y, w: this._w, h: this._h } = this._prevRect);
-            this._prevRect = null;
-            this._applyRect();
+        if (this.hasAttribute('minimized')) {
+            this.removeAttribute('minimized');
+            this.style.display = '';
+            this.dispatchEvent(new CustomEvent('arianna:restore', { bubbles: true, detail: {} }));
+            return this;
         }
-        (this as unknown as ControlBase)._emit('restore', {});
+        if (this.hasAttribute('maximized') && this.#prevRect) {
+            this.removeAttribute('maximized');
+            this.setAttribute('x',      String(this.#prevRect.x));
+            this.setAttribute('y',      String(this.#prevRect.y));
+            this.setAttribute('width',  String(this.#prevRect.w));
+            this.setAttribute('height', String(this.#prevRect.h));
+            this.#prevRect = null;
+            this.dispatchEvent(new CustomEvent('arianna:restore', { bubbles: true, detail: {} }));
+        }
         return this;
     }
-    close(): this {
-        (this as unknown as ControlBase)._emit('close', {});
-        const self = this as unknown as ControlBase;
-        self.el.parentElement?.removeChild(self.el);
+
+    /**
+     * Bring this window to the top of its z-stack and fire 'arianna:focus'.
+     * Named `focus_` internally to avoid clobbering HTMLElement.focus().
+     */
+    focus_(): this {
+        WIN_Z += 1;
+        this.style.zIndex = String(WIN_Z);
+        this.setAttribute('focused', '');
+        this.dispatchEvent(new CustomEvent('arianna:focus', { bubbles: true, detail: {} }));
         return this;
     }
 
-    // ── Build ──────────────────────────────────────────────────────────────
-    _build(): void {
-        const self = this as unknown as ControlBase;
-        const showChrome = self._get<boolean>('chrome', true);
-        const resizable  = self._get<boolean>('resizable', true);
-        const cls        = self._get<string>('class', '');
-        self.el.className = `ar-window ar-window--${this._style}${cls ? ' ' + cls : ''}`;
-        self.el.tabIndex = 0;
-
-        const trafficLights = this._style === 'macos'
-            ? `<div class="ar-window__lights">
-                 <button class="ar-window__light ar-window__light--close"    data-r="close"    aria-label="Close"></button>
-                 <button class="ar-window__light ar-window__light--minimize" data-r="minimize" aria-label="Minimize"></button>
-                 <button class="ar-window__light ar-window__light--maximize" data-r="maximize" aria-label="Maximize"></button>
-               </div>`
-            : '';
-        const winButtons = this._style === 'windows'
-            ? `<div class="ar-window__btns">
-                 <button class="ar-window__btn" data-r="minimize" aria-label="Minimize">−</button>
-                 <button class="ar-window__btn" data-r="maximize" aria-label="Maximize">▢</button>
-                 <button class="ar-window__btn ar-window__btn--close" data-r="close" aria-label="Close">×</button>
-               </div>`
-            : '';
-
-        self.el.innerHTML = `
-<header class="ar-window__chrome" data-r="chrome">
-  ${trafficLights}
-  <div class="ar-window__title" data-r="title">${escapeAttr(this._title)}</div>
-  ${winButtons}
-</header>
-<nav class="ar-window__menu" data-r="menu" hidden></nav>
-<section class="ar-window__body" data-r="body"></section>
-${resizable ? `
-<div class="ar-window__edge ar-window__edge--n"  data-r="resize" data-edge="n"  aria-label="Resize north"></div>
-<div class="ar-window__edge ar-window__edge--s"  data-r="resize" data-edge="s"  aria-label="Resize south"></div>
-<div class="ar-window__edge ar-window__edge--w"  data-r="resize" data-edge="w"  aria-label="Resize west"></div>
-<div class="ar-window__edge ar-window__edge--e"  data-r="resize" data-edge="e"  aria-label="Resize east"></div>
-<div class="ar-window__edge ar-window__edge--nw" data-r="resize" data-edge="nw" aria-label="Resize north-west"></div>
-<div class="ar-window__edge ar-window__edge--ne" data-r="resize" data-edge="ne" aria-label="Resize north-east"></div>
-<div class="ar-window__edge ar-window__edge--sw" data-r="resize" data-edge="sw" aria-label="Resize south-west"></div>
-<div class="ar-window__edge ar-window__edge--se" data-r="resize" data-edge="se" aria-label="Resize south-east"></div>` : ''}`;
-
-        this._elTitle = self.el.querySelector('[data-r="title"]') as HTMLElement;
-        this._elBody  = self.el.querySelector('[data-r="body"]')  as HTMLElement;
-        this._elMenu  = self.el.querySelector('[data-r="menu"]')  as HTMLElement;
-
-        if (showChrome) {
-            self.el.querySelector('[data-r="close"]')   ?.addEventListener('click', (e) => { e.stopPropagation(); this.close(); });
-            self.el.querySelector('[data-r="minimize"]')?.addEventListener('click', (e) => { e.stopPropagation(); this.minimize(); });
-            self.el.querySelector('[data-r="maximize"]')?.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (this._maximized) this.restore(); else this.maximize();
-            });
-        }
-
-        // Drag by title bar
-        const chrome = self.el.querySelector('[data-r="chrome"]') as HTMLElement;
-        this._wireDrag(chrome);
-        if (resizable) {
-            self.el.querySelectorAll<HTMLElement>('[data-r="resize"]').forEach(h => this._wireResize(h));
-        }
-
-        // Focus on click
-        self.el.addEventListener('pointerdown', () => this.focus());
-
-        this._renderMenu();
+    /** Programmatic move (also fired by the arianna-mover modifier). */
+    moveTo(x: number, y: number): this {
+        this.setAttribute('x', String(x));
+        this.setAttribute('y', String(y));
+        return this;
     }
 
-    private _renderMenu(): void {
-        if (!this._elMenu) return;
-        if (this._menu.length === 0) {
-            this._elMenu.hidden = true;
-            return;
-        }
-        this._elMenu.hidden = false;
-        this._elMenu.innerHTML = '';
-        for (const item of this._menu) {
-            const btn = document.createElement('button');
-            btn.className = 'ar-window__menu-item';
-            btn.textContent = item.label;
-            btn.dataset.id = item.id;
-            btn.addEventListener('click', () => {
-                (this as unknown as ControlBase)._emit('menu', { id: item.id, label: item.label });
-            });
-            this._elMenu.appendChild(btn);
+    /** Programmatic resize (also fired by the arianna-resizer modifier). */
+    resizeTo(w: number, h: number): this {
+        this.setAttribute('width',  String(Math.max(this.minW(), w)));
+        this.setAttribute('height', String(Math.max(this.minH(), h)));
+        return this;
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount() {
+        // Defer initial focus to next tick so peers can mount first
+        if (this.getAttribute('focused') !== 'false') {
+            requestAnimationFrame(() => this.focus_());
         }
     }
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
 
-    private _applyRect(): void {
-        const self = this as unknown as ControlBase;
-        // If x/y < 0 → center within parent.
-        if (this._x < 0 || this._y < 0) {
-            const p = self.el.parentElement?.getBoundingClientRect();
-            if (p) {
-                this._x = Math.max(0, (p.width  - this._w) / 2);
-                this._y = Math.max(0, (p.height - this._h) / 2);
-            } else {
-                this._x = 32; this._y = 32;
-            }
-        }
-        self.el.style.left   = `${this._x}px`;
-        self.el.style.top    = `${this._y}px`;
-        self.el.style.width  = `${this._w}px`;
-        self.el.style.height = `${this._h}px`;
-    }
+    // ── Attr getters / setters ───────────────────────────────────────────────
 
-    private _wireDrag(handle: HTMLElement): void {
-        let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
-        handle.addEventListener('pointerdown', (e: PointerEvent) => {
-            if ((e.target as HTMLElement).closest('button')) return;
-            if (this._maximized) return;
-            dragging = true;
-            sx = e.clientX; sy = e.clientY; ox = this._x; oy = this._y;
-            handle.setPointerCapture(e.pointerId);
-            e.preventDefault();
-        });
-        handle.addEventListener('pointermove', (e: PointerEvent) => {
-            if (!dragging) return;
-            this._x = ox + (e.clientX - sx);
-            this._y = Math.max(0, oy + (e.clientY - sy));
-            this._applyRect();
-            (this as unknown as ControlBase)._emit('move', { x: this._x, y: this._y });
-        });
-        const stop = (e: PointerEvent) => {
-            if (!dragging) return;
-            dragging = false;
-            try { handle.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-        };
-        handle.addEventListener('pointerup', stop);
-        handle.addEventListener('pointercancel', stop);
-    }
+    get variant(): WindowStyle  { return (this.getAttribute('variant') ?? 'macos') as WindowStyle; }
+    set variant(v: WindowStyle) { this.setAttribute('variant', v); }
 
-    private _wireResize(handle: HTMLElement): void {
-        // Edge encoding: each handle carries data-edge ∈ {n,s,w,e,nw,ne,sw,se}.
-        // For an edge that includes 'n' we move the top of the rect (decrease y
-        // by the dy, increase h by -dy). For 's' we just grow h by +dy. Mirror
-        // for w/e on the x axis. Corner handles combine both axes.
-        // Min size is enforced per axis; when the minimum is hit on a 'n' or
-        // 'w' edge we hold the opposite side fixed so the window doesn't drift.
-        const edge = handle.dataset.edge ?? 'se';
-        const moveTop    = edge.includes('n');
-        const moveBottom = edge.includes('s');
-        const moveLeft   = edge.includes('w');
-        const moveRight  = edge.includes('e');
+    get title(): string  { return this.getAttribute('title') ?? ''; }
+    set title(v: string) { v ? this.setAttribute('title', v) : this.removeAttribute('title'); }
 
-        let sx = 0, sy = 0, ow = 0, oh = 0, ox = 0, oy = 0, dragging = false;
+    get x(): number  { return parseInt(this.getAttribute('x') ?? '0', 10); }
+    set x(v: number) { this.setAttribute('x', String(v)); }
 
-        handle.addEventListener('pointerdown', (e: PointerEvent) => {
-            if (this._maximized) return;
-            dragging = true;
-            sx = e.clientX; sy = e.clientY;
-            ow = this._w;   oh = this._h;
-            ox = this._x;   oy = this._y;
-            handle.setPointerCapture(e.pointerId);
-            e.preventDefault();
-            e.stopPropagation();
-        });
+    get y(): number  { return parseInt(this.getAttribute('y') ?? '0', 10); }
+    set y(v: number) { this.setAttribute('y', String(v)); }
 
-        handle.addEventListener('pointermove', (e: PointerEvent) => {
-            if (!dragging) return;
-            const dx = e.clientX - sx;
-            const dy = e.clientY - sy;
+    get width(): number  { return parseInt(this.getAttribute('width') ?? '480', 10); }
+    set width(v: number) { this.setAttribute('width', String(v)); }
 
-            if (moveRight) {
-                this._w = Math.max(this._minW, ow + dx);
-            }
-            if (moveLeft) {
-                // Pulling left grows the window; pulling right shrinks it.
-                // Cap the shift so we never go below minW (the right edge
-                // stays anchored — we compute the largest x shift that keeps
-                // ow - dx ≥ minW, i.e. dx ≤ ow - minW).
-                const clampedDx = Math.min(dx, ow - this._minW);
-                this._w = ow - clampedDx;
-                this._x = ox + clampedDx;
-            }
-            if (moveBottom) {
-                this._h = Math.max(this._minH, oh + dy);
-            }
-            if (moveTop) {
-                // Same mirror logic on the Y axis. Also clamp y ≥ 0 so the
-                // title bar never slides above the viewport.
-                let clampedDy = Math.min(dy, oh - this._minH);
-                if (oy + clampedDy < 0) clampedDy = -oy;
-                this._h = oh - clampedDy;
-                this._y = oy + clampedDy;
-            }
+    get height(): number  { return parseInt(this.getAttribute('height') ?? '320', 10); }
+    set height(v: number) { this.setAttribute('height', String(v)); }
 
-            this._applyRect();
-            (this as unknown as ControlBase)._emit('resize', { w: this._w, h: this._h });
-            if (moveLeft || moveTop) {
-                (this as unknown as ControlBase)._emit('move', { x: this._x, y: this._y });
-            }
-        });
+    get resizable(): boolean  { return this.getAttribute('resizable') !== 'false'; }
+    set resizable(v: boolean) { this.setAttribute('resizable', v ? 'true' : 'false'); }
 
-        const stop = (e: PointerEvent) => {
-            if (!dragging) return;
-            dragging = false;
-            try { handle.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-        };
-        handle.addEventListener('pointerup', stop);
-        handle.addEventListener('pointercancel', stop);
-    }
+    get chrome(): boolean  { return this.getAttribute('chrome') !== 'false'; }
+    set chrome(v: boolean) { this.setAttribute('chrome', v ? 'true' : 'false'); }
 
-    private _injectStyles(): void {
-        if (document.getElementById('ar-window-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-window-styles';
-        s.textContent = `
-.ar-window {
-    position: absolute;
-    display: flex; flex-direction: column;
-    background: #1e1e1e;
-    color: #d4d4d4;
-    font: 13px -apple-system, system-ui, sans-serif;
-    box-shadow: 0 8px 32px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
-    overflow: hidden;
-    user-select: none;
-}
-.ar-window:not(.ar-window--focused) { opacity: 0.92; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
-.ar-window__chrome {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0 12px;
-    height: 30px; flex-shrink: 0;
-    background: #2a2a2c;
-    border-bottom: 1px solid #1a1a1a;
-    cursor: grab;
-    position: relative;
-}
-.ar-window__chrome:active { cursor: grabbing; }
-.ar-window__title {
-    flex: 1;
-    text-align: center;
-    font: 600 12px sans-serif;
-    color: #d4d4d4;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    pointer-events: none;
-}
-.ar-window__menu {
-    display: flex; align-items: center; gap: 14px;
-    height: 26px; padding: 0 12px;
-    background: #1f1f21;
-    border-bottom: 1px solid #1a1a1a;
-    font: 11px sans-serif;
-}
-.ar-window__menu-item {
-    background: none; border: 0; color: #d4d4d4;
-    padding: 2px 6px;
-    cursor: pointer;
-    border-radius: 3px;
-    font: 11px sans-serif;
-}
-.ar-window__menu-item:hover { background: rgba(255,255,255,.08); }
-.ar-window__body {
-    flex: 1; min-height: 0;
-    overflow: auto;
-    background: #1e1e1e;
-    user-select: text;
-}
-.ar-window__edge {
-    position: absolute;
-    /* Default invisible — handles are interaction-only hit areas. The corner
-     * grips are drawn via the body's border-radius/box-shadow visuals; users
-     * locate them by cursor change, not by a visible glyph. */
-    background: transparent;
-    z-index: 2;
-    touch-action: none;
-}
-/* Edge strips — 6px wide along each side, slightly inset from corners so
- * they don't fight with the 12×12 corner handles for pointer capture. */
-.ar-window__edge--n { top:    -3px; left:  10px; right: 10px; height: 6px;  cursor: ns-resize; }
-.ar-window__edge--s { bottom: -3px; left:  10px; right: 10px; height: 6px;  cursor: ns-resize; }
-.ar-window__edge--w { left:   -3px; top:   10px; bottom: 10px; width: 6px;  cursor: ew-resize; }
-.ar-window__edge--e { right:  -3px; top:   10px; bottom: 10px; width: 6px;  cursor: ew-resize; }
-/* Corner squares — 12×12 hit boxes overlapping the edges, so the four
- * corners win the pointer when the user lands within ~6px of each. */
-.ar-window__edge--nw { top:    -3px; left:   -3px; width: 14px; height: 14px; cursor: nwse-resize; }
-.ar-window__edge--ne { top:    -3px; right:  -3px; width: 14px; height: 14px; cursor: nesw-resize; }
-.ar-window__edge--sw { bottom: -3px; left:   -3px; width: 14px; height: 14px; cursor: nesw-resize; }
-.ar-window__edge--se { bottom: -3px; right:  -3px; width: 14px; height: 14px; cursor: nwse-resize;
-    /* Keep the classic SE corner grip glyph visible — it's the universal
-     * "this can be resized" affordance most users look for. */
-    background:
-        linear-gradient(135deg, transparent 0%, transparent 40%, #555 41%, #555 50%, transparent 51%, transparent 65%, #555 66%, #555 75%, transparent 76%);
-}
+    get maximized(): boolean { return this.hasAttribute('maximized'); }
+    get minimized(): boolean { return this.hasAttribute('minimized'); }
 
-/* ── macOS style ─────────────────────────────────────────────────────── */
-.ar-window--macos {
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,.05);
-}
-.ar-window--macos .ar-window__chrome {
-    background: linear-gradient(180deg, #3a3a3c 0%, #2a2a2c 100%);
-    height: 28px;
-    border-radius: 10px 10px 0 0;
-}
-.ar-window--macos .ar-window__lights {
-    display: flex; gap: 6px; align-items: center;
-    position: relative; z-index: 1;
-}
-.ar-window__light {
-    width: 12px; height: 12px; border-radius: 50%;
-    border: 0; cursor: pointer; padding: 0;
-    transition: filter .12s;
-}
-.ar-window__light:hover { filter: brightness(1.15); }
-.ar-window__light--close    { background: #ff5f57; }
-.ar-window__light--minimize { background: #ffbd2e; }
-.ar-window__light--maximize { background: #28c940; }
-.ar-window--macos:not(.ar-window--focused) .ar-window__light { background: #555; }
+    // ── Template helpers ─────────────────────────────────────────────────────
 
-/* ── Windows style ───────────────────────────────────────────────────── */
-.ar-window--windows {
-    border-radius: 0;
-    border: 1px solid #444;
-}
-.ar-window--windows .ar-window__chrome {
-    background: #1f1f23;
-    border-bottom: 1px solid #444;
-    height: 32px;
-    padding-left: 12px;
-    padding-right: 0;
-}
-.ar-window--windows .ar-window__title { text-align: left; }
-.ar-window--windows .ar-window__btns {
-    display: flex; height: 100%;
-}
-.ar-window__btn {
-    background: none; border: 0; color: #d4d4d4;
-    width: 44px; height: 100%;
-    cursor: pointer;
-    font: 14px sans-serif;
-    display: flex; align-items: center; justify-content: center;
-    transition: background .12s;
-}
-.ar-window__btn:hover { background: rgba(255,255,255,.08); }
-.ar-window__btn--close:hover { background: #c42b1c; color: #fff; }
+    private titleText   : () => string = () => '';
+    private dockStyle   : () => WindowStyle = () => 'macos';
+    private isMacOS     : () => boolean = () => true;
+    private isWindows   : () => boolean = () => false;
+    private hasChrome   : () => boolean = () => true;
+    private isResizable : () => boolean = () => true;
+    private minW        : () => number = () => 200;
+    private minH        : () => number = () => 120;
+    private onCloseClick: () => void = () => {};
+    private onMinClick  : () => void = () => {};
+    private onMaxClick  : () => void = () => {};
 
-/* ── States ──────────────────────────────────────────────────────────── */
-.ar-window--minimized { display: none; }
-.ar-window--maximized {
-    border-radius: 0;
-    box-shadow: none;
-}
-.ar-window--focused {
-    box-shadow: 0 12px 40px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4);
-}
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    display      : 'flex',
+                    flexDirection: 'column',
+                    background   : 'var(--arianna-bg, #ffffff)',
+                    color        : 'var(--arianna-text, #1f2328)',
+                    overflow     : 'hidden',
+                    boxShadow    : '0 16px 48px rgba(0,0,0,0.25)',
+                    border       : '1px solid var(--arianna-border, #d8d8d8)',
+                    minWidth     : '160px',
+                    minHeight    : '80px',
+                    fontFamily   : '-apple-system, system-ui, sans-serif',
+                    boxSizing    : 'border-box',
+                }),
+                new Rule(':root[variant="macos"]',   { borderRadius: '10px' }),
+                new Rule(':root[variant="windows"]', { borderRadius: '0' }),
+                new Rule(':root[focused]', { boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }),
+                new Rule(':root[maximized]', {
+                    borderRadius: '0', border: 'none',
+                }),
 
-@media (max-width: 600px) {
-    .ar-window__chrome { height: 26px; padding: 0 8px; }
-    .ar-window__title { font-size: 11px; }
-    .ar-window__btn { width: 36px; }
-    .ar-window__menu { height: 22px; padding: 0 8px; gap: 10px; }
-    .ar-window__menu-item { font-size: 10px; }
-}
-`;
-        document.head.appendChild(s);
+                // Title bar
+                new Rule('.ar-window__titlebar', {
+                    alignItems: 'center',
+                    background: 'var(--arianna-bg-3, #f3f3f3)',
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    display   : 'flex',
+                    flexShrink: '0',
+                    gap       : '8px',
+                    height    : '36px',
+                    padding   : '0 12px',
+                    cursor    : 'move',
+                    userSelect: 'none',
+                }),
+                new Rule(':root[variant="macos"] .ar-window__titlebar', {
+                    justifyContent: 'center',
+                }),
+                new Rule('.ar-window__title', {
+                    flex      : '1',
+                    fontSize  : '0.82rem',
+                    fontWeight: '600',
+                    textAlign : 'center',
+                    color     : 'var(--arianna-muted, #6e6b62)',
+                    overflow  : 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                }),
+                new Rule(':root[variant="windows"] .ar-window__title', {
+                    textAlign: 'left',
+                    paddingLeft: '4px',
+                }),
+
+                // macOS traffic lights
+                new Rule('.ar-window__traffic', {
+                    display   : 'flex',
+                    alignItems: 'center',
+                    gap       : '8px',
+                    flexShrink: '0',
+                }),
+                new Rule('.ar-window__btn', {
+                    width     : '12px',
+                    height    : '12px',
+                    border    : 'none',
+                    borderRadius: '50%',
+                    cursor    : 'pointer',
+                    padding   : '0',
+                    transition: 'opacity 0.12s ease',
+                }),
+                new Rule('.ar-window__btn--close',    { background: '#ff5f57' }),
+                new Rule('.ar-window__btn--minimize', { background: '#ffbd2e' }),
+                new Rule('.ar-window__btn--maximize', { background: '#28c940' }),
+                new Rule('.ar-window__btn:hover',     { opacity: '0.8' }),
+
+                // Windows-style chrome
+                new Rule('.ar-window__chrome', {
+                    display   : 'flex',
+                    alignItems: 'center',
+                    flexShrink: '0',
+                    marginLeft: 'auto',
+                }),
+                new Rule('.ar-window__chrome-btn', {
+                    background: 'none',
+                    border    : 'none',
+                    color     : 'var(--arianna-text, #1f2328)',
+                    cursor    : 'pointer',
+                    font      : 'inherit',
+                    fontSize  : '0.8rem',
+                    height    : '36px',
+                    width     : '40px',
+                    transition: 'background 0.12s ease',
+                }),
+                new Rule('.ar-window__chrome-btn:hover', {
+                    background: 'var(--arianna-bg-4, #ebebeb)',
+                }),
+                new Rule('.ar-window__chrome-btn--close:hover', {
+                    background: 'var(--arianna-danger, #cf222e)',
+                    color     : '#ffffff',
+                }),
+
+                // Menu bar (custom slot content)
+                new Rule('.ar-window__menu', {
+                    background  : 'var(--arianna-bg-3, #f3f3f3)',
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    flexShrink  : '0',
+                }),
+                new Rule('.ar-window__menu:empty', { display: 'none' }),
+
+                // Body
+                new Rule('.ar-window__body', {
+                    flex     : '1',
+                    overflow : 'auto',
+                    position : 'relative',
+                    minHeight: '0',
+                }),
+            ]
+        );
     }
 }
 
-function escapeAttr(s: string): string {
-    return s.replace(/[&<>"']/g, (c: string) => (
-        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Window', {
+        value: Window, writable: false, enumerable: false, configurable: false,
+    });
 }
+
+export default Window;

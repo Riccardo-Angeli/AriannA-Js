@@ -1,70 +1,257 @@
 /**
+ * @module    components/charts/PieChart
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ *
+ * PieChart — pie / donut chart on SVG.
+ *
+ *   const ch = new PieChart({ size: 280, donut: 0.55 });
+ *   ch.append(document.body);
+ *   ch.data = [
+ *     { label: 'Apple',  value: 42, color: '#7eb8f7' },
+ *     { label: 'Orange', value: 28, color: '#f7c97e' },
+ *     { label: 'Pear',   value: 16, color: '#7ef7a8' },
+ *     { label: 'Other',  value: 14, color: '#888'    },
+ *   ];
+ *
+ *   <arianna-pie-chart size="280" donut="0.55"></arianna-pie-chart>
+ *
+ * Events:
+ *   arianna:chart-slice-hover { datum, index, percent }
+ *   arianna:chart-slice-click { datum, index, percent }
  */
 
-/**
- * @module PieChart
- * @example
- *   const chart = new PieChart('#root', { donut: true });
- *   chart.data = [
- *     { label: 'EU', value: 42 },
- *     { label: 'US', value: 35 },
- *     { label: 'APAC', value: 23 },
- *   ];
- *   chart.on('click', ({ slice }) => console.log(slice));
- */
-import { Control } from '../core/Control.ts';
-export interface PieDataPoint { label: string; value: number; color?: string; }
-export interface PieChartOptions { label?: string; size?: number; donut?: boolean; legend?: boolean; class?: string; }
-const PIE_COLORS = ['#7eb8f7','#4caf50','#ff9800','#f44336','#4dd0e1','#b39ddb','#ff7043','#a5d6a7'];
-export class PieChart extends Control<PieChartOptions> {
-  private _data: PieDataPoint[] = [];
-  constructor(container: string | HTMLElement | null = null, opts: PieChartOptions = {}) {
-    super(container, 'div', { size: 180, donut: true, legend: true, ...opts });
-    this.el.className = `ar-chart ar-piechart${opts.class?' '+opts.class:''}`;
-  }
-  set data(v: PieDataPoint[]) { this._data = v; this._set('data' as never, v as never); }
-  get data()                  { return this._data; }
-  protected _build() {
-    this.el.innerHTML = '';
-    const lbl = this._get('label', '') as string; if (lbl) this._el('div', 'ar-chart__title', this.el).textContent = lbl;
-    if (!this._data.length) { this._el('div', 'ar-chart__empty', this.el).textContent = 'No data'; return; }
-    const size  = this._get('size', 180) as number;
-    const R     = size / 2;
-    const r     = this._get('donut', true) ? R * 0.55 : 0;
-    const total = this._data.reduce((s, d) => s + d.value, 0);
-    const svg   = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', `0 0 ${size} ${size}`); svg.style.width = size+'px'; svg.style.height = size+'px';
-    let angle = -Math.PI / 2;
-    this._data.forEach((d, i) => {
-      const slice = (d.value / total) * Math.PI * 2;
-      const x1 = R + R * Math.cos(angle); const y1 = R + R * Math.sin(angle);
-      const x2 = R + R * Math.cos(angle + slice); const y2 = R + R * Math.sin(angle + slice);
-      const ix1 = R + r * Math.cos(angle); const iy1 = R + r * Math.sin(angle);
-      const ix2 = R + r * Math.cos(angle + slice); const iy2 = R + r * Math.sin(angle + slice);
-      const large = slice > Math.PI ? 1 : 0;
-      const color = d.color ?? PIE_COLORS[i % PIE_COLORS.length];
-      const path  = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', r > 0
-        ? `M ${ix1} ${iy1} L ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${r} ${r} 0 ${large} 0 ${ix1} ${iy1} Z`
-        : `M ${R} ${R} L ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} Z`);
-      path.setAttribute('fill', color); path.style.cursor = 'pointer'; path.style.transition = 'opacity .15s';
-      path.addEventListener('mouseenter', () => path.style.opacity = '0.8');
-      path.addEventListener('mouseleave', () => path.style.opacity = '1');
-      path.addEventListener('click', () => this._emit('click', { slice: d }));
-      svg.appendChild(path); angle += slice;
-    });
-    const wrap = this._el('div', 'ar-piechart__wrap', this.el); wrap.appendChild(svg);
-    if (this._get('legend', true)) {
-      const leg = this._el('div', 'ar-piechart__legend', this.el);
-      this._data.forEach((d, i) => {
-        const row = this._el('div', 'ar-piechart__legend-row', leg);
-        const dot = this._el('span', 'ar-piechart__legend-dot', row); dot.style.background = d.color ?? PIE_COLORS[i % PIE_COLORS.length];
-        this._el('span', 'ar-piechart__legend-label', row).textContent = d.label;
-        this._el('span', 'ar-piechart__legend-value', row).textContent = Math.round(d.value / total * 100)+'%';
-      });
-    }
-  }
+import { Component } from '../../core/Component.ts';
+import { signal, effect, type Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule } from '../../core/Rule.ts';
+
+export interface PieDatum {
+    label : string;
+    value : number;
+    color?: string;
 }
-export const PieChartCSS = `.ar-piechart__wrap{display:flex;justify-content:center}.ar-piechart__legend{display:flex;flex-direction:column;gap:5px;margin-top:10px}.ar-piechart__legend-row{align-items:center;display:flex;gap:6px;font-size:.78rem}.ar-piechart__legend-dot{border-radius:50%;flex-shrink:0;height:10px;width:10px}.ar-piechart__legend-label{flex:1}.ar-piechart__legend-value{color:var(--ar-muted)}`;
+
+export interface PieChartOptions {
+    size?       : number;     // SVG square size
+    donut?      : number;     // 0..1 — inner radius ratio (0 = pie, 0.5 = donut)
+    showLegend? : boolean;    // default true
+    showLabels? : boolean;    // labels on slices
+    startAngle? : number;     // radians, default -90deg
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function polar(cx: number, cy: number, r: number, angle: number): [number, number] {
+    return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
+}
+
+function arcPath(cx: number, cy: number, rOuter: number, rInner: number, a0: number, a1: number): string {
+    const [x0, y0] = polar(cx, cy, rOuter, a0);
+    const [x1, y1] = polar(cx, cy, rOuter, a1);
+    const largeArc = (a1 - a0) > Math.PI ? 1 : 0;
+    if (rInner <= 0) {
+        return `M ${cx} ${cy} L ${x0} ${y0} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x1} ${y1} Z`;
+    }
+    const [x2, y2] = polar(cx, cy, rInner, a1);
+    const [x3, y3] = polar(cx, cy, rInner, a0);
+    return [
+        `M ${x0} ${y0}`,
+        `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x1} ${y1}`,
+        `L ${x2} ${y2}`,
+        `A ${rInner} ${rInner} 0 ${largeArc} 0 ${x3} ${y3}`,
+        'Z',
+    ].join(' ');
+}
+
+export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
+    attrs : ['size', 'donut', 'show-legend', 'show-labels', 'start-angle'],
+    shadow: false,
+})
+{
+    readonly data$: Signal<PieDatum[]> = signal<PieDatum[]>([]);
+
+    #svg?    : SVGSVGElement;
+    #legend? : HTMLDivElement;
+
+    constructor(opts: PieChartOptions = {}) {
+        super(opts as never);
+        const self = this as unknown as { render(): HTMLElement };
+        const el = self.render();
+        if (opts.size       != null) el.setAttribute('size',        String(opts.size));
+        if (opts.donut      != null) el.setAttribute('donut',       String(opts.donut));
+        if (opts.showLegend === false) el.setAttribute('show-legend', 'false');
+        if (opts.showLabels === true)  el.setAttribute('show-labels', '');
+        if (opts.startAngle != null) el.setAttribute('start-angle', String(opts.startAngle));
+    }
+
+    build(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            attrSignal(name: string): Signal<string | null> | undefined;
+            Sheet: Sheet | null;
+        };
+        const root = self.render();
+        if (root.querySelector('.pc-wrap')) return;
+
+        const size = parseInt(self.attrSignal('size')?.peek() ?? '280', 10) || 280;
+        const wrap = document.createElement('div');
+        wrap.className = 'pc-wrap';
+
+        const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
+        svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+        svg.setAttribute('width',  String(size));
+        svg.setAttribute('height', String(size));
+        svg.setAttribute('class', 'pc-svg');
+        this.#svg = svg;
+        wrap.appendChild(svg);
+
+        const legend = document.createElement('div');
+        legend.className = 'pc-legend';
+        this.#legend = legend;
+        wrap.appendChild(legend);
+
+        root.appendChild(wrap);
+
+        effect(() => { this.data$.get(); this.#redraw(); });
+
+        self.Sheet = PieChart.DefaultSheet();
+    }
+
+    set data(rows: PieDatum[]) { this.data$.set(rows); }
+    get data(): PieDatum[]     { return this.data$.get(); }
+
+    #redraw(): void {
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+            attrSignal(name: string): Signal<string | null> | undefined;
+        };
+        const svg = this.#svg;
+        const legend = this.#legend;
+        if (!svg || !legend) return;
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+        legend.innerHTML = '';
+
+        const data = this.data$.peek();
+        if (!data.length) return;
+
+        const size = parseInt(svg.getAttribute('width') ?? '280', 10);
+        const cx = size / 2, cy = size / 2;
+        const rOuter = size / 2 - 6;
+        const donut  = parseFloat(self.attrSignal('donut')?.peek() ?? '0') || 0;
+        const rInner = rOuter * Math.max(0, Math.min(0.9, donut));
+        let angle    = parseFloat(self.attrSignal('start-angle')?.peek() ?? String(-Math.PI / 2)) || -Math.PI / 2;
+        const total  = data.reduce((s, d) => s + d.value, 0) || 1;
+        const showLabels = self.attrSignal('show-labels')?.peek() != null;
+        const showLegend = self.attrSignal('show-legend')?.peek() !== 'false';
+
+        legend.style.display = showLegend ? '' : 'none';
+
+        data.forEach((d, i) => {
+            const slice = (d.value / total) * Math.PI * 2;
+            const a0 = angle;
+            const a1 = angle + slice;
+            angle = a1;
+
+            const path = document.createElementNS(SVG_NS, 'path');
+            path.setAttribute('d', arcPath(cx, cy, rOuter, rInner, a0, a1));
+            path.setAttribute('fill', d.color ?? this.#defaultColor(i));
+            path.setAttribute('class', 'pc-slice');
+            const pct = (d.value / total) * 100;
+            path.addEventListener('mouseenter', () =>
+                self.fire('arianna:chart-slice-hover', { detail: { datum: d, index: i, percent: pct, source: this }, bubbles: true }));
+            path.addEventListener('click', () =>
+                self.fire('arianna:chart-slice-click', { detail: { datum: d, index: i, percent: pct, source: this }, bubbles: true }));
+            svg.appendChild(path);
+
+            if (showLabels) {
+                const mid = (a0 + a1) / 2;
+                const r = rInner > 0 ? (rInner + rOuter) / 2 : rOuter * 0.65;
+                const [lx, ly] = polar(cx, cy, r, mid);
+                const lbl = document.createElementNS(SVG_NS, 'text');
+                lbl.setAttribute('x', String(lx));
+                lbl.setAttribute('y', String(ly + 4));
+                lbl.setAttribute('text-anchor', 'middle');
+                lbl.setAttribute('class', 'pc-label');
+                lbl.textContent = pct.toFixed(0) + '%';
+                svg.appendChild(lbl);
+            }
+
+            // Legend item
+            const li = document.createElement('div');
+            li.className = 'pc-legend-item';
+            const sw = document.createElement('span');
+            sw.className = 'pc-legend-sw';
+            sw.style.background = d.color ?? this.#defaultColor(i);
+            const lbl = document.createElement('span');
+            lbl.className = 'pc-legend-lbl';
+            lbl.textContent = `${d.label} · ${pct.toFixed(1)}%`;
+            li.appendChild(sw); li.appendChild(lbl);
+            legend.appendChild(li);
+        });
+    }
+
+    #defaultColor(i: number): string {
+        const palette = ['#7eb8f7', '#f47e7e', '#7ef7a8', '#f7c97e', '#b87ef7', '#7ef7e3', '#f77ec4', '#a8f77e'];
+        return palette[i % palette.length] ?? '#7eb8f7';
+    }
+
+    static DefaultSheet(): Sheet {
+        return new Sheet([
+            new Rule(':root', {
+                background  : 'var(--ar-bg, #fff)',
+                border      : '1px solid var(--ar-border, #e0e0e0)',
+                borderRadius: 'var(--ar-radius, 5px)',
+                color       : 'var(--ar-text, #1a1a1a)',
+                display     : 'inline-block',
+                font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
+                padding     : '12px',
+            }),
+            new Rule(':root .pc-wrap', {
+                alignItems: 'center',
+                display   : 'flex',
+                gap       : '16px',
+            }),
+            new Rule(':root .pc-svg', { display: 'block' }),
+            new Rule(':root .pc-slice', {
+                cursor    : 'pointer',
+                stroke    : 'var(--ar-bg, #fff)',
+                strokeWidth: '2',
+                transition: 'opacity 0.15s',
+            }),
+            new Rule(':root .pc-slice:hover', { opacity: '0.85' }),
+            new Rule(':root .pc-label', {
+                fill       : '#fff',
+                fontSize   : '11px',
+                fontWeight : '700',
+                pointerEvents: 'none',
+                textShadow : '0 1px 2px rgba(0,0,0,0.5)',
+            }),
+            new Rule(':root .pc-legend', {
+                display      : 'flex',
+                flexDirection: 'column',
+                gap          : '4px',
+            }),
+            new Rule(':root .pc-legend-item', {
+                alignItems: 'center',
+                display   : 'flex',
+                fontSize  : '0.78rem',
+                gap       : '6px',
+            }),
+            new Rule(':root .pc-legend-sw', {
+                borderRadius: '2px',
+                display     : 'inline-block',
+                height      : '12px',
+                width       : '12px',
+            }),
+        ]);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'PieChart', {
+        value: PieChart, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default PieChart;

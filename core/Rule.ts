@@ -773,6 +773,313 @@ export class Rule
 
         return result;
     }
+
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  DOM append — auto-inject this Rule into the DOM.
+    //
+    //  Full port of Golem's original `new Css(selector, rules, [sheet|mode], [index])`
+    //  matrix. A Rule becomes immediately effective without requiring a Sheet
+    //  wrapper, and supports the FIVE append modes from the original Css.js:
+    //
+    //    1. STYLE  — internal <style> appended to <head>             (default, or 'style')
+    //    2. FILE   — Blob URL wrapped in <link rel="stylesheet">     ('file')
+    //    3. SHEET  — appended to an existing v2 Sheet                (Sheet instance)
+    //    4. LINK   — written into existing <link>.sheet or CSSStyleSheet
+    //    5. PARENT — append <style> under a specific Element / ShadowRoot
+    //                (for shadow-DOM scoping or non-<head> hosting)
+    //
+    //  Each Rule owns at most ONE host artifact at a time (style or link or
+    //  sheet position). Re-appending detaches the previous one. Edits to the
+    //  rule (Rule-Changed, Selector-Changed) re-sync the host node's content
+    //  automatically.
+    //
+    //  Examples:
+    //    new Rule('.Fancy', { background: 'yellow' }).append();
+    //    new Rule('.Fancy', { background: 'yellow' }).append('style');
+    //    new Rule('.Fancy', { background: 'yellow' }).append('file');
+    //    new Rule('.Fancy', { background: 'yellow' }).append(existingSheet);
+    //    new Rule('.Fancy', { background: 'yellow' }).append(existingSheet, 0);
+    //    new Rule('.Fancy', { background: 'yellow' }).append(linkElement);
+    //    new Rule('.Fancy', { background: 'yellow' }).append(cssStyleSheet);
+    //    new Rule(':root',  { background: 'yellow' }).append(shadowRoot);
+    //
+    //  Static shortcuts:
+    //    Rule.css('.Fancy', { … });
+    //    Rule.css('.Fancy', { … }, 'file');
+    //    Rule.css({ Selector: '.Fancy', Content: {…} });
+    //    Rule.css({ Selector: '.Fancy', Content: {…} }, sheet);
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #styleNode   : HTMLStyleElement | null = null;
+    #linkNode    : HTMLLinkElement  | null = null;
+    #blobUrl     : string           | null = null;
+    #hostSheet   : { Rules: { remove(rule: unknown): unknown; add(rule: unknown): unknown; insert(rule: unknown, idx: number): unknown } } | null = null;
+    #hostIndex   : number = -1;
+    #appendMode   : 'style' | 'file' | 'sheet' | 'link' | 'parent' | null = null;
+    #syncBound   : (() => void) | null = null;
+
+    /**
+     * Inject this rule into the DOM.
+     *
+     *   rule.append()                            // STYLE — <style> in <head>
+     *   rule.append('style')                     // STYLE (explicit)
+     *   rule.append('file')                      // FILE — Blob + <link>
+     *   rule.append(sheet)                       // SHEET — Sheet instance
+     *   rule.append(sheet, 5)                    // SHEET at specific index
+     *   rule.append(linkElement)                 // LINK — write into <link>.sheet
+     *   rule.append(cssStyleSheet)               // CSSStyleSheet direct
+     *   rule.append(shadowRoot)                  // PARENT under shadow
+     *   rule.append(element)                     // PARENT under any Element
+     *
+     * @returns the Rule itself, for chaining.
+     */
+    append(
+        target?: 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null,
+        index?: number,
+    ): this
+    {
+        // Detach any previous host
+        this.detach();
+
+        // ── Mode 2: FILE — Blob URL + <link> ──
+        if (target === 'file')
+        {
+            const cssText = this.Text;
+            const blob    = new Blob([cssText], { type: 'text/css' });
+            this.#blobUrl = URL.createObjectURL(blob);
+
+            this.#linkNode      = document.createElement('link');
+            this.#linkNode.rel  = 'stylesheet';
+            this.#linkNode.type = 'text/css';
+            this.#linkNode.href = this.#blobUrl;
+            this.#linkNode.setAttribute('data-arianna-rule', this.#id);
+            (document.head ?? document.documentElement).appendChild(this.#linkNode);
+
+            this.#appendMode = 'file';
+            this.#bindSync(() => {
+                // Replace Blob: stylesheet URL can't be edited, recreate it.
+                if (this.#blobUrl) URL.revokeObjectURL(this.#blobUrl);
+                const b = new Blob([this.Text], { type: 'text/css' });
+                this.#blobUrl = URL.createObjectURL(b);
+                if (this.#linkNode) this.#linkNode.href = this.#blobUrl;
+            });
+            return this;
+        }
+
+        // ── Mode 4: LINK — existing <link> with a CSSStyleSheet ──
+        if (target instanceof HTMLLinkElement)
+        {
+            this.#linkNode = target;
+            const sheet = target.sheet;
+            if (sheet)
+            {
+                const i = (typeof index === 'number') ? index : sheet.cssRules.length;
+                try { sheet.insertRule(this.Text, i); } catch { /* invalid rule for this sheet */ }
+                this.#hostIndex = i;
+            }
+            this.#appendMode = 'link';
+            this.#bindSync(() => this.#resyncCSSOM(target.sheet));
+            return this;
+        }
+
+        // ── Mode 4b: direct CSSStyleSheet ──
+        if (target instanceof CSSStyleSheet)
+        {
+            const i = (typeof index === 'number') ? index : target.cssRules.length;
+            try { target.insertRule(this.Text, i); } catch { /* skip */ }
+            this.#hostIndex = i;
+            this.#appendMode = 'link';
+            this.#bindSync(() => this.#resyncCSSOM(target));
+            return this;
+        }
+
+        // ── Mode 5: PARENT — Element or ShadowRoot ──
+        if (target instanceof Element || (typeof ShadowRoot !== 'undefined' && target instanceof ShadowRoot))
+        {
+            this.#styleNode = document.createElement('style');
+            this.#styleNode.setAttribute('data-arianna-rule', this.#id);
+            this.#styleNode.textContent = this.Text;
+            (target as Element | ShadowRoot).appendChild(this.#styleNode);
+            this.#appendMode = 'parent';
+            this.#bindSync(() => { if (this.#styleNode) this.#styleNode.textContent = this.Text; });
+            return this;
+        }
+
+        // ── Mode 3: SHEET — v2 Sheet (duck-typed to avoid circular import) ──
+        if (target && typeof target === 'object'
+            && 'Rules' in (target as Record<string, unknown>)
+            && (target as { Rules?: { add?: unknown } }).Rules
+            && typeof (target as { Rules: { add?: unknown } }).Rules.add === 'function')
+        {
+            const sheet = target as unknown as
+                { Rules: { add(rule: unknown): unknown; insert(rule: unknown, idx: number): unknown; remove(rule: unknown): unknown } };
+            if (typeof index === 'number') sheet.Rules.insert(this, index);
+            else                            sheet.Rules.add(this);
+            this.#hostSheet = sheet;
+            this.#hostIndex = (typeof index === 'number') ? index : -1;
+            this.#appendMode = 'sheet';
+            // Re-syncing handled by the Sheet itself (Sheet-Changed flushes).
+            return this;
+        }
+
+        // ── Mode 1: STYLE (default) — <style> in <head> ──
+        // Covers: target === 'style', target === undefined, target === null.
+        this.#styleNode = document.createElement('style');
+        this.#styleNode.setAttribute('data-arianna-rule', this.#id);
+        this.#styleNode.textContent = this.Text;
+        (document.head ?? document.documentElement).appendChild(this.#styleNode);
+        this.#appendMode = 'style';
+        this.#bindSync(() => { if (this.#styleNode) this.#styleNode.textContent = this.Text; });
+        return this;
+    }
+
+    /**
+     * Remove this rule's DOM artifact (style/link/sheet entry). The Rule
+     * descriptor is preserved — you can call `.append(...)` again later.
+     */
+    detach(): this
+    {
+        // Sync listeners
+        if (this.#syncBound)
+        {
+            this.off('Rule-Changed',     this.#syncBound);
+            this.off('Selector-Changed', this.#syncBound);
+            this.#syncBound = null;
+        }
+
+        if (this.#styleNode && this.#styleNode.parentNode)
+            this.#styleNode.parentNode.removeChild(this.#styleNode);
+        this.#styleNode = null;
+
+        if (this.#linkNode && this.#appendMode === 'file' && this.#linkNode.parentNode)
+            this.#linkNode.parentNode.removeChild(this.#linkNode);
+        this.#linkNode = null;
+
+        if (this.#blobUrl) { URL.revokeObjectURL(this.#blobUrl); this.#blobUrl = null; }
+
+        if (this.#hostSheet)
+        {
+            try { this.#hostSheet.Rules.remove(this); } catch { /* sheet may be gone */ }
+            this.#hostSheet = null;
+        }
+        this.#hostIndex = -1;
+        this.#appendMode = null;
+        return this;
+    }
+
+    #bindSync(handler: () => void): void
+    {
+        this.#syncBound = handler;
+        this.on('Rule-Changed',     handler);
+        this.on('Selector-Changed', handler);
+    }
+
+    #resyncCSSOM(sheet: CSSStyleSheet | null): void
+    {
+        if (!sheet) return;
+        if (this.#hostIndex < 0 || this.#hostIndex >= sheet.cssRules.length) return;
+        try { sheet.deleteRule(this.#hostIndex); sheet.insertRule(this.Text, this.#hostIndex); } catch { /* skip */ }
+    }
+
+    /**
+     * The DOM artifact owning this rule, if attached. Returns the <style>
+     * for STYLE/PARENT mode, the <link> for FILE/LINK mode, the Sheet
+     * instance for SHEET mode, or null if detached.
+     */
+    get Host(): HTMLStyleElement | HTMLLinkElement | object | null
+    {
+        return this.#styleNode ?? this.#linkNode ?? this.#hostSheet ?? null;
+    }
+
+    /** Current append mode, or null if detached. */
+    get Mode(): 'style' | 'file' | 'sheet' | 'link' | 'parent' | null { return this.#appendMode; }
+
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Static — Master Sheet (Golem `Css.SheetES5` parity)
+    //
+    //  When set, every `Rule.css(...)` / `Rule.append(...)` call without an
+    //  explicit `target` argument will auto-append to this master Sheet
+    //  instead of creating a fresh <style> in <head>.
+    //
+    //  Mirrors the original Golem pattern:
+    //
+    //    Css.SheetES5 = new SheetES5();           // master sheet for the doc
+    //    new Css('.a', { color: 'red' });         // → appended to master
+    //    new Css('.b', { color: 'blue' });        // → appended to master
+    //
+    //  v2 equivalent:
+    //
+    //    Rule.Sheet = new Sheet();                // master sheet (auto-Blob+<link>)
+    //    Rule.css('.a', { color: 'red' });        // → master.Rules.add
+    //    Rule.css('.b', { color: 'blue' });       // → master.Rules.add
+    //
+    //  Set to `null` to restore the default <style>-per-rule behaviour.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    static #masterSheet: unknown = null;
+
+    /**
+     * Master Sheet for all `Rule.css(...)` / `Rule.append(...)` calls.
+     * When set, every rule created via these helpers without an explicit
+     * target will auto-append to this Sheet. Set to `null` to disable.
+     */
+    static get Sheet(): unknown { return Rule.#masterSheet; }
+    static set Sheet(s: unknown) { Rule.#masterSheet = s; }
+
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Static shortcuts — Golem-style `new Css(selector, rules, [sheet], [idx])`
+    // ─────────────────────────────────────────────────────────────────────────
+
+    static css(selector: string, contents: CSSProperties | string, target?: 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null, index?: number): Rule;
+    static css(definition: RuleDefinition,                          target?: 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null, index?: number): Rule;
+    static css(
+        arg0  : string | RuleDefinition,
+        arg1? : CSSProperties | string | 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null,
+        arg2? : 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null | number,
+        arg3? : number,
+    ): Rule
+    {
+        let rule: Rule;
+        let target: Parameters<Rule['append']>[0] = undefined;
+        let index : number | undefined           = undefined;
+
+        if (typeof arg0 === 'string')
+        {
+            rule   = new Rule(arg0, arg1 as CSSProperties | string);
+            target = arg2 as typeof target;
+            index  = arg3;
+        }
+        else
+        {
+            rule   = new Rule(arg0);
+            target = arg1 as typeof target;
+            index  = arg2 as number | undefined;
+        }
+
+        // If no explicit target AND a master Sheet is set globally, use it.
+        if ((target === undefined || target === null) && Rule.#masterSheet)
+            target = Rule.#masterSheet as unknown as typeof target;
+
+        return rule.append(target, index);
+    }
+
+    /** Alias for `Rule.css(...)`. Mirrors `new Css(...)` more literally. */
+    static append(selector: string, contents: CSSProperties | string, target?: 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null, index?: number): Rule;
+    static append(definition: RuleDefinition,                          target?: 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null, index?: number): Rule;
+    static append(
+        arg0  : string | RuleDefinition,
+        arg1? : CSSProperties | string | 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null,
+        arg2? : 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null | number,
+        arg3? : number,
+    ): Rule
+    {
+        return (typeof arg0 === 'string')
+            ? Rule.css(arg0, arg1 as CSSProperties | string, arg2 as Parameters<Rule['append']>[0], arg3)
+            : Rule.css(arg0, arg1 as Parameters<Rule['append']>[0], arg2 as number | undefined);
+    }
 }
 
 // ── CssState ──────────────────────────────────────────────────────────────────

@@ -1,73 +1,279 @@
 /**
+ * @module    components/inputs/Dropdown
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Dropdown — select-style picker with optional search filter and clearable
+ * selection.
+ *
+ * @example HTML
+ *   <arianna-dropdown placeholder="Choose country" searchable clearable></arianna-dropdown>
+ *
+ * Events: arianna:change  detail: { value, option }
+ * Attrs:  placeholder, searchable, clearable, disabled, value
  */
 
-/**
- * @module Dropdown
- * @example
- *   const dd = new Dropdown('#root', { placeholder: 'Choose country' });
- *   dd.options = [{ value: 'it', label: 'Italy' }, { value: 'ch', label: 'Switzerland' }];
- *   dd.value = 'ch';
- *   dd.on('change', ({ value }) => console.log(value));
- */
-import { Control } from '../core/Control.ts';
-export interface DropdownOption { value: string; label: string; icon?: string; disabled?: boolean; }
-export interface DropdownOptions { placeholder?: string; searchable?: boolean; clearable?: boolean; disabled?: boolean; class?: string; }
-export class Dropdown extends Control<DropdownOptions> {
-  private _options: DropdownOption[] = [];
-  private _value  = '';
-  private _open   = false;
-  private _filter = '';
-  constructor(container: string | HTMLElement | null = null, opts: DropdownOptions = {}) {
-    super(container, 'div', { placeholder: 'Select…', searchable: false, clearable: false, ...opts });
-    this.el.className = `ar-dropdown${opts.class?' '+opts.class:''}`;
-    this._on(document as unknown as HTMLElement, 'click', (e: MouseEvent) => { if (!this.el.contains(e.target as Node)) this._closeList(); });
-  }
-  set options(v: DropdownOption[]) { this._options = v; this._set('options' as never, v as never); }
-  set value(v: string)             { this._value = v; this._build(); }
-  get value()                      { return this._value; }
-  get selectedOption()             { return this._options.find(o => o.value === this._value); }
-  private _closeList()             { this._open = false; this._build(); }
-  protected _build() {
-    this.el.innerHTML = '';
-    const sel     = this.selectedOption;
-    const trigger = this._el('div', 'ar-dropdown__trigger', this.el);
-    if (sel?.icon) this._el('span', 'ar-dropdown__icon', trigger).textContent = sel.icon;
-    const lbl = this._el('span', 'ar-dropdown__value', trigger);
-    lbl.textContent = sel?.label ?? this._get('placeholder', 'Select…') as string;
-    if (!sel) lbl.classList.add('ar-dropdown__placeholder');
-    if (this._get('clearable', false) && sel) {
-      const x = this._el('button', 'ar-dropdown__clear', trigger) as HTMLButtonElement;
-      x.textContent = '✕';
-      x.addEventListener('click', e => { e.stopPropagation(); this._value = ''; this._emit('change', { value: '', option: null }); this._build(); });
-    }
-    this._el('span', 'ar-dropdown__arrow', trigger).textContent = this._open ? '▾' : '▸';
-    if (!this._get('disabled', false)) {
-      trigger.addEventListener('click', e => { e.stopPropagation(); this._open = !this._open; this._build(); });
-    }
-    if (this._open) {
-      const list = this._el('div', 'ar-dropdown__list', this.el);
-      if (this._get('searchable', false)) {
-        const inp = document.createElement('input');
-        inp.type = 'text'; inp.className = 'ar-dropdown__search'; inp.placeholder = 'Search…'; inp.value = this._filter;
-        inp.addEventListener('input', () => { this._filter = inp.value; this._renderOptions(list); });
-        inp.addEventListener('click', e => e.stopPropagation());
-        list.appendChild(inp); setTimeout(() => inp.focus(), 0);
-      }
-      this._renderOptions(list);
-    }
-  }
-  private _renderOptions(list: HTMLElement) {
-    list.querySelectorAll('.ar-dropdown__option').forEach(e => e.remove());
-    const q = this._filter.toLowerCase();
-    const filtered = q ? this._options.filter(o => o.label.toLowerCase().includes(q)) : this._options;
-    filtered.forEach(opt => {
-      const row = this._el('div', `ar-dropdown__option${opt.value===this._value?' ar-dropdown__option--active':''}${opt.disabled?' ar-dropdown__option--disabled':''}`, list);
-      if (opt.icon) this._el('span', '', row).textContent = opt.icon;
-      this._el('span', '', row).textContent = opt.label;
-      if (!opt.disabled) row.addEventListener('click', e => { e.stopPropagation(); this._value = opt.value; this._filter = ''; this._open = false; this._emit('change', { value: opt.value, option: opt }); this._build(); });
-    });
-  }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
+
+export interface DropdownOption {
+    value    : string;
+    label    : string;
+    icon?    : string;
+    disabled?: boolean;
 }
-export const DropdownCSS = `.ar-dropdown{position:relative;user-select:none}.ar-dropdown__trigger{align-items:center;background:var(--ar-bg3);border:1px solid var(--ar-border);border-radius:var(--ar-radius);cursor:pointer;display:flex;gap:6px;padding:6px 10px;transition:border-color var(--ar-transition)}.ar-dropdown__trigger:hover{border-color:var(--ar-border2)}.ar-dropdown__value{flex:1;font-size:.82rem}.ar-dropdown__placeholder{color:var(--ar-muted)}.ar-dropdown__arrow{color:var(--ar-muted);font-size:.7rem}.ar-dropdown__clear{background:none;border:none;color:var(--ar-muted);cursor:pointer;font-size:.8rem;line-height:1;padding:0}.ar-dropdown__list{background:var(--ar-bg3);border:1px solid var(--ar-border);border-radius:var(--ar-radius);box-shadow:var(--ar-shadow-lg);left:0;max-height:240px;overflow-y:auto;padding:4px 0;position:absolute;right:0;top:calc(100% + 4px);z-index:500}.ar-dropdown__search{border:none;border-bottom:1px solid var(--ar-border);color:var(--ar-text);display:block;font:inherit;font-size:.82rem;outline:none;padding:7px 12px;width:100%;background:transparent}.ar-dropdown__option{align-items:center;cursor:pointer;display:flex;font-size:.82rem;gap:6px;padding:7px 12px;transition:background var(--ar-transition)}.ar-dropdown__option:hover{background:var(--ar-bg4)}.ar-dropdown__option--active{color:var(--ar-primary);font-weight:500}.ar-dropdown__option--disabled{opacity:.4;cursor:not-allowed}`;
+
+export interface DropdownOptions {
+    placeholder? : string;
+    searchable?  : boolean;
+    clearable?   : boolean;
+    disabled?    : boolean;
+    options?     : DropdownOption[];
+    value?       : string;
+}
+
+export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
+    attrs : ['placeholder', 'searchable', 'clearable', 'disabled', 'value'],
+    shadow: false,
+})
+{
+    options$: Signal<DropdownOption[]> = signal<DropdownOption[]>([]);
+    open$   : Signal<boolean>          = signal<boolean>(false);
+    filter$ : Signal<string>           = signal<string>('');
+
+    #outsideClick: ((e: Event) => void) | null = null;
+
+    build(_opts: DropdownOptions = {})
+    {
+        const value = this.attrSignal('value');
+
+        const selected = (): DropdownOption | undefined =>
+            this.options$.get().find(o => o.value === (value.get() ?? ''));
+
+        this.placeholderText = () => this.getAttribute('placeholder') ?? 'Select…';
+        this.isOpen          = () => this.open$.get();
+        this.isSearchable    = () => this.hasAttribute('searchable');
+        this.isClearable     = () => this.hasAttribute('clearable');
+        this.isDisabled      = () => this.hasAttribute('disabled');
+        this.hasSelection    = () => !!selected();
+        this.selectedLabel   = () => selected()?.label ?? this.placeholderText();
+        this.selectedIcon    = () => selected()?.icon ?? '';
+        this.hasSelectedIcon = () => !!selected()?.icon;
+        this.valueClass      = () => 'ar-dropdown__value' +
+            (this.hasSelection() ? '' : ' ar-dropdown__placeholder');
+        this.arrowText       = () => this.isOpen() ? '▾' : '▸';
+        this.filterValue     = () => this.filter$.get();
+
+        this.filteredOpts = (): DropdownOption[] => {
+            const q = this.filter$.get().toLowerCase();
+            const opts = this.options$.get();
+            return q ? opts.filter(o => o.label.toLowerCase().includes(q)) : opts;
+        };
+        this.optCls = (o: DropdownOption) =>
+            'ar-dropdown__option'
+            + (o.value === (value.get() ?? '') ? ' ar-dropdown__option--active' : '')
+            + (o.disabled ? ' ar-dropdown__option--disabled' : '');
+
+        this.onTriggerClick = (e: Event) => {
+            e.stopPropagation();
+            if (this.isDisabled()) return;
+            const wasOpen = this.open$.get();
+            this.open$.set(!wasOpen);
+            if (!wasOpen) {
+                this.#outsideClick = (ev: Event) => {
+                    if (!this.contains(ev.target as Node)) this.open$.set(false);
+                };
+                setTimeout(() => document.addEventListener('click', this.#outsideClick!), 0);
+            } else if (this.#outsideClick) {
+                document.removeEventListener('click', this.#outsideClick);
+                this.#outsideClick = null;
+            }
+        };
+
+        this.onClear = (e: Event) => {
+            e.stopPropagation();
+            this.removeAttribute('value');
+            this.dispatchEvent(new CustomEvent('arianna:change', {
+                bubbles: true, detail: { value: '', option: null },
+            }));
+        };
+
+        this.onFilter = (e: Event) => {
+            e.stopPropagation();
+            this.filter$.set((e.target as HTMLInputElement).value);
+        };
+
+        this.onOptionClick = (opt: DropdownOption, e: Event) => {
+            e.stopPropagation();
+            if (opt.disabled) return;
+            this.setAttribute('value', opt.value);
+            this.open$.set(false);
+            this.dispatchEvent(new CustomEvent('arianna:change', {
+                bubbles: true, detail: { value: opt.value, option: opt },
+            }));
+        };
+
+        this.template = html`
+            <div class="ar-dropdown__trigger" @click="this.onTriggerClick">
+                <span class="ar-dropdown__icon" a-if="this.hasSelectedIcon()">{{ this.selectedIcon() }}</span>
+                <span :class="this.valueClass()">{{ this.selectedLabel() }}</span>
+                <button class="ar-dropdown__clear"
+                        a-if="this.isClearable() && this.hasSelection()"
+                        @click="this.onClear"
+                        aria-label="Clear">✕</button>
+                <span class="ar-dropdown__arrow">{{ this.arrowText() }}</span>
+            </div>
+            <div class="ar-dropdown__list" a-if="this.isOpen()">
+                <input class="ar-dropdown__search"
+                       type="text"
+                       a-if="this.isSearchable()"
+                       placeholder="Search…"
+                       :value="this.filterValue()"
+                       @input="this.onFilter"
+                       @click="(e) => e.stopPropagation()"/>
+                <div :class="this.optCls(opt)"
+                     a-for="opt in this.filteredOpts()"
+                     @click="(e) => this.onOptionClick(opt, e)">
+                    <span a-if="opt.icon">{{ opt.icon }}</span>
+                    <span>{{ opt.label }}</span>
+                </div>
+            </div>
+        `;
+
+        this.Sheet = Dropdown.DefaultSheet();
+    }
+
+    set options(v: DropdownOption[]) { this.options$.set(v ?? []); }
+    get options(): DropdownOption[]  { return this.options$.get(); }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount() {
+        if (this.#outsideClick) {
+            document.removeEventListener('click', this.#outsideClick);
+            this.#outsideClick = null;
+        }
+    }
+
+    get value(): string  { return this.getAttribute('value') ?? ''; }
+    set value(v: string) { v ? this.setAttribute('value', v) : this.removeAttribute('value'); }
+
+    get placeholder(): string  { return this.getAttribute('placeholder') ?? ''; }
+    set placeholder(v: string) { this.setAttribute('placeholder', v); }
+
+    get searchable(): boolean  { return this.hasAttribute('searchable'); }
+    set searchable(v: boolean) { v ? this.setAttribute('searchable', '') : this.removeAttribute('searchable'); }
+
+    get clearable(): boolean  { return this.hasAttribute('clearable'); }
+    set clearable(v: boolean) { v ? this.setAttribute('clearable', '') : this.removeAttribute('clearable'); }
+
+    private placeholderText: () => string = () => '';
+    private isOpen         : () => boolean = () => false;
+    private isSearchable   : () => boolean = () => false;
+    private isClearable    : () => boolean = () => false;
+    private isDisabled     : () => boolean = () => false;
+    private hasSelection   : () => boolean = () => false;
+    private selectedLabel  : () => string = () => '';
+    private selectedIcon   : () => string = () => '';
+    private hasSelectedIcon: () => boolean = () => false;
+    private valueClass     : () => string = () => '';
+    private arrowText      : () => string = () => '▸';
+    private filterValue    : () => string = () => '';
+    private filteredOpts   : () => DropdownOption[] = () => [];
+    private optCls         : (o: DropdownOption) => string = () => '';
+    private onTriggerClick : (e: Event) => void = () => {};
+    private onClear        : (e: Event) => void = () => {};
+    private onFilter       : (e: Event) => void = () => {};
+    private onOptionClick  : (o: DropdownOption, e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    display : 'inline-block',
+                    position: 'relative',
+                    width   : '100%',
+                    maxWidth: '320px',
+                }),
+                new Rule('.ar-dropdown__trigger', {
+                    alignItems  : 'center',
+                    background  : 'var(--arianna-bg, #ffffff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    cursor      : 'pointer',
+                    display     : 'flex',
+                    gap         : '8px',
+                    padding     : '6px 10px',
+                    transition  : 'border-color 0.18s ease',
+                }),
+                new Rule('.ar-dropdown__trigger:hover', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
+                new Rule('.ar-dropdown__value', { flex: '1', fontSize: '0.82rem' }),
+                new Rule('.ar-dropdown__placeholder', { color: 'var(--arianna-muted, #6e6b62)' }),
+                new Rule('.ar-dropdown__arrow',       { color: 'var(--arianna-muted, #6e6b62)', fontSize: '0.7rem' }),
+                new Rule('.ar-dropdown__clear', {
+                    background: 'none', border: 'none',
+                    color     : 'var(--arianna-muted, #6e6b62)',
+                    cursor    : 'pointer', fontSize: '0.7rem', padding: '0',
+                }),
+                new Rule('.ar-dropdown__list', {
+                    background  : 'var(--arianna-bg, #ffffff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    boxShadow   : '0 6px 18px rgba(0,0,0,0.14)',
+                    display     : 'flex',
+                    flexDirection: 'column',
+                    left        : '0',
+                    maxHeight   : '260px',
+                    overflowY   : 'auto',
+                    position    : 'absolute',
+                    right       : '0',
+                    top         : 'calc(100% + 4px)',
+                    zIndex      : '900',
+                }),
+                new Rule('.ar-dropdown__search', {
+                    background  : 'var(--arianna-bg-3, #f3f3f3)',
+                    border      : 'none',
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    font        : 'inherit',
+                    fontSize    : '0.8rem',
+                    outline     : 'none',
+                    padding     : '6px 10px',
+                }),
+                new Rule('.ar-dropdown__option', {
+                    alignItems: 'center',
+                    cursor    : 'pointer',
+                    display   : 'flex',
+                    fontSize  : '0.82rem',
+                    gap       : '8px',
+                    padding   : '6px 10px',
+                    transition: 'background 0.14s ease',
+                }),
+                new Rule('.ar-dropdown__option:hover:not(.ar-dropdown__option--disabled)', {
+                    background: 'var(--arianna-bg-3, #f3f3f3)',
+                }),
+                new Rule('.ar-dropdown__option--active', {
+                    background: 'rgba(31,111,235,0.10)',
+                    color     : 'var(--arianna-primary, #1f6feb)',
+                }),
+                new Rule('.ar-dropdown__option--disabled', { opacity: '0.4', cursor: 'not-allowed' }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Dropdown', { value: Dropdown, writable: false, enumerable: false, configurable: false });
+}
+
+export default Dropdown;

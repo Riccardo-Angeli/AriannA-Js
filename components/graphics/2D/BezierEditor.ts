@@ -1,544 +1,446 @@
 /**
- * @module    BezierEditor
+ * @module    components/graphics/2D/BezierEditor
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
  *
- * Interactive cubic Bézier path editor — Illustrator-style. Lets the user
- * build, edit and manipulate paths made of anchor points joined by cubic
- * Bézier segments. Each anchor has two control handles (`hIn`, `hOut`) that
- * can be either symmetric (mirrored), asymmetric (independent magnitudes,
- * mirrored direction), or fully independent (corner point).
+ * BezierEditor — interactive cubic Bézier path editor (Illustrator-style).
+ * Lets users build, edit, and manipulate paths of anchor points joined by
+ * cubic Bézier segments. Each anchor has `hIn` / `hOut` control handles
+ * stored relative to the anchor position.
  *
- *   ●─────╲                ╱─────●
- *    \     ╲              ╱     /
- *     ●     ╲            ╱     ●
- *           Anchor     Anchor
- *           (smooth)   (corner)
+ *   • Pen mode    — click empty space to add an anchor; drag to define hOut
+ *   • Edit mode   — drag anchors / handles; alt-drag handle to break symmetry
+ *   • Delete mode — click an anchor to remove it
  *
- * Built-in interactions:
+ * Output: SVG `<path>` `d` attribute via `toSVGPath()`.
  *
- *   • Pen mode: click in empty space to add an anchor; drag to define the
- *     out-handle (and a mirrored in-handle on the next anchor's hIn).
- *   • Edit mode: drag anchors to move; drag handles to reshape; alt-drag a
- *     handle to break symmetry; double-click an anchor to toggle smooth/corner.
- *   • Delete mode: click an anchor to remove it.
- *   • Closed/open paths via `closePath()` / `openPath()`.
+ * @example HTML
+ *   <arianna-bezier-editor width="600" height="400" mode="pen"></arianna-bezier-editor>
  *
- * Coordinate system is world-space — meant to be embedded inside a Canvas2D
- * (or any other transform-aware viewport). Set `pxPerUnit` to control the
- * displayed scale of handle dots.
- *
- * Output: an SVG `<path>` `d` attribute can be obtained via `toSVGPath()`.
- *
- * @example
- *   import { BezierEditor } from 'ariannajs/components/gfx2d';
- *
- *   const ed = new BezierEditor('#bezier', { width: 600, height: 400 });
- *   ed.setMode('pen');
- *   ed.on('change', () => console.log(ed.toSVGPath()));
- *
- *   // Programmatic build
- *   ed.addAnchor({ x: 100, y: 100 });
- *   ed.addAnchor({ x: 300, y: 100, hIn: { x: -50, y: 0 }, hOut: { x: 50, y: 0 } });
- *   ed.closePath();
+ * Events: arianna:change  detail: { anchors, closed, d }
+ * Attrs:  width, height, mode (pen|edit|delete), closed
  */
 
-import { Control, type CtrlOptions } from '../../core/Control.ts';
-
-// ── Types ────────────────────────────────────────────────────────────────────
+import { Component } from '../../../core/Component.ts';
+import { html }      from '../../../core/Template.ts';
+import { signal }    from '../../../core/Observable.ts';
+import type { Signal } from '../../../core/Observable.ts';
+import { Sheet } from '../../../core/Sheet.ts';
+import { Rule }      from '../../../core/Rule.ts';
 
 export interface Vec2 { x: number; y: number; }
 
-/**
- * One anchor point. `hIn` and `hOut` are stored relative to the anchor — so
- * `(0,0)` means the handle is on top of the anchor (a corner). Move them
- * outwards to make smooth Bézier transitions.
- */
 export interface Anchor {
     x    : number;
     y    : number;
     hIn  : Vec2;
     hOut : Vec2;
-    /** 'smooth' = handles mirrored & equal magnitude;
-     *  'asym'   = handles mirrored but independent magnitudes;
-     *  'corner' = handles fully independent. */
     kind : 'smooth' | 'asym' | 'corner';
 }
 
 export type BezierMode = 'pen' | 'edit' | 'delete';
 
-export interface BezierEditorOptions extends CtrlOptions {
-    /** SVG width. Default 600. */
-    width?      : number;
-    /** SVG height. Default 400. */
-    height?     : number;
-    /** Initial editing mode. Default 'pen'. */
-    mode?       : BezierMode;
-    /** Initial path. Default empty. */
-    anchors?    : Anchor[];
-    /** Whether the path is closed. Default false. */
-    closed?     : boolean;
-    /** Stroke colour for the path. Default '#e40c88'. */
-    stroke?     : string;
-    /** Stroke width. Default 2. */
-    strokeWidth?: number;
-    /** Fill colour ('none' to leave open). Default 'none'. */
-    fill?       : string;
+export interface BezierEditorOptions {
+    width?   : number;
+    height?  : number;
+    mode?    : BezierMode;
+    anchors? : Anchor[];
+    closed?  : boolean;
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+interface BezierState { anchors: Anchor[]; closed: boolean; }
 
-export class BezierEditor extends Control<BezierEditorOptions>
+export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement, {}, {
+    attrs : ['width', 'height', 'mode', 'closed'],
+    shadow: false,
+})
 {
-    private _anchors : Anchor[] = [];
-    private _closed  : boolean  = false;
-    private _mode    : BezierMode;
+    state$: Signal<BezierState> = signal<BezierState>({ anchors: [], closed: false });
 
-    private _selected : number | null = null;          // selected anchor index
-    private _draggingAnchor: number | null = null;     // index being dragged
-    private _draggingHandle: { i: number; which: 'in' | 'out' } | null = null;
-
-    // DOM
-    private _svg!     : SVGSVGElement;
-    private _gPath!   : SVGGElement;
-    private _gOverlay!: SVGGElement;     // anchors + handles overlay
-
-    constructor(container: string | HTMLElement | null, opts: BezierEditorOptions = {})
+    build(_opts: BezierEditorOptions = {})
     {
-        super(container, 'div', {
-            width      : 600,
-            height     : 400,
-            mode       : 'pen',
-            anchors    : [],
-            closed     : false,
-            stroke     : '#e40c88',
-            strokeWidth: 2,
-            fill       : 'none',
-            ...opts,
-        });
+        const wAttr = this.attrSignal('width');
+        const hAttr = this.attrSignal('height');
 
-        this.el.className = `ar-bezier${opts.class ? ' ' + opts.class : ''}`;
-        this._mode    = this._get<BezierMode>('mode', 'pen');
-        this._anchors = (this._get<Anchor[]>('anchors', []) || []).map(a => this._cloneAnchor(a));
-        this._closed  = this._get<boolean>('closed', false);
+        this.viewBox = () => `0 0 ${this.#w()} ${this.#h()}`;
+        this.wStr    = () => String(this.#w());
+        this.hStr    = () => String(this.#h());
+        this.pathD   = () => this.toSVGPath();
 
-        this._injectStyles();
-        this._build();
+        this.anchorList = (): Array<{ cx: string; cy: string; idx: number; cls: string }> =>
+            this.state$.get().anchors.map((a, i) => ({
+                cx: String(a.x), cy: String(a.y), idx: i,
+                cls: 'ar-bez__anchor',
+            }));
+
+        this.handleSegments = (): Array<{ x1: string; y1: string; x2: string; y2: string }> => {
+            const out: Array<{ x1: string; y1: string; x2: string; y2: string }> = [];
+            for (const a of this.state$.get().anchors) {
+                if (a.hIn.x !== 0 || a.hIn.y !== 0) {
+                    out.push({
+                        x1: String(a.x), y1: String(a.y),
+                        x2: String(a.x + a.hIn.x), y2: String(a.y + a.hIn.y),
+                    });
+                }
+                if (a.hOut.x !== 0 || a.hOut.y !== 0) {
+                    out.push({
+                        x1: String(a.x), y1: String(a.y),
+                        x2: String(a.x + a.hOut.x), y2: String(a.y + a.hOut.y),
+                    });
+                }
+            }
+            return out;
+        };
+
+        this.handleDots = (): Array<{ cx: string; cy: string; idx: number; side: 'in' | 'out' }> => {
+            const out: Array<{ cx: string; cy: string; idx: number; side: 'in' | 'out' }> = [];
+            this.state$.get().anchors.forEach((a, i) => {
+                if (a.hIn.x !== 0 || a.hIn.y !== 0) {
+                    out.push({ cx: String(a.x + a.hIn.x), cy: String(a.y + a.hIn.y), idx: i, side: 'in' });
+                }
+                if (a.hOut.x !== 0 || a.hOut.y !== 0) {
+                    out.push({ cx: String(a.x + a.hOut.x), cy: String(a.y + a.hOut.y), idx: i, side: 'out' });
+                }
+            });
+            return out;
+        };
+
+        // ── Handlers ────────────────────────────────────────────────────
+        this.onSvgPointerDown = (e: Event) => {
+            const me = e as PointerEvent;
+            const target = me.target as SVGElement;
+            // Ignore if clicking on an anchor or handle
+            if (target.classList.contains('ar-bez__anchor') || target.classList.contains('ar-bez__handle-dot')) return;
+            const svg = me.currentTarget as SVGSVGElement;
+            const pt = this.#localPoint(svg, me);
+            const mode = (this.getAttribute('mode') ?? 'pen') as BezierMode;
+            if (mode === 'pen') {
+                // Add new anchor; allow drag to define hOut
+                const cur = this.state$.get();
+                const anchor: Anchor = { x: pt.x, y: pt.y, hIn: { x: 0, y: 0 }, hOut: { x: 0, y: 0 }, kind: 'corner' };
+                // If there's a previous anchor, the new hIn mirrors the previous hOut visually
+                this.state$.set({ ...cur, anchors: [...cur.anchors, anchor] });
+                this.#fire();
+
+                // Pen drag — set hOut while pointer moves before release
+                svg.setPointerCapture?.(me.pointerId);
+                this.#penDragIdx = cur.anchors.length;
+                this.#penDragOrigin = { x: pt.x, y: pt.y };
+            }
+        };
+        this.onSvgPointerMove = (e: Event) => {
+            const me = e as PointerEvent;
+            if (this.#penDragIdx == null) return;
+            const svg = me.currentTarget as SVGSVGElement;
+            const pt = this.#localPoint(svg, me);
+            const cur = this.state$.get();
+            const a = cur.anchors[this.#penDragIdx];
+            if (!a || !this.#penDragOrigin) return;
+            const next = cur.anchors.slice();
+            const hOut = { x: pt.x - this.#penDragOrigin.x, y: pt.y - this.#penDragOrigin.y };
+            const hIn  = { x: -hOut.x, y: -hOut.y };
+            next[this.#penDragIdx] = { ...a, hOut, hIn, kind: 'smooth' };
+            this.state$.set({ ...cur, anchors: next });
+            this.#fire();
+        };
+        this.onSvgPointerUp = () => {
+            this.#penDragIdx = null;
+            this.#penDragOrigin = null;
+        };
+
+        this.onAnchorPointerDown = (e: Event) => {
+            const me = e as PointerEvent;
+            me.stopPropagation();
+            const target = me.currentTarget as SVGCircleElement;
+            const idx = parseInt(target.dataset.idx ?? '0', 10);
+            const mode = (this.getAttribute('mode') ?? 'pen') as BezierMode;
+            if (mode === 'delete') {
+                this.removeAnchor(idx);
+                return;
+            }
+            // Edit: drag anchor
+            target.setPointerCapture?.(me.pointerId);
+            this.#anchorDragIdx = idx;
+        };
+        this.onAnchorPointerMove = (e: Event) => {
+            if (this.#anchorDragIdx == null) return;
+            const me = e as PointerEvent;
+            const svg = (me.currentTarget as SVGElement).ownerSVGElement;
+            if (!svg) return;
+            const pt = this.#localPoint(svg, me);
+            const cur = this.state$.get();
+            const a = cur.anchors[this.#anchorDragIdx];
+            if (!a) return;
+            const next = cur.anchors.slice();
+            next[this.#anchorDragIdx] = { ...a, x: pt.x, y: pt.y };
+            this.state$.set({ ...cur, anchors: next });
+            this.#fire();
+        };
+        this.onAnchorPointerUp = () => { this.#anchorDragIdx = null; };
+
+        this.onHandlePointerDown = (e: Event) => {
+            const me = e as PointerEvent;
+            me.stopPropagation();
+            const target = me.currentTarget as SVGCircleElement;
+            target.setPointerCapture?.(me.pointerId);
+            this.#handleDragIdx = parseInt(target.dataset.idx ?? '0', 10);
+            this.#handleDragSide = (target.dataset.side as 'in' | 'out') ?? 'out';
+            this.#handleDragAlt  = me.altKey;
+        };
+        this.onHandlePointerMove = (e: Event) => {
+            if (this.#handleDragIdx == null) return;
+            const me = e as PointerEvent;
+            const svg = (me.currentTarget as SVGElement).ownerSVGElement;
+            if (!svg) return;
+            const pt = this.#localPoint(svg, me);
+            const cur = this.state$.get();
+            const a = cur.anchors[this.#handleDragIdx];
+            if (!a) return;
+            const next = cur.anchors.slice();
+            const delta = { x: pt.x - a.x, y: pt.y - a.y };
+            let updated: Anchor;
+            if (this.#handleDragSide === 'out') {
+                if (this.#handleDragAlt || a.kind === 'corner') {
+                    updated = { ...a, hOut: delta, kind: 'corner' };
+                } else if (a.kind === 'smooth') {
+                    updated = { ...a, hOut: delta, hIn: { x: -delta.x, y: -delta.y } };
+                } else {
+                    // asym: keep direction mirrored but magnitude independent
+                    const mag = Math.hypot(a.hIn.x, a.hIn.y) || Math.hypot(delta.x, delta.y);
+                    const dirLen = Math.hypot(delta.x, delta.y) || 1;
+                    updated = { ...a, hOut: delta, hIn: { x: -delta.x * mag / dirLen, y: -delta.y * mag / dirLen } };
+                }
+            } else {
+                if (this.#handleDragAlt || a.kind === 'corner') {
+                    updated = { ...a, hIn: delta, kind: 'corner' };
+                } else if (a.kind === 'smooth') {
+                    updated = { ...a, hIn: delta, hOut: { x: -delta.x, y: -delta.y } };
+                } else {
+                    const mag = Math.hypot(a.hOut.x, a.hOut.y) || Math.hypot(delta.x, delta.y);
+                    const dirLen = Math.hypot(delta.x, delta.y) || 1;
+                    updated = { ...a, hIn: delta, hOut: { x: -delta.x * mag / dirLen, y: -delta.y * mag / dirLen } };
+                }
+            }
+            next[this.#handleDragIdx] = updated;
+            this.state$.set({ ...cur, anchors: next });
+            this.#fire();
+        };
+        this.onHandlePointerUp = () => {
+            this.#handleDragIdx = null;
+            this.#handleDragSide = null;
+            this.#handleDragAlt = false;
+        };
+
+        this.template = html`
+            <svg :viewBox="this.viewBox()"
+                 :width="this.wStr()" :height="this.hStr()"
+                 xmlns="http://www.w3.org/2000/svg"
+                 class="ar-bez__svg"
+                 @pointerdown="this.onSvgPointerDown"
+                 @pointermove="this.onSvgPointerMove"
+                 @pointerup="this.onSvgPointerUp">
+                <path :d="this.pathD()" class="ar-bez__path" fill="none"></path>
+                <line a-for="s in this.handleSegments()"
+                      :x1="s.x1" :y1="s.y1" :x2="s.x2" :y2="s.y2"
+                      class="ar-bez__handle-line"></line>
+                <circle a-for="h in this.handleDots()"
+                        :cx="h.cx" :cy="h.cy" r="4"
+                        class="ar-bez__handle-dot"
+                        :data-idx="h.idx" :data-side="h.side"
+                        @pointerdown="this.onHandlePointerDown"
+                        @pointermove="this.onHandlePointerMove"
+                        @pointerup="this.onHandlePointerUp"></circle>
+                <circle a-for="a in this.anchorList()"
+                        :cx="a.cx" :cy="a.cy" r="5"
+                        :class="a.cls"
+                        :data-idx="a.idx"
+                        @pointerdown="this.onAnchorPointerDown"
+                        @pointermove="this.onAnchorPointerMove"
+                        @pointerup="this.onAnchorPointerUp"></circle>
+            </svg>
+        `;
+
+        this.Sheet = BezierEditor.DefaultSheet();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
+    // ── Public API ───────────────────────────────────────────────────────────
 
-    /** All current anchors (deep-cloned, safe to mutate). */
-    getAnchors(): Anchor[] { return this._anchors.map(a => this._cloneAnchor(a)); }
+    setMode(mode: BezierMode): this { this.setAttribute('mode', mode); return this; }
+    getMode(): BezierMode { return (this.getAttribute('mode') as BezierMode) || 'pen'; }
 
-    /** Replace all anchors. */
-    setAnchors(arr: Anchor[]): this
-    {
-        this._anchors = arr.map(a => this._cloneAnchor(a));
-        this._render();
-        this._emitChange('replace');
+    closePath(): this {
+        const cur = this.state$.get();
+        this.state$.set({ ...cur, closed: true });
+        this.setAttribute('closed', 'true');
+        this.#fire();
+        return this;
+    }
+    openPath(): this {
+        const cur = this.state$.get();
+        this.state$.set({ ...cur, closed: false });
+        this.removeAttribute('closed');
+        this.#fire();
         return this;
     }
 
-    /** Add an anchor at the end of the path. */
-    addAnchor(opts: Partial<Anchor> & Vec2): Anchor
-    {
+    addAnchor(opts: { x: number; y: number; hIn?: Vec2; hOut?: Vec2; kind?: Anchor['kind'] }): Anchor {
         const a: Anchor = {
             x: opts.x, y: opts.y,
-            hIn  : opts.hIn  ? { ...opts.hIn  } : { x: 0, y: 0 },
-            hOut : opts.hOut ? { ...opts.hOut } : { x: 0, y: 0 },
-            kind : opts.kind ?? 'corner',
+            hIn:  opts.hIn  ?? { x: 0, y: 0 },
+            hOut: opts.hOut ?? { x: 0, y: 0 },
+            kind: opts.kind ?? 'corner',
         };
-        this._anchors.push(a);
-        this._selected = this._anchors.length - 1;
-        this._render();
-        this._emitChange('add', { index: this._selected });
+        const cur = this.state$.get();
+        this.state$.set({ ...cur, anchors: [...cur.anchors, a] });
+        this.#fire();
         return a;
     }
 
-    /** Remove an anchor by index. */
-    removeAnchor(index: number): this
-    {
-        if (index < 0 || index >= this._anchors.length) return this;
-        this._anchors.splice(index, 1);
-        if (this._selected === index) this._selected = null;
-        else if (this._selected !== null && this._selected > index) this._selected--;
-        this._render();
-        this._emitChange('remove', { index });
+    removeAnchor(idx: number): this {
+        const cur = this.state$.get();
+        if (idx < 0 || idx >= cur.anchors.length) return this;
+        const next = cur.anchors.slice();
+        next.splice(idx, 1);
+        this.state$.set({ ...cur, anchors: next });
+        this.#fire();
         return this;
     }
 
-    /** Update a single anchor's fields. */
-    updateAnchor(index: number, patch: Partial<Anchor>): this
-    {
-        if (index < 0 || index >= this._anchors.length) return this;
-        const a = this._anchors[index]!;
-        if (patch.x !== undefined) a.x = patch.x;
-        if (patch.y !== undefined) a.y = patch.y;
-        if (patch.hIn)  a.hIn  = { ...patch.hIn };
-        if (patch.hOut) a.hOut = { ...patch.hOut };
-        if (patch.kind) a.kind = patch.kind;
-        this._render();
-        this._emitChange('update', { index });
+    setAnchors(anchors: Anchor[]): this {
+        this.state$.set({ ...this.state$.get(), anchors: anchors.map(a => ({
+            x: a.x, y: a.y,
+            hIn: { ...a.hIn }, hOut: { ...a.hOut },
+            kind: a.kind,
+        })) });
+        this.#fire();
         return this;
     }
 
-    /** Close the path (last anchor connects back to first). */
-    closePath(): this { this._closed = true;  this._render(); this._emitChange('close'); return this; }
-
-    /** Open a previously-closed path. */
-    openPath(): this  { this._closed = false; this._render(); this._emitChange('open');  return this; }
-
-    /** Is the path closed? */
-    isClosed(): boolean { return this._closed; }
-
-    /** Set the editing mode (pen / edit / delete). */
-    setMode(mode: BezierMode): this
-    {
-        this._mode = mode;
-        this._svg.setAttribute('data-mode', mode);
-        this._emit('mode', { mode });
-        return this;
+    getAnchors(): Anchor[] {
+        return this.state$.get().anchors.map(a => ({
+            x: a.x, y: a.y,
+            hIn: { ...a.hIn }, hOut: { ...a.hOut },
+            kind: a.kind,
+        }));
     }
 
-    getMode(): BezierMode { return this._mode; }
-
-    /**
-     * Render the path as an SVG `d` attribute string. Supports both open
-     * and closed paths, with cubic Bézier segments between anchors that
-     * have handle points.
-     */
-    toSVGPath(): string
-    {
-        if (!this._anchors.length) return '';
-        const a0 = this._anchors[0]!;
-        const parts: string[] = [`M ${fmt(a0.x)} ${fmt(a0.y)}`];
-
-        const segs = this._closed ? this._anchors.length : this._anchors.length - 1;
-        for (let i = 0; i < segs; i++)
-        {
-            const a = this._anchors[i]!;
-            const b = this._anchors[(i + 1) % this._anchors.length]!;
-            const c1 = { x: a.x + a.hOut.x, y: a.y + a.hOut.y };
-            const c2 = { x: b.x + b.hIn.x,  y: b.y + b.hIn.y  };
-            parts.push(`C ${fmt(c1.x)} ${fmt(c1.y)} ${fmt(c2.x)} ${fmt(c2.y)} ${fmt(b.x)} ${fmt(b.y)}`);
+    toSVGPath(): string {
+        const cur = this.state$.get();
+        const anchors = cur.anchors;
+        if (anchors.length === 0) return '';
+        const parts: string[] = [];
+        parts.push(`M${anchors[0]!.x},${anchors[0]!.y}`);
+        for (let i = 1; i < anchors.length; i++) {
+            const a = anchors[i - 1]!;
+            const b = anchors[i]!;
+            const c1x = a.x + a.hOut.x, c1y = a.y + a.hOut.y;
+            const c2x = b.x + b.hIn.x,  c2y = b.y + b.hIn.y;
+            parts.push(`C${c1x},${c1y} ${c2x},${c2y} ${b.x},${b.y}`);
         }
-        if (this._closed) parts.push('Z');
+        if (cur.closed && anchors.length > 1) {
+            const last = anchors[anchors.length - 1]!;
+            const first = anchors[0]!;
+            const c1x = last.x + last.hOut.x, c1y = last.y + last.hOut.y;
+            const c2x = first.x + first.hIn.x, c2y = first.y + first.hIn.y;
+            parts.push(`C${c1x},${c1y} ${c2x},${c2y} ${first.x},${first.y} Z`);
+        }
         return parts.join(' ');
     }
 
-    /** Index of the currently selected anchor, or null. */
-    getSelected(): number | null { return this._selected; }
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
 
-    /** Programmatically select an anchor. */
-    select(index: number | null): this
-    {
-        this._selected = index;
-        this._render();
-        return this;
+    #w(): number { return parseInt(this.getAttribute('width')  ?? '600', 10) || 600; }
+    #h(): number { return parseInt(this.getAttribute('height') ?? '400', 10) || 400; }
+
+    #localPoint(svg: SVGSVGElement | null, e: PointerEvent): Vec2 {
+        if (!svg) return { x: 0, y: 0 };
+        const rect = svg.getBoundingClientRect();
+        const vbW = this.#w(), vbH = this.#h();
+        const x = ((e.clientX - rect.left) / rect.width)  * vbW;
+        const y = ((e.clientY - rect.top)  / rect.height) * vbH;
+        return { x, y };
     }
 
-    // ── Build + render ─────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        const w = this._get<number>('width',  600);
-        const h = this._get<number>('height', 400);
-
-        const svgNS = 'http://www.w3.org/2000/svg';
-        this._svg = document.createElementNS(svgNS, 'svg') as SVGSVGElement;
-        this._svg.setAttribute('width',  String(w));
-        this._svg.setAttribute('height', String(h));
-        this._svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-        this._svg.setAttribute('class', 'ar-bezier__svg');
-        this._svg.setAttribute('data-mode', this._mode);
-
-        // Background hit area for canvas-level pen clicks
-        const bg = document.createElementNS(svgNS, 'rect');
-        bg.setAttribute('x', '0'); bg.setAttribute('y', '0');
-        bg.setAttribute('width', String(w)); bg.setAttribute('height', String(h));
-        bg.setAttribute('fill', 'transparent');
-        bg.setAttribute('class', 'ar-bezier__bg');
-        bg.addEventListener('pointerdown', e => this._onBgDown(e));
-        this._svg.appendChild(bg);
-
-        this._gPath    = document.createElementNS(svgNS, 'g') as SVGGElement;
-        this._gOverlay = document.createElementNS(svgNS, 'g') as SVGGElement;
-        this._gPath.setAttribute('class', 'ar-bezier__path-g');
-        this._gOverlay.setAttribute('class', 'ar-bezier__overlay-g');
-        this._svg.appendChild(this._gPath);
-        this._svg.appendChild(this._gOverlay);
-
-        this.el.appendChild(this._svg);
-        this._render();
+    #fire(): void {
+        const cur = this.state$.get();
+        this.dispatchEvent(new CustomEvent('arianna:change', {
+            bubbles: true,
+            detail: { anchors: this.getAnchors(), closed: cur.closed, d: this.toSVGPath() },
+        }));
     }
 
-    private _render(): void
+    #penDragIdx: number | null = null;
+    #penDragOrigin: Vec2 | null = null;
+    #anchorDragIdx: number | null = null;
+    #handleDragIdx: number | null = null;
+    #handleDragSide: 'in' | 'out' | null = null;
+    #handleDragAlt = false;
+
+    private viewBox        : () => string = () => '0 0 600 400';
+    private wStr           : () => string = () => '600';
+    private hStr           : () => string = () => '400';
+    private pathD          : () => string = () => '';
+    private anchorList     : () => Array<{ cx: string; cy: string; idx: number; cls: string }> = () => [];
+    private handleSegments : () => Array<{ x1: string; y1: string; x2: string; y2: string }> = () => [];
+    private handleDots     : () => Array<{ cx: string; cy: string; idx: number; side: 'in' | 'out' }> = () => [];
+    private onSvgPointerDown   : (e: Event) => void = () => {};
+    private onSvgPointerMove   : (e: Event) => void = () => {};
+    private onSvgPointerUp     : (e: Event) => void = () => {};
+    private onAnchorPointerDown: (e: Event) => void = () => {};
+    private onAnchorPointerMove: (e: Event) => void = () => {};
+    private onAnchorPointerUp  : (e: Event) => void = () => {};
+    private onHandlePointerDown: (e: Event) => void = () => {};
+    private onHandlePointerMove: (e: Event) => void = () => {};
+    private onHandlePointerUp  : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
     {
-        this._gPath.innerHTML    = '';
-        this._gOverlay.innerHTML = '';
-        if (!this._anchors.length) return;
-
-        const svgNS = 'http://www.w3.org/2000/svg';
-        const stroke = this._get<string>('stroke', '#e40c88');
-        const sw     = this._get<number>('strokeWidth', 2);
-        const fill   = this._get<string>('fill', 'none');
-
-        // Path
-        const path = document.createElementNS(svgNS, 'path');
-        path.setAttribute('d', this.toSVGPath());
-        path.setAttribute('stroke', stroke);
-        path.setAttribute('stroke-width', String(sw));
-        path.setAttribute('fill', fill);
-        this._gPath.appendChild(path);
-
-        // Overlay: handles + anchors
-        for (let i = 0; i < this._anchors.length; i++)
-        {
-            const a = this._anchors[i]!;
-            const isSel = this._selected === i;
-
-            // Lines from anchor to handles
-            if (isSel || a.hIn.x !== 0 || a.hIn.y !== 0)
-            {
-                const lin = document.createElementNS(svgNS, 'line');
-                lin.setAttribute('x1', fmt(a.x));        lin.setAttribute('y1', fmt(a.y));
-                lin.setAttribute('x2', fmt(a.x + a.hIn.x));  lin.setAttribute('y2', fmt(a.y + a.hIn.y));
-                lin.setAttribute('class', 'ar-bezier__handle-line');
-                this._gOverlay.appendChild(lin);
-            }
-            if (isSel || a.hOut.x !== 0 || a.hOut.y !== 0)
-            {
-                const lout = document.createElementNS(svgNS, 'line');
-                lout.setAttribute('x1', fmt(a.x));        lout.setAttribute('y1', fmt(a.y));
-                lout.setAttribute('x2', fmt(a.x + a.hOut.x)); lout.setAttribute('y2', fmt(a.y + a.hOut.y));
-                lout.setAttribute('class', 'ar-bezier__handle-line');
-                this._gOverlay.appendChild(lout);
-            }
-
-            // Handle dots
-            if (isSel)
-            {
-                if (a.hIn.x !== 0 || a.hIn.y !== 0)
-                {
-                    const hin = document.createElementNS(svgNS, 'circle');
-                    hin.setAttribute('cx', fmt(a.x + a.hIn.x)); hin.setAttribute('cy', fmt(a.y + a.hIn.y));
-                    hin.setAttribute('r', '4');
-                    hin.setAttribute('class', 'ar-bezier__handle');
-                    hin.dataset.role = 'h-in';
-                    hin.dataset.idx  = String(i);
-                    hin.addEventListener('pointerdown', e => this._onHandleDown(e, i, 'in'));
-                    this._gOverlay.appendChild(hin);
-                }
-                if (a.hOut.x !== 0 || a.hOut.y !== 0)
-                {
-                    const hout = document.createElementNS(svgNS, 'circle');
-                    hout.setAttribute('cx', fmt(a.x + a.hOut.x)); hout.setAttribute('cy', fmt(a.y + a.hOut.y));
-                    hout.setAttribute('r', '4');
-                    hout.setAttribute('class', 'ar-bezier__handle');
-                    hout.dataset.role = 'h-out';
-                    hout.dataset.idx  = String(i);
-                    hout.addEventListener('pointerdown', e => this._onHandleDown(e, i, 'out'));
-                    this._gOverlay.appendChild(hout);
-                }
-            }
-
-            // Anchor dot
-            const dot = document.createElementNS(svgNS, isSel ? 'rect' : 'circle');
-            if (isSel)
-            {
-                (dot as SVGRectElement).setAttribute('x', fmt(a.x - 4));
-                (dot as SVGRectElement).setAttribute('y', fmt(a.y - 4));
-                (dot as SVGRectElement).setAttribute('width', '8');
-                (dot as SVGRectElement).setAttribute('height', '8');
-            }
-            else
-            {
-                (dot as SVGCircleElement).setAttribute('cx', fmt(a.x));
-                (dot as SVGCircleElement).setAttribute('cy', fmt(a.y));
-                (dot as SVGCircleElement).setAttribute('r', '4');
-            }
-            dot.setAttribute('class', 'ar-bezier__anchor' + (isSel ? ' selected' : '') +
-                                     (a.kind === 'corner' ? ' corner' : ''));
-            dot.dataset.idx = String(i);
-            dot.addEventListener('pointerdown', e => this._onAnchorDown(e as unknown as PointerEvent, i));
-            dot.addEventListener('dblclick',    () => this._onAnchorDblClick(i));
-            this._gOverlay.appendChild(dot);
-        }
-    }
-
-    // ── Event handlers ─────────────────────────────────────────────────────
-
-    private _onBgDown(e: PointerEvent): void
-    {
-        if (this._mode !== 'pen') { this._selected = null; this._render(); return; }
-        e.preventDefault();
-        const pt = this._svgCoord(e);
-        const newAnchor = this.addAnchor({ x: pt.x, y: pt.y });
-        this._selected = this._anchors.length - 1;
-
-        // Press-drag to define the out-handle of the new anchor
-        const idx = this._selected!;
-        const startX = e.clientX, startY = e.clientY;
-        (e.target as Element).setPointerCapture?.(e.pointerId);
-
-        const onMove = (ev: PointerEvent) => {
-            const cur = this._svgCoord(ev);
-            const dx = cur.x - newAnchor.x, dy = cur.y - newAnchor.y;
-            this.updateAnchor(idx, {
-                hOut: { x: dx, y: dy },
-                hIn:  { x: -dx, y: -dy },     // mirrored
-                kind: 'smooth',
-            });
-            // Mark drag actually happened
-            void (ev.clientX - startX);
-            void (ev.clientY - startY);
-        };
-        const onUp = () => {
-            this._svg.removeEventListener('pointermove', onMove);
-            this._svg.removeEventListener('pointerup',   onUp);
-        };
-        this._svg.addEventListener('pointermove', onMove);
-        this._svg.addEventListener('pointerup',   onUp);
-    }
-
-    private _onAnchorDown(e: PointerEvent, idx: number): void
-    {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (this._mode === 'delete') { this.removeAnchor(idx); return; }
-
-        this._selected = idx;
-        this._render();
-
-        const a = this._anchors[idx]!;
-        const start = { x: a.x, y: a.y };
-        const startEv = this._svgCoord(e);
-        (e.target as Element).setPointerCapture?.(e.pointerId);
-
-        const onMove = (ev: PointerEvent) => {
-            const cur = this._svgCoord(ev);
-            this.updateAnchor(idx, {
-                x: start.x + (cur.x - startEv.x),
-                y: start.y + (cur.y - startEv.y),
-            });
-        };
-        const onUp = () => {
-            this._svg.removeEventListener('pointermove', onMove);
-            this._svg.removeEventListener('pointerup',   onUp);
-        };
-        this._svg.addEventListener('pointermove', onMove);
-        this._svg.addEventListener('pointerup',   onUp);
-    }
-
-    private _onHandleDown(e: PointerEvent, idx: number, which: 'in' | 'out'): void
-    {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const a = this._anchors[idx]!;
-        const startEv = this._svgCoord(e);
-        const startHandle = which === 'in' ? { ...a.hIn } : { ...a.hOut };
-        const breakSym = e.altKey;
-        (e.target as Element).setPointerCapture?.(e.pointerId);
-
-        const onMove = (ev: PointerEvent) => {
-            const cur = this._svgCoord(ev);
-            const newH = {
-                x: startHandle.x + (cur.x - startEv.x),
-                y: startHandle.y + (cur.y - startEv.y),
-            };
-            const patch: Partial<Anchor> = which === 'in' ? { hIn: newH } : { hOut: newH };
-            // Auto-mirror the opposite handle unless alt-drag (break symmetry)
-            if (!breakSym && a.kind !== 'corner')
-            {
-                if (which === 'in')  patch.hOut = { x: -newH.x, y: -newH.y };
-                else                 patch.hIn  = { x: -newH.x, y: -newH.y };
-            }
-            else if (breakSym)
-            {
-                patch.kind = 'corner';
-            }
-            this.updateAnchor(idx, patch);
-        };
-        const onUp = () => {
-            this._svg.removeEventListener('pointermove', onMove);
-            this._svg.removeEventListener('pointerup',   onUp);
-        };
-        this._svg.addEventListener('pointermove', onMove);
-        this._svg.addEventListener('pointerup',   onUp);
-    }
-
-    private _onAnchorDblClick(idx: number): void
-    {
-        const a = this._anchors[idx]!;
-        const next: Anchor['kind'] = a.kind === 'corner' ? 'smooth' : 'corner';
-        if (next === 'corner')
-        {
-            this.updateAnchor(idx, { kind: 'corner' });
-        }
-        else
-        {
-            // Recreate symmetric handles based on adjacent neighbours
-            const prev = this._anchors[(idx - 1 + this._anchors.length) % this._anchors.length]!;
-            const nxt  = this._anchors[(idx + 1) % this._anchors.length]!;
-            const dx = (nxt.x - prev.x) / 4;
-            const dy = (nxt.y - prev.y) / 4;
-            this.updateAnchor(idx, {
-                kind: 'smooth',
-                hIn:  { x: -dx, y: -dy },
-                hOut: { x:  dx, y:  dy },
-            });
-        }
-    }
-
-    // ── Helpers ────────────────────────────────────────────────────────────
-
-    /** Map a DOM pointer event to SVG-internal coordinates. */
-    private _svgCoord(e: { clientX: number; clientY: number }): Vec2
-    {
-        const rect = this._svg.getBoundingClientRect();
-        const w = this._get<number>('width', 600);
-        const h = this._get<number>('height', 400);
-        const sx = w / (rect.width  || w);
-        const sy = h / (rect.height || h);
-        return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
-    }
-
-    private _cloneAnchor(a: Anchor): Anchor
-    {
-        return { x: a.x, y: a.y, hIn: { ...a.hIn }, hOut: { ...a.hOut }, kind: a.kind };
-    }
-
-    private _emitChange(kind: string, extra?: Record<string, unknown>): void
-    {
-        this._emit('change', { kind, ...(extra || {}) });
-    }
-
-    private _injectStyles(): void
-    {
-        if (document.getElementById('ar-bezier-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-bezier-styles';
-        s.textContent = `
-.ar-bezier { display:inline-block; background:#0d0d0d; border:1px solid #333; border-radius:4px; }
-.ar-bezier__svg { display:block; cursor:crosshair; }
-.ar-bezier__svg[data-mode="edit"]   { cursor:default; }
-.ar-bezier__svg[data-mode="delete"] { cursor:not-allowed; }
-.ar-bezier__bg     { cursor:inherit; }
-.ar-bezier__handle-line { stroke:rgba(228,12,136,0.5); stroke-width:1; }
-.ar-bezier__handle      { fill:#fff; stroke:#e40c88; stroke-width:1.5; cursor:move; }
-.ar-bezier__handle:hover { fill:#e40c88; }
-.ar-bezier__anchor      { fill:#fff; stroke:#e40c88; stroke-width:1.5; cursor:move; }
-.ar-bezier__anchor.corner { fill:#1e1e1e; }
-.ar-bezier__anchor.selected { fill:#e40c88; stroke:#fff; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', {
+                    display: 'inline-block',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                }),
+                new Rule('.ar-bez__svg', { display: 'block', touchAction: 'none', cursor: 'crosshair' }),
+                new Rule('.ar-bez__path', {
+                    stroke: 'var(--arianna-text, #1f2328)',
+                    strokeWidth: '1.5',
+                }),
+                new Rule('.ar-bez__handle-line', {
+                    stroke: 'var(--arianna-muted, #6e6b62)',
+                    strokeWidth: '0.5',
+                    strokeDasharray: '2,2',
+                }),
+                new Rule('.ar-bez__handle-dot', {
+                    fill: 'var(--arianna-bg, #fff)',
+                    stroke: 'var(--arianna-primary, #1f6feb)',
+                    strokeWidth: '1.5',
+                    cursor: 'grab',
+                }),
+                new Rule('.ar-bez__anchor', {
+                    fill: 'var(--arianna-primary, #1f6feb)',
+                    stroke: '#fff',
+                    strokeWidth: '2',
+                    cursor: 'grab',
+                }),
+            ]
+        );
     }
 }
 
-function fmt(n: number): string
-{
-    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'BezierEditor', {
+        value: BezierEditor, writable: false, enumerable: false, configurable: false,
+    });
 }
+
+export default BezierEditor;

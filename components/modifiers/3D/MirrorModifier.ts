@@ -5,9 +5,19 @@
  * @license   MIT / Commercial (dual license)
  *
  * Mirror geometry on X, Y or Z axis with optional vertex welding on the plane.
+ *
+ * @example HTML
+ *   <arianna-mirror for="m1" axis="x" merge="true" threshold="0.001"></arianna-mirror>
+ *
+ * Attrs (declarative): for, axis, merge, threshold, enabled
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, _vLen, _vSub, type MeshLike, type Vec3Like } from './Base.ts';
+import { Component } from '../../../core/Component.ts';
+import {
+    Modifier3D, Modifier3DElement,
+    _cloneGeom, _recomputeNormals, _vLen, _vSub,
+    type MeshLike, type Vec3Like,
+} from './Base.ts';
 
 export type MirrorAxis = 'x' | 'y' | 'z';
 
@@ -57,3 +67,23 @@ export class MirrorModifier extends Modifier3D {
         return this;
     }
 }
+
+export class MirrorModifierElement extends (Component('arianna-mirror', HTMLElement, {}, {
+    attrs : ['for', 'axis', 'merge', 'threshold', 'enabled'],
+    shadow: false,
+}) as typeof Modifier3DElement) {
+    protected createModifier(mesh: MeshLike): Modifier3D {
+        const axis      = ((this.getAttribute('axis') ?? 'x') as MirrorAxis);
+        const merge     = this.getAttribute('merge') !== 'false';
+        const threshold = parseFloat(this.getAttribute('threshold') ?? '0.001') || 0.001;
+        return new MirrorModifier(mesh, axis, merge, threshold);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'MirrorModifier', {
+        value: MirrorModifier, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default MirrorModifier;

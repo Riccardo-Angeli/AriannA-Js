@@ -4,12 +4,9 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Compound widget that presents *all* enabled payment methods in a single
+ * Compound widget — presents *all* enabled payment methods in a single
  * checkout UI, lets the user pick one, and forwards the appropriate event
- * to the merchant code. This is the single integration point most apps
- * actually want — instead of mounting ApplePay / GPay / Stripe / Satispay
- * separately, drop in `PaymentGateway` and configure which methods to
- * expose for the current order.
+ * up to the merchant. The single integration point most apps want.
  *
  *   ┌─────────────────────────────────────┐
  *   │ Choose how to pay                   │
@@ -24,316 +21,389 @@
  *   │ ○ Alipay                            │
  *   └─────────────────────────────────────┘
  *
- * The component instantiates the underlying widgets *lazily* — only when a
- * method is selected does it create the corresponding ApplePay / GPay / …
- * instance. Events from the underlying widget bubble up through this one.
+ * Methods are configured programmatically via `setMethods()` (the merchant
+ * supplies per-method config — keys, merchant ids, redirect URLs).
+ * Events from any selected underlying widget bubble up; `arianna:payment-*`
+ * events propagate naturally because the inner widgets dispatch with
+ * `bubbles: true`.
  *
- * @example
- *   import { PaymentGateway } from 'ariannajs/components/payments';
+ * @example HTML
+ *   <arianna-payment-gateway amount="99.00" currency="EUR" title="Pay now"></arianna-payment-gateway>
  *
- *   const pg = new PaymentGateway('#checkout', {
- *       amount  : 99.00,
- *       currency: 'EUR',
- *       methods : {
- *           applePay : { merchantId: 'merchant.com.example', countryCode: 'IT' },
- *           googlePay: { merchantId: '01234567', merchantName: 'X', countryCode: 'IT', gateway: 'stripe', gatewayMerchantId: 'acct_1' },
- *           card     : { saveOption: true },
- *           paypal   : { clientId: 'AYxxx' },
- *           stripe   : { publishableKey: 'pk_test_…', clientSecret: '…', returnUrl: 'https://…' },
- *           satispay : { redirectUrl: 'https://online.satispay.com/…' },
- *           nexi     : { redirectUrl: 'https://ecommerce.nexi.it/…' },
- *           alipay   : { mode: 'redirect', redirectUrl: 'https://openapi.alipay.com/…' },
- *       },
+ * @example JS
+ *   const pg = new PaymentGateway();
+ *   pg.setMethods({
+ *     applePay : { merchantId: 'merchant.com.example', countryCode: 'IT' },
+ *     googlePay: { merchantId: '01234567', merchantName: 'X', countryCode: 'IT',
+ *                  gateway: 'stripe', gatewayMerchantId: 'acct_1' },
+ *     card     : { saveOption: true },
+ *     paypal   : { clientId: 'AYxxx' },
+ *     stripe   : { publishableKey: 'pk_test_...', clientSecret: '...',
+ *                  returnUrl: 'https://...' },
+ *     satispay : { redirectUrl: 'https://online.satispay.com/pay/xxx' },
+ *     nexi     : { redirectUrl: 'https://ecommerce.nexi.it/ecomm/...' },
+ *     alipay   : { mode: 'redirect', redirectUrl: 'https://openapi.alipay.com/...' },
  *   });
- *   pg.on('success', e => api.confirm(e.method, e.payload));
- *   pg.on('error',   e => showToast(`${e.method}: ${e.message}`));
- *   pg.on('cancel',  e => console.log('cancelled', e.method));
+ *
+ * Events: re-dispatches all `arianna:payment-success/error/cancel/redirect`
+ *         from inner widgets, plus `arianna:method-select` when the user
+ *         picks a method.
+ *
+ * Attrs: amount, currency, title
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
-import { ApplePay,   type ApplePayOptions   } from './ApplePay.ts';
-import { GooglePay,  type GooglePayOptions  } from './GooglePay.ts';
-import { CreditCard, type CreditCardOptions } from './CreditCard.ts';
-import { PayPal,     type PayPalOptions     } from './PayPal.ts';
-import { Stripe,     type StripeOptions     } from './Stripe.ts';
-import { Satispay,   type SatispayOptions   } from './Satispay.ts';
-import { Nexi,       type NexiOptions       } from './Nexi.ts';
-import { AliPay,     type AliPayOptions     } from './AliPay.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Method identifiers ──────────────────────────────────────────────────────
+import { ApplePay }   from './ApplePay.ts';
+import { GooglePay }  from './GooglePay.ts';
+import { CreditCard } from './CreditCard.ts';
+import { PayPal }     from './PayPal.ts';
+import { Stripe }     from './Stripe.ts';
+import { Satispay }   from './Satispay.ts';
+import { Nexi }       from './Nexi.ts';
+import { AliPay }     from './AliPay.ts';
 
 export type PaymentMethodId =
     | 'applePay' | 'googlePay' | 'card' | 'paypal'
     | 'stripe'   | 'satispay'  | 'nexi' | 'alipay';
 
-interface MethodMeta { id: PaymentMethodId; label: string; icon: string; }
+export interface PaymentGatewayMethodConfig {
+    applePay?  : Partial<{ merchantId: string; countryCode: string;
+                           supportedNetworks: string[]; merchantCapabilities: string[];
+                           buttonStyle: string; buttonType: string; forceShow: boolean }>;
+    googlePay? : Partial<{ merchantId: string; merchantName: string; countryCode: string;
+                           gateway: string; gatewayMerchantId: string;
+                           environment: string; buttonColor: string; buttonType: string;
+                           supportedNetworks: string[]; supportedAuthMethods: string[] }>;
+    card?      : Partial<{ saveOption: boolean; holderNameRequired: boolean }>;
+    paypal?    : Partial<{ clientId: string; intent: string; redirectUrl: string;
+                           buttonStyle: string; buttonColor: string; buttonShape: string }>;
+    stripe?    : Partial<{ publishableKey: string; clientSecret: string; returnUrl: string;
+                           locale: string; appearanceTheme: string }>;
+    satispay?  : Partial<{ redirectUrl: string; target: string }>;
+    nexi?      : Partial<{ redirectUrl: string; target: string }>;
+    alipay?    : Partial<{ mode: string; redirectUrl: string; qrUrl: string; target: string }>;
+}
 
-const METHOD_META: MethodMeta[] = [
-    { id: 'applePay',  label: 'Apple Pay',         icon: '' },
-    { id: 'googlePay', label: 'Google Pay',        icon: 'G' },
+export interface PaymentGatewayOptions {
+    amount   : number;
+    currency : string;
+    methods  : PaymentGatewayMethodConfig;
+    initial? : PaymentMethodId;
+    title?   : string;
+    order?   : PaymentMethodId[];
+}
+
+const METHOD_META: Array<{ id: PaymentMethodId; label: string; icon: string }> = [
+    { id: 'applePay',  label: 'Apple Pay',           icon: '' },
+    { id: 'googlePay', label: 'Google Pay',          icon: 'G' },
     { id: 'card',      label: 'Credit / Debit Card', icon: '▣' },
-    { id: 'paypal',    label: 'PayPal',            icon: 'P' },
-    { id: 'stripe',    label: 'Stripe',            icon: 'S' },
-    { id: 'satispay',  label: 'Satispay',          icon: '◉' },
-    { id: 'nexi',      label: 'Nexi',              icon: 'n' },
-    { id: 'alipay',    label: 'Alipay',            icon: '支' },
+    { id: 'paypal',    label: 'PayPal',              icon: 'P' },
+    { id: 'stripe',    label: 'Stripe',              icon: 'S' },
+    { id: 'satispay',  label: 'Satispay',            icon: '◉' },
+    { id: 'nexi',      label: 'Nexi',                icon: 'n' },
+    { id: 'alipay',    label: 'Alipay',              icon: '支' },
 ];
 
-// ── Per-method option subsets ───────────────────────────────────────────────
-//
-// We omit the always-redundant fields (amount/currency live at the gateway
-// level, and the container is allocated dynamically per method). The
-// remaining fields are exactly the per-PSP credentials/config the merchant
-// has to provide.
-type ApplePaySubset   = Omit<ApplePayOptions,   'amount' | 'currency' | 'class'>;
-type GooglePaySubset  = Omit<GooglePayOptions,  'amount' | 'currency' | 'class'>;
-type CardSubset       = Omit<CreditCardOptions, 'amount' | 'currency' | 'class'>;
-type PayPalSubset     = Omit<PayPalOptions,     'amount' | 'currency' | 'class'>;
-type StripeSubset     = Omit<StripeOptions,                            'class'>;
-type SatispaySubset   = Omit<SatispayOptions,   'amount' | 'currency' | 'class'>;
-type NexiSubset       = Omit<NexiOptions,       'amount' | 'currency' | 'class'>;
-type AliPaySubset     = Omit<AliPayOptions,     'amount' | 'currency' | 'class'>;
-
-export interface PaymentGatewayMethodConfig
+export class PaymentGateway extends Component('arianna-payment-gateway', HTMLElement, {}, {
+    attrs : ['amount', 'currency', 'title'],
+    shadow: false,
+})
 {
-    applePay?  : Partial<ApplePaySubset>;
-    googlePay? : Partial<GooglePaySubset>;
-    card?      : Partial<CardSubset>;
-    paypal?    : Partial<PayPalSubset>;
-    stripe?    : Partial<StripeSubset>;
-    satispay?  : Partial<SatispaySubset>;
-    nexi?      : Partial<NexiSubset>;
-    alipay?    : Partial<AliPaySubset>;
-}
+    methods$ : Signal<PaymentGatewayMethodConfig> = signal<PaymentGatewayMethodConfig>({});
+    selected$: Signal<PaymentMethodId | null> = signal<PaymentMethodId | null>(null);
 
-export interface PaymentGatewayOptions extends CtrlOptions
-{
-    amount      : number;
-    /** ISO 4217 currency. */
-    currency    : string;
-    /** Per-method config — only the methods present here are shown. */
-    methods     : PaymentGatewayMethodConfig;
-    /** Initially-selected method. Default = first available. */
-    initial?    : PaymentMethodId;
-    /** Title above the method list. Default 'Choose how to pay'. */
-    title?      : string;
-    /** Reorder methods. Default uses METHOD_META order. */
-    order?      : PaymentMethodId[];
-    /** Locale for built-in labels. */
-    locale?     : 'it' | 'en';
-}
+    // Cached widget instances — created lazily when a method is selected
+    #instances: Partial<Record<PaymentMethodId, Element>> = {};
 
-// ── Component ────────────────────────────────────────────────────────────────
-
-export class PaymentGateway extends Control<PaymentGatewayOptions>
-{
-    private _selected : PaymentMethodId | null = null;
-    /** Lazily-instantiated child widgets, keyed by method id. */
-    private _children : Partial<Record<PaymentMethodId, Control<CtrlOptions>>> = {};
-
-    private _elList!  : HTMLElement;
-    private _elPanel! : HTMLElement;
-
-    constructor(container: string | HTMLElement | null, opts: PaymentGatewayOptions)
+    build(_opts: PaymentGatewayOptions = {} as PaymentGatewayOptions)
     {
-        super(container, 'div', {
-            title  : detectIt() ? 'Scegli come pagare' : 'Choose how to pay',
-            locale : detectIt() ? 'it' : 'en',
-            ...opts,
-        });
+        const titleAttr = this.attrSignal('title');
 
-        this.el.className = `ar-pg${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
+        this.headerTitle = () => titleAttr.get() ?? 'Choose how to pay';
 
-        const initial = opts.initial ?? this._availableMethods()[0];
-        if (initial) this.select(initial);
+        this.methodList = (): Array<{ id: PaymentMethodId; label: string; icon: string; cls: string; selected: boolean }> => {
+            const cfg = this.methods$.get();
+            const sel = this.selected$.get();
+            return METHOD_META
+                .filter(m => cfg[m.id])
+                .map(m => ({
+                    id: m.id,
+                    label: m.label,
+                    icon: m.icon,
+                    selected: sel === m.id,
+                    cls: 'ar-pg__row' + (sel === m.id ? ' ar-pg__row--selected' : ''),
+                }));
+        };
+
+        this.onRowClick = (e: Event) => {
+            const row = e.currentTarget as HTMLElement;
+            const id = row.dataset.method as PaymentMethodId;
+            if (id) this.selectMethod(id);
+        };
+
+        this.template = html`
+            <div class="ar-pg">
+                <div class="ar-pg__title">{{ this.headerTitle() }}</div>
+                <div class="ar-pg__list">
+                    <div a-for="m in this.methodList()"
+                         :class="m.cls"
+                         :data-method="m.id"
+                         @click="this.onRowClick">
+                        <div class="ar-pg__head">
+                            <span class="ar-pg__radio">
+                                <span a-if="m.selected">●</span>
+                            </span>
+                            <span class="ar-pg__icon">{{ m.icon }}</span>
+                            <span class="ar-pg__label">{{ m.label }}</span>
+                        </div>
+                        <div class="ar-pg__mount" :data-mount="m.id" a-if="m.selected"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.Sheet = PaymentGateway.DefaultSheet();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
+    // ── Public API ───────────────────────────────────────────────────────────
 
-    /** Methods the merchant has actually configured (in display order). */
-    getAvailableMethods(): PaymentMethodId[] { return this._availableMethods(); }
-
-    /** Currently-selected method id, or null. */
-    getSelected(): PaymentMethodId | null { return this._selected; }
-
-    /** Select a payment method (rebuilds the panel). */
-    select(id: PaymentMethodId): this
-    {
-        if (!this._availableMethods().includes(id))
-        {
-            this._emit('error', { method: id, message: 'method not configured' });
-            return this;
+    setMethods(cfg: PaymentGatewayMethodConfig): this {
+        this.methods$.set({ ...cfg });
+        // Pick first method as initial if none selected yet
+        if (!this.selected$.get()) {
+            const first = METHOD_META.find(m => cfg[m.id]);
+            if (first) this.selectMethod(first.id);
         }
-        this._selected = id;
-        this._refreshList();
-        this._buildPanel();
-        this._emit('select', { method: id });
         return this;
     }
 
-    /** Trigger pay() on the currently-selected child widget, if it has one. */
-    pay(): this
-    {
-        const id = this._selected;
-        if (!id) { this._emit('error', { method: null, message: 'no method selected' }); return this; }
-        const child = this._children[id] as { pay?: () => unknown } | undefined;
-        if (child && typeof child.pay === 'function') { void child.pay(); }
+    getMethods(): PaymentGatewayMethodConfig { return { ...this.methods$.get() }; }
+
+    selectMethod(id: PaymentMethodId): this {
+        this.selected$.set(id);
+        this.dispatchEvent(new CustomEvent('arianna:method-select', {
+            bubbles: true, detail: { method: id },
+        }));
+        // Mount the underlying widget lazily after DOM update
+        queueMicrotask(() => this.#mountMethod(id));
         return this;
     }
 
-    // ── Build + render ─────────────────────────────────────────────────────
+    getSelected(): PaymentMethodId | null { return this.selected$.get(); }
 
-    protected _build(): void
-    {
-        this.el.innerHTML = `
-<div class="ar-pg__head">
-  <span class="ar-pg__title">${escapeHtml(this._get<string>('title', 'Choose how to pay'))}</span>
-  <span class="ar-pg__total">${this._formatTotal()}</span>
-</div>
-<div class="ar-pg__body">
-  <div class="ar-pg__list" data-r="list"></div>
-  <div class="ar-pg__panel" data-r="panel"></div>
-</div>`;
-        this._elList  = this.el.querySelector<HTMLElement>('[data-r="list"]')!;
-        this._elPanel = this.el.querySelector<HTMLElement>('[data-r="panel"]')!;
-        this._refreshList();
+    /** Programmatically trigger payment on the currently-selected method. */
+    async pay(): Promise<void> {
+        const sel = this.selected$.get();
+        if (!sel) return;
+        const inst = this.#instances[sel];
+        if (!inst) return;
+        const w = inst as { pay?(): Promise<void> | void };
+        if (typeof w.pay === 'function') await w.pay();
     }
 
-    private _refreshList(): void
-    {
-        this._elList.innerHTML = '';
-        for (const id of this._availableMethods())
-        {
-            const meta = METHOD_META.find(m => m.id === id)!;
-            const row = document.createElement('button');
-            row.type = 'button';
-            row.className = 'ar-pg__row' + (id === this._selected ? ' ar-pg__row--selected' : '');
-            row.dataset.id = id;
-            row.innerHTML = `
-<span class="ar-pg__radio">${id === this._selected ? '◉' : '○'}</span>
-<span class="ar-pg__icon">${escapeHtml(meta.icon)}</span>
-<span class="ar-pg__label">${escapeHtml(meta.label)}</span>`;
-            row.addEventListener('click', () => this.select(id));
-            this._elList.appendChild(row);
-        }
-    }
+    // ── Internal ─────────────────────────────────────────────────────────────
 
-    private _buildPanel(): void
-    {
-        this._elPanel.innerHTML = '';
-        if (!this._selected) return;
+    #mountMethod(id: PaymentMethodId): void {
+        const host = this.querySelector<HTMLElement>(`[data-mount="${id}"]`);
+        if (!host) return;
+        if (host.children.length > 0) return;  // already mounted
 
-        // Mount point for the child widget
-        const mount = document.createElement('div');
-        mount.className = 'ar-pg__mount';
-        mount.dataset.method = this._selected;
-        this._elPanel.appendChild(mount);
+        const amount   = parseFloat(this.getAttribute('amount') ?? '0') || 0;
+        const currency = this.getAttribute('currency') ?? 'EUR';
+        const cfg = this.methods$.get();
 
-        // Reuse cached child if already built once for this method (to avoid
-        // re-loading external SDK scripts on each selection toggle).
-        if (this._children[this._selected])
-        {
-            const cached = this._children[this._selected]!;
-            mount.appendChild(cached.el);
-            return;
-        }
-
-        // Build the appropriate child widget with merged options
-        const amount   = this._get<number>('amount', 0);
-        const currency = this._get<string>('currency', 'EUR');
-        const cfg      = this._get<PaymentGatewayMethodConfig>('methods', {});
-
-        let child: Control<CtrlOptions> | null = null;
-        // Each branch builds the merged options object then casts to the
-        // concrete component's option type. We strip amount/currency out of
-        // the per-method config (if present) so the gateway-level values
-        // always win.
-        const stripTotals = <T extends object>(o: T | undefined): T =>
-            (o ? { ...o, amount: undefined, currency: undefined } : {}) as T;
-
-        switch (this._selected)
-        {
-            case 'applePay':  child = new ApplePay  (mount, { amount, currency, ...stripTotals(cfg.applePay)  } as ApplePayOptions);   break;
-            case 'googlePay': child = new GooglePay (mount, { amount, currency, ...stripTotals(cfg.googlePay) } as GooglePayOptions); break;
-            case 'card':      child = new CreditCard(mount, { amount, currency, ...stripTotals(cfg.card)      } as CreditCardOptions); break;
-            case 'paypal':    child = new PayPal    (mount, { amount, currency, ...stripTotals(cfg.paypal)    } as PayPalOptions);    break;
-            case 'stripe':    child = new Stripe    (mount, { ...(cfg.stripe   as StripeOptions) });                                  break;
-            case 'satispay':  child = new Satispay  (mount, { amount, currency, ...stripTotals(cfg.satispay)  } as SatispayOptions);  break;
-            case 'nexi':      child = new Nexi      (mount, { amount, currency, ...stripTotals(cfg.nexi)      } as NexiOptions);      break;
-            case 'alipay':    child = new AliPay    (mount, { amount, currency, ...stripTotals(cfg.alipay)    } as AliPayOptions);    break;
-        }
-
-        if (child)
-        {
-            this._children[this._selected] = child;
-            // Bubble events up — tag with the method
-            for (const evt of ['ready', 'submit', 'success', 'error', 'cancel', 'click', 'pending'])
-            {
-                child.on(evt, (data: unknown) =>
-                    this._emit(evt, { method: this._selected, ...(data as Record<string, unknown>) }));
+        let el: Element | null = null;
+        switch (id) {
+            case 'applePay': {
+                const c = cfg.applePay ?? {};
+                const ap = new ApplePay();
+                if (c.merchantId)           ap.setAttribute('merchant-id',           c.merchantId);
+                if (c.countryCode)          ap.setAttribute('country-code',          c.countryCode);
+                ap.setAttribute('currency', currency);
+                ap.setAttribute('amount',   String(amount));
+                if (c.supportedNetworks)    ap.setAttribute('supported-networks',    c.supportedNetworks.join(','));
+                if (c.merchantCapabilities) ap.setAttribute('merchant-capabilities', c.merchantCapabilities.join(','));
+                if (c.buttonStyle)          ap.setAttribute('button-style',          c.buttonStyle);
+                if (c.buttonType)           ap.setAttribute('button-type',           c.buttonType);
+                if (c.forceShow)            ap.setAttribute('force-show',            '');
+                el = ap;
+                break;
+            }
+            case 'googlePay': {
+                const c = cfg.googlePay ?? {};
+                const gp = new GooglePay();
+                if (c.merchantId)        gp.setAttribute('merchant-id',         c.merchantId);
+                if (c.merchantName)      gp.setAttribute('merchant-name',       c.merchantName);
+                if (c.countryCode)       gp.setAttribute('country-code',        c.countryCode);
+                gp.setAttribute('currency', currency);
+                gp.setAttribute('amount',   String(amount));
+                if (c.gateway)           gp.setAttribute('gateway',             c.gateway);
+                if (c.gatewayMerchantId) gp.setAttribute('gateway-merchant-id', c.gatewayMerchantId);
+                if (c.environment)       gp.setAttribute('environment',         c.environment);
+                if (c.buttonColor)       gp.setAttribute('button-color',        c.buttonColor);
+                if (c.buttonType)        gp.setAttribute('button-type',         c.buttonType);
+                el = gp;
+                break;
+            }
+            case 'card': {
+                const c = cfg.card ?? {};
+                const cc = new CreditCard();
+                cc.setAttribute('amount',   String(amount));
+                cc.setAttribute('currency', currency);
+                if (c.saveOption)         cc.setAttribute('save-option', '');
+                if (c.holderNameRequired) cc.setAttribute('holder-name-required', '');
+                el = cc;
+                break;
+            }
+            case 'paypal': {
+                const c = cfg.paypal ?? {};
+                const pp = new PayPal();
+                if (c.clientId)    pp.setAttribute('client-id',    c.clientId);
+                pp.setAttribute('amount',   String(amount));
+                pp.setAttribute('currency', currency);
+                if (c.intent)      pp.setAttribute('intent',       c.intent);
+                if (c.redirectUrl) pp.setAttribute('redirect-url', c.redirectUrl);
+                if (c.buttonStyle) pp.setAttribute('button-style', c.buttonStyle);
+                if (c.buttonColor) pp.setAttribute('button-color', c.buttonColor);
+                if (c.buttonShape) pp.setAttribute('button-shape', c.buttonShape);
+                el = pp;
+                break;
+            }
+            case 'stripe': {
+                const c = cfg.stripe ?? {};
+                const st = new Stripe();
+                if (c.publishableKey)  st.setAttribute('publishable-key',  c.publishableKey);
+                if (c.clientSecret)    st.setAttribute('client-secret',    c.clientSecret);
+                if (c.returnUrl)       st.setAttribute('return-url',       c.returnUrl);
+                if (c.locale)          st.setAttribute('locale',           c.locale);
+                if (c.appearanceTheme) st.setAttribute('appearance-theme', c.appearanceTheme);
+                el = st;
+                break;
+            }
+            case 'satispay': {
+                const c = cfg.satispay ?? {};
+                const sp = new Satispay();
+                if (c.redirectUrl) sp.setAttribute('redirect-url', c.redirectUrl);
+                sp.setAttribute('amount',   String(amount));
+                sp.setAttribute('currency', currency);
+                if (c.target)      sp.setAttribute('target',       c.target);
+                el = sp;
+                break;
+            }
+            case 'nexi': {
+                const c = cfg.nexi ?? {};
+                const nx = new Nexi();
+                if (c.redirectUrl) nx.setAttribute('redirect-url', c.redirectUrl);
+                nx.setAttribute('amount',   String(amount));
+                nx.setAttribute('currency', currency);
+                if (c.target)      nx.setAttribute('target',       c.target);
+                el = nx;
+                break;
+            }
+            case 'alipay': {
+                const c = cfg.alipay ?? {};
+                const ap = new AliPay();
+                if (c.mode)        ap.setAttribute('mode',         c.mode);
+                if (c.redirectUrl) ap.setAttribute('redirect-url', c.redirectUrl);
+                if (c.qrUrl)       ap.setAttribute('qr-url',       c.qrUrl);
+                ap.setAttribute('amount',   String(amount));
+                ap.setAttribute('currency', currency);
+                if (c.target)      ap.setAttribute('target',       c.target);
+                el = ap;
+                break;
             }
         }
-    }
-
-    private _availableMethods(): PaymentMethodId[]
-    {
-        const cfg   = this._get<PaymentGatewayMethodConfig>('methods', {});
-        const order = this._get<PaymentMethodId[]>('order', METHOD_META.map(m => m.id));
-        return order.filter(id => cfg[id] !== undefined);
-    }
-
-    private _formatTotal(): string
-    {
-        const amount   = this._get<number>('amount', 0);
-        const currency = this._get<string>('currency', 'EUR');
-        const locale   = this._get<'it' | 'en'>('locale', 'en');
-        try
-        {
-            const fmt = new Intl.NumberFormat(locale === 'it' ? 'it-IT' : 'en-US', {
-                style: 'currency', currency,
-            });
-            return fmt.format(amount);
+        if (el) {
+            host.appendChild(el);
+            this.#instances[id] = el;
         }
-        catch { return `${currency} ${amount.toFixed(2)}`; }
     }
 
-    private _injectStyles(): void
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    private headerTitle: () => string = () => 'Choose how to pay';
+    private methodList : () => Array<{ id: PaymentMethodId; label: string; icon: string; cls: string; selected: boolean }> = () => [];
+    private onRowClick : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
     {
-        if (document.getElementById('ar-pg-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-pg-styles';
-        s.textContent = `
-.ar-pg { display:flex; flex-direction:column; max-width:720px; background:#1e1e1e; border:1px solid #333; border-radius:8px; color:#d4d4d4; font:13px -apple-system,system-ui,sans-serif; }
-.ar-pg__head { display:flex; align-items:baseline; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #333; }
-.ar-pg__title { font:600 14px sans-serif; }
-.ar-pg__total { font:600 16px ui-monospace,monospace; color:#e40c88; }
-.ar-pg__body { display:flex; min-height:240px; }
-.ar-pg__list  { width:240px; flex-shrink:0; border-right:1px solid #333; padding:8px; display:flex; flex-direction:column; gap:2px; }
-.ar-pg__row   { display:flex; align-items:center; gap:10px; padding:10px 12px; background:transparent; border:0; color:#d4d4d4; cursor:pointer; border-radius:4px; text-align:left; font:13px sans-serif; }
-.ar-pg__row:hover { background:#2a2a2a; }
-.ar-pg__row--selected { background:rgba(228,12,136,0.15); border-left:3px solid #e40c88; padding-left:9px; }
-.ar-pg__radio { font-size:14px; color:#888; width:14px; }
-.ar-pg__row--selected .ar-pg__radio { color:#e40c88; }
-.ar-pg__icon  { width:22px; text-align:center; font:600 14px sans-serif; }
-.ar-pg__label { flex:1; }
-.ar-pg__panel { flex:1; padding:18px; min-height:200px; display:flex; align-items:flex-start; }
-.ar-pg__mount { width:100%; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', {
+                    display: 'block',
+                    fontFamily: '-apple-system, system-ui, sans-serif',
+                    fontSize: '13px',
+                    color: 'var(--arianna-text, #1f2328)',
+                    maxWidth: '480px',
+                }),
+                new Rule('.ar-pg', {
+                    display: 'flex', flexDirection: 'column',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 8px)',
+                    overflow: 'hidden',
+                }),
+                new Rule('.ar-pg__title', {
+                    padding: '14px 18px',
+                    background: 'var(--arianna-bg-3, #f3f3f3)',
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    fontWeight: '600',
+                    fontSize: '14px',
+                }),
+                new Rule('.ar-pg__list', { display: 'flex', flexDirection: 'column' }),
+                new Rule('.ar-pg__row', {
+                    display: 'flex', flexDirection: 'column',
+                    borderBottom: '1px solid var(--arianna-bg-3, #f3f3f3)',
+                    cursor: 'pointer',
+                    transition: 'background 0.1s',
+                }),
+                new Rule('.ar-pg__row:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+                new Rule('.ar-pg__row--selected', {
+                    background: 'rgba(31,111,235,0.04)',
+                    cursor: 'default',
+                }),
+                new Rule('.ar-pg__head', {
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    padding: '14px 18px',
+                }),
+                new Rule('.ar-pg__radio', {
+                    width: '18px', height: '18px',
+                    border: '2px solid var(--arianna-muted, #6e6b62)',
+                    borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '14px',
+                    color: 'var(--arianna-primary, #1f6feb)',
+                }),
+                new Rule('.ar-pg__row--selected .ar-pg__radio', {
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                }),
+                new Rule('.ar-pg__icon', {
+                    fontSize: '16px', fontWeight: '700',
+                    width: '20px', textAlign: 'center',
+                }),
+                new Rule('.ar-pg__label', { flex: '1' }),
+                new Rule('.ar-pg__mount', { padding: '0 18px 16px 50px' }),
+            ]
+        );
     }
 }
 
-function detectIt(): boolean
-{
-    if (typeof navigator !== 'undefined' && navigator.language?.startsWith('it')) return true;
-    return false;
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'PaymentGateway', {
+        value: PaymentGateway, writable: false, enumerable: false, configurable: false,
+    });
 }
 
-function escapeHtml(s: string): string
-{
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
-}
+export default PaymentGateway;

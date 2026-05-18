@@ -1,6 +1,6 @@
 /**
  * @file arianna.d.ts
- * @description Global window declarations for AriannA Framework v1.4.0
+ * @description Global window declarations for AriannA Framework v2.0.0
  * @author Riccardo Angeli
  * @copyright Riccardo Angeli 2012–2026
  *
@@ -8,6 +8,17 @@
  *   { "compilerOptions": { "types": ["arianna"] } }
  * or reference directly:
  *   /// <reference types="arianna" />
+ *
+ * v2 notes:
+ *   • `Component` is dual-callable:
+ *       new Component('div', opts)         → instance
+ *       Component('arianna-x', def)        → returns a tag-bound subclass,
+ *                                            registered via Core.Define
+ *   • Pure CSS preprocessors live in `additionals/`:
+ *       Less, Sass, Scss, Stylus
+ *     (`Sheet.Less(text)` in core is now a thin wrapper to `additionals/Less`.)
+ *   • Each declared `def.attrs` entry becomes an internal `Signal<string|null>`
+ *     bridged to the DOM via a `<name>-change` event.
  */
 
 import type { default as _Core, TypeDescriptor, NamespaceDescriptor } from '../core/Core.ts';
@@ -16,7 +27,7 @@ import type { default as _Observable, Signal, SignalMono, ReadonlySignal,
 import type { default as _State, StateEvent } from '../core/State.ts';
 import type { default as _Real, RealTarget, RealDef } from '../core/Real.ts';
 import type { default as _Virtual, VirtualNode } from '../core/Virtual.ts';
-import type { default as _Component, ComponentOptions } from '../core/Component.ts';
+import type { Component as _Component, ComponentDef, ComponentOptions } from '../core/Component.ts';
 import type { default as _Directive, ComponentMeta } from '../core/Directive.ts';
 import type { Rule as _Rule, CssState as _CssState, CSSProperties } from '../core/Rule.ts';
 import type { default as _Sheet } from '../core/Stylesheet.ts';
@@ -32,6 +43,27 @@ import type { MapEmbed      as _MapEmbed,
               OpenStreetMap as _OpenStreetMap,
               AppleMap      as _AppleMap,
               BingMap       as _BingMap       } from '../components/maps/MapEmbed.ts';
+
+// ── v2 pilot components ───────────────────────────────────────────────────
+import type { Button             as _Button             } from '../components/inputs/Button.ts';
+import type { TextField          as _TextField          } from '../components/inputs/TextField.ts';
+import type { Card               as _Card               } from '../components/display/Card.ts';
+import type { Modal              as _Modal              } from '../components/layout/Modal.ts';
+import type { Tabs               as _Tabs,
+              Tab                as _Tab                } from '../components/navigation/Tabs.ts';
+import type { Mover              as _Mover              } from '../components/modifiers/2D/Mover.ts';
+import type { ColorPickerWheel   as _ColorPickerWheel   } from '../components/graphics/colors/ColorPickerWheel.ts';
+import type { CandlestickChart   as _CandlestickChart   } from '../components/finance/CandlestickChart.ts';
+import type { DHLTracker         as _DHLTracker         } from '../components/shipments/DHLTracker.ts';
+import type { AudioTrackEditor   as _AudioTrackEditor,
+              AudioTrack         as _AudioTrack,
+              AudioPart          as _AudioPart          } from '../components/audio/AudioTrackEditor.ts';
+
+// ── CSS preprocessors (now in additionals/) ───────────────────────────────
+import type { default as _Less   } from '../additionals/Less.ts';
+import type { default as _Sass   } from '../additionals/Sass.ts';
+import type { default as _Scss   } from '../additionals/Scss.ts';
+import type { default as _Stylus } from '../additionals/Stylus.ts';
 
 declare global {
 
@@ -58,8 +90,13 @@ declare global {
      */
     const Virtual: typeof VirtualNode & ((...args: ConstructorParameters<typeof VirtualNode>) => VirtualNode);
 
-    /** Component — dual-mode component (Real/Virtual). */
-    const Component: typeof _Component & ((...args: ConstructorParameters<typeof _Component>) => InstanceType<typeof _Component>);
+    /**
+     * Component — dual-callable AriannA component base.
+     *
+     *   new Component('div', { class: 'foo' })   // instance
+     *   class X extends Component('arianna-x', { attrs: [...], shadow: 'drop' }) { build() {…} }
+     */
+    const Component: typeof _Component;
 
     /** Directive — DOM directive runtime + TS decorator helpers. */
     const Directive: typeof _Directive;
@@ -99,31 +136,43 @@ declare global {
     /** Read Signals without tracking dependencies. */
     function untrack<T>(fn: () => T): T;
 
+    // ── CSS preprocessors (additionals/) ──────────────────────────────────────
+
+    /** Less.js-flavoured parser → CSS string. */
+    const Less:   typeof _Less;
+    /** Sass indentation-based parser → CSS string. */
+    const Sass:   typeof _Sass;
+    /** SCSS brace-delimited parser → CSS string. */
+    const Scss:   typeof _Scss;
+    /** Stylus permissive parser → CSS string. */
+    const Stylus: typeof _Stylus;
+
     // ── New May-2026 components (also on window) ──────────────────────────────
 
-    /** Calendar — month/week/day views with event placement, also usable as a date picker. */
     const Calendar: typeof _Calendar;
-
-    /** Dock — desktop launcher with two switchable styles ('macos' | 'windows'). */
     const Dock: typeof _Dock;
-
-    /** Window — desktop-style window chrome with draggable title bar, resize, min/max/close. */
     const Window: typeof _Window;
-
-    /** MapEmbed — abstract base for the four map embedders. */
     const MapEmbed: typeof _MapEmbed;
-
-    /** GoogleMap — Google Maps iframe embedder (no API key required for basic map). */
     const GoogleMap: typeof _GoogleMap;
-
-    /** OpenStreetMap — OSM iframe embedder using the public export endpoint. */
     const OpenStreetMap: typeof _OpenStreetMap;
-
-    /** AppleMap — Apple Maps embedder (renders on Apple platforms; fallback card elsewhere). */
     const AppleMap: typeof _AppleMap;
-
-    /** BingMap — Microsoft Bing Maps iframe embedder. */
     const BingMap: typeof _BingMap;
+
+    // ── v2 pilot components ───────────────────────────────────────────────────
+
+    const Button:             typeof _Button;
+    const TextField:          typeof _TextField;
+    const Card:               typeof _Card;
+    const Modal:              typeof _Modal;
+    const Tabs:               typeof _Tabs;
+    const Tab:                typeof _Tab;
+    const Mover:              typeof _Mover;
+    const ColorPickerWheel:   typeof _ColorPickerWheel;
+    const CandlestickChart:   typeof _CandlestickChart;
+    const DHLTracker:         typeof _DHLTracker;
+    const AudioTrackEditor:   typeof _AudioTrackEditor;
+    const AudioTrack:         typeof _AudioTrack;
+    const AudioPart:          typeof _AudioPart;
 
     // ── Window interface augmentation ─────────────────────────────────────────
 
@@ -145,7 +194,12 @@ declare global {
         computed      : <T>(fn: () => T) => ReadonlySignal<T>;
         batch         : (fn: () => void) => void;
         untrack       : <T>(fn: () => T) => T;
-        // ── New May-2026 components ───────────────────────────────────────────
+        // CSS preprocessors (additionals)
+        Less          : typeof _Less;
+        Sass          : typeof _Sass;
+        Scss          : typeof _Scss;
+        Stylus        : typeof _Stylus;
+        // May-2026 group
         Calendar      : typeof _Calendar;
         Dock          : typeof _Dock;
         Window        : typeof _Window;
@@ -154,6 +208,20 @@ declare global {
         OpenStreetMap : typeof _OpenStreetMap;
         AppleMap      : typeof _AppleMap;
         BingMap       : typeof _BingMap;
+        // v2 pilots
+        Button            : typeof _Button;
+        TextField         : typeof _TextField;
+        Card              : typeof _Card;
+        Modal             : typeof _Modal;
+        Tabs              : typeof _Tabs;
+        Tab               : typeof _Tab;
+        Mover             : typeof _Mover;
+        ColorPickerWheel  : typeof _ColorPickerWheel;
+        CandlestickChart  : typeof _CandlestickChart;
+        DHLTracker        : typeof _DHLTracker;
+        AudioTrackEditor  : typeof _AudioTrackEditor;
+        AudioTrack        : typeof _AudioTrack;
+        AudioPart         : typeof _AudioPart;
     }
 }
 

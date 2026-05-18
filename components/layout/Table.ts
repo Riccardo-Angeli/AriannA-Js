@@ -1,1154 +1,1228 @@
 /**
- * @module    Table
+ * @module    components/layout/Table
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
  *
- * High-performance data table for AriannA.
- * Single component — configure via options to enable/disable any feature.
+ * Table — data table with full feature parity to v1.
  *
- * ── Features ──────────────────────────────────────────────────────────────────
- *   - Column sorting (single / multi)
- *   - Global search + per-column filtering
- *   - Client-side pagination (optional)
- *   - Server-side / async data loading
- *   - Web Worker offloading for sort+filter on large datasets (optional)
- *   - LRU cache for remote pages (optional)
- *   - Sticky header
- *   - Row selection (single / multi / checkbox)
- *   - Column resizing
- *   - Column visibility toggle
- *   - Custom cell renderers
- *   - Export to CSV
- *   - AriannA Observable events
- *   - Keyboard navigation
- *   - Accessible (ARIA grid)
+ * # Features
+ *   • Column sorting (multi-col with Shift+click)
+ *   • Global search filter + per-column accessors
+ *   • Client-side pagination (page size + page navigation)
+ *   • Server-side async fetch via `fetcher` callback
+ *   • LRU cache for remote pages
+ *   • Web Worker offloading for sort+filter on large datasets (>= worker-threshold rows)
+ *   • Sticky header
+ *   • Row selection (none / single / multi via Ctrl/Shift)
+ *   • Column resizing (drag right edge of header cell)
+ *   • Column visibility toggle (button + menu)
+ *   • Custom cell renderers
+ *   • CSV export
+ *   • Keyboard-friendly (header buttons focusable, page buttons disabled at boundaries)
+ *   • ARIA grid role + sortable header cells
  *
- * ── Usage ─────────────────────────────────────────────────────────────────────
+ * # Lazy server-side mode
  *
- * @example
- *   // Client-side, full-featured
- *   import { Table } from 'arianna-wip/controls';
+ *   const t = new Table();
+ *   t.columns = [...];
+ *   t.fetcher = async ({ page, pageSize, sort, query }) => {
+ *     const res = await api.get('/data', { page, pageSize, sort, query });
+ *     return { rows: res.data, total: res.total };
+ *   };
  *
- *   const table = new Table('#container', {
- *     columns: [
- *       { key: 'name',   label: 'Name',   sortable: true, width: 200 },
- *       { key: 'email',  label: 'Email',  sortable: true },
- *       { key: 'status', label: 'Status', render: (v) => `<span class="badge">${v}</span>` },
- *     ],
- *     paging    : { pageSize: 25, sizes: [10, 25, 50, 100] },
- *     selectable: 'multi',
- *     worker    : true,   // offload sort+filter to Web Worker
- *     cache     : true,   // LRU cache for remote pages
- *   });
+ *   When `fetcher` is set, the table calls it on mount and on every
+ *   sort/search/page change. Responses go through the LRU cache (keyed by
+ *   query params) so the same query within the cache window returns instantly.
  *
- *   table.load(myData);
- *   table.mount();
+ * # Worker mode
  *
- *   table.on('select', e => console.log(e.detail.rows));
- *   table.on('sort',   e => console.log(e.detail.column, e.detail.direction));
- *   table.on('page',   e => console.log(e.detail.page));
+ *   For client-side mode (no fetcher) with large datasets, set `worker` true
+ *   and `workerThreshold` (default 5000). When rows >= threshold, sort+filter
+ *   runs inside a `Blob`-spawned Web Worker so the UI thread stays free.
  *
- * @example
- *   // Server-side / async
- *   const table = new Table('#container', {
- *     columns: [...],
- *     paging : { pageSize: 20 },
- *     fetch  : async ({ page, pageSize, sort, filter }) => {
- *       const res = await api.get('/data', { page, pageSize, sort, filter });
- *       return { rows: res.data, total: res.total };
- *     },
- *   });
- *   table.mount();
+ * @example HTML
+ *   <arianna-table page-size="25" selectable="multi" searchable
+ *                  sticky-header column-toggle worker></arianna-table>
  *
- * @example
- *   // Lightweight — no paging, no worker, no cache
- *   const table = new Table('#container', {
- *     columns  : [...],
- *     paging   : false,
- *     worker   : false,
- *     cache    : false,
- *     selectable: 'none',
- *   });
- *   table.load(myData).mount();
+ * Events:
+ *   - arianna:select   detail: { rows, indices }   row(s) selected
+ *   - arianna:sort     detail: { sorts }            full sort stack
+ *   - arianna:page     detail: { page }
+ *   - arianna:search   detail: { query }
+ *   - arianna:fetch    detail: { rows, total }      after server-side load
+ *   - arianna:resize-column  detail: { key, width }
+ *   - arianna:toggle-column  detail: { key, visible }
+ *   - arianna:export   detail: { format, rows }
+ *
+ * Slots:  (none — programmatic columns/rows only)
+ *
+ * Attrs:
+ *   page-size, selectable ('none' | 'single' | 'multi'), searchable,
+ *   sticky-header, column-toggle, column-resize, worker, worker-threshold
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
-/** Column definition. */
-export interface TableColumn<R = Row> {
-  /** Property key in the row object. */
-  key      : string;
-  /** Display header label. */
-  label    : string;
-  /** Column width (px or CSS value). @default 'auto' */
-  width?   : number | string;
-  /** Min column width in px. @default 60 */
-  minWidth?: number;
-  /** Whether this column can be sorted. @default false */
-  sortable?: boolean;
-  /** Whether this column can be filtered. @default false */
-  filterable?: boolean;
-  /** Whether this column is visible. @default true */
-  visible? : boolean;
-  /** Whether this column can be resized. @default true */
-  resizable?: boolean;
-  /** Text alignment. @default 'left' */
-  align?   : 'left' | 'center' | 'right';
-  /**
-   * Custom cell renderer.
-   * Return an HTML string or a DOM node.
-   *
-   * @example
-   *   render: (value, row) => `<strong>${value}</strong>`
-   */
-  render?  : (value: unknown, row: R, col: TableColumn<R>) => string | Node;
-  /**
-   * Custom header renderer.
-   */
-  renderHeader?: (col: TableColumn<R>) => string | Node;
-  /** Value accessor (override default key lookup). */
-  value?   : (row: R) => unknown;
-  /** Sort comparator (custom sort). */
-  sort?    : (a: R, b: R, dir: SortDir) => number;
-  /** CSS class(es) applied to cells in this column. */
-  class?   : string;
-  /** CSS class(es) applied to the header cell. */
-  headerClass?: string;
-}
-
-/** A generic row — any plain object. */
-export type Row = Record<string, unknown>;
-
-/** Sort direction. */
+export type Row     = Record<string, unknown>;
 export type SortDir = 'asc' | 'desc';
+export type SelectMode = 'none' | 'single' | 'multi';
 
-/** Active sort state. */
+export interface TableColumn<R = Row> {
+    key         : string;
+    label       : string;
+    width?      : number | string;
+    minWidth?   : number;
+    sortable?   : boolean;
+    resizable?  : boolean;
+    visible?    : boolean;
+    align?      : 'left' | 'center' | 'right';
+    render?     : (value: unknown, row: R, col: TableColumn<R>) => string;
+    value?      : (row: R) => unknown;
+    sort?       : (a: R, b: R, dir: SortDir) => number;
+    class?      : string;
+    headerClass?: string;
+}
+
 export interface SortState {
-  key : string;
-  dir : SortDir;
+    key : string;
+    dir : SortDir;
 }
 
-/** Pagination arianna-wip-config. */
-export interface PagingConfig {
-  /** Rows per page. @default 25 */
-  pageSize  : number;
-  /** Available page size options. @default [10, 25, 50, 100] */
-  sizes?    : number[];
-  /** Current page (1-indexed). @default 1 */
-  page?     : number;
-}
-
-/** Fetch function for server-side data. */
-export type FetchFn<R = Row> = (params: FetchParams) => Promise<FetchResult<R>>;
-
-/** Parameters passed to the fetch function. */
 export interface FetchParams {
-  page     : number;
-  pageSize : number;
-  sort?    : SortState;
-  filter?  : string;
-  filters? : Record<string, string>;
+    page     : number;
+    pageSize : number;
+    sort     : SortState[];
+    query    : string;
 }
 
-/** Expected return from fetch function. */
-export interface FetchResult<R = Row> {
-  rows  : R[];
-  total : number;
+export interface FetchResult {
+    rows  : Row[];
+    total : number;
 }
 
-/** Table options. */
-export interface TableOptions<R = Row> extends CtrlOptions {
-  class?        : string;
-  expandable?   : boolean;
-  expandSingle? : boolean;
-  rowContent?   : (row: R) => Promise<string | HTMLElement>;
-  /** Column definitions. Required. */
-  columns     : TableColumn<R>[];
-  /**
-   * Pagination arianna-wip-config, or false to disable.
-   * @default { pageSize: 25, sizes: [10, 25, 50, 100] }
-   */
-  paging?     : PagingConfig | false;
-  /**
-   * Row selection mode.
-   * @default 'none'
-   */
-  selectable? : 'none' | 'single' | 'multi';
-  /** Show row checkboxes (multi selection). @default false */
-  checkboxes? : boolean;
-  /**
-   * Async data fetcher for server-side mode.
-   * If provided, `load()` is ignored for paged data.
-   */
-  fetch?      : FetchFn<R>;
-  /**
-   * Offload sort+filter to a Web Worker.
-   * Has no effect in server-side (fetch) mode.
-   * @default false
-   */
-  worker?     : boolean;
-  /**
-   * Enable LRU cache for remote pages.
-   * Only meaningful in server-side (fetch) mode.
-   * @default false
-   */
-  cache?      : boolean;
-  /** LRU cache capacity (number of pages). @default 20 */
-  cacheSize?  : number;
-  /** Show global search bar. @default true */
-  searchable? : boolean;
-  /** Show column filter inputs. @default false */
-  columnFilters? : boolean;
-  /** Show column visibility toggle button. @default false */
-  columnToggle?  : boolean;
-  /** Enable column resizing. @default false */
-  resizable?  : boolean;
-  /** Sticky header. @default true */
-  stickyHeader? : boolean;
-  /** Show row count / total arianna-wip-info. @default true */
-  info?       : boolean;
-  /** Enable CSV export button. @default false */
-  exportCsv?  : boolean;
-  /** Placeholder shown when no rows match. @default 'No data' */
-  emptyText?  : string;
-  /** Loading text. @default 'Loading…' */
-  loadingText?: string;
-  /** Row click callback shorthand. */
-  onRowClick? : (row: R, e: MouseEvent) => void;
+export type Fetcher = (params: FetchParams) => Promise<FetchResult>;
+
+export interface TableOptions {
+    columns?         : TableColumn[];
+    rows?            : Row[];
+    pageSize?        : number;
+    selectable?      : SelectMode;
+    searchable?      : boolean;
+    stickyHeader?    : boolean;
+    columnToggle?    : boolean;
+    columnResize?    : boolean;
+    worker?          : boolean;
+    workerThreshold? : number;
+    cacheSize?       : number;
+    fetcher?         : Fetcher;
 }
 
-// ── LRU Cache ─────────────────────────────────────────────────────────────────
+// ── Internal types ──────────────────────────────────────────────────────────
 
-class LRUCache<K, V> {
-  private _map  = new Map<K, V>();
-  private _cap  : number;
-  constructor(capacity: number) { this._cap = capacity; }
-  get(key: K): V | undefined {
-    if (!this._map.has(key)) return undefined;
-    const v = this._map.get(key)!;
-    this._map.delete(key); this._map.set(key, v);
-    return v;
-  }
-  set(key: K, value: V): void {
-    if (this._map.has(key)) this._map.delete(key);
-    else if (this._map.size >= this._cap) this._map.delete(this._map.keys().next().value!);
-    this._map.set(key, value);
-  }
-  clear(): void { this._map.clear(); }
+interface DisplayRow {
+    raw      : Row;
+    index    : number;
+    selected : boolean;
+    rowClass : string;
+    cells    : Array<{ html: string; cellClass: string; style: string }>;
 }
 
-// ── Worker source ─────────────────────────────────────────────────────────────
+interface HeaderCell {
+    col       : TableColumn;
+    label     : string;
+    isSorted  : boolean;
+    sortIcon  : string;
+    sortOrder : string;
+    headerCls : string;
+    style     : string;
+    sortable  : boolean;
+    resizable : boolean;
+}
 
-/**
- * Worker script source (inlined as a Blob URL).
- * Handles sort + filter off the main thread.
- */
-const WORKER_SRC = `
-self.onmessage = function(e) {
-  const { rows, sort, filter, columnFilters, columns } = e.data;
-  let result = rows.slice();
+interface PageBtn {
+    label    : string;
+    page     : number;
+    active   : boolean;
+    disabled : boolean;
+    isDots   : boolean;
+}
 
-  // Global filter
-  if (filter) {
-    const q = filter.toLowerCase();
-    result = result.filter(row =>
-      Object.values(row).some(v => String(v ?? '').toLowerCase().includes(q))
-    );
-  }
+interface ColToggleEntry {
+    col     : TableColumn;
+    visible : boolean;
+}
 
-  // Column filters
-  if (columnFilters) {
-    Object.entries(columnFilters).forEach(([key, val]) => {
-      if (!val) return;
-      const q = val.toLowerCase();
-      result = result.filter(row => String(row[key] ?? '').toLowerCase().includes(q));
-    });
-  }
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-  // Sort
-  if (sort && sort.key) {
-    const dir = sort.dir === 'asc' ? 1 : -1;
-    result.sort((a: R, b: R) => {
-      const av = a[sort.key] ?? '';
-      const bv = b[sort.key] ?? '';
-      if (av < bv) return -dir;
-      if (av > bv) return  dir;
-      return 0;
-    });
-  }
+function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]!));
+}
 
-  self.postMessage({ rows: result, total: result.length });
+/** Escape CSV cell — wrap in quotes if needed, double internal quotes. */
+function csvCell(v: unknown): string {
+    const s = String(v ?? '');
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+}
+
+/** Tiny LRU cache (Map preserves insertion order). */
+class LRU<K, V> {
+    #map: Map<K, V> = new Map();
+    #capacity: number;
+    constructor(capacity: number = 32) { this.#capacity = capacity; }
+    get(key: K): V | undefined {
+        if (!this.#map.has(key)) return undefined;
+        const v = this.#map.get(key)!;
+        this.#map.delete(key);
+        this.#map.set(key, v);
+        return v;
+    }
+    set(key: K, value: V): void {
+        if (this.#map.has(key)) this.#map.delete(key);
+        else if (this.#map.size >= this.#capacity) {
+            const first = this.#map.keys().next().value;
+            if (first !== undefined) this.#map.delete(first);
+        }
+        this.#map.set(key, value);
+    }
+    clear(): void { this.#map.clear(); }
+    get size(): number { return this.#map.size; }
+}
+
+/** Body of the Web Worker — stringified at runtime. Pure data: no DOM, no
+ *  app-side closures (custom sort/value/render functions can't ride the
+ *  worker, so we fall back to the main-thread path for those columns). */
+const WORKER_BODY = `
+self.onmessage = (e) => {
+    const { rows, query, sort, columns } = e.data;
+    let filtered = rows;
+    if (query) {
+        const q = query.toLowerCase();
+        filtered = rows.filter(r => columns.some(c => {
+            const v = r[c.key];
+            return String(v ?? '').toLowerCase().includes(q);
+        }));
+    }
+    if (sort && sort.length) {
+        filtered = filtered.slice().sort((a, b) => {
+            for (const s of sort) {
+                const av = a[s.key], bv = b[s.key];
+                if (av === bv) continue;
+                const cmp = (av < bv) ? -1 : 1;
+                return s.dir === 'asc' ? cmp : -cmp;
+            }
+            return 0;
+        });
+    }
+    self.postMessage({ rows: filtered, total: filtered.length });
 };
 `;
 
-// ── Table ──────────────────────────────────────────────────────────────────────
+let WORKER_URL: string | null = null;
+function getWorkerUrl(): string {
+    if (WORKER_URL) return WORKER_URL;
+    const blob = new Blob([WORKER_BODY], { type: 'application/javascript' });
+    WORKER_URL = URL.createObjectURL(blob);
+    return WORKER_URL;
+}
 
-/**
- * Table — data grid with optional paging, worker, and cache.
- */
-export class Table<R extends Row = Row> extends Control<TableOptions<R>> {
+// ── Table component ─────────────────────────────────────────────────────────
 
-  protected _expandedRows = new Set<number>();
-  protected _renderRows(): void { this._renderBody(); }
-  protected _build(): void { this._renderBody(); }
-  /** Full client-side dataset. */
-  private _data        : R[]    = [];
-  /** Currently visible rows (after sort+filter). */
-  private _rows        : R[]    = [];
-  /** Total row count (for server-side). */
-  private _total       = 0;
-  /** Current page (1-indexed). */
-  private _page        = 1;
-  /** Current page size. */
-  private _pageSize    : number;
-  /** Current sort state. */
-  private _sort?       : SortState;
-  /** Current global filter. */
-  private _filter      = '';
-  /** Current column filters. */
-  private _colFilters  : Record<string, string> = {};
-  /** Selected row indices (by row reference). */
-  private _selected    = new Set<R>();
-  /** Loading state. */
-  private _loading     = false;
-  /** Web Worker instance. */
-  private _worker?     : Worker;
-  /** Pending worker resolve. */
-  private _workerResolve?: (rows: R[]) => void;
-  /** LRU page cache. */
-  private _cache?      : LRUCache<string, FetchResult<R>>;
-  /** Column resize state. */
-  private _resizeCol?  : { col: TableColumn<R>; startX: number; startW: number };
-  /** DOM refs. */
-  private _dom         = {} as {
-    toolbar   : HTMLElement;
-    table     : HTMLTableElement;
-    thead     : HTMLTableSectionElement;
-    tbody     : HTMLTableSectionElement;
-    footer    : HTMLElement;
-    info      : HTMLElement;
-    pager     : HTMLElement;
-    empty     : HTMLElement;
-    spinner   : HTMLElement;
-  };
+export class Table extends Component('arianna-table', HTMLElement, {}, {
+    attrs : [
+        'page-size', 'selectable', 'searchable', 'sticky-header',
+        'column-toggle', 'column-resize', 'worker', 'worker-threshold',
+    ],
+    shadow: false,
+})
+{
+    // ── Reactive state ──────────────────────────────────────────────────────
+    columns$       : Signal<TableColumn[]>      = signal<TableColumn[]>([]);
+    rows$          : Signal<Row[]>              = signal<Row[]>([]);
+    /** Computed display rows (filtered + sorted + paged). Recomputed eagerly
+     *  on input change AND on async worker / fetcher result. */
+    displayRows$   : Signal<DisplayRow[]>       = signal<DisplayRow[]>([]);
+    totalCount$    : Signal<number>             = signal<number>(0);
+    selected$      : Signal<Set<number>>        = signal<Set<number>>(new Set());
+    /** Multi-column sort stack: most-recently-added LAST. */
+    sortStack$     : Signal<SortState[]>        = signal<SortState[]>([]);
+    query$         : Signal<string>             = signal<string>('');
+    page$          : Signal<number>             = signal<number>(1);
+    loading$       : Signal<boolean>            = signal<boolean>(false);
+    /** Column visibility map. Keys NOT in this map default to visible. */
+    visibility$    : Signal<Record<string, boolean>> = signal<Record<string, boolean>>({});
+    /** Column widths overridden by user resize. */
+    widthsOverride$: Signal<Record<string, number>>  = signal<Record<string, number>>({});
+    /** Toggle menu open state. */
+    toggleOpen$    : Signal<boolean>            = signal<boolean>(false);
 
-  // ── Constructor ─────────────────────────────────────────────────────────────
+    // ── Internals ───────────────────────────────────────────────────────────
+    #fetcher  : Fetcher | null = null;
+    #cache    : LRU<string, FetchResult>;
+    #worker   : Worker | null = null;
+    #lastSearchTimer = 0;
+    #recomputeTimer  = 0;
+    #toggleOutside: ((e: Event) => void) | null = null;
 
-  constructor(
-    container : string | HTMLElement | null = null,
-    options   : TableOptions<R>,
-  ) {
-    super(container, 'div', {
-      paging       : { pageSize: 25, sizes: [10, 25, 50, 100] },
-      selectable   : 'none',
-      checkboxes   : false,
-      worker       : false,
-      cache        : false,
-      cacheSize    : 20,
-      searchable   : true,
-      columnFilters: false,
-      columnToggle : false,
-      resizable    : false,
-      stickyHeader : true,
-      info         : true,
-      exportCsv    : false,
-      emptyText    : 'No data',
-      loadingText  : 'Loading…',
-      ...options,
-    });
-
-    this.el.className = `arianna-table-wrap${options.class ? ' '+options.class : ''}`;
-
-    const paging = this.get('paging') as TableOptions<R>['paging'] | undefined;
-    this._pageSize = paging ? (paging.pageSize ?? 25) : Infinity;
-    this._page     = paging ? (paging.page    ?? 1)  : 1;
-
-    // Init Web Worker
-    if (this.get('worker') && !this.get('fetch')) {
-      const blob = new Blob([WORKER_SRC], { type: 'text/javascript' });
-      const url  = URL.createObjectURL(blob);
-      this._worker = new Worker(url);
-      this._worker.onmessage = (e: MessageEvent) => {
-        if (this._workerResolve) {
-          this._workerResolve(e.data.rows as R[]);
-          this._total = e.data.total;
-          this._workerResolve = undefined;
-        }
-      };
-      this._onDestroy(() => { this._worker?.terminate(); URL.revokeObjectURL(url); });
+    constructor() {
+        super();
+        this.#cache = new LRU<string, FetchResult>(32);
     }
 
-    // Init cache
-    if (this.get('cache') && this.get('fetch')) {
-      this._cache = new LRUCache<string, FetchResult<R>>(this.get('cacheSize') ?? 20);
-    }
-  }
+    build(_opts: TableOptions = {})
+    {
+        this.setAttribute('role', 'grid');
 
-  // ── Data ────────────────────────────────────────────────────────────────────
+        // Computed columns: filter out hidden ones for rendering purposes.
+        const visibleCols = (): TableColumn[] => {
+            const v = this.visibility$.get();
+            return this.columns$.get().filter(c => v[c.key] !== false && c.visible !== false);
+        };
 
-  /**
-   * Load client-side data.
-   * Triggers a re-render if mounted.
-   *
-   * @example
-   *   table.load(myRows);
-   */
-  load(data: R[]): this {
-    this._data  = data;
-    this._total = data.length;
-    this._page  = 1;
-    if (this._mounted) this._process().then(() => this._renderBody());
-    return this;
-  }
+        this.headers = (): HeaderCell[] => {
+            const stack = this.sortStack$.get();
+            const widths = this.widthsOverride$.get();
+            return visibleCols().map(col => {
+                const sortable  = !!col.sortable;
+                const resizable = col.resizable !== false && this.hasColumnResize();
+                const sIdx = stack.findIndex(s => s.key === col.key);
+                const isSorted = sIdx >= 0;
+                const dir = isSorted ? stack[sIdx].dir : null;
+                const order = (isSorted && stack.length > 1) ? String(sIdx + 1) : '';
 
-  /**
-   * Append rows to client-side data.
-   */
-  append(rows: R[]): this {
-    this._data.push(...rows);
-    this._total = this._data.length;
-    if (this._mounted) this._process().then(() => this._renderBody());
-    return this;
-  }
+                const override = widths[col.key];
+                const w = override !== undefined ? override + 'px'
+                        : col.width !== undefined ? (typeof col.width === 'number' ? col.width + 'px' : col.width)
+                        : '';
+                const styleParts: string[] = [];
+                if (w) styleParts.push(`width: ${w}`);
+                if (col.align) styleParts.push(`text-align: ${col.align}`);
 
-  /**
-   * Clear all data.
-   */
-  clear(): this {
-    this._data = []; this._rows = []; this._total = 0; this._page = 1;
-    if (this._mounted) this._renderBody();
-    return this;
-  }
+                return {
+                    col,
+                    label    : col.label,
+                    isSorted,
+                    sortIcon : isSorted ? (dir === 'asc' ? '▲' : '▼') : '',
+                    sortOrder: order,
+                    headerCls: 'ar-table__th'
+                             + (sortable  ? ' ar-table__th--sortable'  : '')
+                             + (isSorted  ? ' ar-table__th--sorted'    : '')
+                             + (resizable ? ' ar-table__th--resizable' : '')
+                             + (col.headerClass ? ' ' + col.headerClass : ''),
+                    style    : styleParts.join('; '),
+                    sortable,
+                    resizable,
+                };
+            });
+        };
 
-  /**
-   * Reload data — re-triggers fetch (server-side) or re-processes (client-side).
-   */
-  reload(): this {
-    this._page = 1;
-    if (this._mounted) this._load();
-    return this;
-  }
-
-  /**
-   * Invalidate the cache and reload.
-   */
-  invalidateCache(): this {
-    this._cache?.clear();
-    return this.reload();
-  }
-
-  // ── Selection ────────────────────────────────────────────────────────────────
-
-  /**
-   * Get all selected rows.
-   */
-  getSelected(): R[] { return [...this._selected]; }
-
-  /**
-   * Clear selection.
-   */
-  clearSelection(): this {
-    this._selected.clear();
-    this._dom.tbody?.querySelectorAll('tr.selected')
-      .forEach(r => r.classList.remove('selected'));
-    return this;
-  }
-
-  // ── Export ───────────────────────────────────────────────────────────────────
-
-  /**
-   * Export current view to CSV and trigger download.
-   */
-  exportToCsv(filename = 'export.csv'): void {
-    const cols = this.get<TableColumn<R>[]>('columns') ?? [].filter((c: TableColumn<R>) => c.visible !== false);
-    const header = cols.map((c: TableColumn<R>) => JSON.stringify(c.label)).join(',');
-    const rowLines = this._rows.map(row =>
-      cols.map((c: TableColumn<R>) => {
-        const v = c.value ? c.value(row) : row[c.key];
-        return JSON.stringify(String(v ?? ''));
-      }).join(',')
-    );
-    const csv  = [header, ...rowLines].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  // ── Render ───────────────────────────────────────────────────────────────────
-
-  protected _render(): void {
-    this.el.innerHTML = '';
-    const opts = this._state.State;
-
-    // Toolbar
-    this._dom.toolbar = this._el('div', 'arianna-wip-table__toolbar', this.el);
-    this._buildToolbar();
-
-    // Table
-    const tableWrap = this._el('div', 'arianna-wip-table__scroll', this.el);
-    this._dom.table = document.createElement('table');
-    this._dom.table.className = 'arianna-wip-table';
-    this._dom.table.setAttribute('role', 'grid');
-    tableWrap.appendChild(this._dom.table);
-
-    this._dom.thead = this._dom.table.createTHead();
-    this._dom.tbody = this._dom.table.createTBody();
-    this._buildHeader();
-
-    // Empty state
-    this._dom.empty = this._el('div', 'arianna-wip-table__empty', this.el);
-    this._dom.empty.textContent = opts.emptyText ?? 'No data';
-    this._dom.empty.style.display = 'none';
-
-    // Spinner
-    this._dom.spinner = this._el('div', 'arianna-wip-table__spinner', this.el);
-    this._dom.spinner.textContent = opts.loadingText ?? 'Loading…';
-    this._dom.spinner.style.display = 'none';
-
-    // Footer
-    this._dom.footer = this._el('div', 'arianna-wip-table__footer', this.el);
-    this._dom.info   = this._el('span', 'arianna-wip-table__info',  this._dom.footer);
-    this._dom.pager  = this._el('div',  'arianna-wip-table__pager', this._dom.footer);
-
-    this._load();
-  }
-
-  private _buildToolbar(): void {
-    const opts = this._state.State;
-    const tb   = this._dom.toolbar;
-
-    if (opts.searchable) {
-      const input = document.createElement('input');
-      input.type        = 'text';
-      input.placeholder = 'Search…';
-      input.className   = 'arianna-wip-table__search';
-      input.value       = this._filter;
-      this._listen(input as unknown as HTMLElement, 'input', () => {
-        this._filter = input.value;
-        this._page   = 1;
-        this._load();
-      });
-      tb.appendChild(input);
-    }
-
-    if (opts.exportCsv) {
-      const btn = document.createElement('button');
-      btn.className   = 'arianna-wip-table__btn';
-      btn.textContent = '↓ CSV';
-      btn.addEventListener('click', () => this.exportToCsv());
-      tb.appendChild(btn);
-    }
-
-    if (opts.columnToggle) {
-      const btn = document.createElement('button');
-      btn.className   = 'arianna-wip-table__btn';
-      btn.textContent = '⊞ Columns';
-      btn.addEventListener('click', () => this._showColumnToggle(btn));
-      tb.appendChild(btn);
-    }
-  }
-
-  private _buildHeader(): void {
-    const opts = this._state.State;
-    const tr   = this._dom.thead.insertRow();
-    tr.setAttribute('role', 'row');
-
-    if (opts.checkboxes && opts.selectable === 'multi') {
-      const th  = document.createElement('th');
-      th.className = 'arianna-wip-table__th arianna-wip-table__th--check';
-      const cb  = document.createElement('input');
-      cb.type   = 'checkbox';
-      cb.addEventListener('change', () => {
-        if (cb.checked) this._rows.forEach(r => this._selected.add(r));
-        else            this._selected.clear();
-        this._renderBody();
-      });
-      th.appendChild(cb);
-      tr.appendChild(th);
-    }
-
-    (opts.columns ?? [])
-      .filter((c: TableColumn<R>) => c.visible !== false)
-      .forEach((col: TableColumn<R>) => {
-        const th = document.createElement('th');
-        th.className   = `arianna-table__th ${col.headerClass ?? ''}`;
-        th.setAttribute('role', 'columnheader');
-        th.setAttribute('aria-sort', 'none');
-        th.style.width = col.width ? (typeof col.width === 'number' ? col.width+'px' : col.width) : '';
-        if (col.align) th.style.textAlign = col.align;
-
-        const inner = this._el('div', 'arianna-wip-table__th-inner', th);
-
-        if (col.renderHeader) {
-          const h = col.renderHeader(col);
-          if (typeof h === 'string') inner.innerHTML = h;
-          else inner.appendChild(h);
-        } else {
-          inner.textContent = col.label;
-        }
-
-        if (col.sortable) {
-          th.classList.add('arianna-wip-table__th--sortable');
-          const arrow = this._el('span', 'arianna-wip-table__sort-arrow', inner);
-          arrow.textContent = this._sort?.key === col.key
-            ? (this._sort.dir === 'asc' ? '↑' : '↓') : '↕';
-          th.addEventListener('click', () => this._toggleSort(col));
-        }
-
-        if (opts.resizable && col.resizable !== false) {
-          const handle = this._el('div', 'arianna-wip-table__resize-handle', th);
-          this._listen(handle as unknown as HTMLElement, 'mousedown', e => {
-            this._resizeCol = {
-              col,
-              startX : (e as MouseEvent).clientX,
-              startW : th.offsetWidth,
-            };
-          });
-        }
-
-        if (opts.columnFilters && col.filterable) {
-          const fi = document.createElement('input');
-          fi.type        = 'text';
-          fi.placeholder = '…';
-          fi.className   = 'arianna-wip-table__col-filter';
-          fi.value       = this._colFilters[col.key] ?? '';
-          fi.addEventListener('input', () => {
-            this._colFilters[col.key] = fi.value;
-            this._page = 1;
-            this._load();
-          });
-          fi.addEventListener('click', e => e.stopPropagation());
-          th.appendChild(fi);
-        }
-
-        tr.appendChild(th);
-      });
-
-    // Column resize mousemove/mouseup on document
-    this._listen(document as unknown as HTMLElement, 'mousemove', e => {
-      if (!this._resizeCol) return;
-      const dx  = (e as MouseEvent).clientX - this._resizeCol.startX;
-      const min = this._resizeCol.col.minWidth ?? 60;
-      const w   = Math.max(min, this._resizeCol.startW + dx);
-      const idx = (opts.columns ?? []).findIndex(c => c.key === this._resizeCol!.col.key);
-      const th  = this._dom.thead.rows[0]?.cells[idx];
-      if (th) th.style.width = w + 'px';
-      this._resizeCol.col.width = w;
-    });
-    this._listen(document as unknown as HTMLElement, 'mouseup', () => {
-      this._resizeCol = undefined;
-    });
-  }
-
-  private _renderBody(): void {
-    const opts   = this._state.State;
-    const tbody  = this._dom.tbody;
-    tbody.innerHTML = '';
-
-    if (this._loading) {
-      this._dom.spinner.style.display = '';
-      this._dom.empty.style.display   = 'none';
-      this._renderFooter();
-      return;
-    }
-    this._dom.spinner.style.display = 'none';
-
-    if (!this._rows.length) {
-      this._dom.empty.style.display = '';
-      this._renderFooter();
-      return;
-    }
-    this._dom.empty.style.display = 'none';
-
-    this._rows.forEach((row, ri) => {
-      const tr = tbody.insertRow();
-      tr.setAttribute('role', 'row');
-      if (this._selected.has(row)) tr.classList.add('selected');
-
-      // Click
-      // Expand toggle cell
-      if (opts.expandable) {
-        const td = tr.insertCell(); td.className = 'ar-table__td ar-table__td--exp';
-        const btn = document.createElement('button'); btn.className = 'ar-table__exp-btn';
-        const idx2 = ri;
-        btn.innerHTML = this._expandedRows.has(idx2) ? '▾' : '▸';
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          if (this._expandedRows.has(idx2)) {
-            this._expandedRows.delete(idx2);
-            this._emit('collapse', { row, index: idx2 });
-          } else {
-            if (opts.expandSingle) this._expandedRows.clear();
-            this._expandedRows.add(idx2);
-            this._emit('expand', { row, index: idx2 });
-          }
-          this._renderRows();
-          // If expanded, render async content
-          if (this._expandedRows.has(idx2) && opts.rowContent) {
-            const detailRow = tbody.querySelector(`[data-exp-detail="${idx2}"]`);
-            if (detailRow) {
-              const cell = detailRow.querySelector('td');
-              if (cell) {
-                cell.innerHTML = '<span style="color:var(--ar-muted);font-size:.8rem">Loading…</span>';
-                const content = await opts.rowContent(row);
-                if (typeof content === 'string') cell.innerHTML = content;
-                else { cell.innerHTML = ''; cell.appendChild(content); }
-              }
+        // Pagination buttons — based on totalCount$ which is either local
+        // filtered count (client mode) or server total (fetcher mode).
+        this.totalPages = (): number => {
+            const ps = this.pageSize;
+            if (ps <= 0) return 1;
+            return Math.max(1, Math.ceil(this.totalCount$.get() / ps));
+        };
+        this.pageButtons = (): PageBtn[] => {
+            const tp = this.totalPages();
+            const cur = this.page$.get();
+            const out: PageBtn[] = [];
+            out.push({ label: '‹', page: cur - 1, active: false, disabled: cur <= 1, isDots: false });
+            const start = Math.max(1, cur - 1);
+            const end   = Math.min(tp, cur + 1);
+            if (start > 1) {
+                out.push({ label: '1', page: 1, active: cur === 1, disabled: false, isDots: false });
+                if (start > 2) out.push({ label: '…', page: 0, active: false, disabled: true, isDots: true });
             }
-          }
-        });
-        td.appendChild(btn);
-      }
-            tr.addEventListener('click', e => {
-        const mode = opts.selectable;
-        if (mode === 'none') {
-          opts.onRowClick?.(row, e as MouseEvent);
-          return;
+            for (let p = start; p <= end; p++) {
+                out.push({ label: String(p), page: p, active: p === cur, disabled: false, isDots: false });
+            }
+            if (end < tp) {
+                if (end < tp - 1) out.push({ label: '…', page: 0, active: false, disabled: true, isDots: true });
+                out.push({ label: String(tp), page: tp, active: cur === tp, disabled: false, isDots: false });
+            }
+            out.push({ label: '›', page: cur + 1, active: false, disabled: cur >= tp, isDots: false });
+            return out;
+        };
+
+        // ── Column toggle menu ──────────────────────────────────────────────
+        this.columnEntries = (): ColToggleEntry[] => {
+            const v = this.visibility$.get();
+            return this.columns$.get().map(col => ({
+                col,
+                visible: v[col.key] !== false && col.visible !== false,
+            }));
+        };
+
+        // ── Other reactive helpers ──────────────────────────────────────────
+        this.allRows           = () => this.displayRows$.get();
+        this.hasMultiplePages  = () => this.totalPages() > 1;
+        this.hasColumnToggle   = () => this.hasAttribute('column-toggle');
+        this.hasColumnResize   = () => this.getAttribute('column-resize') !== 'false';
+        this.toggleMenuOpen    = () => this.toggleOpen$.get();
+        this.isSelectable      = () => {
+            const m = this.getAttribute('selectable');
+            return m !== null && m !== 'none';
+        };
+        this.isMultiSelect     = () => this.getAttribute('selectable') === 'multi';
+        this.isSearchable      = () => this.hasAttribute('searchable');
+        this.isLoading         = () => this.loading$.get();
+        this.totalLabel        = () => {
+            const t = this.totalCount$.get();
+            return t === 1 ? '1 row' : `${t} rows`;
+        };
+
+        // ── Event handlers ──────────────────────────────────────────────────
+        this.onHeaderClick = (col: TableColumn, e: Event) => {
+            if (!col.sortable) return;
+            const me = e as MouseEvent;
+            const stack = [...this.sortStack$.get()];
+            const idx = stack.findIndex(s => s.key === col.key);
+
+            if (me.shiftKey) {
+                // Multi-col sort: cycle this column without dropping others
+                if (idx >= 0) {
+                    if (stack[idx].dir === 'asc') stack[idx] = { ...stack[idx], dir: 'desc' };
+                    else                          stack.splice(idx, 1);
+                } else {
+                    stack.push({ key: col.key, dir: 'asc' });
+                }
+            } else {
+                // Single-col: cycle through asc → desc → off
+                if (idx >= 0 && stack.length === 1) {
+                    if (stack[0].dir === 'asc') stack[0] = { key: col.key, dir: 'desc' };
+                    else                         stack.length = 0;
+                } else {
+                    stack.length = 0;
+                    stack.push({ key: col.key, dir: 'asc' });
+                }
+            }
+            this.sortStack$.set(stack);
+            this.page$.set(1);
+            this.dispatchEvent(new CustomEvent('arianna:sort', {
+                bubbles: true, detail: { sorts: stack },
+            }));
+            this.#recompute();
+        };
+
+        this.onSearchInput = (e: Event) => {
+            const v = (e.target as HTMLInputElement).value;
+            clearTimeout(this.#lastSearchTimer);
+            this.#lastSearchTimer = window.setTimeout(() => {
+                this.query$.set(v);
+                this.page$.set(1);
+                this.dispatchEvent(new CustomEvent('arianna:search', {
+                    bubbles: true, detail: { query: v },
+                }));
+                this.#recompute();
+            }, 200);
+        };
+
+        this.onRowClick = (dr: DisplayRow, e: Event) => {
+            if (!this.isSelectable()) return;
+            const me = e as MouseEvent;
+            const cur = new Set(this.selected$.get());
+            if (this.isMultiSelect()) {
+                if (me.shiftKey && cur.size > 0) {
+                    // Range select from last → this index
+                    const last = Math.max(...cur);
+                    const lo = Math.min(last, dr.index);
+                    const hi = Math.max(last, dr.index);
+                    for (let i = lo; i <= hi; i++) cur.add(i);
+                } else if (me.ctrlKey || me.metaKey) {
+                    if (cur.has(dr.index)) cur.delete(dr.index);
+                    else                    cur.add(dr.index);
+                } else {
+                    cur.clear();
+                    cur.add(dr.index);
+                }
+            } else {
+                cur.clear();
+                cur.add(dr.index);
+            }
+            this.selected$.set(cur);
+            const selectedRows = [...cur].map(i => this.rows$.get()[i]).filter(r => r !== undefined);
+            this.dispatchEvent(new CustomEvent('arianna:select', {
+                bubbles: true, detail: { rows: selectedRows, indices: [...cur] },
+            }));
+            this.#recompute();
+        };
+
+        this.onPageClick = (btn: PageBtn) => {
+            if (btn.disabled || btn.isDots) return;
+            this.page$.set(btn.page);
+            this.dispatchEvent(new CustomEvent('arianna:page', {
+                bubbles: true, detail: { page: btn.page },
+            }));
+            this.#recompute();
+        };
+
+        this.onToggleMenu = (e: Event) => {
+            e.stopPropagation();
+            const wasOpen = this.toggleOpen$.get();
+            this.toggleOpen$.set(!wasOpen);
+            if (!wasOpen) {
+                this.#toggleOutside = (ev: Event) => {
+                    if (!this.contains(ev.target as Node)) this.toggleOpen$.set(false);
+                };
+                setTimeout(() => document.addEventListener('click', this.#toggleOutside!), 0);
+            } else if (this.#toggleOutside) {
+                document.removeEventListener('click', this.#toggleOutside);
+                this.#toggleOutside = null;
+            }
+        };
+
+        this.onColumnToggle = (key: string, visible: boolean) => {
+            const v = { ...this.visibility$.get(), [key]: visible };
+            this.visibility$.set(v);
+            this.dispatchEvent(new CustomEvent('arianna:toggle-column', {
+                bubbles: true, detail: { key, visible },
+            }));
+        };
+
+        this.onResizeStart = (col: TableColumn, e: Event) => {
+            if (!this.hasColumnResize() || col.resizable === false) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const me = e as MouseEvent;
+            const th = (me.currentTarget as HTMLElement).closest<HTMLElement>('.ar-table__th');
+            if (!th) return;
+            const startX = me.clientX;
+            const startW = th.offsetWidth;
+            const minW = col.minWidth ?? 50;
+
+            const onMove = (mv: MouseEvent) => {
+                const newW = Math.max(minW, startW + (mv.clientX - startX));
+                const widths = { ...this.widthsOverride$.get(), [col.key]: newW };
+                this.widthsOverride$.set(widths);
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup',   onUp);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                const w = this.widthsOverride$.get()[col.key];
+                this.dispatchEvent(new CustomEvent('arianna:resize-column', {
+                    bubbles: true, detail: { key: col.key, width: w },
+                }));
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup',   onUp);
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        };
+
+        this.onExportCsv = () => this.exportCSV();
+
+        // ── Template ────────────────────────────────────────────────────────
+        this.template = html`
+            <div class="ar-table__toolbar" a-if="this.isSearchable() || this.hasColumnToggle()">
+                <input class="ar-table__search"
+                       a-if="this.isSearchable()"
+                       type="text"
+                       placeholder="Search…"
+                       aria-label="Search rows"
+                       @input="this.onSearchInput"/>
+                <span class="ar-table__total">{{ this.totalLabel() }}</span>
+                <span class="ar-table__spinner" a-if="this.isLoading()">⟳</span>
+                <span class="ar-table__spacer"></span>
+                <div class="ar-table__col-toggle" a-if="this.hasColumnToggle()">
+                    <button class="ar-table__col-toggle-btn"
+                            @click="this.onToggleMenu"
+                            aria-label="Toggle columns">⋮</button>
+                    <div class="ar-table__col-menu" a-if="this.toggleMenuOpen()">
+                        <label class="ar-table__col-menu-item" a-for="entry in this.columnEntries()">
+                            <input type="checkbox"
+                                   :checked="entry.visible"
+                                   @change="(e) => this.onColumnToggle(entry.col.key, e.target.checked)"/>
+                            <span>{{ entry.col.label }}</span>
+                        </label>
+                    </div>
+                </div>
+                <button class="ar-table__export-btn"
+                        @click="this.onExportCsv"
+                        title="Export CSV"
+                        aria-label="Export CSV">⤓</button>
+            </div>
+
+            <div class="ar-table__scroll">
+                <table class="ar-table">
+                    <thead class="ar-table__thead">
+                        <tr>
+                            <th :class="h.headerCls"
+                                :style="h.style"
+                                a-for="h in this.headers()"
+                                @click="(e) => this.onHeaderClick(h.col, e)">
+                                <span class="ar-table__th-label">{{ h.label }}</span>
+                                <span class="ar-table__th-sort" a-if="h.isSorted">{{ h.sortIcon }}</span>
+                                <span class="ar-table__th-order" a-if="h.sortOrder">{{ h.sortOrder }}</span>
+                                <span class="ar-table__th-resize"
+                                      a-if="h.resizable"
+                                      @mousedown="(e) => this.onResizeStart(h.col, e)"></span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr :class="dr.rowClass"
+                            a-for="dr in this.allRows()"
+                            @click="(e) => this.onRowClick(dr, e)">
+                            <td :class="cell.cellClass"
+                                :style="cell.style"
+                                a-for="cell in dr.cells"
+                                a-html="cell.html"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="ar-table__footer" a-if="this.hasMultiplePages()">
+                <button :class="(btn.active ? 'ar-table__page ar-table__page--active' : (btn.isDots ? 'ar-table__page ar-table__page--dots' : 'ar-table__page'))"
+                        a-for="btn in this.pageButtons()"
+                        :disabled="btn.disabled"
+                        @click="(e) => this.onPageClick(btn)">{{ btn.label }}</button>
+            </div>
+        `;
+
+        this.Sheet = Table.DefaultSheet();
+    }
+
+    // ── Public API ───────────────────────────────────────────────────────────
+
+    set columns(v: TableColumn[]) {
+        this.columns$.set(v ?? []);
+        this.#recompute();
+    }
+    get columns(): TableColumn[] { return this.columns$.get(); }
+
+    set rows(v: Row[]) {
+        this.rows$.set(v ?? []);
+        this.selected$.set(new Set());
+        this.page$.set(1);
+        this.#recompute();
+    }
+    get rows(): Row[] { return this.rows$.get(); }
+
+    /**
+     * Set a server-side fetcher. When set, every sort/search/page change
+     * triggers a fetcher call (with LRU caching). Set null to disable.
+     */
+    set fetcher(fn: Fetcher | null) {
+        this.#fetcher = fn;
+        this.#cache.clear();
+        this.#recompute();
+    }
+    get fetcher(): Fetcher | null { return this.#fetcher; }
+
+    getSelected(): Row[] {
+        const all = this.rows$.get();
+        return [...this.selected$.get()].map(i => all[i]).filter(r => r !== undefined);
+    }
+    clearSelection(): this { this.selected$.set(new Set()); this.#recompute(); return this; }
+    selectAll(): this {
+        if (!this.isMultiSelect()) return this;
+        const sel = new Set<number>();
+        this.rows$.get().forEach((_, i) => sel.add(i));
+        this.selected$.set(sel);
+        this.#recompute();
+        return this;
+    }
+
+    setSort(key: string, dir: SortDir = 'asc'): this {
+        this.sortStack$.set([{ key, dir }]);
+        this.page$.set(1);
+        this.#recompute();
+        return this;
+    }
+    /** Add a sort level on top of the existing stack (multi-col). */
+    addSort(key: string, dir: SortDir = 'asc'): this {
+        const stack = [...this.sortStack$.get(), { key, dir }];
+        this.sortStack$.set(stack);
+        this.#recompute();
+        return this;
+    }
+    clearSort(): this {
+        this.sortStack$.set([]);
+        this.#recompute();
+        return this;
+    }
+
+    search(query: string): this {
+        this.query$.set(query);
+        this.page$.set(1);
+        this.#recompute();
+        return this;
+    }
+
+    goToPage(p: number): this {
+        const clamped = Math.max(1, Math.min(this.totalPages(), p));
+        this.page$.set(clamped);
+        this.#recompute();
+        return this;
+    }
+
+    /** Show/hide a column programmatically. */
+    setColumnVisible(key: string, visible: boolean): this {
+        const v = { ...this.visibility$.get(), [key]: visible };
+        this.visibility$.set(v);
+        return this;
+    }
+
+    /** Set a column's width override (px). Pass `null` to clear. */
+    setColumnWidth(key: string, width: number | null): this {
+        const widths = { ...this.widthsOverride$.get() };
+        if (width === null) delete widths[key];
+        else                widths[key] = width;
+        this.widthsOverride$.set(widths);
+        return this;
+    }
+
+    /** Clear the LRU page cache (server-side mode). */
+    clearCache(): this { this.#cache.clear(); return this; }
+
+    /**
+     * Export current filtered+sorted rows (all pages) as CSV.
+     * Returns the CSV string and triggers a browser download.
+     */
+    exportCSV(filename = 'table-export.csv'): string {
+        const cols = this.columns$.get().filter(c =>
+            this.visibility$.get()[c.key] !== false && c.visible !== false,
+        );
+
+        // In server-side mode we only have the current page; warn but proceed.
+        const sourceRows = this.#fetcher
+            ? this.displayRows$.get().map(d => d.raw)
+            : this.#processClientSide(this.rows$.get(), false);
+
+        const header = cols.map(c => csvCell(c.label)).join(',');
+        const body = sourceRows.map(row =>
+            cols.map(c => {
+                const v = c.value ? c.value(row) : row[c.key];
+                return csvCell(v);
+            }).join(','),
+        ).join('\n');
+        const csv = header + '\n' + body;
+
+        this.dispatchEvent(new CustomEvent('arianna:export', {
+            bubbles: true, detail: { format: 'csv', rows: sourceRows },
+        }));
+
+        // Trigger download via Blob
+        try {
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.warn('[Table] CSV download failed:', e);
         }
-        if (mode === 'single') { this._selected.clear(); }
-        if (this._selected.has(row)) this._selected.delete(row);
-        else                         this._selected.add(row);
-        this._renderBody();
-        this._fire('select', { rows: this.getSelected(), row });
-        opts.onRowClick?.(row, e as MouseEvent);
-      });
 
-      // Checkbox
-      if (opts.checkboxes && opts.selectable === 'multi') {
-        const td = tr.insertCell();
-        td.className = 'arianna-wip-table__td arianna-wip-table__td--check';
-        const cb = document.createElement('input');
-        cb.type    = 'checkbox';
-        cb.checked = this._selected.has(row);
-        cb.addEventListener('change', e => {
-          e.stopPropagation();
-          if (cb.checked) this._selected.add(row);
-          else            this._selected.delete(row);
-          if (cb.checked) tr.classList.add('selected');
-          else            tr.classList.remove('selected');
-          this._fire('select', { rows: this.getSelected(), row });
+        return csv;
+    }
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount() {
+        // Trigger initial fetch / compute
+        this.#recompute();
+    }
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount() {
+        clearTimeout(this.#lastSearchTimer);
+        clearTimeout(this.#recomputeTimer);
+        if (this.#worker) {
+            this.#worker.terminate();
+            this.#worker = null;
+        }
+        if (this.#toggleOutside) {
+            document.removeEventListener('click', this.#toggleOutside);
+            this.#toggleOutside = null;
+        }
+    }
+
+    // ── Recompute pipeline ──────────────────────────────────────────────────
+
+    /**
+     * Batched recompute. Microtask-coalesced so multiple set ops (sort+page+
+     * search) run a single pipeline at the end of the tick.
+     */
+    #recompute(): void {
+        clearTimeout(this.#recomputeTimer);
+        this.#recomputeTimer = window.setTimeout(() => {
+            if (this.#fetcher) {
+                this.#runServerSide();
+            } else {
+                this.#runClientSide();
+            }
+        }, 0);
+    }
+
+    /**
+     * Client-side path.
+     *   • Worker if rows.length >= threshold AND no custom value()/sort()/render fns
+     *     (those can't ride a Worker)
+     *   • Otherwise main thread
+     */
+    #runClientSide(): void {
+        const rows  = this.rows$.get();
+        const useWorker = this.hasAttribute('worker')
+            && rows.length >= this.workerThreshold
+            && this.#workerEligible();
+
+        if (useWorker) {
+            this.loading$.set(true);
+            this.#runWorker(rows);
+        } else {
+            const filteredSorted = this.#processClientSide(rows, false);
+            this.totalCount$.set(filteredSorted.length);
+            this.#renderPage(filteredSorted);
+        }
+    }
+
+    #workerEligible(): boolean {
+        return this.columns$.get().every(c => !c.render && !c.value && !c.sort);
+    }
+
+    /** Worker code can't access app functions, so for custom render/value/
+     *  sort we always go main-thread. */
+    #runWorker(rows: Row[]): void {
+        if (!this.#worker) {
+            try {
+                this.#worker = new Worker(getWorkerUrl());
+                this.#worker.onmessage = (e) => {
+                    const { rows: out, total } = e.data;
+                    this.totalCount$.set(total);
+                    this.#renderPage(out);
+                    this.loading$.set(false);
+                };
+                this.#worker.onerror = (err) => {
+                    console.warn('[Table] worker error, falling back:', err);
+                    const filteredSorted = this.#processClientSide(rows, false);
+                    this.totalCount$.set(filteredSorted.length);
+                    this.#renderPage(filteredSorted);
+                    this.loading$.set(false);
+                };
+            } catch (e) {
+                console.warn('[Table] cannot spawn worker, falling back:', e);
+                const filteredSorted = this.#processClientSide(rows, false);
+                this.totalCount$.set(filteredSorted.length);
+                this.#renderPage(filteredSorted);
+                this.loading$.set(false);
+                return;
+            }
+        }
+        this.#worker.postMessage({
+            rows,
+            query  : this.query$.get(),
+            sort   : this.sortStack$.get(),
+            columns: this.columns$.get().map(c => ({ key: c.key })),
         });
-        td.appendChild(cb);
-      }
+    }
 
-      (opts.columns ?? [])
-        .filter((c: TableColumn<R>) => c.visible !== false)
-        .forEach((col: TableColumn<R>) => {
-          const td  = tr.insertCell();
-          td.className = `arianna-table__td ${col.class ?? ''}`;
-          td.setAttribute('role', 'gridcell');
-          if (col.align) td.style.textAlign = col.align;
+    /**
+     * Server-side path with LRU cache. Cache key includes query+sort+page+pageSize.
+     */
+    #runServerSide(): void {
+        if (!this.#fetcher) return;
+        const params: FetchParams = {
+            page    : this.page$.get(),
+            pageSize: this.pageSize,
+            sort    : this.sortStack$.get(),
+            query   : this.query$.get(),
+        };
+        const cacheKey = JSON.stringify(params);
+        const cached = this.#cache.get(cacheKey);
+        if (cached) {
+            this.totalCount$.set(cached.total);
+            this.#renderRows(cached.rows);
+            return;
+        }
+        this.loading$.set(true);
+        this.#fetcher(params)
+            .then(result => {
+                this.#cache.set(cacheKey, result);
+                this.totalCount$.set(result.total);
+                this.#renderRows(result.rows);
+                this.dispatchEvent(new CustomEvent('arianna:fetch', {
+                    bubbles: true, detail: { rows: result.rows, total: result.total },
+                }));
+            })
+            .catch(err => {
+                console.warn('[Table] fetch failed:', err);
+                this.#renderRows([]);
+                this.totalCount$.set(0);
+            })
+            .finally(() => this.loading$.set(false));
+    }
 
-          const v = col.value ? col.value(row) : row[col.key];
-          if (col.render) {
-            const r = col.render(v, row, col);
-            if (typeof r === 'string') td.innerHTML = r;
-            else td.appendChild(r);
-          } else {
-            td.textContent = String(v ?? '');
-          }
+    /**
+     * Main-thread filter+sort. Optionally returns ALL rows (no pagination,
+     * for CSV export).
+     */
+    #processClientSide(rows: Row[], _alreadyPaged: boolean): Row[] {
+        const cols  = this.columns$.get();
+        const q     = this.query$.get();
+        const sorts = this.sortStack$.get();
+
+        // Filter
+        let filtered = rows;
+        if (q) {
+            const ql = q.toLowerCase();
+            filtered = rows.filter(row =>
+                cols.some(col => {
+                    const v = col.value ? col.value(row) : row[col.key];
+                    return String(v ?? '').toLowerCase().includes(ql);
+                }),
+            );
+        }
+
+        // Sort
+        if (sorts.length > 0) {
+            filtered = filtered.slice().sort((a, b) => {
+                for (const s of sorts) {
+                    const col = cols.find(c => c.key === s.key);
+                    if (!col) continue;
+                    if (col.sort) {
+                        const r = col.sort(a, b, s.dir);
+                        if (r !== 0) return r;
+                        continue;
+                    }
+                    const av = col.value ? col.value(a) : a[col.key];
+                    const bv = col.value ? col.value(b) : b[col.key];
+                    if (av === bv) continue;
+                    const cmp = (av as never) < (bv as never) ? -1 : 1;
+                    return s.dir === 'asc' ? cmp : -cmp;
+                }
+                return 0;
+            });
+        }
+        return filtered;
+    }
+
+    /**
+     * Slice a filtered+sorted array by current page and render.
+     */
+    #renderPage(filtered: Row[]): void {
+        const ps = this.pageSize;
+        const pg = this.page$.get();
+        const start = (pg - 1) * ps;
+        const sliced = ps > 0 ? filtered.slice(start, start + ps) : filtered;
+
+        // We need to keep original-row indices for selection tracking
+        const all = this.rows$.get();
+        const indexMap = new Map<Row, number>();
+        all.forEach((r, i) => indexMap.set(r, i));
+
+        this.#renderRows(sliced, indexMap);
+    }
+
+    /** Final stage: build DisplayRow[] for the current view. */
+    #renderRows(rows: Row[], indexMap?: Map<Row, number>): void {
+        const cols = this.columns$.get().filter(c =>
+            this.visibility$.get()[c.key] !== false && c.visible !== false,
+        );
+        const sel = this.selected$.get();
+
+        const out: DisplayRow[] = rows.map((row, viewIdx) => {
+            const originalIdx = indexMap ? (indexMap.get(row) ?? viewIdx) : viewIdx;
+            const selected = sel.has(originalIdx);
+            return {
+                raw     : row,
+                index   : originalIdx,
+                selected,
+                rowClass: 'ar-table__row' + (selected ? ' ar-table__row--selected' : ''),
+                cells   : cols.map(col => {
+                    const v = col.value ? col.value(row) : row[col.key];
+                    const cellHtml = col.render ? col.render(v, row, col) : escapeHtml(String(v ?? ''));
+                    const style = col.align ? `text-align: ${col.align}` : '';
+                    return {
+                        html     : cellHtml,
+                        cellClass: 'ar-table__td' + (col.class ? ' ' + col.class : ''),
+                        style,
+                    };
+                }),
+            };
         });
-    });
 
-    this._renderFooter();
-  }
-
-  private _renderFooter(): void {
-    const opts   = this._state.State;
-    const paging = opts.paging;
-    const info   = this._dom.info;
-    const pager  = this._dom.pager;
-    pager.innerHTML = '';
-
-    // Info text
-    if (opts.info) {
-      if (paging) {
-        const start = (this._page - 1) * this._pageSize + 1;
-        const end   = Math.min(this._page * this._pageSize, this._total);
-        info.textContent = `${start}–${end} of ${this._total}`;
-      } else {
-        info.textContent = `${this._total} rows`;
-      }
+        this.displayRows$.set(out);
     }
 
-    if (!paging || this._total <= this._pageSize) return;
+    // ── Attrs ────────────────────────────────────────────────────────────────
 
-    const totalPages = Math.ceil(this._total / this._pageSize);
+    get pageSize(): number  { return parseInt(this.getAttribute('page-size') ?? '25', 10) || 25; }
+    set pageSize(v: number) { this.setAttribute('page-size', String(v)); }
 
-    // Page size selector
-    if (paging.sizes && paging.sizes.length > 1) {
-      const sel = document.createElement('select');
-      sel.className = 'arianna-wip-table__page-size';
-      paging.sizes.forEach(s => {
-        const o = document.createElement('option');
-        o.value = String(s); o.textContent = `${s} / page`;
-        if (s === this._pageSize) o.selected = true;
-        sel.appendChild(o);
-      });
-      sel.addEventListener('change', () => {
-        this._pageSize = Number(sel.value);
-        this._page     = 1;
-        this._load();
-      });
-      pager.appendChild(sel);
+    get selectable(): SelectMode  { return (this.getAttribute('selectable') ?? 'none') as SelectMode; }
+    set selectable(v: SelectMode) { this.setAttribute('selectable', v); }
+
+    get searchable(): boolean  { return this.hasAttribute('searchable'); }
+    set searchable(v: boolean) { v ? this.setAttribute('searchable', '') : this.removeAttribute('searchable'); }
+
+    get stickyHeader(): boolean  { return this.hasAttribute('sticky-header'); }
+    set stickyHeader(v: boolean) { v ? this.setAttribute('sticky-header', '') : this.removeAttribute('sticky-header'); }
+
+    get columnToggle(): boolean  { return this.hasAttribute('column-toggle'); }
+    set columnToggle(v: boolean) { v ? this.setAttribute('column-toggle', '') : this.removeAttribute('column-toggle'); }
+
+    get columnResize(): boolean  { return this.getAttribute('column-resize') !== 'false'; }
+    set columnResize(v: boolean) { this.setAttribute('column-resize', v ? 'true' : 'false'); }
+
+    get worker(): boolean  { return this.hasAttribute('worker'); }
+    set worker(v: boolean) { v ? this.setAttribute('worker', '') : this.removeAttribute('worker'); }
+
+    get workerThreshold(): number  { return parseInt(this.getAttribute('worker-threshold') ?? '5000', 10) || 5000; }
+    set workerThreshold(v: number) { this.setAttribute('worker-threshold', String(v)); }
+
+    // ── Template helpers ────────────────────────────────────────────────────
+
+    private headers         : () => HeaderCell[] = () => [];
+    private allRows         : () => DisplayRow[] = () => [];
+    private totalPages      : () => number = () => 1;
+    private pageButtons     : () => PageBtn[] = () => [];
+    private columnEntries   : () => ColToggleEntry[] = () => [];
+    private hasMultiplePages: () => boolean = () => false;
+    private hasColumnToggle : () => boolean = () => false;
+    private hasColumnResize : () => boolean = () => true;
+    private toggleMenuOpen  : () => boolean = () => false;
+    private isSelectable    : () => boolean = () => false;
+    private isMultiSelect   : () => boolean = () => false;
+    private isSearchable    : () => boolean = () => false;
+    private isLoading       : () => boolean = () => false;
+    private totalLabel      : () => string  = () => '';
+    private onHeaderClick   : (col: TableColumn, e: Event) => void = () => {};
+    private onSearchInput   : (e: Event) => void = () => {};
+    private onRowClick      : (dr: DisplayRow, e: Event) => void = () => {};
+    private onPageClick     : (btn: PageBtn) => void = () => {};
+    private onToggleMenu    : (e: Event) => void = () => {};
+    private onColumnToggle  : (key: string, visible: boolean) => void = () => {};
+    private onResizeStart   : (col: TableColumn, e: Event) => void = () => {};
+    private onExportCsv     : () => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    display      : 'flex',
+                    flexDirection: 'column',
+                    width        : '100%',
+                    overflow     : 'hidden',
+                    background   : 'var(--arianna-bg, #ffffff)',
+                    color        : 'var(--arianna-text, #1f2328)',
+                    border       : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius : 'var(--arianna-radius, 6px)',
+                    fontSize     : '0.85rem',
+                }),
+
+                // Toolbar
+                new Rule('.ar-table__toolbar', {
+                    alignItems  : 'center',
+                    background  : 'var(--arianna-bg-3, #f8f9fa)',
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    display     : 'flex',
+                    gap         : '8px',
+                    padding     : '8px 12px',
+                }),
+                new Rule('.ar-table__search', {
+                    background  : 'var(--arianna-bg, #ffffff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius-sm, 4px)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    font        : 'inherit',
+                    padding     : '5px 10px',
+                    width       : '240px',
+                    outline     : 'none',
+                }),
+                new Rule('.ar-table__search:focus', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
+                new Rule('.ar-table__total', {
+                    color   : 'var(--arianna-muted, #6e6b62)',
+                    fontSize: '0.78rem',
+                }),
+                new Rule('.ar-table__spinner', {
+                    animation: 'ar-table-spin 1s linear infinite',
+                    color    : 'var(--arianna-primary, #1f6feb)',
+                    display  : 'inline-block',
+                }),
+                new Rule('@keyframes ar-table-spin', {
+                    'from': { transform: 'rotate(0deg)' },
+                    'to'  : { transform: 'rotate(360deg)' },
+                } as never),
+                new Rule('.ar-table__spacer', { flex: '1' }),
+
+                // Column toggle menu
+                new Rule('.ar-table__col-toggle', { position: 'relative' }),
+                new Rule('.ar-table__col-toggle-btn, .ar-table__export-btn', {
+                    background  : 'none',
+                    border      : '1px solid transparent',
+                    borderRadius: 'var(--arianna-radius-sm, 4px)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    cursor      : 'pointer',
+                    font        : 'inherit',
+                    fontSize    : '0.9rem',
+                    padding     : '4px 10px',
+                    transition  : 'background 0.14s ease',
+                }),
+                new Rule('.ar-table__col-toggle-btn:hover, .ar-table__export-btn:hover', {
+                    background: 'var(--arianna-bg, #ffffff)',
+                    borderColor: 'var(--arianna-border, #d8d8d8)',
+                }),
+                new Rule('.ar-table__col-menu', {
+                    background  : 'var(--arianna-bg, #ffffff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    boxShadow   : '0 4px 12px rgba(0,0,0,0.12)',
+                    minWidth    : '160px',
+                    padding     : '6px 0',
+                    position    : 'absolute',
+                    right       : '0',
+                    top         : 'calc(100% + 4px)',
+                    zIndex      : '500',
+                }),
+                new Rule('.ar-table__col-menu-item', {
+                    alignItems: 'center',
+                    cursor    : 'pointer',
+                    display   : 'flex',
+                    fontSize  : '0.82rem',
+                    gap       : '8px',
+                    padding   : '5px 12px',
+                }),
+                new Rule('.ar-table__col-menu-item:hover', { background: 'var(--arianna-bg-3, #f8f9fa)' }),
+
+                // Scroll wrapper + table
+                new Rule('.ar-table__scroll', {
+                    flex     : '1',
+                    overflow : 'auto',
+                    minHeight: '0',
+                }),
+                new Rule('.ar-table', {
+                    width         : '100%',
+                    borderCollapse: 'collapse',
+                    tableLayout   : 'fixed',
+                }),
+                new Rule(':root[sticky-header] .ar-table__thead', {
+                    position: 'sticky',
+                    top     : '0',
+                    zIndex  : '1',
+                }),
+                new Rule('.ar-table__thead', { background: 'var(--arianna-bg-3, #f8f9fa)' }),
+                new Rule('.ar-table__th', {
+                    borderBottom : '1px solid var(--arianna-border, #d8d8d8)',
+                    color        : 'var(--arianna-muted, #6e6b62)',
+                    fontSize     : '0.72rem',
+                    fontWeight   : '700',
+                    padding      : '10px 12px',
+                    position     : 'relative',
+                    textAlign    : 'left',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    userSelect   : 'none',
+                    whiteSpace   : 'nowrap',
+                    overflow     : 'hidden',
+                    textOverflow : 'ellipsis',
+                }),
+                new Rule('.ar-table__th--sortable',       { cursor: 'pointer' }),
+                new Rule('.ar-table__th--sortable:hover', { color: 'var(--arianna-text, #1f2328)' }),
+                new Rule('.ar-table__th--sorted',         { color: 'var(--arianna-text, #1f2328)' }),
+                new Rule('.ar-table__th-sort',  { marginLeft: '6px', fontSize: '0.7rem' }),
+                new Rule('.ar-table__th-order', {
+                    background  : 'var(--arianna-primary, #1f6feb)',
+                    borderRadius: '8px',
+                    color       : '#ffffff',
+                    fontSize    : '0.62rem',
+                    marginLeft  : '4px',
+                    padding     : '0 5px',
+                }),
+                new Rule('.ar-table__th-resize', {
+                    bottom : '0',
+                    cursor : 'col-resize',
+                    height : '100%',
+                    position: 'absolute',
+                    right  : '0',
+                    top    : '0',
+                    width  : '6px',
+                    transition: 'background 0.14s ease',
+                }),
+                new Rule('.ar-table__th-resize:hover', {
+                    background: 'var(--arianna-primary, #1f6feb)',
+                }),
+
+                // Body
+                new Rule('.ar-table__row', {
+                    transition: 'background 0.14s ease',
+                    cursor    : 'default',
+                }),
+                new Rule('.ar-table__row:hover', { background: 'var(--arianna-bg-3, #f8f9fa)' }),
+                new Rule('.ar-table__row--selected', { background: 'rgba(31,111,235,0.08)' }),
+                new Rule('.ar-table__td', {
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    padding     : '10px 12px',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    whiteSpace  : 'nowrap',
+                    overflow    : 'hidden',
+                    textOverflow: 'ellipsis',
+                }),
+
+                // Footer pagination
+                new Rule('.ar-table__footer', {
+                    display    : 'flex',
+                    alignItems : 'center',
+                    gap        : '4px',
+                    padding    : '10px 12px',
+                    borderTop  : '1px solid var(--arianna-border, #d8d8d8)',
+                    background : 'var(--arianna-bg-3, #f8f9fa)',
+                }),
+                new Rule('.ar-table__page', {
+                    background  : 'var(--arianna-bg, #ffffff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius-sm, 4px)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    cursor      : 'pointer',
+                    font        : 'inherit',
+                    fontSize    : '0.8rem',
+                    minWidth    : '32px',
+                    padding     : '4px 8px',
+                    transition  : 'border-color 0.14s ease',
+                }),
+                new Rule('.ar-table__page:hover:not(:disabled)', {
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                }),
+                new Rule('.ar-table__page--active', {
+                    background : 'var(--arianna-primary, #1f6feb)',
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                    color      : '#ffffff',
+                }),
+                new Rule('.ar-table__page--dots', {
+                    background: 'none',
+                    border    : 'none',
+                    cursor    : 'default',
+                    color     : 'var(--arianna-muted, #6e6b62)',
+                }),
+                new Rule('.ar-table__page:disabled', { opacity: '0.4', cursor: 'not-allowed' }),
+            ]
+        );
     }
-
-    // Prev
-    this._pageBtn(pager, '‹', this._page > 1, () => { this._page--; this._load(); });
-
-    // Page numbers (window of 5)
-    const half  = 2;
-    const start = Math.max(1, Math.min(this._page - half, totalPages - 4));
-    const end   = Math.min(totalPages, start + 4);
-    for (let p = start; p <= end; p++) {
-      this._pageBtn(pager, String(p), true, () => { this._page = p; this._load(); },
-        p === this._page);
-    }
-
-    // Next
-    this._pageBtn(pager, '›', this._page < totalPages, () => { this._page++; this._load(); });
-
-    this._fire('page', { page: this._page, pageSize: this._pageSize, total: this._total });
-  }
-
-  private _pageBtn(
-    parent  : HTMLElement,
-    label   : string,
-    enabled : boolean,
-    onClick : () => void,
-    active  = false,
-  ): void {
-    const btn = document.createElement('button');
-    btn.className   = `arianna-table__page-btn${active ? ' active' : ''}`;
-    btn.textContent = label;
-    btn.disabled    = !enabled;
-    btn.addEventListener('click', onClick);
-    parent.appendChild(btn);
-  }
-
-  // ── Data processing ──────────────────────────────────────────────────────────
-
-  private async _load(): Promise<void> {
-    const fetchFn = this.get<FetchFn<R> | undefined>('fetch');
-
-    if (fetchFn) {
-      await this._fetchRemote(fetchFn);
-    } else {
-      await this._processLocal();
-    }
-
-    this._renderBody();
-  }
-
-  private async _fetchRemote(fetchFn: FetchFn<R>): Promise<void> {
-    const cacheKey = JSON.stringify({
-      page       : this._page,
-      pageSize   : this._pageSize,
-      sort       : this._sort,
-      filter     : this._filter,
-      colFilters : this._colFilters,
-    });
-
-    if (this._cache) {
-      const cached = this._cache.get(cacheKey);
-      if (cached) {
-        this._rows  = cached.rows;
-        this._total = cached.total;
-        return;
-      }
-    }
-
-    this._loading = true;
-    this._renderBody();
-
-    try {
-      const result = await fetchFn({
-        page       : this._page,
-        pageSize   : this._pageSize,
-        sort       : this._sort,
-        filter     : this._filter,
-        filters    : this._colFilters,
-      });
-
-      this._rows  = result.rows;
-      this._total = result.total;
-      this._cache?.set(cacheKey, result);
-      this._fire('load', { rows: this._rows, total: this._total });
-    } catch (err) {
-      this._fire('error', { error: err });
-    } finally {
-      this._loading = false;
-    }
-  }
-
-  private async _processLocal(): Promise<void> {
-    const paging  = this.get('paging');
-    const opts    = this._state.State;
-
-    if (this._worker && this._worker) {
-      await this._processWithWorker();
-    } else {
-      this._processSync();
-    }
-
-    // Paginate
-    if (paging) {
-      const start = (this._page - 1) * this._pageSize;
-      this._rows  = this._rows.slice(start, start + this._pageSize);
-    }
-
-    this._fire('load', { rows: this._rows, total: this._total });
-  }
-
-  private _processSync(): void {
-    const opts = this._state.State;
-    let   rows = this._data.slice();
-
-    // Global filter
-    if (this._filter) {
-      const q = this._filter.toLowerCase();
-      rows = rows.filter(row =>
-        Object.values(row).some(v => String(v ?? '').toLowerCase().includes(q))
-      );
-    }
-
-    // Column filters
-    Object.entries(this._colFilters).forEach(([key, val]) => {
-      if (!val) return;
-      const q = val.toLowerCase();
-      rows = rows.filter(row => String(row[key] ?? '').toLowerCase().includes(q));
-    });
-
-    // Sort
-    if (this._sort) {
-      const { key, dir } = this._sort;
-      const col = (opts.columns ?? []).find((c: TableColumn<R>) => c.key === key);
-      const d   = dir === 'asc' ? 1 : -1;
-      rows.sort((a: R, b: R) => {
-        if (col?.sort) return col.sort(a, b, dir);
-        const av = (col?.value ? col.value(a) : a[key] ?? '') as string | number;
-        const bv = (col?.value ? col.value(b) : b[key] ?? '') as string | number;
-        return av < bv ? -d : av > bv ? d : 0;
-      });
-    }
-
-    this._total = rows.length;
-    this._rows  = rows;
-  }
-
-  private _processWithWorker(): Promise<void> {
-    return new Promise<void>(resolve => {
-      this._workerResolve = (rows: R[]) => {
-        this._rows = rows;
-        resolve();
-      };
-      this._worker!.postMessage({
-        rows          : this._data,
-        sort          : this._sort,
-        filter        : this._filter,
-        columnFilters : this._colFilters,
-        columns       : this.get<TableColumn<R>[]>('columns') ?? [].map((c: TableColumn<R>) => ({ key: c.key })),
-      });
-    });
-  }
-
-  // ── Sort ─────────────────────────────────────────────────────────────────────
-
-  private _toggleSort(col: TableColumn<R>): void {
-    if (!this._sort || this._sort.key !== col.key) {
-      this._sort = { key: col.key, dir: 'asc' };
-    } else if (this._sort.dir === 'asc') {
-      this._sort = { key: col.key, dir: 'desc' };
-    } else {
-      this._sort = undefined;
-    }
-    this._page = 1;
-    this._rebuildHeader();
-    this._load();
-    this._fire('sort', { column: col, sort: this._sort });
-  }
-
-  private _rebuildHeader(): void {
-    this._dom.thead.innerHTML = '';
-    this._buildHeader();
-  }
-
-  // ── Column toggle ────────────────────────────────────────────────────────────
-
-  private _showColumnToggle(anchor: HTMLElement): void {
-    const existing = document.querySelector('.arianna-wip-table__col-menu');
-    if (existing) { existing.remove(); return; }
-
-    const menu = document.createElement('div');
-    menu.className = 'arianna-wip-table__col-menu';
-    const rect = anchor.getBoundingClientRect();
-    menu.style.position = 'fixed';
-    menu.style.top      = rect.bottom + 4 + 'px';
-    menu.style.left     = rect.left   + 'px';
-
-    this.get<TableColumn<R>[]>('columns') ?? [].forEach((col: TableColumn<R>) => {
-      const row = document.createElement('label');
-      row.className = 'arianna-wip-table__col-menu-row';
-      const cb = document.createElement('input');
-      cb.type    = 'checkbox';
-      cb.checked = col.visible !== false;
-      cb.addEventListener('change', () => {
-        col.visible = cb.checked;
-        this._rebuildHeader();
-        this._renderBody();
-      });
-      row.appendChild(cb);
-      row.appendChild(document.createTextNode(' ' + col.label));
-      menu.appendChild(row);
-    });
-
-    document.body.appendChild(menu);
-    const close = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node) && e.target !== anchor) {
-        menu.remove();
-        document.removeEventListener('click', close);
-      }
-    };
-    setTimeout(() => document.addEventListener('click', close), 10);
-  }
-
-  // ── Process ──────────────────────────────────────────────────────────────────
-
-  private async _process(): Promise<void> {
-    return this._processLocal();
-  }
 }
 
-// ── Default CSS ────────────────────────────────────────────────────────────────
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Table', { value: Table, writable: false, enumerable: false, configurable: false });
+}
 
-/**
- * Inject default Table styles.
- *
- * @example
- *   import { injectTableStyles } from 'arianna-wip/controls/Table';
- *   injectTableStyles();
- */
-export function injectTableStyles(): void {
-  if (document.getElementById('arianna-wip-table-styles')) return;
-  const style = document.createElement('style');
-  style.id = 'arianna-wip-table-styles';
-  style.textContent = `
-.arianna-table-wrap {
-  --tbl-bg        : var(--bg2, #161616);
-  --tbl-border    : var(--b, #2a2a2a);
-  --tbl-head-bg   : var(--bg3, #1e1e1e);
-  --tbl-row-hover : rgba(255,255,255,.04);
-  --tbl-sel       : rgba(126,184,247,.15);
-  --tbl-sel-border: #7eb8f7;
-  --tbl-text      : var(--text, #e0e0e0);
-  --tbl-muted     : var(--muted, #888);
-  --tbl-radius    : 6px;
-
-  display       : flex;
-  flex-direction: column;
-  background    : var(--tbl-bg);
-  border        : 1px solid var(--tbl-border);
-  border-radius : var(--tbl-radius);
-  overflow      : hidden;
-  font-size     : .82rem;
-  color         : var(--tbl-text);
-}
-.arianna-table__toolbar {
-  display    : flex;
-  align-items: center;
-  gap        : 8px;
-  padding    : 8px 12px;
-  border-bottom: 1px solid var(--tbl-border);
-  background : var(--tbl-head-bg);
-}
-.arianna-table__search, .arianna-table__col-filter {
-  background: rgba(255,255,255,.06); border: 1px solid var(--tbl-border);
-  border-radius: 4px; color: inherit; font-size: .82rem;
-  padding: 4px 8px; outline: none; flex: 1;
-}
-.arianna-table__search:focus, .arianna-table__col-filter:focus {
-  border-color: var(--tbl-sel-border);
-}
-.arianna-table__btn {
-  background: rgba(255,255,255,.06); border: 1px solid var(--tbl-border);
-  border-radius: 4px; color: inherit; cursor: pointer; font-size: .78rem;
-  padding: 4px 10px; white-space: nowrap;
-}
-.arianna-table__btn:hover { background: rgba(255,255,255,.1); }
-.arianna-table__scroll { overflow-x: auto; flex: 1; }
-.arianna-table {
-  width: 100%; border-collapse: collapse; table-layout: fixed;
-}
-.arianna-table__th {
-  background : var(--tbl-head-bg);
-  border-bottom: 2px solid var(--tbl-border);
-  padding    : 8px 12px;
-  text-align : left;
-  font-weight: 600;
-  font-size  : .78rem;
-  color      : var(--tbl-muted);
-  white-space: nowrap;
-  position   : sticky;
-  top        : 0;
-  z-index    : 1;
-  user-select: none;
-}
-.arianna-table__th-inner { display: flex; align-items: center; gap: 4px; }
-.arianna-table__th--sortable { cursor: pointer; }
-.arianna-table__th--sortable:hover { color: var(--tbl-text); }
-.arianna-table__sort-arrow { font-size: .7rem; opacity: .5; }
-.arianna-table__resize-handle {
-  position: absolute; right: 0; top: 0; bottom: 0;
-  width: 4px; cursor: col-resize;
-}
-.arianna-table__td {
-  padding: 8px 12px; border-bottom: 1px solid var(--tbl-border);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-tbody tr:hover .arianna-table__td { background: var(--tbl-row-hover); }
-tbody tr.selected .arianna-table__td {
-  background: var(--tbl-sel);
-  border-left: 2px solid var(--tbl-sel-border);
-}
-.arianna-table__th--check, .arianna-table__td--check { width: 36px; text-align: center; }
-.arianna-table__footer {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 12px; border-top: 1px solid var(--tbl-border);
-  background: var(--tbl-head-bg); flex-shrink: 0;
-}
-.arianna-table__info { color: var(--tbl-muted); font-size: .78rem; }
-.arianna-table__pager { display: flex; align-items: center; gap: 4px; }
-.arianna-table__page-btn {
-  background: transparent; border: 1px solid var(--tbl-border);
-  border-radius: 3px; color: inherit; cursor: pointer;
-  font-size: .78rem; min-width: 28px; padding: 2px 6px;
-}
-.arianna-table__page-btn:hover:not(:disabled) { border-color: var(--tbl-sel-border); }
-.arianna-table__page-btn.active {
-  background: var(--tbl-sel-border); color: #000; border-color: var(--tbl-sel-border);
-}
-.arianna-table__page-btn:disabled { opacity: .35; cursor: default; }
-.arianna-table__page-size {
-  background: rgba(255,255,255,.06); border: 1px solid var(--tbl-border);
-  border-radius: 3px; color: inherit; font-size: .78rem; padding: 2px 4px;
-}
-.arianna-table__empty, .arianna-table__spinner {
-  text-align: center; padding: 40px 20px; color: var(--tbl-muted);
-}
-.arianna-table__col-menu {
-  background: var(--tbl-head-bg); border: 1px solid var(--tbl-border);
-  border-radius: 5px; box-shadow: 0 8px 24px rgba(0,0,0,.4);
-  min-width: 160px; padding: 8px 0; z-index: 9999;
-}
-.arianna-table__col-menu-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 5px 14px; cursor: pointer; font-size: .82rem;
-}
-.arianna-table__col-menu-row:hover { background: var(--tbl-row-hover); }
-`;
-  document.head.appendChild(style);
-}
+export default Table;

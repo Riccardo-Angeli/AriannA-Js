@@ -4,10 +4,20 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Laplacian smoothing — iteratively average vertices toward their neighbors.
+ * Laplacian smoothing — iteratively averages vertices toward their neighbors.
+ *
+ * @example HTML
+ *   <arianna-smooth for="m1" iterations="3" factor="0.5"></arianna-smooth>
+ *
+ * Attrs (declarative): for, iterations, factor, enabled
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, _vAdd, _vScale, _vLerp, type MeshLike } from './Base.ts';
+import { Component } from '../../../core/Component.ts';
+import {
+    Modifier3D, Modifier3DElement,
+    _cloneGeom, _recomputeNormals, _vAdd, _vScale, _vLerp,
+    type MeshLike,
+} from './Base.ts';
 
 export class SmoothModifier extends Modifier3D {
     #iterations: number;
@@ -33,7 +43,10 @@ export class SmoothModifier extends Modifier3D {
             g.vertices = g.vertices.map((v, i) => {
                 const ns = Array.from(adj[i]);
                 if (!ns.length) return v;
-                const avg = _vScale(ns.reduce((s, ni) => _vAdd(s, g.vertices[ni]), { x: 0, y: 0, z: 0 }), 1 / ns.length);
+                const avg = _vScale(
+                    ns.reduce((s, ni) => _vAdd(s, g.vertices[ni]), { x: 0, y: 0, z: 0 }),
+                    1 / ns.length,
+                );
                 return _vLerp(v, avg, this.#factor);
             });
         }
@@ -42,3 +55,22 @@ export class SmoothModifier extends Modifier3D {
         return this;
     }
 }
+
+export class SmoothModifierElement extends (Component('arianna-smooth', HTMLElement, {}, {
+    attrs : ['for', 'iterations', 'factor', 'enabled'],
+    shadow: false,
+}) as typeof Modifier3DElement) {
+    protected createModifier(mesh: MeshLike): Modifier3D {
+        const iterations = parseInt  (this.getAttribute('iterations') ?? '3',   10) || 3;
+        const factor     = parseFloat(this.getAttribute('factor')     ?? '0.5')      || 0.5;
+        return new SmoothModifier(mesh, iterations, factor);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'SmoothModifier', {
+        value: SmoothModifier, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default SmoothModifier;

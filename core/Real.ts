@@ -2,8 +2,86 @@ import Core, { type TypeDescriptor } from './Core.ts';
 import { VirtualNode } from './Virtual.ts';
 import { signal, signalMono, sinkText, effect, computed, batch, untrack, AriannATemplate, type Signal, type SignalMono, type ReadonlySignal } from './Observable.ts';
 import Rule from './Rule.ts';
-import Sheet from './Stylesheet.ts';
+import { Sheet } from './Sheet.ts';
+
 export type { Signal, SignalMono, ReadonlySignal };
+
+// ─── Dotted-path access helpers ──────────────────────────────────────────
+// Shared between Real, Virtual and Component.
+// Supports paths like "style.background", "dataset.foo", "classList.0", etc.
+// Auto-creates intermediate object literals when writing nested paths into
+// plain dictionaries. Refuses to overwrite DOM ancestors with literals.
+
+export function readDottedPath(target: Record<string, unknown>, path: string): unknown {
+    const parts = path.split('.');
+    let cur: unknown = target;
+    for (const p of parts) {
+        if (cur === null || cur === undefined) return undefined;
+        cur = (cur as Record<string, unknown>)[p];
+    }
+    return cur;
+}
+
+export function writeDottedPath(target: Record<string, unknown>, path: string, value: unknown): void {
+    const parts = path.split('.');
+    let cur: Record<string, unknown> = target;
+    for (let i = 0; i < parts.length - 1; i++) {
+        const p = parts[i];
+        const next = cur[p];
+        if (next === null || next === undefined || typeof next !== 'object') {
+            // Auto-create only on plain dictionaries; never overwrite a non-object DOM ancestor with `{}`.
+            if (next === undefined) {
+                const o: Record<string, unknown> = {};
+                cur[p] = o;
+                cur = o;
+                continue;
+            }
+            // Non-object existing value (e.g. number, string). Cannot descend.
+            return;
+        }
+        cur = next as Record<string, unknown>;
+    }
+    cur[parts[parts.length - 1]] = value;
+}
+
+/**
+ * Fluent accessor for a nested object on a target. Returned by `.sub(path)`.
+ */
+export interface SubAccessor {
+    /** Set a key (or dotted sub-key) on this sub-object. */
+    set(key: string, value: unknown): SubAccessor;
+    /** Get a key (or dotted sub-key) from this sub-object. */
+    get(key: string): unknown;
+    /** Descend further into a nested key — returns a sub-accessor for it. */
+    sub(key: string): SubAccessor;
+    /** The underlying object at this path (or undefined if it's a primitive). */
+    unwrap(): unknown;
+    /** Return the original owner (Real / VirtualNode / Element) for chaining. */
+    end<T = unknown>(): T;
+}
+
+export function makeSubAccessor(rootTarget: Record<string, unknown>, basePath: string, owner: unknown): SubAccessor {
+    const accessor: SubAccessor = {
+        set(key: string, value: unknown): SubAccessor {
+            writeDottedPath(rootTarget, basePath + '.' + key, value);
+            return accessor;
+        },
+        get(key: string): unknown {
+            return readDottedPath(rootTarget, basePath + '.' + key);
+        },
+        sub(key: string): SubAccessor {
+            return makeSubAccessor(rootTarget, basePath + '.' + key, owner);
+        },
+        unwrap(): unknown {
+            return readDottedPath(rootTarget, basePath);
+        },
+        end<T = unknown>(): T {
+            return owner as T;
+        },
+    };
+    return accessor;
+}
+
 export type ShadowState = 'open' | 'close';
 export type ShadowMode  = 'drop' | 'inset' | 'glow' | 'layered';
 export interface ShadowOptions { color?: string; blur?: number; spread?: number; x?: number; y?: number; }
@@ -48,12 +126,17 @@ function toNodes(items: NodeInput[]): Node[] {
 }
 export class Real {
     #el: Element; #mode: boolean; #descriptor: TypeDescriptor | false; #value: unknown; #effects: Array<() => void> = [];
+    #sheet: Sheet | null = null; #styleNode: HTMLStyleElement | null = null; #instanceId: string = ''; #sheetSync: (() => void) | null = null;
     static readonly Instances: Real[] = [];
     static get Namespaces() { return Core.Namespaces; }
     constructor(arg0: RealTarget, arg1?: Record<string, unknown> | (new (...a: unknown[]) => Element), arg2?: new (...a: unknown[]) => Element) {
         this.#mode = new.target !== undefined; this.#el = document.createElement('div'); this.#descriptor = false; this.#value = this;
         this.#init(arg0, arg1, arg2);
-        if (this.#mode) { Real.Instances.push(this); if (!this.#el.id) { this.#el.id = `Real-Instance-${Real.Instances.length}`; this.#el.className = this.#el.id; } }
+        // Auto-assign id + class. SVG/MathML elements have `className` as a
+        // read-only SVGAnimatedString — we can only mutate the class via
+        // setAttribute('class', …), which is also the universally correct
+        // form for HTML. So we always use setAttribute here.
+        if (this.#mode) { Real.Instances.push(this); if (!this.#el.id) { const autoId = `Real-Instance-${Real.Instances.length}`; this.#el.id = autoId; this.#el.setAttribute('class', autoId); } }
     }
     #init(arg0: RealTarget, arg1?: Record<string, unknown> | (new (...a: unknown[]) => Element), arg2?: new (...a: unknown[]) => Element): void {
         if (arg0 instanceof AriannATemplate) { this.#el = arg0.clone(); this.#mode = true; return; }
@@ -63,12 +146,22 @@ export class Real {
             if (arg0 instanceof Element) { this.#el = arg0; this.#descriptor = Core.GetDescriptor(arg0); this.#value = new Real(arg0); this.#mode = true; return; }
             return;
         }
-        if (typeof arg0 === 'string') { const d = Core.GetDescriptor(arg0); this.#el = (d && d.Namespace?.functions?.create) ? d.Namespace.functions.create(arg0) as Element : document.createElement(arg0); if (d) this.#descriptor = d; }
+        if (typeof arg0 === 'string') {
+            // Single line: namespace.Create() — via functions.create — handles
+            // every case (CLASS via Reflect.construct, FUNCTION via createElement
+            // + Update, plain native tags). Real has no upgrade logic of its
+            // own; it just asks the namespace for an upgraded element.
+            const d = Core.GetDescriptor(arg0);
+            this.#el = (d && d.Namespace?.functions?.create)
+                ? d.Namespace.functions.create(arg0) as Element
+                : document.createElement(arg0);
+            if (d) this.#descriptor = d;
+        }
         else if (arg0 instanceof Element) { this.#el = arg0; this.#descriptor = Core.GetDescriptor(arg0); }
         else if (arg0 instanceof Real) { this.#el = arg0.render(); }
         else if (arg0 instanceof VirtualNode) { this.#el = arg0.render(); }
         else if (typeof arg0 === 'object' && 'Tag' in (arg0 as object)) { const def = arg0 as RealDef; this.#el = document.createElement(def.Tag ?? 'div'); if (def.Attributes) for (const [k,v] of Object.entries(def.Attributes)) this.#el.setAttribute(k,v); }
-        if (arg1 && typeof arg1 === 'object' && typeof arg1 !== 'function') { const opts = arg1 as Record<string, unknown>; if (opts.id) this.#el.id = String(opts.id); if (opts.class || opts.className) this.#el.className = String(opts.class ?? opts.className); }
+        if (arg1 && typeof arg1 === 'object' && typeof arg1 !== 'function') { const opts = arg1 as Record<string, unknown>; if (opts.id) this.#el.id = String(opts.id); if (opts.class || opts.className) this.#el.setAttribute('class', String(opts.class ?? opts.className)); }
     }
     render(): Element { return this.#el; }
     valueOf(): Element { return this.#el; }
@@ -83,8 +176,21 @@ export class Real {
     remove(...targets: (string | Node | Real | number)[]): this { for (const t of targets) { let node: Node | null = null; if (typeof t === 'number') node = this.#el.childNodes[t] ?? null; else if (typeof t === 'string') node = this.#el.querySelector(t); else if (t instanceof Real) node = t.render(); else if (t instanceof Node) node = t; if (node && this.#el.contains(node)) this.#el.removeChild(node); } return this; }
     shift(n = 1): this { for (let i = 0; i < n && this.#el.firstChild; i++) this.#el.removeChild(this.#el.firstChild); return this; }
     pop(n = 1): this   { for (let i = 0; i < n && this.#el.lastChild;  i++) this.#el.removeChild(this.#el.lastChild);  return this; }
-    get(name: string): string | undefined { const u = name.toUpperCase(); for (let i = 0; i < this.#el.attributes.length; i++) { const a = this.#el.attributes.item(i)!; if (a.name.toUpperCase() === u) return a.value; } const rec = this.#el as unknown as Record<string, unknown>; for (const k of Object.keys(rec)) if (k.toUpperCase() === u) return String(rec[k]); return undefined; }
-    set(name: string, value: string): this { const u = name.toUpperCase(); for (let i = 0; i < this.#el.attributes.length; i++) { const a = this.#el.attributes.item(i)!; if (a.name.toUpperCase() === u) { this.#el.setAttribute(a.name, value); return this; } } const rec = this.#el as unknown as Record<string, unknown>; for (const k of Object.keys(rec)) if (k.toUpperCase() === u) { rec[k] = value; return this; } this.#el.setAttribute(name.toLowerCase(), value); return this; }
+    get(name: string): string | undefined { if (name.indexOf('.') !== -1) { const v = readDottedPath(this.#el as unknown as Record<string, unknown>, name); return v === undefined ? undefined : (typeof v === 'string' ? v : String(v)); } const u = name.toUpperCase(); for (let i = 0; i < this.#el.attributes.length; i++) { const a = this.#el.attributes.item(i)!; if (a.name.toUpperCase() === u) return a.value; } const rec = this.#el as unknown as Record<string, unknown>; for (const k of Object.keys(rec)) if (k.toUpperCase() === u) return String(rec[k]); return undefined; }
+    set(name: string, value: unknown): this { if (name.indexOf('.') !== -1) { writeDottedPath(this.#el as unknown as Record<string, unknown>, name, value); return this; } const u = name.toUpperCase(); for (let i = 0; i < this.#el.attributes.length; i++) { const a = this.#el.attributes.item(i)!; if (a.name.toUpperCase() === u) { this.#el.setAttribute(a.name, String(value)); return this; } } const rec = this.#el as unknown as Record<string, unknown>; for (const k of Object.keys(rec)) if (k.toUpperCase() === u) { rec[k] = value; return this; } this.#el.setAttribute(name.toLowerCase(), String(value)); return this; }
+
+    /**
+     * Returns a fluent sub-property accessor for a nested object on this element.
+     *
+     *   new Real('div').sub('style').set('background', 'orange').set('color', 'white');
+     *   new Real('div').sub('style').get('background');     // 'orange'
+     *   new Real('div').sub('style').sub('transform');      // further nesting
+     *
+     * The returned object exposes `.set(key, value)`, `.get(key)`, `.sub(key)`,
+     * `.unwrap()` (the underlying object) and `.end()` (back to the Real).
+     */
+    sub(path: string): SubAccessor { return makeSubAccessor(this.#el as unknown as Record<string, unknown>, path, this); }
+
     show(): this { (this.#el as HTMLElement).style.display = ''; return this; }
     hide(): this { (this.#el as HTMLElement).style.display = 'none'; return this; }
     contains(...nodes: (Node | Real | string)[]): boolean { for (const n of nodes) { const el = typeof n === 'string' ? this.#el.querySelector(n) : n instanceof Real ? n.render() : n; if (!el || !this.#el.contains(el)) return false; } return true; }
@@ -102,9 +208,79 @@ export class Real {
     prop(name: string, getter: Getter<unknown>): this { const rec = this.#el as unknown as Record<string, unknown>; this.#effects.push(effect(() => { rec[name] = getter(); })); return this; }
     style(prop: string, getter: Getter<string>): this { const el = this.#el as HTMLElement; const cssProp = prop.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`); this.#effects.push(effect(() => { el.style.setProperty(cssProp, getter()); })); return this; }
     bind(getter: Getter<string>, setter?: (v: string) => void): this { this.prop('value', getter); if (setter) this.#el.addEventListener('input', e => setter((e.target as HTMLInputElement).value)); return this; }
-    destroy(): this { this.#effects.forEach(s => s()); this.#effects = []; return this; }
+    destroy(): this { this.#effects.forEach(s => s()); this.#effects = []; this.Sheet = null; return this; }
+
+    /**
+     * Scoped Sheet for this Real instance.
+     *
+     * Assigning a Sheet attaches it to the host element. Each rule's
+     * `:root` selector (and `&`) is rewritten to target THIS element via
+     * an auto-generated class (`__real-…`) — or `:host` when a shadow
+     * root is present. The resulting `<style>` is appended to
+     * `document.head` (light DOM) or to the shadow root, and tracked so
+     * subsequent `Sheet.Rules.add/remove/...` mutations re-flush
+     * automatically.
+     *
+     * Assigning `null` removes the installed `<style>` and detaches the
+     * Sheet (the Sheet itself is preserved — only this Real disconnects).
+     *
+     *   const button = new Real('div').set('class','Fancy').append(stage);
+     *   button.Sheet = new Sheet(new Rule(':root', { background: 'yellow' }));
+     *   button.Sheet.Rules.add(new Rule(':root:hover', { transform: 'scale(1.05)' }));
+     */
+    get Sheet(): Sheet | null { return this.#sheet; }
+    set Sheet(next: Sheet | null)
+    {
+        // Detach previous
+        if (this.#sheet && this.#sheetSync)
+            this.#sheet.off('Sheet-Changed', this.#sheetSync);
+        if (this.#styleNode && this.#styleNode.parentNode)
+            this.#styleNode.parentNode.removeChild(this.#styleNode);
+        this.#styleNode = null;
+        this.#sheetSync = null;
+        this.#sheet     = next;
+        if (!next) return;
+
+        if (!this.#instanceId)
+            this.#instanceId = 'real-' + Math.random().toString(36).slice(2, 10);
+
+        const el        = this.#el;
+        const useShadow = !!(el as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot;
+        let   replace   : string;
+        if (useShadow) replace = ':host';
+        else {
+            const cls = '__' + this.#instanceId;
+            el.classList.add(cls);
+            replace = '.' + cls;
+        }
+
+        const apply = () => {
+            if (!this.#sheet) return;
+            let css = '';
+            for (const r of this.#sheet.Rules)
+            {
+                const scoped = r.Text.replace(/(^|,\s*|\s)(:root|&)(?![\w-])/g, (_m, pre: string) => pre + replace);
+                css += scoped + '\n';
+            }
+            if (!this.#styleNode) {
+                this.#styleNode = document.createElement('style');
+                this.#styleNode.setAttribute('data-arianna-sheet',    el.tagName.toLowerCase());
+                this.#styleNode.setAttribute('data-arianna-instance', this.#instanceId);
+                if (useShadow)
+                    (el as Element & { shadowRoot: ShadowRoot }).shadowRoot.appendChild(this.#styleNode);
+                else
+                    (document.head ?? document.documentElement).appendChild(this.#styleNode);
+            }
+            this.#styleNode.textContent = css;
+        };
+
+        apply();
+        this.#sheetSync = apply;
+        next.on('Sheet-Changed', apply);
+    }
+
     static tpl(html: string): AriannATemplate { return new AriannATemplate(html); }
-    static Define(tag: string, ctor: new (...a: unknown[]) => Element, base: new (...a: unknown[]) => Element = HTMLElement, style: Record<string, string> = {}): TypeDescriptor | false { return Core.Define(tag, ctor, base, style); }
+    static Define(tag: string, ctor: new (...a: unknown[]) => Element, base: new (...a: unknown[]) => Element = HTMLElement, style: Record<string, string> = {}): new (...a: unknown[]) => Element { return Core.Define(tag, ctor, base, style); }
     static GetDescriptor = Core.GetDescriptor;
     static Render(obj: RealDef | VirtualNode | Element | Real | AriannATemplate): Element | null { if (obj instanceof Element) return obj; if (obj instanceof Real) return obj.render(); if (obj instanceof VirtualNode) return obj.render(); if (obj instanceof AriannATemplate) return obj.clone(); if (typeof obj === 'object' && 'Tag' in obj) { const el = document.createElement((obj as RealDef).Tag ?? 'div'); if ((obj as RealDef).Attributes) for (const [k,v] of Object.entries((obj as RealDef).Attributes!)) el.setAttribute(k,v); return el; } return null; }
     static signal     = signal;

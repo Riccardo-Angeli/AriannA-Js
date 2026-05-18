@@ -4,135 +4,129 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Nexi (formerly XPay) hosted payment gateway integration. Nexi is the
- * dominant Italian acquirer / processor; many Italian banks issue cards
- * routed through Nexi. The standard flow is "Hosted Payment Page": the
- * merchant generates a signed redirect URL server-side and the user is
- * sent to the Nexi-branded checkout page, then back to the merchant's
- * return URL with the transaction outcome.
+ * Nexi (XPay) redirect button. Italian market leader for online card
+ * payments. Merchant server creates a transaction via Nexi's XPay API,
+ * receives a `redirect_url`, and the widget redirects the user there.
+ * Confirmation is delivered via Nexi webhook (server-side).
  *
- * This widget renders the Nexi-branded button + redirects on click. It
- * does NOT compute the MAC signature itself — that requires the merchant's
- * secret key and must happen server-side. The caller passes the fully-
- * formed `redirectUrl` returned by their backend.
+ * @example HTML
+ *   <arianna-nexi redirect-url="https://ecommerce.nexi.it/ecomm/JResp.do?…"
+ *                 amount="49.90" currency="EUR"></arianna-nexi>
  *
- * Note: Nexi also offers a JS SDK for inline iframe checkout; that's a
- * future enhancement (would mirror the Stripe.ts pattern).
+ * Events:
+ *   arianna:payment-redirect  detail: { method: 'nexi', url: string }
+ *   arianna:payment-error     detail: { method: 'nexi', message: string }
  *
- * @example
- *   import { Nexi } from 'ariannajs/components/payments';
- *
- *   // 1. Backend signs payment request → returns { redirectUrl, transactionCode }
- *   const { redirectUrl, transactionCode } = await api.createNexiPayment(amount);
- *
- *   // 2. Mount widget
- *   const nx = new Nexi('#nexi', {
- *       redirectUrl: redirectUrl,
- *       amount     : 99.00,
- *       transactionCode: transactionCode,
- *   });
+ * Attrs: redirect-url, amount, currency, target
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface NexiOptions extends CtrlOptions
-{
-    /** Pre-signed Nexi hosted-checkout URL (returned by the merchant backend). */
+export interface NexiOptions {
     redirectUrl : string;
     amount      : number;
-    /** ISO 4217. Default 'EUR' (Nexi mainly handles EUR). */
-    currency?   : string;
-    /** Optional internal transaction code, displayed under the button. */
-    transactionCode? : string;
-    /** Button label override. */
-    buttonLabel?: string;
-    /** Open in new tab vs replace current. Default false. */
-    openInNewTab? : boolean;
-    /** Locale: 'it' | 'en'. Default browser default → 'it' or 'en'. */
-    locale?     : 'it' | 'en';
+    currency    : string;
+    target?     : '_blank' | '_self';
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
-
-export class Nexi extends Control<NexiOptions>
+export class Nexi extends Component('arianna-nexi', HTMLElement, {}, {
+    attrs : ['redirect-url', 'amount', 'currency', 'target'],
+    shadow: false,
+})
 {
-    constructor(container: string | HTMLElement | null, opts: NexiOptions)
+    build(_opts: NexiOptions = {} as NexiOptions)
     {
-        super(container, 'div', {
-            currency    : 'EUR',
-            openInNewTab: false,
-            locale      : detectItOrEn(),
-            ...opts,
-        });
+        const amountAttr = this.attrSignal('amount');
+        const currencyAttr = this.attrSignal('currency');
 
-        this.el.className = `ar-nexi${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
+        this.btnLabel = () => {
+            const a = parseFloat(amountAttr.get() ?? '0') || 0;
+            const c = currencyAttr.get() ?? 'EUR';
+            return `Pay ${c} ${a.toFixed(2)} with Nexi`;
+        };
+
+        this.onClick = () => { void this.pay(); };
+
+        this.template = html`
+            <button type="button" class="ar-nexi__btn" @click="this.onClick">
+                <span class="ar-nexi__logo">nexi</span>
+                <span>{{ this.btnLabel() }}</span>
+            </button>
+        `;
+
+        this.Sheet = Nexi.DefaultSheet();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    pay(): this
-    {
-        const url = this._get<string>('redirectUrl', '');
-        if (!url) { this._emit('error', { message: 'redirectUrl not configured' }); return this; }
-        this._emit('click', { transactionCode: this._get<string>('transactionCode', '') });
-        if (this._get<boolean>('openInNewTab', false)) window.open(url, '_blank', 'noopener');
-        else                                            window.location.href = url;
-        return this;
+    async pay(): Promise<void> {
+        const url = this.getAttribute('redirect-url');
+        if (!url) {
+            this.dispatchEvent(new CustomEvent('arianna:payment-error', {
+                bubbles: true, detail: { method: 'nexi', message: 'Missing redirect-url' },
+            }));
+            return;
+        }
+        this.dispatchEvent(new CustomEvent('arianna:payment-redirect', {
+            bubbles: true, detail: { method: 'nexi', url },
+        }));
+        const target = (this.getAttribute('target') ?? '_self') as '_blank' | '_self';
+        if (target === '_self') window.location.href = url;
+        else window.open(url, '_blank', 'noopener');
     }
 
-    // ── Internal ───────────────────────────────────────────────────────────
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
 
-    protected _build(): void
+    private btnLabel: () => string = () => 'Pay with Nexi';
+    private onClick : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
     {
-        const locale = this._get<'it' | 'en'>('locale', 'it');
-        const label  = this._get<string>('buttonLabel', '') || (locale === 'it' ? 'Paga con Nexi' : 'Pay with Nexi');
-        const tx     = this._get<string>('transactionCode', '');
-
-        this.el.innerHTML = `
-<button class="ar-nexi__btn" data-r="btn" type="button">
-  <span class="ar-nexi__logo">${NEXI_LOGO}</span>
-  <span>${escapeHtml(label)}</span>
-</button>
-${tx ? `<div class="ar-nexi__txn">${escapeHtml(locale === 'it' ? 'Codice: ' : 'Code: ')}${escapeHtml(tx)}</div>` : ''}`;
-
-        this.el.querySelector<HTMLButtonElement>('[data-r="btn"]')?.addEventListener('click', () => this.pay());
-        this._emit('ready', {});
-    }
-
-    private _injectStyles(): void
-    {
-        if (document.getElementById('ar-nexi-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-nexi-styles';
-        // Nexi brand: dark blue #002756, accent yellow #ffd200
-        s.textContent = `
-.ar-nexi { display:inline-flex; flex-direction:column; gap:6px; align-items:flex-start; }
-.ar-nexi__btn { display:inline-flex; align-items:center; gap:8px; min-width:200px; padding:11px 20px; background:#002756; color:#fff; border:0; border-radius:6px; font:600 15px -apple-system,system-ui,sans-serif; cursor:pointer; transition:background .12s; }
-.ar-nexi__btn:hover { background:#001a3d; }
-.ar-nexi__logo svg { display:block; height:18px; width:auto; }
-.ar-nexi__txn { font:11px ui-monospace,monospace; color:#666; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', { display: 'inline-block' }),
+                new Rule('.ar-nexi__btn', {
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    minWidth: '200px',
+                    minHeight: '44px',
+                    padding: '0 18px',
+                    background: '#0e2c5e',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    font: '600 14px -apple-system, system-ui, sans-serif',
+                    transition: 'background 0.15s',
+                }),
+                new Rule('.ar-nexi__btn:hover', { background: '#0a2148' }),
+                new Rule('.ar-nexi__logo', {
+                    background: '#fff',
+                    color: '#0e2c5e',
+                    padding: '2px 8px',
+                    borderRadius: '3px',
+                    fontWeight: '900',
+                    fontStyle: 'italic',
+                    fontSize: '13px',
+                }),
+            ]
+        );
     }
 }
 
-const NEXI_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 24" aria-hidden="true">
-<text x="0" y="18" font-family="-apple-system,system-ui,sans-serif" font-size="18" font-weight="700" fill="#ffd200">nexi</text>
-</svg>`;
-
-function detectItOrEn(): 'it' | 'en'
-{
-    if (typeof navigator !== 'undefined' && navigator.language?.startsWith('it')) return 'it';
-    return 'en';
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Nexi', {
+        value: Nexi, writable: false, enumerable: false, configurable: false,
+    });
 }
 
-function escapeHtml(s: string): string
-{
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
-}
+export default Nexi;

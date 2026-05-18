@@ -1,13 +1,13 @@
 /**
- * @module    components/tracking/TrackingMulti
+ * @module    components/shipments/TrackingMulti
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
  * Multi-carrier shipment tracker. Given a tracking number, it auto-detects
  * the most likely carrier by matching against each carrier's regex and
- * mounts the corresponding subcomponent. If multiple carriers match (which
- * happens with ambiguous numeric formats), it presents a small picker.
+ * mounts the corresponding subcomponent. When multiple carriers match
+ * (which happens with ambiguous numeric formats), it presents a small picker.
  *
  *   ┌──────────────────────────────────────┐
  *   │ Tracking number                      │
@@ -19,291 +19,331 @@
  *   │  …mounted DHLTracker / FedExTracker… │
  *   └──────────────────────────────────────┘
  *
- * Programmatic API: `setNumber(n)`, `setCarrier(id)`, `getCarrier()`,
- * `setEvents(events)`, `getActive()`. Events from the active subcomponent
- * bubble up through this widget tagged with the carrier id.
+ * @example HTML
+ *   <arianna-tracking-multi tracking-number="1Z999AA10123456784"></arianna-tracking-multi>
  *
- * @example
- *   import { TrackingMulti } from 'ariannajs/components/tracking';
+ * @example JS
+ *   const t = new TrackingMulti();
+ *   t.setTrackingNumber('1Z999AA10123456784');   // auto-detected as UPS
+ *   t.addEventListener('arianna:carrier-detected', e =>
+ *     console.log('Carrier:', e.detail.carrier));
+ *   t.setEvents(await api.fetchEvents(t.getCarrier(), t.getTrackingNumber()));
  *
- *   const t = new TrackingMulti('#tracker');
- *   t.setNumber('1Z999AA10123456784');     // → auto-detected as UPS
- *   t.on('detected', e => console.log('Carrier:', e.carrier));
- *   t.setEvents(await api.fetchEvents(t.getCarrier(), t.getNumber()));
+ * Events:
+ *   arianna:carrier-detected  detail: { carrier: CarrierId | null, candidates: CarrierId[] }
+ *   (plus inner tracker events bubble through naturally)
+ *
+ * Attrs: tracking-number, carrier (force), show-input, locale
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
-import { type CarrierConfig, type TrackingEvent, type TrackerOptions, Tracker } from './Tracker.ts';
-import { DHLTracker   } from './DHLTracker.ts';
-import { UPSTracker   } from './UPSTracker.ts';
-import { FedExTracker } from './FedExTracker.ts';
-import { BRTTracker   } from './BRTTracker.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+import { DHLTracker }   from './DHLTracker.ts';
+import { UPSTracker }   from './UPSTracker.ts';
+import { FedExTracker } from './FedExTracker.ts';
+import { BRTTracker }   from './BRTTracker.ts';
+import type { TrackingEvent } from './Tracker.ts';
 
 export type CarrierId = 'dhl' | 'ups' | 'fedex' | 'brt';
 
-interface CarrierEntry
-{
+interface CarrierEntry {
     id      : CarrierId;
     name    : string;
     pattern : RegExp;
-    factory : (mount: HTMLElement, opts: TrackerOptions) => Tracker;
+    make    : () => HTMLElement & {
+        setTrackingNumber(n: string): unknown;
+        setEvents(events: TrackingEvent[]): unknown;
+    };
 }
 
 const CARRIERS: CarrierEntry[] = [
-    { id: 'ups',   name: 'UPS',   pattern: /^1Z[0-9A-Z]{16}$/i,         factory: (m, o) => new UPSTracker(m, o)   },
-    { id: 'fedex', name: 'FedEx', pattern: /^(\d{12}|\d{15}|\d{20})$/,  factory: (m, o) => new FedExTracker(m, o) },
-    { id: 'dhl',   name: 'DHL',   pattern: /^(\d{10,11}|[A-Z]{3}\d{7})$/i, factory: (m, o) => new DHLTracker(m, o) },
-    { id: 'brt',   name: 'BRT',   pattern: /^\d{10,12}$/,               factory: (m, o) => new BRTTracker(m, o)   },
+    { id: 'ups',   name: 'UPS',   pattern: /^1Z[0-9A-Z]{16}$/i,           make: () => new UPSTracker()   as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
+    { id: 'fedex', name: 'FedEx', pattern: /^(\d{12}|\d{15}|\d{20})$/,    make: () => new FedExTracker() as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
+    { id: 'dhl',   name: 'DHL',   pattern: /^(\d{10,11}|[A-Z]{3}\d{7})$/i, make: () => new DHLTracker()   as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
+    { id: 'brt',   name: 'BRT',   pattern: /^\d{10,12}$/,                  make: () => new BRTTracker()   as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
 ];
 
-export interface TrackingMultiOptions extends CtrlOptions
-{
+export interface TrackingMultiOptions {
     trackingNumber? : string;
-    /** Force a specific carrier instead of auto-detecting. */
     carrier?        : CarrierId;
-    /** Show the input + button. Default true. Set false if your app supplies the number programmatically. */
     showInput?      : boolean;
-    /** Locale. */
     locale?         : string;
-    /** Initial events to display once a carrier is selected. */
     events?         : TrackingEvent[];
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
-
-export class TrackingMulti extends Control<TrackingMultiOptions>
+export class TrackingMulti extends Component('arianna-tracking-multi', HTMLElement, {}, {
+    attrs : ['tracking-number', 'carrier', 'show-input', 'locale'],
+    shadow: false,
+})
 {
-    private _number   : string = '';
-    private _carrier  : CarrierId | null = null;
-    private _events   : TrackingEvent[] = [];
-    private _active   : Tracker | null = null;
+    candidates$: Signal<CarrierId[]> = signal<CarrierId[]>([]);
+    pending$   : Signal<TrackingEvent[] | null> = signal<TrackingEvent[] | null>(null);
 
-    private _elInput!  : HTMLInputElement;
-    private _elBtn!    : HTMLButtonElement;
-    private _elPicker! : HTMLElement;
-    private _elMount!  : HTMLElement;
+    #activeTracker: (HTMLElement & { setTrackingNumber(n: string): unknown; setEvents(events: TrackingEvent[]): unknown }) | null = null;
 
-    constructor(container: string | HTMLElement | null, opts: TrackingMultiOptions = {})
+    build(_opts: TrackingMultiOptions = {})
     {
-        super(container, 'div', { showInput: true, ...opts });
+        const numberAttr  = this.attrSignal('tracking-number');
+        const carrierAttr = this.attrSignal('carrier');
 
-        this.el.className = `ar-trk-multi${opts.class ? ' ' + opts.class : ''}`;
-        this._number  = opts.trackingNumber ?? '';
-        this._carrier = opts.carrier ?? null;
-        this._events  = opts.events ?? [];
-        this._injectStyles();
-        this._build();
+        this.showInput = () => this.getAttribute('show-input') !== 'false';
+        this.inputVal  = () => numberAttr.get() ?? '';
 
-        if (this._number)
-        {
-            if (this._carrier) this._mount(this._carrier);
-            else               this._autoDetect();
-        }
+        this.hasMultiple = () => {
+            const cands = this.candidates$.get();
+            const forced = carrierAttr.get();
+            return cands.length > 1 && !forced;
+        };
+
+        this.candidatesList = (): Array<{ id: CarrierId; name: string; selected: boolean }> => {
+            const sel = carrierAttr.get();
+            return this.candidates$.get().map(id => ({
+                id, name: CARRIERS.find(c => c.id === id)!.name,
+                selected: sel === id,
+            }));
+        };
+
+        this.activeCarrier = () => carrierAttr.get() as CarrierId | null;
+
+        // ── Handlers ────────────────────────────────────────────────────
+        this.onInput = (e: Event) => {
+            this.setAttribute('tracking-number', (e.target as HTMLInputElement).value);
+        };
+        this.onTrack = () => {
+            this.#detect();
+        };
+        this.onKeyDown = (e: Event) => {
+            if ((e as KeyboardEvent).key === 'Enter') this.#detect();
+        };
+        this.onCandidatePick = (e: Event) => {
+            const btn = e.currentTarget as HTMLButtonElement;
+            const id = btn.dataset.id as CarrierId;
+            if (id) this.setCarrier(id);
+        };
+
+        this.template = html`
+            <div class="ar-trkm">
+                <div class="ar-trkm__inputrow" a-if="this.showInput()">
+                    <input type="text" class="ar-trkm__input"
+                           placeholder="Tracking number"
+                           :value="this.inputVal()"
+                           @input="this.onInput"
+                           @keydown="this.onKeyDown"/>
+                    <button type="button" class="ar-trkm__track" @click="this.onTrack">Track</button>
+                </div>
+                <div class="ar-trkm__picker" a-if="this.hasMultiple()">
+                    <div class="ar-trkm__picker-msg">
+                        ⚠ Multiple carriers match this number
+                    </div>
+                    <div class="ar-trkm__picker-options">
+                        <button type="button" a-for="c in this.candidatesList()"
+                                class="ar-trkm__cand"
+                                :data-id="c.id"
+                                @click="this.onCandidatePick">{{ c.name }}</button>
+                    </div>
+                </div>
+                <div class="ar-trkm__mount" data-r="mount"></div>
+            </div>
+        `;
+
+        this.Sheet = TrackingMulti.DefaultSheet();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
+    // ── Public API ───────────────────────────────────────────────────────────
 
-    /** Currently-detected (or forced) carrier id, or null. */
-    getCarrier(): CarrierId | null { return this._carrier; }
+    setTrackingNumber(n: string): this {
+        this.setAttribute('tracking-number', n);
+        this.#detect();
+        return this;
+    }
+    getTrackingNumber(): string { return this.getAttribute('tracking-number') ?? ''; }
 
-    /** Current tracking number. */
-    getNumber(): string { return this._number; }
+    setCarrier(id: CarrierId): this {
+        this.setAttribute('carrier', id);
+        this.#mountActive();
+        return this;
+    }
+    getCarrier(): CarrierId | null {
+        return (this.getAttribute('carrier') as CarrierId | null);
+    }
 
-    /** Active sub-Tracker instance, or null. */
-    getActive(): Tracker | null { return this._active; }
-
-    /**
-     * Set / change the tracking number. Triggers auto-detection unless
-     * `carrier` was forced via the constructor or `setCarrier`.
-     */
-    setNumber(n: string): this
-    {
-        this._number = n.trim();
-        if (this._elInput) this._elInput.value = this._number;
-        if (!this._number)
-        {
-            this._unmount();
-            return this;
+    setEvents(events: TrackingEvent[]): this {
+        if (this.#activeTracker) {
+            this.#activeTracker.setEvents(events);
+        } else {
+            this.pending$.set(events);
         }
-        if (this._carrier) this._mount(this._carrier);
-        else               this._autoDetect();
         return this;
     }
 
-    /** Force a specific carrier (skips auto-detection). */
-    setCarrier(id: CarrierId): this
-    {
-        this._carrier = id;
-        if (this._number) this._mount(id);
-        return this;
-    }
+    /** Currently-mounted inner tracker, if any. */
+    getActive(): HTMLElement | null { return this.#activeTracker; }
 
-    /**
-     * Forward events to the active subcomponent. If no carrier is mounted
-     * yet, the events are buffered and applied when one becomes active.
-     */
-    setEvents(events: TrackingEvent[]): this
-    {
-        this._events = events.slice();
-        if (this._active) this._active.setEvents(this._events);
-        return this;
-    }
+    // ── Internal ─────────────────────────────────────────────────────────────
 
-    /** Carriers whose pattern matches the current tracking number. */
-    getCandidates(): CarrierId[]
-    {
-        if (!this._number) return [];
-        return CARRIERS.filter(c => c.pattern.test(this._number)).map(c => c.id);
-    }
-
-    // ── Internal ───────────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        const showInput = this._get<boolean>('showInput', true);
-        this.el.innerHTML = `
-${showInput ? `
-<div class="ar-trk-multi__head">
-  <input class="ar-trk-multi__inp" data-r="inp" type="text" placeholder="Tracking number">
-  <button class="ar-trk-multi__btn" data-r="btn" type="button">Track</button>
-</div>` : ''}
-<div class="ar-trk-multi__picker" data-r="picker" style="display:none"></div>
-<div class="ar-trk-multi__mount"  data-r="mount"></div>`;
-
-        if (showInput)
-        {
-            this._elInput = this.el.querySelector<HTMLInputElement>('[data-r="inp"]')!;
-            this._elBtn   = this.el.querySelector<HTMLButtonElement>('[data-r="btn"]')!;
-            this._elInput.value = this._number;
-            this._elInput.addEventListener('keydown', e => {
-                if (e.key === 'Enter') this.setNumber(this._elInput.value);
-            });
-            this._elBtn.addEventListener('click', () => this.setNumber(this._elInput.value));
+    #detect(): void {
+        const n = (this.getAttribute('tracking-number') ?? '').trim();
+        if (!n) { this.candidates$.set([]); return; }
+        const matches = CARRIERS.filter(c => c.pattern.test(n)).map(c => c.id);
+        this.candidates$.set(matches);
+        // If forced carrier set, keep it; else if exactly one match, use it
+        const forced = this.getAttribute('carrier') as CarrierId | null;
+        if (!forced) {
+            if (matches.length === 1) {
+                this.setCarrier(matches[0]!);
+            } else if (matches.length === 0) {
+                this.removeAttribute('carrier');
+                this.#unmountActive();
+            }
+        } else {
+            this.#mountActive();
         }
-
-        this._elPicker = this.el.querySelector<HTMLElement>('[data-r="picker"]')!;
-        this._elMount  = this.el.querySelector<HTMLElement>('[data-r="mount"]')!;
+        this.dispatchEvent(new CustomEvent('arianna:carrier-detected', {
+            bubbles: true,
+            detail: { carrier: this.getAttribute('carrier'), candidates: matches },
+        }));
     }
 
-    private _autoDetect(): void
-    {
-        const candidates = this.getCandidates();
-        if (candidates.length === 0)
-        {
-            this._showPicker(`No known carrier matches this format.`, [], null);
-            this._unmount();
-            this._emit('not-recognised', { number: this._number });
-            return;
-        }
-        if (candidates.length === 1)
-        {
-            this._hidePicker();
-            this._mount(candidates[0]!);
-            this._emit('detected', { carrier: candidates[0], number: this._number });
-            return;
-        }
-
-        // Ambiguous — present a picker and pick the first as default
-        this._showPicker(`This number could be from multiple carriers — pick one:`, candidates, candidates[0]!);
-        this._mount(candidates[0]!);
-        this._emit('ambiguous', { carriers: candidates, number: this._number });
-    }
-
-    private _showPicker(label: string, candidates: CarrierId[], selected: CarrierId | null): void
-    {
-        this._elPicker.style.display = '';
-        this._elPicker.innerHTML = `
-<div class="ar-trk-multi__picker-label">${escapeHtml(label)}</div>
-${candidates.length ? `<div class="ar-trk-multi__picker-row">
-  ${candidates.map(id => {
-      const c = CARRIERS.find(x => x.id === id)!;
-      const sel = id === selected;
-      return `<label class="ar-trk-multi__picker-opt${sel ? ' ar-trk-multi__picker-opt--sel' : ''}">
-        <input type="radio" name="ar-trk-pick" data-pick="${id}"${sel ? ' checked' : ''}>
-        <span>${escapeHtml(c.name)}</span>
-      </label>`;
-  }).join('')}
-</div>` : ''}`;
-
-        this._elPicker.querySelectorAll<HTMLInputElement>('[data-pick]').forEach(r => {
-            r.addEventListener('change', () => {
-                if (!r.checked) return;
-                const id = r.dataset.pick as CarrierId;
-                this._mount(id);
-                // Update visual selection
-                this._elPicker.querySelectorAll('.ar-trk-multi__picker-opt').forEach(el =>
-                    el.classList.toggle('ar-trk-multi__picker-opt--sel', el.contains(r)));
-                this._emit('select', { carrier: id, number: this._number });
-            });
-        });
-    }
-
-    private _hidePicker(): void
-    {
-        this._elPicker.style.display = 'none';
-        this._elPicker.innerHTML = '';
-    }
-
-    private _mount(id: CarrierId): void
-    {
-        if (this._active && this._carrier === id) return;     // already mounted right one
-        this._unmount();
-
+    #mountActive(): void {
+        const host = this.querySelector<HTMLElement>('[data-r="mount"]');
+        if (!host) return;
+        this.#unmountActive();
+        const id = this.getAttribute('carrier') as CarrierId | null;
+        if (!id) return;
         const entry = CARRIERS.find(c => c.id === id);
         if (!entry) return;
-
-        this._carrier = id;
-        const inner = document.createElement('div');
-        this._elMount.appendChild(inner);
-        this._active = entry.factory(inner, {
-            trackingNumber: this._number,
-            events        : this._events,
-            locale        : this._get<string>('locale', '') || undefined,
-        });
-
-        // Bubble events up tagged with the carrier
-        for (const evt of ['events', 'open-portal'])
-        {
-            this._active.on(evt, (data: unknown) =>
-                this._emit(evt, { carrier: id, ...(data as Record<string, unknown>) }));
+        const tracker = entry.make() as HTMLElement & {
+            setTrackingNumber(n: string): unknown;
+            setEvents(events: TrackingEvent[]): unknown;
+        };
+        const num = this.getAttribute('tracking-number');
+        if (num) tracker.setTrackingNumber(num);
+        const loc = this.getAttribute('locale');
+        if (loc) (tracker as HTMLElement).setAttribute('locale', loc);
+        host.appendChild(tracker);
+        this.#activeTracker = tracker;
+        // Flush pending events if any
+        const pending = this.pending$.get();
+        if (pending) {
+            queueMicrotask(() => {
+                tracker.setEvents(pending);
+                this.pending$.set(null);
+            });
         }
     }
 
-    private _unmount(): void
-    {
-        this._elMount.innerHTML = '';
-        this._active = null;
+    #unmountActive(): void {
+        if (this.#activeTracker) {
+            this.#activeTracker.remove();
+            this.#activeTracker = null;
+        }
     }
 
-    private _injectStyles(): void
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount() {
+        // Initial detection if number provided via attribute
+        if (this.getAttribute('tracking-number')) {
+            queueMicrotask(() => this.#detect());
+        }
+    }
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount() {
+        this.#unmountActive();
+    }
+
+    private showInput      : () => boolean = () => true;
+    private inputVal       : () => string = () => '';
+    private hasMultiple    : () => boolean = () => false;
+    private candidatesList : () => Array<{ id: CarrierId; name: string; selected: boolean }> = () => [];
+    private activeCarrier  : () => CarrierId | null = () => null;
+    private onInput        : (e: Event) => void = () => {};
+    private onTrack        : (e: Event) => void = () => {};
+    private onKeyDown      : (e: Event) => void = () => {};
+    private onCandidatePick: (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
     {
-        if (document.getElementById('ar-trk-multi-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-trk-multi-styles';
-        s.textContent = `
-.ar-trk-multi { display:flex; flex-direction:column; gap:10px; max-width:520px; font:13px -apple-system,system-ui,sans-serif; }
-.ar-trk-multi__head { display:flex; gap:6px; }
-.ar-trk-multi__inp  { flex:1; background:#0d0d0d; border:1px solid #333; color:#d4d4d4; padding:9px 12px; font:13px ui-monospace,monospace; border-radius:4px; }
-.ar-trk-multi__inp:focus { outline:none; border-color:#e40c88; }
-.ar-trk-multi__btn  { background:#e40c88; color:#fff; border:0; padding:9px 18px; font:600 13px sans-serif; border-radius:4px; cursor:pointer; }
-.ar-trk-multi__btn:hover { background:#c30b75; }
-.ar-trk-multi__picker { padding:10px 12px; background:#252525; border:1px solid #444; border-radius:4px; }
-.ar-trk-multi__picker-label { font:12px sans-serif; color:#eab308; margin-bottom:6px; }
-.ar-trk-multi__picker-row { display:flex; flex-wrap:wrap; gap:8px; }
-.ar-trk-multi__picker-opt { display:inline-flex; gap:6px; align-items:center; padding:4px 10px; background:#1e1e1e; border:1px solid #444; border-radius:14px; cursor:pointer; font:12px sans-serif; }
-.ar-trk-multi__picker-opt:hover { border-color:#666; }
-.ar-trk-multi__picker-opt--sel { border-color:#e40c88; background:rgba(228,12,136,0.15); }
-.ar-trk-multi__picker-opt input { margin:0; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', {
+                    display: 'block',
+                    fontFamily: '-apple-system, system-ui, sans-serif',
+                    fontSize: '13px',
+                    color: 'var(--arianna-text, #1f2328)',
+                    maxWidth: '480px',
+                }),
+                new Rule('.ar-trkm', {
+                    display: 'flex', flexDirection: 'column', gap: '10px',
+                }),
+                new Rule('.ar-trkm__inputrow', {
+                    display: 'flex', gap: '8px',
+                }),
+                new Rule('.ar-trkm__input', {
+                    flex: '1',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    color: 'var(--arianna-text, #1f2328)',
+                    padding: '9px 12px',
+                    font: '13px ui-monospace, monospace',
+                    borderRadius: '6px',
+                }),
+                new Rule('.ar-trkm__input:focus', {
+                    outline: 'none',
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                }),
+                new Rule('.ar-trkm__track', {
+                    padding: '9px 16px',
+                    background: 'var(--arianna-primary, #1f6feb)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                }),
+                new Rule('.ar-trkm__track:hover', { background: 'var(--arianna-primary-hover, #1858c4)' }),
+                new Rule('.ar-trkm__picker', {
+                    background: 'var(--arianna-bg-3, #f3f3f3)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: '6px',
+                    padding: '10px 12px',
+                }),
+                new Rule('.ar-trkm__picker-msg', {
+                    fontSize: '12px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    marginBottom: '8px',
+                }),
+                new Rule('.ar-trkm__picker-options', {
+                    display: 'flex', gap: '6px', flexWrap: 'wrap',
+                }),
+                new Rule('.ar-trkm__cand', {
+                    padding: '5px 10px',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                }),
+                new Rule('.ar-trkm__cand:hover', {
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                    color: 'var(--arianna-primary, #1f6feb)',
+                }),
+            ]
+        );
     }
 }
 
-function escapeHtml(s: string): string
-{
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'TrackingMulti', {
+        value: TrackingMulti, writable: false, enumerable: false, configurable: false,
+    });
 }
+
+export default TrackingMulti;

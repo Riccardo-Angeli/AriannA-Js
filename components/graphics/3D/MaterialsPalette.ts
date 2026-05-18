@@ -1,383 +1,349 @@
 /**
- * @module    PaletteMaterials
+ * @module    components/graphics/3D/MaterialsPalette
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
  *
- * Material browser + property editor. Two modes side-by-side:
+ * MaterialsPalette — material picker + parameter inspector for 3D editors.
+ * Supports the standard three.js material families:
  *
- *   ┌──────────┬──────────────────────┐
- *   │ Library  │ Properties           │
- *   ├──────────┼──────────────────────┤
- *   │ ▣ Metal  │ Name [Brushed Steel] │
- *   │ ▣ Plast. │ Type [PBR Standard ▾]│
- *   │ ▣ Wood   │ Albedo  [#888888]    │
- *   │ ▣ Glass  │ Metalness    [0.85]  │
- *   │ + New    │ Roughness    [0.30]  │
- *   │          │ Emissive     [#000]  │
- *   │          │ Alpha        [1.00]  │
- *   │          │ Map: ───────────     │
- *   │          │   Albedo  [pick] ⊘   │
- *   │          │   Normal  [pick] ⊘   │
- *   │          │   Rough.  [pick] ⊘   │
- *   └──────────┴──────────────────────┘
+ *   • basic         — flat colour, no lighting
+ *   • lambert       — diffuse only
+ *   • phong         — diffuse + specular highlights
+ *   • standard (PBR)— metalness/roughness physically-based
+ *   • physical (PBR)— standard + clearcoat/transmission/sheen
+ *   • toon          — cel-shaded
+ *   • normal        — surface normals as colour
+ *   • wireframe     — line render
  *
- * Built-in templates: Metal, Plastic, Wood, Glass, Emissive, Fabric, Stone.
- * The component is renderer-agnostic — emits `apply` events with the full
- * material spec; consumer (Three.js / WebGPU) maps to its real material.
+ * Each material exposes its own parameters reactively; changes fire
+ * `arianna:material-change` so the host renderer can apply them.
  *
- * @example
- *   import { PaletteMaterials } from 'ariannajs/components/gfx3d';
+ * @example HTML
+ *   <arianna-materials-palette kind="standard"></arianna-materials-palette>
  *
- *   const pm = new PaletteMaterials('#materials');
- *   pm.on('apply',  e => mesh.setMaterial(e.material));
- *   pm.on('change', e => mesh.updateMaterial(e.material));
- *
- *   const mat = pm.addMaterial({ name: 'Custom Brass', albedo: '#cd9b1d', metalness: 0.95 });
- *   pm.select(mat.id);
+ * Events: arianna:material-change  detail: MaterialDef
+ * Attrs:  kind
  */
 
-import { Control, type CtrlOptions } from '../../core/Control.ts';
+import { Component } from '../../../core/Component.ts';
+import { html }      from '../../../core/Template.ts';
+import { signal }    from '../../../core/Observable.ts';
+import type { Signal } from '../../../core/Observable.ts';
+import { Sheet } from '../../../core/Sheet.ts';
+import { Rule }      from '../../../core/Rule.ts';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+export type MaterialKind =
+    | 'basic' | 'lambert' | 'phong' | 'standard' | 'physical'
+    | 'toon' | 'normal' | 'wireframe';
 
-export type MaterialKind = 'pbr-standard' | 'pbr-clearcoat' | 'unlit' | 'toon';
-
-export interface MaterialSpec {
-    id        : string;
-    name      : string;
-    kind      : MaterialKind;
-    albedo    : string;        // hex
-    metalness : number;        // 0..1
-    roughness : number;        // 0..1
-    emissive  : string;        // hex
-    emissiveIntensity : number;
-    alpha     : number;        // 0..1
-    /** Optional texture map URLs; renderer interprets. */
-    maps : {
-        albedo?    : string;
-        normal?    : string;
-        roughness? : string;
-        metalness? : string;
-        emissive?  : string;
-    };
+export interface MaterialDef {
+    kind         : MaterialKind;
+    color?       : string;
+    emissive?    : string;
+    opacity?     : number;
+    metalness?   : number;
+    roughness?   : number;
+    clearcoat?   : number;
+    transmission?: number;
+    ior?         : number;
+    shininess?   : number;
+    side?        : 'front' | 'back' | 'double';
+    flatShading? : boolean;
+    wireframe?   : boolean;
 }
 
-export interface PaletteMaterialsOptions extends CtrlOptions {
-    /** Initial library. */
-    library? : MaterialSpec[];
-    /** Pre-selected material id. */
-    selected? : string;
-    /** Title. Default 'Materials'. */
-    title? : string;
-}
+export interface MaterialsPaletteOptions { kind?: MaterialKind; }
 
-// ── Templates ────────────────────────────────────────────────────────────────
-
-const TEMPLATES: Array<Omit<MaterialSpec, 'id'>> = [
-    { name: 'Metal',    kind: 'pbr-standard', albedo: '#8a8a8a', metalness: 0.9,  roughness: 0.25, emissive: '#000', emissiveIntensity: 0, alpha: 1, maps: {} },
-    { name: 'Plastic',  kind: 'pbr-standard', albedo: '#3b82f6', metalness: 0.05, roughness: 0.5,  emissive: '#000', emissiveIntensity: 0, alpha: 1, maps: {} },
-    { name: 'Wood',     kind: 'pbr-standard', albedo: '#8b5a2b', metalness: 0.0,  roughness: 0.85, emissive: '#000', emissiveIntensity: 0, alpha: 1, maps: {} },
-    { name: 'Glass',    kind: 'pbr-clearcoat', albedo: '#ffffff', metalness: 0.0, roughness: 0.05, emissive: '#000', emissiveIntensity: 0, alpha: 0.3, maps: {} },
-    { name: 'Emissive', kind: 'unlit',        albedo: '#e40c88', metalness: 0.0,  roughness: 1.0,  emissive: '#e40c88', emissiveIntensity: 2.0, alpha: 1, maps: {} },
-    { name: 'Fabric',   kind: 'pbr-standard', albedo: '#dc2626', metalness: 0.0,  roughness: 0.95, emissive: '#000', emissiveIntensity: 0, alpha: 1, maps: {} },
-    { name: 'Stone',    kind: 'pbr-standard', albedo: '#525252', metalness: 0.0,  roughness: 0.8,  emissive: '#000', emissiveIntensity: 0, alpha: 1, maps: {} },
+const KIND_INFO: Array<{ kind: MaterialKind; label: string; icon: string }> = [
+    { kind: 'basic',     label: 'Basic',     icon: '◻' },
+    { kind: 'lambert',   label: 'Lambert',   icon: '◐' },
+    { kind: 'phong',     label: 'Phong',     icon: '◓' },
+    { kind: 'standard',  label: 'Standard',  icon: '◆' },
+    { kind: 'physical',  label: 'Physical',  icon: '◈' },
+    { kind: 'toon',      label: 'Toon',      icon: '◖' },
+    { kind: 'normal',    label: 'Normal',    icon: '⬢' },
+    { kind: 'wireframe', label: 'Wireframe', icon: '⊞' },
 ];
 
-// ── Component ────────────────────────────────────────────────────────────────
+const DEFAULTS: Record<MaterialKind, MaterialDef> = {
+    basic:     { kind: 'basic',     color: '#cccccc', opacity: 1 },
+    lambert:   { kind: 'lambert',   color: '#cccccc', emissive: '#000000', opacity: 1 },
+    phong:     { kind: 'phong',     color: '#cccccc', emissive: '#000000', shininess: 30, opacity: 1 },
+    standard:  { kind: 'standard',  color: '#cccccc', emissive: '#000000', metalness: 0, roughness: 0.5, opacity: 1 },
+    physical:  { kind: 'physical',  color: '#cccccc', emissive: '#000000', metalness: 0, roughness: 0.5, clearcoat: 0, transmission: 0, ior: 1.5, opacity: 1 },
+    toon:      { kind: 'toon',      color: '#cccccc', emissive: '#000000', opacity: 1 },
+    normal:    { kind: 'normal' },
+    wireframe: { kind: 'wireframe', color: '#cccccc', wireframe: true, opacity: 1 },
+};
 
-export class PaletteMaterials extends Control<PaletteMaterialsOptions>
+export class MaterialsPalette extends Component('arianna-materials-palette', HTMLElement, {}, {
+    attrs : ['kind'],
+    shadow: false,
+})
 {
-    private _library : MaterialSpec[] = [];
-    private _selected: string | null  = null;
-    private _nextId  = 1;
+    material$: Signal<MaterialDef> = signal<MaterialDef>(DEFAULTS.standard);
 
-    private _elList!  : HTMLElement;
-    private _elProps! : HTMLElement;
-
-    constructor(container: string | HTMLElement | null, opts: PaletteMaterialsOptions = {})
+    build(_opts: MaterialsPaletteOptions = {})
     {
-        super(container, 'div', { library: [], title: 'Materials', ...opts });
-        this.el.className = `ar-palmat${opts.class ? ' ' + opts.class : ''}`;
+        const kindAttr = this.attrSignal('kind');
 
-        const lib = opts.library;
-        if (lib === undefined)
-        {
-            // Not specified → seed with built-in templates so the panel isn't empty
-            for (const t of TEMPLATES) this._library.push({ ...t, id: this._mkId(), maps: { ...t.maps } });
-        }
-        else
-        {
-            // Explicitly provided (even if empty) → respect caller
-            this._library = lib.map(m => ({ ...m, maps: { ...m.maps } }));
-        }
-
-        this._injectStyles();
-        this._build();
-
-        const initSel = this._get<string>('selected', '');
-        this.select(initSel || this._library[0]?.id || null);
-    }
-
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    /** Library (deep-cloned). */
-    getLibrary(): MaterialSpec[] { return this._library.map(m => ({ ...m, maps: { ...m.maps } })); }
-
-    /** Currently selected material (deep-cloned), or null. */
-    getSelected(): MaterialSpec | null
-    {
-        if (!this._selected) return null;
-        const m = this._library.find(x => x.id === this._selected);
-        return m ? { ...m, maps: { ...m.maps } } : null;
-    }
-
-    /** Select a material by id, or pass null to deselect. */
-    select(id: string | null): this
-    {
-        this._selected = id;
-        this._renderList();
-        this._renderProps();
-        const m = this.getSelected();
-        if (m) this._emit('apply', { id: m.id, material: m });
-        return this;
-    }
-
-    /** Add a new material to the library (returns the created spec). */
-    addMaterial(partial: Partial<MaterialSpec> = {}): MaterialSpec
-    {
-        const m: MaterialSpec = {
-            id        : this._mkId(),
-            name      : partial.name ?? 'New Material',
-            kind      : partial.kind ?? 'pbr-standard',
-            albedo    : partial.albedo ?? '#888888',
-            metalness : partial.metalness ?? 0,
-            roughness : partial.roughness ?? 0.5,
-            emissive  : partial.emissive ?? '#000000',
-            emissiveIntensity: partial.emissiveIntensity ?? 0,
-            alpha     : partial.alpha ?? 1,
-            maps      : { ...(partial.maps ?? {}) },
+        this.kinds = () => {
+            const cur = kindAttr.get() ?? 'standard';
+            return KIND_INFO.map(k => ({
+                kind: k.kind,
+                label: k.label,
+                icon: k.icon,
+                cls: 'ar-mat__kind' + (cur === k.kind ? ' ar-mat__kind--active' : ''),
+            }));
         };
-        this._library.push(m);
-        this._renderList();
-        this._emit('add', { id: m.id, material: m });
-        return m;
-    }
 
-    /** Update properties of an existing material. */
-    updateMaterial(id: string, patch: Partial<MaterialSpec>): this
-    {
-        const i = this._library.findIndex(m => m.id === id);
-        if (i < 0) return this;
-        const cur = this._library[i]!;
-        const updated: MaterialSpec = {
-            ...cur, ...patch,
-            maps: { ...cur.maps, ...(patch.maps ?? {}) },
+        this.curKind = (): MaterialKind => (kindAttr.get() as MaterialKind) ?? 'standard';
+        this.hasColor      = () => !['normal'].includes(this.curKind());
+        this.hasEmissive   = () => ['lambert', 'phong', 'standard', 'physical', 'toon'].includes(this.curKind());
+        this.hasMetalness  = () => ['standard', 'physical'].includes(this.curKind());
+        this.hasRoughness  = () => ['standard', 'physical'].includes(this.curKind());
+        this.hasClearcoat  = () => this.curKind() === 'physical';
+        this.hasTransmission = () => this.curKind() === 'physical';
+        this.hasShininess  = () => this.curKind() === 'phong';
+        this.hasIor        = () => this.curKind() === 'physical';
+
+        this.colorVal     = () => this.material$.get().color     ?? '#cccccc';
+        this.emissiveVal  = () => this.material$.get().emissive  ?? '#000000';
+        this.opacityVal   = () => String(this.material$.get().opacity   ?? 1);
+        this.metalnessVal = () => String(this.material$.get().metalness ?? 0);
+        this.roughnessVal = () => String(this.material$.get().roughness ?? 0.5);
+        this.clearcoatVal = () => String(this.material$.get().clearcoat ?? 0);
+        this.transmissionVal = () => String(this.material$.get().transmission ?? 0);
+        this.shininessVal = () => String(this.material$.get().shininess ?? 30);
+        this.iorVal       = () => String(this.material$.get().ior ?? 1.5);
+
+        this.onKindClick = (e: Event) => {
+            const btn = e.currentTarget as HTMLButtonElement;
+            const kind = btn.dataset.kind as MaterialKind;
+            if (kind) this.setKind(kind);
         };
-        this._library[i] = updated;
-        this._renderList();
-        if (this._selected === id) this._renderProps();
-        this._emit('change', { id, material: updated });
+        this.onParam = (e: Event) => {
+            const inp = e.target as HTMLInputElement;
+            const param = inp.dataset.param;
+            if (!param) return;
+            const v: string | number = inp.type === 'number' || inp.type === 'range'
+                ? parseFloat(inp.value)
+                : inp.value;
+            this.setParam(param as keyof MaterialDef, v);
+        };
+
+        this.template = html`
+            <div class="ar-mat__kinds">
+                <button type="button" a-for="k in this.kinds()"
+                        :class="k.cls"
+                        :data-kind="k.kind"
+                        :title="k.label"
+                        @click="this.onKindClick">
+                    <span class="ar-mat__kind-icon">{{ k.icon }}</span>
+                    <span class="ar-mat__kind-lbl">{{ k.label }}</span>
+                </button>
+            </div>
+            <div class="ar-mat__params">
+                <label class="ar-mat__field" a-if="this.hasColor()">
+                    <span>Color</span>
+                    <input type="color" data-param="color" :value="this.colorVal()" @input="this.onParam"/>
+                    <input type="text"  data-param="color" :value="this.colorVal()" @change="this.onParam"/>
+                </label>
+                <label class="ar-mat__field" a-if="this.hasEmissive()">
+                    <span>Emissive</span>
+                    <input type="color" data-param="emissive" :value="this.emissiveVal()" @input="this.onParam"/>
+                </label>
+                <label class="ar-mat__field">
+                    <span>Opacity</span>
+                    <input type="range" data-param="opacity" min="0" max="1" step="0.01" :value="this.opacityVal()" @input="this.onParam"/>
+                    <span class="ar-mat__num">{{ this.opacityVal() }}</span>
+                </label>
+                <label class="ar-mat__field" a-if="this.hasMetalness()">
+                    <span>Metalness</span>
+                    <input type="range" data-param="metalness" min="0" max="1" step="0.01" :value="this.metalnessVal()" @input="this.onParam"/>
+                    <span class="ar-mat__num">{{ this.metalnessVal() }}</span>
+                </label>
+                <label class="ar-mat__field" a-if="this.hasRoughness()">
+                    <span>Roughness</span>
+                    <input type="range" data-param="roughness" min="0" max="1" step="0.01" :value="this.roughnessVal()" @input="this.onParam"/>
+                    <span class="ar-mat__num">{{ this.roughnessVal() }}</span>
+                </label>
+                <label class="ar-mat__field" a-if="this.hasClearcoat()">
+                    <span>Clearcoat</span>
+                    <input type="range" data-param="clearcoat" min="0" max="1" step="0.01" :value="this.clearcoatVal()" @input="this.onParam"/>
+                    <span class="ar-mat__num">{{ this.clearcoatVal() }}</span>
+                </label>
+                <label class="ar-mat__field" a-if="this.hasTransmission()">
+                    <span>Transmission</span>
+                    <input type="range" data-param="transmission" min="0" max="1" step="0.01" :value="this.transmissionVal()" @input="this.onParam"/>
+                    <span class="ar-mat__num">{{ this.transmissionVal() }}</span>
+                </label>
+                <label class="ar-mat__field" a-if="this.hasIor()">
+                    <span>IOR</span>
+                    <input type="number" data-param="ior" min="1" max="2.4" step="0.05" :value="this.iorVal()" @change="this.onParam"/>
+                </label>
+                <label class="ar-mat__field" a-if="this.hasShininess()">
+                    <span>Shininess</span>
+                    <input type="range" data-param="shininess" min="0" max="200" step="1" :value="this.shininessVal()" @input="this.onParam"/>
+                    <span class="ar-mat__num">{{ this.shininessVal() }}</span>
+                </label>
+            </div>
+        `;
+
+        this.Sheet = MaterialsPalette.DefaultSheet();
+    }
+
+    // ── Public API ───────────────────────────────────────────────────────────
+
+    setKind(kind: MaterialKind): this {
+        this.setAttribute('kind', kind);
+        // Reset material to defaults for the new kind, preserving common shared fields
+        const cur = this.material$.get();
+        const next: MaterialDef = { ...DEFAULTS[kind] };
+        if (cur.color) next.color = cur.color;
+        if (cur.opacity !== undefined) next.opacity = cur.opacity;
+        this.material$.set(next);
+        this.#fire();
+        return this;
+    }
+    setParam(param: keyof MaterialDef, value: string | number | boolean): this {
+        const cur = this.material$.get();
+        this.material$.set({ ...cur, [param]: value });
+        this.#fire();
+        return this;
+    }
+    getMaterial(): MaterialDef { return { ...this.material$.get() }; }
+    setMaterial(m: MaterialDef): this {
+        if (m.kind) this.setAttribute('kind', m.kind);
+        this.material$.set({ ...m });
+        this.#fire();
         return this;
     }
 
-    /** Remove a material. If it was selected, selection is cleared. */
-    removeMaterial(id: string): this
-    {
-        const i = this._library.findIndex(m => m.id === id);
-        if (i < 0) return this;
-        this._library.splice(i, 1);
-        if (this._selected === id) this._selected = null;
-        this._renderList();
-        this._renderProps();
-        this._emit('remove', { id });
-        return this;
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    #fire(): void {
+        this.dispatchEvent(new CustomEvent('arianna:material-change', {
+            bubbles: true, detail: this.getMaterial(),
+        }));
     }
 
-    /** All built-in template names — useful for "From template" dropdowns. */
-    static getTemplates(): ReadonlyArray<Omit<MaterialSpec, 'id'>>
+    private kinds          : () => Array<{ kind: MaterialKind; label: string; icon: string; cls: string }> = () => [];
+    private curKind        : () => MaterialKind = () => 'standard';
+    private hasColor       : () => boolean = () => true;
+    private hasEmissive    : () => boolean = () => false;
+    private hasMetalness   : () => boolean = () => false;
+    private hasRoughness   : () => boolean = () => false;
+    private hasClearcoat   : () => boolean = () => false;
+    private hasTransmission: () => boolean = () => false;
+    private hasShininess   : () => boolean = () => false;
+    private hasIor         : () => boolean = () => false;
+    private colorVal       : () => string = () => '#cccccc';
+    private emissiveVal    : () => string = () => '#000000';
+    private opacityVal     : () => string = () => '1';
+    private metalnessVal   : () => string = () => '0';
+    private roughnessVal   : () => string = () => '0.5';
+    private clearcoatVal   : () => string = () => '0';
+    private transmissionVal: () => string = () => '0';
+    private shininessVal   : () => string = () => '30';
+    private iorVal         : () => string = () => '1.5';
+    private onKindClick    : (e: Event) => void = () => {};
+    private onParam        : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
     {
-        return TEMPLATES.map(t => ({ ...t, maps: { ...t.maps } }));
-    }
-
-    // ── Internal ───────────────────────────────────────────────────────────
-
-    private _mkId(): string { return `mat-${this._nextId++}`; }
-
-    protected _build(): void
-    {
-        this.el.innerHTML = `
-<div class="ar-palmat__head">
-  <span class="ar-palmat__title">${escapeHtml(this._get<string>('title', 'Materials'))}</span>
-</div>
-<div class="ar-palmat__body">
-  <div class="ar-palmat__library" data-r="library"></div>
-  <div class="ar-palmat__props"   data-r="props"></div>
-</div>
-<div class="ar-palmat__footer">
-  <button class="ar-palmat__btn" data-act="new">+ New</button>
-  <button class="ar-palmat__btn ar-palmat__btn--danger" data-act="remove">× Delete</button>
-</div>
-`;
-        this._elList  = this.el.querySelector<HTMLElement>('[data-r="library"]')!;
-        this._elProps = this.el.querySelector<HTMLElement>('[data-r="props"]')!;
-
-        this.el.querySelector('[data-act="new"]')?.addEventListener('click',
-            () => { const m = this.addMaterial(); this.select(m.id); });
-        this.el.querySelector('[data-act="remove"]')?.addEventListener('click',
-            () => { if (this._selected) this.removeMaterial(this._selected); });
-
-        this._renderList();
-    }
-
-    private _renderList(): void
-    {
-        this._elList.innerHTML = '';
-        for (const m of this._library)
-        {
-            const item = document.createElement('div');
-            item.className = 'ar-palmat__item' + (m.id === this._selected ? ' ar-palmat__item--selected' : '');
-            item.dataset.id = m.id;
-            item.innerHTML = `
-<div class="ar-palmat__swatch" style="background:${m.albedo}"></div>
-<span class="ar-palmat__item-name">${escapeHtml(m.name)}</span>
-`;
-            item.addEventListener('click', () => this.select(m.id));
-            this._elList.appendChild(item);
-        }
-    }
-
-    private _renderProps(): void
-    {
-        const m = this._selected ? this._library.find(x => x.id === this._selected) : null;
-        if (!m)
-        {
-            this._elProps.innerHTML = `<div class="ar-palmat__empty">No material selected</div>`;
-            return;
-        }
-
-        this._elProps.innerHTML = `
-<div class="ar-palmat__prop">
-  <label>Name</label>
-  <input data-prop="name"  type="text"   value="${escapeHtml(m.name)}">
-</div>
-<div class="ar-palmat__prop">
-  <label>Type</label>
-  <select data-prop="kind">
-    <option value="pbr-standard"${m.kind==='pbr-standard'?' selected':''}>PBR Standard</option>
-    <option value="pbr-clearcoat"${m.kind==='pbr-clearcoat'?' selected':''}>PBR Clearcoat</option>
-    <option value="unlit"${m.kind==='unlit'?' selected':''}>Unlit</option>
-    <option value="toon"${m.kind==='toon'?' selected':''}>Toon</option>
-  </select>
-</div>
-<div class="ar-palmat__prop">
-  <label>Albedo</label>
-  <input data-prop="albedo"   type="color"  value="${m.albedo}">
-</div>
-<div class="ar-palmat__prop">
-  <label>Metalness</label>
-  <input data-prop="metalness" type="number" min="0" max="1" step="0.01" value="${m.metalness}">
-</div>
-<div class="ar-palmat__prop">
-  <label>Roughness</label>
-  <input data-prop="roughness" type="number" min="0" max="1" step="0.01" value="${m.roughness}">
-</div>
-<div class="ar-palmat__prop">
-  <label>Emissive</label>
-  <input data-prop="emissive"  type="color"  value="${m.emissive}">
-</div>
-<div class="ar-palmat__prop">
-  <label>Em.Intensity</label>
-  <input data-prop="emissiveIntensity" type="number" min="0" max="10" step="0.1" value="${m.emissiveIntensity}">
-</div>
-<div class="ar-palmat__prop">
-  <label>Alpha</label>
-  <input data-prop="alpha" type="number" min="0" max="1" step="0.01" value="${m.alpha}">
-</div>
-<div class="ar-palmat__sep">Texture maps</div>
-${this._mapField('Albedo',    'albedo',    m.maps.albedo)}
-${this._mapField('Normal',    'normal',    m.maps.normal)}
-${this._mapField('Roughness', 'roughness', m.maps.roughness)}
-${this._mapField('Metalness', 'metalness', m.maps.metalness)}
-${this._mapField('Emissive',  'emissive',  m.maps.emissive)}
-`;
-
-        // Wire scalar inputs
-        const props: Array<keyof MaterialSpec> = ['name','kind','albedo','metalness','roughness','emissive','emissiveIntensity','alpha'];
-        for (const p of props)
-        {
-            const inp = this._elProps.querySelector<HTMLInputElement>(`[data-prop="${p}"]`);
-            if (!inp) continue;
-            inp.addEventListener('change', () => {
-                const raw = inp.value;
-                const v: unknown = inp.type === 'number' ? parseFloat(raw) || 0 : raw;
-                this.updateMaterial(m.id, { [p]: v } as Partial<MaterialSpec>);
-            });
-        }
-        // Wire map inputs
-        for (const k of ['albedo','normal','roughness','metalness','emissive'] as const)
-        {
-            const inp = this._elProps.querySelector<HTMLInputElement>(`[data-map="${k}"]`);
-            if (!inp) continue;
-            inp.addEventListener('change', () => {
-                const newMaps = { ...m.maps, [k]: inp.value };
-                this.updateMaterial(m.id, { maps: newMaps });
-            });
-            const clear = this._elProps.querySelector<HTMLButtonElement>(`[data-map-clear="${k}"]`);
-            clear?.addEventListener('click', () => {
-                const newMaps = { ...m.maps, [k]: undefined };
-                this.updateMaterial(m.id, { maps: newMaps });
-            });
-        }
-    }
-
-    private _mapField(label: string, key: string, value: string | undefined): string
-    {
-        return `
-<div class="ar-palmat__prop ar-palmat__prop--map">
-  <label>${escapeHtml(label)}</label>
-  <input data-map="${key}" type="text" placeholder="(no map)" value="${escapeHtml(value || '')}">
-  <button class="ar-palmat__map-clear" data-map-clear="${key}" title="Clear">⊘</button>
-</div>`;
-    }
-
-    private _injectStyles(): void
-    {
-        if (document.getElementById('ar-palmat-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-palmat-styles';
-        s.textContent = `
-.ar-palmat { display:flex; flex-direction:column; min-width:480px; background:#1e1e1e; border:1px solid #333; border-radius:6px; color:#d4d4d4; font:12px -apple-system,system-ui,sans-serif; user-select:none; }
-.ar-palmat__head { padding:8px 12px; border-bottom:1px solid #333; }
-.ar-palmat__title { font:600 12px sans-serif; color:#e40c88; letter-spacing:.04em; text-transform:uppercase; }
-.ar-palmat__body { display:flex; flex:1; min-height:300px; max-height:520px; }
-.ar-palmat__library { width:160px; border-right:1px solid #333; overflow:auto; padding:4px; display:flex; flex-direction:column; gap:2px; }
-.ar-palmat__item { display:flex; align-items:center; gap:8px; padding:4px 8px; cursor:pointer; border-radius:3px; }
-.ar-palmat__item:hover { background:#2a2a2a; }
-.ar-palmat__item--selected { background:rgba(228,12,136,0.2); border-left:2px solid #e40c88; }
-.ar-palmat__swatch { width:24px; height:24px; border-radius:3px; border:1px solid #444; flex-shrink:0; }
-.ar-palmat__item-name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.ar-palmat__props { flex:1; overflow:auto; padding:8px; display:flex; flex-direction:column; gap:6px; }
-.ar-palmat__prop { display:flex; align-items:center; gap:8px; }
-.ar-palmat__prop label { width:90px; font:10px ui-monospace,monospace; color:#888; flex-shrink:0; }
-.ar-palmat__prop input, .ar-palmat__prop select { flex:1; background:#0d0d0d; border:1px solid #333; color:#d4d4d4; padding:3px 6px; font:11px ui-monospace,monospace; border-radius:2px; }
-.ar-palmat__prop input[type="color"] { width:40px; flex:none; padding:0; cursor:pointer; height:22px; }
-.ar-palmat__prop--map input { font:10px ui-monospace,monospace; }
-.ar-palmat__map-clear { background:transparent; border:1px solid #444; color:#888; padding:2px 6px; font-size:11px; cursor:pointer; border-radius:2px; flex:none; }
-.ar-palmat__map-clear:hover { background:#dc2626; border-color:#dc2626; color:#fff; }
-.ar-palmat__sep { font:10px sans-serif; color:#888; text-transform:uppercase; padding-top:8px; padding-bottom:2px; border-top:1px solid #333; margin-top:4px; }
-.ar-palmat__empty { padding:20px; text-align:center; color:#666; }
-.ar-palmat__footer { padding:6px; border-top:1px solid #333; display:flex; gap:4px; }
-.ar-palmat__btn { background:transparent; border:1px solid #444; color:#d4d4d4; padding:4px 10px; font:11px sans-serif; border-radius:3px; cursor:pointer; }
-.ar-palmat__btn:hover { background:#2a2a2a; }
-.ar-palmat__btn--danger:hover { background:#dc2626; border-color:#dc2626; color:#fff; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', {
+                    background  : 'var(--arianna-bg, #fff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    display     : 'flex',
+                    fontFamily  : '-apple-system, system-ui, sans-serif',
+                    fontSize    : '12px',
+                    width       : '320px',
+                    minHeight   : '300px',
+                    overflow    : 'hidden',
+                }),
+                new Rule('.ar-mat__kinds', {
+                    display: 'flex', flexDirection: 'column',
+                    gap: '2px', padding: '4px',
+                    width: '90px',
+                    borderRight: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg-3, #f3f3f3)',
+                }),
+                new Rule('.ar-mat__kind', {
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '5px 7px',
+                    background: 'transparent',
+                    border: '1px solid transparent',
+                    borderRadius: '3px',
+                    color: 'var(--arianna-text, #1f2328)',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                }),
+                new Rule('.ar-mat__kind:hover', { background: 'var(--arianna-bg, #fff)' }),
+                new Rule('.ar-mat__kind--active', {
+                    background: 'var(--arianna-bg, #fff)',
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                    color: 'var(--arianna-primary, #1f6feb)',
+                }),
+                new Rule('.ar-mat__kind-icon', { fontSize: '13px' }),
+                new Rule('.ar-mat__kind-lbl',  { fontSize: '11px' }),
+                new Rule('.ar-mat__params', {
+                    flex: '1', padding: '8px',
+                    display: 'flex', flexDirection: 'column', gap: '6px',
+                    overflowY: 'auto',
+                }),
+                new Rule('.ar-mat__field', {
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                }),
+                new Rule('.ar-mat__field span:first-child', {
+                    width: '76px',
+                    fontSize: '10px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    textTransform: 'uppercase',
+                }),
+                new Rule('.ar-mat__field input[type="range"]', { flex: '1' }),
+                new Rule('.ar-mat__field input[type="text"], .ar-mat__field input[type="number"]', {
+                    flex: '1', minWidth: '0',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    color: 'var(--arianna-text, #1f2328)',
+                    padding: '3px 6px',
+                    font: '11px ui-monospace, monospace',
+                    borderRadius: '2px',
+                }),
+                new Rule('.ar-mat__field input[type="color"]', {
+                    width: '28px', height: '22px',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    padding: '0', background: 'transparent',
+                    cursor: 'pointer',
+                }),
+                new Rule('.ar-mat__num', {
+                    width: '30px',
+                    fontSize: '10px', fontFamily: 'ui-monospace, monospace',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    textAlign: 'right',
+                }),
+            ]
+        );
     }
 }
 
-function escapeHtml(s: string): string
-{
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'MaterialsPalette', {
+        value: MaterialsPalette, writable: false, enumerable: false, configurable: false,
+    });
 }
+
+export default MaterialsPalette;

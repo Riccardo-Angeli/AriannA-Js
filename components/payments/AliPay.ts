@@ -4,148 +4,188 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Alipay payment integration. Alipay is server-driven: the merchant creates
- * a payment URL on the backend, redirects the user (or shows a QR code),
- * the user authorises in the Alipay app, and Alipay calls back to the
- * merchant's notify URL.
+ * Alipay payment widget. Supports two operating modes:
  *
- * This widget renders the official Alipay button or QR code. It does NOT
- * perform any handshake itself — the caller provides either the redirect URL
- * (for desktop) or the QR code data URL (typically generated server-side).
+ *   • `redirect` — opens the Alipay payment page (default for web flows)
+ *   • `qr-code` — displays a QR code that the user scans with the Alipay app
  *
- *   • `redirectUrl` — desktop / mobile web: clicking the button navigates here.
- *   • `qrCode`      — desktop with QR display: rendered as <img>.
+ * Either mode requires the merchant server to call Alipay's OpenAPI first
+ * to obtain the redirect URL or QR code URL. Confirmation arrives via
+ * Alipay webhook server-side.
  *
- * @example
- *   import { AliPay } from 'ariannajs/components/payments';
+ * @example HTML
+ *   <arianna-alipay mode="redirect"
+ *                   redirect-url="https://openapi.alipay.com/gateway.do?…"
+ *                   amount="100.00" currency="CNY"></arianna-alipay>
  *
- *   const ap = new AliPay('#alipay', {
- *       mode    : 'redirect',
- *       redirectUrl: 'https://openapi.alipay.com/gateway.do?…',
- *       amount  : 99.00,
- *       currency: 'CNY',
- *   });
- *   ap.on('click', () => analytics.track('alipay_clicked'));
+ * @example QR code
+ *   <arianna-alipay mode="qr-code"
+ *                   qr-url="https://qr.alipay.com/xxx"
+ *                   amount="100.00" currency="CNY"></arianna-alipay>
+ *
+ * Events:
+ *   arianna:payment-redirect  detail: { method: 'alipay', url: string }
+ *   arianna:payment-error     detail: { method: 'alipay', message: string }
+ *
+ * Attrs: mode, redirect-url, qr-url, amount, currency, target
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+export type AliPayMode = 'redirect' | 'qr-code';
 
-export interface AliPayOptions extends CtrlOptions
-{
-    /** Display mode. */
-    mode        : 'redirect' | 'qr';
-    /** For mode='redirect': URL to navigate to on click. */
+export interface AliPayOptions {
+    mode?       : AliPayMode;
     redirectUrl?: string;
-    /** For mode='qr': QR code image URL or data URL. */
-    qrCode?     : string;
-    /** Total amount (informational — actual charge is server-side). */
+    qrUrl?      : string;
     amount      : number;
-    /** ISO 4217 currency code. Default 'CNY'. */
-    currency?   : string;
-    /** Button label override. */
-    buttonLabel?: string;
-    /** Open the redirect in a new tab instead of replacing window. Default false. */
-    openInNewTab? : boolean;
-    /** Locale: 'zh' | 'en'. Default 'en'. */
-    locale?     : 'zh' | 'en';
+    currency    : string;
+    target?     : '_blank' | '_self';
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+const ALIPAY_LOGO = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="4" fill="#00a0e9"/><text x="12" y="16" text-anchor="middle" fill="#fff" font-family="-apple-system, sans-serif" font-weight="700" font-size="11">支</text></svg>`;
 
-export class AliPay extends Control<AliPayOptions>
+export class AliPay extends Component('arianna-alipay', HTMLElement, {}, {
+    attrs : ['mode', 'redirect-url', 'qr-url', 'amount', 'currency', 'target'],
+    shadow: false,
+})
 {
-    constructor(container: string | HTMLElement | null, opts: AliPayOptions)
+    build(_opts: AliPayOptions = {} as AliPayOptions)
     {
-        super(container, 'div', {
-            currency    : 'CNY',
-            openInNewTab: false,
-            locale      : 'en',
-            ...opts,
-        });
+        const modeAttr = this.attrSignal('mode');
+        const amountAttr = this.attrSignal('amount');
+        const currencyAttr = this.attrSignal('currency');
+        const qrUrlAttr = this.attrSignal('qr-url');
 
-        this.el.className = `ar-alipay${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
+        this.isQrMode = () => modeAttr.get() === 'qr-code';
+
+        this.btnLabel = () => {
+            const a = parseFloat(amountAttr.get() ?? '0') || 0;
+            const c = currencyAttr.get() ?? 'CNY';
+            return `Pay ${c} ${a.toFixed(2)} with Alipay`;
+        };
+
+        this.qrImgSrc = () => {
+            const url = qrUrlAttr.get() ?? '';
+            // Use Google Chart API to render QR if URL doesn't point to an image
+            if (/\.(png|jpe?g|gif|svg)(\?|$)/i.test(url)) return url;
+            return url
+                ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}`
+                : '';
+        };
+
+        this.onClick = () => { void this.pay(); };
+
+        this.template = html`
+            <div class="ar-alipay" a-if="!this.isQrMode()">
+                <button type="button" class="ar-alipay__btn" @click="this.onClick">
+                    <span class="ar-alipay__logo">${ALIPAY_LOGO}</span>
+                    <span>{{ this.btnLabel() }}</span>
+                </button>
+            </div>
+            <div class="ar-alipay ar-alipay--qr" a-if="this.isQrMode()">
+                <img class="ar-alipay__qr" :src="this.qrImgSrc()" alt="Alipay QR code"/>
+                <div class="ar-alipay__qr-hint">
+                    Scan with the Alipay app to pay
+                </div>
+                <div class="ar-alipay__qr-amount">{{ this.btnLabel() }}</div>
+            </div>
+        `;
+
+        this.Sheet = AliPay.DefaultSheet();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    /** Programmatically invoke the redirect (for mode='redirect' only). */
-    pay(): this
-    {
-        const url = this._get<string>('redirectUrl', '');
-        if (!url) { this._emit('error', { message: 'redirectUrl not configured' }); return this; }
-        this._emit('click', {});
-        if (this._get<boolean>('openInNewTab', false))
-            window.open(url, '_blank', 'noopener');
-        else
-            window.location.href = url;
-        return this;
-    }
-
-    // ── Internal ───────────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        const mode    = this._get<'redirect' | 'qr'>('mode', 'redirect');
-        const locale  = this._get<'zh' | 'en'>('locale', 'en');
-        const label   = this._get<string>('buttonLabel', '') || (locale === 'zh' ? '使用支付宝付款' : 'Pay with Alipay');
-
-        if (mode === 'qr')
-        {
-            const qr = this._get<string>('qrCode', '');
-            this.el.innerHTML = `
-<div class="ar-alipay__qr-wrap">
-  ${qr ? `<img class="ar-alipay__qr" src="${qr}" alt="Alipay QR">` : `<div class="ar-alipay__qr ar-alipay__qr--missing">QR code missing</div>`}
-  <div class="ar-alipay__qr-label">
-    <span class="ar-alipay__brand">${ALIPAY_LOGO}</span>
-    <span>${escapeHtml(locale === 'zh' ? '请使用支付宝扫描二维码' : 'Scan with Alipay')}</span>
-  </div>
-</div>`;
+    async pay(): Promise<void> {
+        const url = this.getAttribute('redirect-url');
+        if (!url) {
+            this.dispatchEvent(new CustomEvent('arianna:payment-error', {
+                bubbles: true, detail: { method: 'alipay', message: 'Missing redirect-url' },
+            }));
+            return;
         }
-        else
-        {
-            this.el.innerHTML = `
-<button class="ar-alipay__btn" data-r="btn" type="button">
-  <span class="ar-alipay__brand">${ALIPAY_LOGO}</span>
-  <span>${escapeHtml(label)}</span>
-</button>`;
-            this.el.querySelector<HTMLButtonElement>('[data-r="btn"]')?.addEventListener('click', () => this.pay());
-        }
-
-        this._emit('ready', { mode });
+        this.dispatchEvent(new CustomEvent('arianna:payment-redirect', {
+            bubbles: true, detail: { method: 'alipay', url },
+        }));
+        const target = (this.getAttribute('target') ?? '_self') as '_blank' | '_self';
+        if (target === '_self') window.location.href = url;
+        else window.open(url, '_blank', 'noopener');
     }
 
-    private _injectStyles(): void
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    private isQrMode: () => boolean = () => false;
+    private btnLabel: () => string = () => 'Pay with Alipay';
+    private qrImgSrc: () => string = () => '';
+    private onClick : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
     {
-        if (document.getElementById('ar-alipay-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-alipay-styles';
-        s.textContent = `
-.ar-alipay { display:inline-block; }
-.ar-alipay__btn { display:inline-flex; align-items:center; gap:8px; min-width:200px; padding:11px 20px; background:#1677ff; color:#fff; border:0; border-radius:6px; font:600 15px -apple-system,system-ui,sans-serif; cursor:pointer; transition:background .12s; }
-.ar-alipay__btn:hover { background:#0958d9; }
-.ar-alipay__brand { font:700 16px sans-serif; letter-spacing:.02em; }
-.ar-alipay__brand svg { display:block; height:18px; }
-.ar-alipay__qr-wrap { display:inline-flex; flex-direction:column; align-items:center; gap:10px; padding:16px; background:#fff; border:2px solid #1677ff; border-radius:8px; }
-.ar-alipay__qr { width:200px; height:200px; display:block; background:#f3f4f6; }
-.ar-alipay__qr--missing { display:flex; align-items:center; justify-content:center; color:#888; font:13px sans-serif; }
-.ar-alipay__qr-label { display:flex; align-items:center; gap:8px; font:13px sans-serif; color:#1677ff; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', { display: 'inline-block' }),
+                new Rule('.ar-alipay__btn', {
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    minWidth: '200px',
+                    minHeight: '44px',
+                    padding: '0 18px',
+                    background: '#00a0e9',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    font: '600 14px -apple-system, system-ui, sans-serif',
+                    transition: 'background 0.15s',
+                }),
+                new Rule('.ar-alipay__btn:hover', { background: '#0090d4' }),
+                new Rule('.ar-alipay__logo', {
+                    display: 'inline-flex',
+                    width: '22px', height: '22px',
+                }),
+                new Rule('.ar-alipay__logo svg', { width: '100%', height: '100%' }),
+                new Rule('.ar-alipay--qr', {
+                    display: 'inline-flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '14px',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 8px)',
+                }),
+                new Rule('.ar-alipay__qr', {
+                    width: '180px', height: '180px',
+                    display: 'block',
+                }),
+                new Rule('.ar-alipay__qr-hint', {
+                    fontSize: '11px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                }),
+                new Rule('.ar-alipay__qr-amount', {
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: 'var(--arianna-text, #1f2328)',
+                }),
+            ]
+        );
     }
 }
 
-const ALIPAY_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" aria-hidden="true">
-<rect width="32" height="32" rx="6" fill="#1677ff"/>
-<text x="16" y="22" text-anchor="middle" font-family="-apple-system,system-ui,sans-serif" font-size="14" font-weight="700" fill="#fff">支</text>
-</svg>`;
-
-function escapeHtml(s: string): string
-{
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'AliPay', {
+        value: AliPay, writable: false, enumerable: false, configurable: false,
+    });
 }
+
+export default AliPay;

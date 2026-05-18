@@ -1,15 +1,28 @@
 /**
  * @module    components/data
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
  *
- * Data-shaped widgets — surfaces that present collections of records:
- * tabular data (Table) and hierarchical data (TreeView). Note that
- * `Table` here is the data-oriented variant; `layout/Table` is the
- * grid-layout container with cells you populate manually.
+ * Barrel — data-shaped widgets: surfaces that present collections of records.
+ *   • Table     — tabular data (re-exports the canonical layout/Table)
+ *   • TreeView  — hierarchical data
  *
- *   import { Table, TreeView } from 'arianna/components/data';
+ * Importing this module side-effect-registers `arianna-tree-view`
+ * (the layout barrel already registers `arianna-table`).
+ *
+ * Tags registered:
+ *   arianna-tree-view, (arianna-table via layout/Table re-export)
  */
 
-export { Table    } from './Table.ts';
+export { Table }    from './Table.ts';
 export { TreeView } from './TreeView.ts';
+
+export type {
+    Row, SortDir, SortState, SelectMode,
+    TableColumn, TableOptions,
+} from './Table.ts';
+
+export type {
+    TreeNode, TreeViewOptions,
+} from './TreeView.ts';

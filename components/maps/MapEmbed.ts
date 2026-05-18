@@ -1,237 +1,307 @@
-// components/maps/MapEmbed.ts
-//
-// MapEmbed family — iframe-based map embedders with a unified API.
-// Each provider builds its own embed URL from a common set of options
-// (center, zoom, marker), so apps can swap providers transparently.
-//
-// Providers:
-//   • GoogleMap        — embed.google.com (no API key for the basic embed)
-//   • OpenStreetMap    — openstreetmap.org/export/embed.html
-//   • AppleMap         — maps.apple.com (renders only on Apple platforms;
-//                        elsewhere shows a deep-link fallback card)
-//   • BingMap          — bing.com/maps/embed (Microsoft Maps)
-//
-// All four extend MapEmbed and share .setLocation(), .setZoom(),
-// .setMarker(), .reload(), .getProvider().
+/**
+ * @module    components/maps/MapEmbed
+ * @author    Riccardo Angeli
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * MapEmbed — abstract base for the AriannA map embedder family.
+ *
+ * # Provider state (verified May 2026)
+ *
+ *   • GoogleMap    — works without API key via `/maps?q=...&output=embed`.
+ *                    Official Maps Embed API supported too (with key) for
+ *                    advanced modes: place / view / directions / streetview / search.
+ *   • OpenStreetMap — works via `openstreetmap.org/export/embed.html`. No key.
+ *   • AppleMap     — Apple Maps has NO public iframe-embed product. The web
+ *                    URL `maps.apple.com/?ll=...` is a deep-link, not an
+ *                    embeddable iframe; many third-party guides incorrectly
+ *                    suggest otherwise. AppleMap therefore renders a styled
+ *                    deep-link fallback card by default. For a true embed
+ *                    you must integrate MapKit JS (requires a developer JWT);
+ *                    pass `mapkit-token` to opt in.
+ *   • BingMap      — DEPRECATED. Bing Maps for Enterprise was retired for
+ *                    free tier on 30 Jun 2025, enterprise EOL 30 Jun 2028.
+ *                    Class still exists for backward compatibility but
+ *                    console-warns and recommends AzureMap as replacement.
+ *   • AzureMap     — Microsoft's current platform. Free tier needs a
+ *                    subscription key but uses standard `atlas.microsoft.com`
+ *                    REST tile endpoints — we render via static map URL.
+ *
+ * Each provider extends MapEmbed and shares `.setLocation()`, `.setZoom()`,
+ * `.setMarker()`, `.reload()`, `.getProvider()`. Subclasses implement
+ * `embedUrl()` + optionally override `openUrl()`.
+ *
+ * # The custom-element shape
+ *
+ * Concrete subclasses register their own tag (e.g. `arianna-google-map`).
+ * `MapEmbed` itself does NOT register a tag — it's an abstract bag.
+ *
+ * @example
+ *   <arianna-google-map center-lat="51.5072" center-lng="-0.1276" zoom="13" marker></arianna-google-map>
+ *   <arianna-osm-map address="Eiffel Tower, Paris" zoom="15"></arianna-osm-map>
+ *   <arianna-apple-map center-lat="40.7128" center-lng="-74.0060"></arianna-apple-map>
+ */
 
-import { Control } from '../core/Control';
-
-// ── Local typed view of the Control base class ──────────────────────────────
-// We don't depend on Control's own TS typings here (which vary across the
-// project tree); we declare the runtime contract we know exists, then cast
-// `this` to it whenever we touch an inherited member. Zero runtime cost.
-type ControlBase = Control & {
-    el        : HTMLElement;
-    _get<T = unknown>(key: string, fallback?: T): T;
-    _emit(type: string, detail?: unknown, ev?: Event): void;
-    _build(): void;
-};
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
 export interface LatLng { lat: number; lng: number; }
 
+export type MapProvider =
+    | 'google' | 'osm' | 'apple' | 'bing' | 'azure' | 'maplibre';
+
 export interface MapEmbedOptions {
-    /** Map center; default Greenwich (51.4779, -0.0015). */
-    center?  : LatLng;
-    /** Zoom level (1–20); default 13. */
-    zoom?    : number;
-    /** Place a marker at `center`. */
-    marker?  : boolean;
-    /** Optional text label shown over the marker (provider-dependent). */
-    label?   : string;
-    /** Optional human address (some providers prefer it to lat/lng). */
-    address? : string;
-    /** Aspect ratio; default '16/9'. Use 'square' or e.g. '4/3'. */
+    center?     : LatLng;
+    zoom?       : number;
+    marker?     : boolean;
+    label?      : string;
+    address?    : string;
     aspectRatio?: string;
-    /** Extra CSS class on the root. */
-    class?   : string;
 }
 
-export type MapProvider = 'google' | 'osm' | 'apple' | 'bing';
+const DEFAULT_CENTER: LatLng = { lat: 51.4779, lng: -0.0015 };  // Greenwich
 
-export abstract class MapEmbed extends Control {
-    protected _iframe!: HTMLIFrameElement;
-    protected _center : LatLng;
-    protected _zoom   : number;
-    protected _marker : boolean;
+/**
+ * Helper used by subclasses. Builds the abstract MapEmbed Component definition
+ * with the unified attribute set. Concrete subclasses pass their own tag.
+ */
+export function _mapEmbedBase(tag: string) {
+    return Component(tag, HTMLElement, {}, {
+        attrs : [
+            'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
+            'aspect-ratio', 'api-key', 'mapkit-token',
+        ],
+        shadow: false,
+    });
+}
 
-    constructor(container: HTMLElement | string, opts: MapEmbedOptions) {
-        super(container as HTMLElement, 'div', {
-            center     : { lat: 51.4779, lng: -0.0015 },
-            zoom       : 13,
-            marker     : true,
-            aspectRatio: '16/9',
-            ...opts,
-        });
-        const self = this as unknown as ControlBase;
-        this._center = self._get<LatLng>('center', { lat: 51.4779, lng: -0.0015 });
-        this._zoom   = self._get<number>('zoom', 13);
-        this._marker = self._get<boolean>('marker', true);
-        self.el.className = `ar-map ar-map--${this.getProvider()}${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
+/**
+ * MapEmbed — base class. Subclasses MUST override `getProvider()` and
+ * `embedUrl()`; may override `openUrl()` and `build()` for fallback states.
+ */
+export abstract class MapEmbed extends _mapEmbedBase('arianna-map-embed')
+{
+    build(_opts: MapEmbedOptions = {})
+    {
+        const centerLat   = this.attrSignal('center-lat');
+        const centerLng   = this.attrSignal('center-lng');
+        const zoom        = this.attrSignal('zoom');
+        const aspectRatio = this.attrSignal('aspect-ratio');
+
+        this.centerLatNum = () => parseFloat(centerLat.get() ?? String(DEFAULT_CENTER.lat));
+        this.centerLngNum = () => parseFloat(centerLng.get() ?? String(DEFAULT_CENTER.lng));
+        this.zoomNum      = () => parseInt(zoom.get() ?? '13', 10) || 13;
+        this.hasMarker    = () => this.getAttribute('marker') !== 'false';
+
+        this.stageStyle = () => {
+            const ar = aspectRatio.get() ?? '16/9';
+            return `aspect-ratio: ${ar}`;
+        };
+
+        this.providerBadge = () => this.getProvider().toUpperCase();
+
+        // Build URLs reactively — getEmbedUrl/getOpenUrl read attrs lazily,
+        // so any attribute change triggers a re-render.
+        this.iframeSrc = () => this.getEmbedUrl();
+        this.openHref  = () => this.getOpenUrl();
+
+        this.template = html`
+            <div class="ar-map__stage" :style="this.stageStyle()">
+                <iframe class="ar-map__iframe"
+                        :src="this.iframeSrc()"
+                        frameborder="0"
+                        loading="lazy"
+                        referrerpolicy="no-referrer-when-downgrade"
+                        allowfullscreen></iframe>
+            </div>
+            <div class="ar-map__chrome">
+                <span class="ar-map__badge">{{ this.providerBadge() }}</span>
+                <a class="ar-map__open"
+                   :href="this.openHref()"
+                   target="_blank"
+                   rel="noopener">Open ↗</a>
+            </div>
+        `;
+
+        this.Sheet = MapEmbed.DefaultSheet();
     }
 
-    // ── Abstract — each provider builds its own URL ────────────────────────
+    // ── Subclass contract ────────────────────────────────────────────────────
+
+    /** Provider identifier — must be unique per concrete subclass. */
     abstract getProvider(): MapProvider;
-    protected abstract _embedUrl(): string;
 
-    // ── Public API ─────────────────────────────────────────────────────────
-    setLocation(center: LatLng): this { this._center = { ...center }; this._refresh(); return this; }
-    setZoom(z: number)         : this { this._zoom = Math.max(1, Math.min(20, z)); this._refresh(); return this; }
-    setMarker(on: boolean)     : this { this._marker = on; this._refresh(); return this; }
-    reload()                   : this { this._refresh(); return this; }
-    getCenter()                : LatLng { return { ...this._center }; }
-    getZoom()                  : number { return this._zoom; }
+    /** Builds the iframe `src` URL from the current attributes. */
+    protected abstract getEmbedUrl(): string;
 
-    // ── Build + refresh ────────────────────────────────────────────────────
-    _build(): void {
-        const self = this as unknown as ControlBase;
-        const aspect = self._get<string>('aspectRatio', '16/9');
-        self.el.innerHTML = `
-<div class="ar-map__stage" style="aspect-ratio:${aspect}">
-  <iframe class="ar-map__iframe"
-          data-r="iframe"
-          frameborder="0"
-          loading="lazy"
-          referrerpolicy="no-referrer-when-downgrade"
-          allowfullscreen></iframe>
-</div>
-<div class="ar-map__chrome">
-  <span class="ar-map__badge">${this.getProvider().toUpperCase()}</span>
-  <a class="ar-map__open" data-r="open" target="_blank" rel="noopener">Open ↗</a>
-</div>`;
-        this._iframe = self.el.querySelector('[data-r="iframe"]') as HTMLIFrameElement;
-        this._refresh();
+    /** Public link in new tab. Default: Google Maps coords URL. */
+    protected getOpenUrl(): string {
+        return `https://www.google.com/maps/@${this.centerLatNum()},${this.centerLngNum()},${this.zoomNum()}z`;
     }
 
-    protected _refresh(): void {
-        if (!this._iframe) return;
-        const self = this as unknown as ControlBase;
-        this._iframe.src = this._embedUrl();
-        const open = self.el.querySelector('[data-r="open"]') as HTMLAnchorElement | null;
-        if (open) open.href = this._openUrl();
-    }
+    // ── Programmatic API (shared) ────────────────────────────────────────────
 
-    /** Public link in a new tab; subclasses may override. */
-    protected _openUrl(): string {
-        const { lat, lng } = this._center;
-        return `https://www.google.com/maps/@${lat},${lng},${this._zoom}z`;
+    setLocation(center: LatLng): this {
+        this.setAttribute('center-lat', String(center.lat));
+        this.setAttribute('center-lng', String(center.lng));
+        return this;
     }
+    setZoom(z: number): this {
+        this.setAttribute('zoom', String(Math.max(1, Math.min(20, z))));
+        return this;
+    }
+    setMarker(on: boolean): this {
+        this.setAttribute('marker', on ? 'true' : 'false');
+        return this;
+    }
+    reload(): this {
+        const iframe = this.querySelector<HTMLIFrameElement>('iframe.ar-map__iframe');
+        if (iframe) iframe.src = this.getEmbedUrl();
+        return this;
+    }
+    getCenter(): LatLng { return { lat: this.centerLatNum(), lng: this.centerLngNum() }; }
+    getZoom(): number   { return this.zoomNum(); }
 
-    protected _injectStyles(): void {
-        if (document.getElementById('ar-map-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-map-styles';
-        s.textContent = `
-.ar-map { position:relative; display:flex; flex-direction:column; background:#1e1e1e; border:1px solid #333; border-radius:8px; overflow:hidden; color:#d4d4d4; font:12px -apple-system,system-ui,sans-serif; }
-.ar-map__stage { position:relative; background:#0d0d0d; min-height:200px; }
-.ar-map__iframe { width:100%; height:100%; border:0; display:block; }
-.ar-map__chrome { display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:#161616; border-top:1px solid #333; }
-.ar-map__badge  { font:10px ui-monospace,monospace; letter-spacing:.08em; color:#e40c88; text-transform:uppercase; padding:2px 8px; border:1px solid rgba(228,12,136,.4); border-radius:10px; }
-.ar-map__open   { font:11px sans-serif; color:#d4d4d4; text-decoration:none; padding:3px 8px; border:1px solid #333; border-radius:3px; }
-.ar-map__open:hover { background:#2a2a2a; }
-.ar-map__fallback { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:24px; text-align:center; color:#888; }
-.ar-map__fallback a { color:#e40c88; text-decoration:none; font-weight:600; }
-@media (max-width: 600px) {
-  .ar-map__stage { min-height:160px; }
-  .ar-map__chrome { padding:4px 8px; }
-  .ar-map__badge  { font-size:9px; padding:1px 6px; }
-}
-`;
-        document.head.appendChild(s);
-    }
-}
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
 
-// ──────────────────────────────────────────────────────────────────────────
-// GoogleMap — uses google.com/maps?output=embed (no API key required)
-// ──────────────────────────────────────────────────────────────────────────
-export class GoogleMap extends MapEmbed {
-    getProvider(): MapProvider { return 'google'; }
-    protected _embedUrl(): string {
-        const { lat, lng } = this._center;
-        const q = (this as unknown as ControlBase)._get<string>('address', '');
-        const query = q ? encodeURIComponent(q) : `${lat},${lng}`;
-        return `https://www.google.com/maps?q=${query}&z=${this._zoom}&output=embed`;
-    }
-    protected _openUrl(): string {
-        const { lat, lng } = this._center;
-        return `https://www.google.com/maps/@${lat},${lng},${this._zoom}z`;
-    }
-}
+    // ── Attr getters/setters (typed) ────────────────────────────────────────
 
-// ──────────────────────────────────────────────────────────────────────────
-// OpenStreetMap — openstreetmap.org/export/embed.html
-// ──────────────────────────────────────────────────────────────────────────
-export class OpenStreetMap extends MapEmbed {
-    getProvider(): MapProvider { return 'osm'; }
-    protected _embedUrl(): string {
-        const { lat, lng } = this._center;
-        const span = 0.6 / Math.pow(2, this._zoom - 8);
-        const bbox = `${lng - span},${lat - span / 2},${lng + span},${lat + span / 2}`;
-        const layer = 'mapnik';
-        const marker = this._marker ? `&marker=${lat}%2C${lng}` : '';
-        return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=${layer}${marker}`;
-    }
-    protected _openUrl(): string {
-        const { lat, lng } = this._center;
-        return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=${this._zoom}/${lat}/${lng}`;
-    }
-}
+    get centerLat(): number  { return this.centerLatNum(); }
+    set centerLat(v: number) { this.setAttribute('center-lat', String(v)); }
 
-// ──────────────────────────────────────────────────────────────────────────
-// AppleMap — Apple Maps web embed (Apple platforms only).
-// On non-Apple browsers the iframe is replaced with a deep-link fallback card.
-// ──────────────────────────────────────────────────────────────────────────
-export class AppleMap extends MapEmbed {
-    getProvider(): MapProvider { return 'apple'; }
+    get centerLng(): number  { return this.centerLngNum(); }
+    set centerLng(v: number) { this.setAttribute('center-lng', String(v)); }
 
-    _build(): void {
-        super._build();
-        if (!this._isAppleCapable()) {
-            const self = this as unknown as ControlBase;
-            const stage = self.el.querySelector('.ar-map__stage') as HTMLElement | null;
-            if (stage) {
-                stage.innerHTML = `
-<div class="ar-map__fallback">
-  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.4">
-    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-    <circle cx="12" cy="10" r="3"/>
-  </svg>
-  <div>Apple Maps embeds render only on Apple platforms.</div>
-  <a data-r="open-fb" target="_blank" rel="noopener">Open in Apple Maps</a>
-</div>`;
-                const fb = stage.querySelector('[data-r="open-fb"]') as HTMLAnchorElement | null;
-                if (fb) fb.href = this._openUrl();
-            }
-        }
-    }
+    get zoom(): number       { return this.zoomNum(); }
+    set zoom(v: number)      { this.setAttribute('zoom', String(v)); }
 
-    protected _embedUrl(): string {
-        const { lat, lng } = this._center;
-        const q = (this as unknown as ControlBase)._get<string>('address', '');
-        const params: string[] = [`ll=${lat},${lng}`, `z=${this._zoom}`, 't=m'];
-        if (q) params.push(`q=${encodeURIComponent(q)}`);
-        return `https://maps.apple.com/?${params.join('&')}`;
-    }
-    protected _openUrl(): string { return this._embedUrl(); }
+    get marker(): boolean    { return this.hasMarker(); }
+    set marker(v: boolean)   { this.setAttribute('marker', v ? 'true' : 'false'); }
 
-    private _isAppleCapable(): boolean {
-        if (typeof navigator === 'undefined') return false;
-        return /(Macintosh|iPhone|iPad|iPod)/.test(navigator.userAgent);
-    }
-}
+    get address(): string    { return this.getAttribute('address') ?? ''; }
+    set address(v: string)   { v ? this.setAttribute('address', v) : this.removeAttribute('address'); }
 
-// ──────────────────────────────────────────────────────────────────────────
-// BingMap — Microsoft Bing Maps embed (no API key for basic map)
-// ──────────────────────────────────────────────────────────────────────────
-export class BingMap extends MapEmbed {
-    getProvider(): MapProvider { return 'bing'; }
-    protected _embedUrl(): string {
-        const { lat, lng } = this._center;
-        return `https://www.bing.com/maps/embed?h=400&w=600&cp=${lat}~${lng}&lvl=${this._zoom}&typ=d&sty=r&src=SHELL&FORM=MBEDV8`;
-    }
-    protected _openUrl(): string {
-        const { lat, lng } = this._center;
-        return `https://www.bing.com/maps?cp=${lat}~${lng}&lvl=${this._zoom}`;
+    get label(): string      { return this.getAttribute('label') ?? ''; }
+    set label(v: string)     { v ? this.setAttribute('label', v) : this.removeAttribute('label'); }
+
+    get apiKey(): string     { return this.getAttribute('api-key') ?? ''; }
+    set apiKey(v: string)    { v ? this.setAttribute('api-key', v) : this.removeAttribute('api-key'); }
+
+    // ── Template helpers (set in build) ─────────────────────────────────────
+
+    protected centerLatNum  : () => number = () => DEFAULT_CENTER.lat;
+    protected centerLngNum  : () => number = () => DEFAULT_CENTER.lng;
+    protected zoomNum       : () => number = () => 13;
+    protected hasMarker     : () => boolean = () => true;
+    protected stageStyle    : () => string = () => '';
+    protected providerBadge : () => string = () => '';
+    protected iframeSrc     : () => string = () => 'about:blank';
+    protected openHref      : () => string = () => '#';
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    background  : 'var(--arianna-bg-3, #f3f3f3)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 8px)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    display     : 'flex',
+                    flexDirection: 'column',
+                    fontFamily  : '-apple-system, system-ui, sans-serif',
+                    fontSize    : '12px',
+                    overflow    : 'hidden',
+                    position    : 'relative',
+                }),
+                new Rule('.ar-map__stage', {
+                    background: 'var(--arianna-bg-4, #ebebeb)',
+                    minHeight : '200px',
+                    position  : 'relative',
+                }),
+                new Rule('.ar-map__iframe', {
+                    border: '0',
+                    display: 'block',
+                    height: '100%',
+                    left  : '0',
+                    position: 'absolute',
+                    top   : '0',
+                    width : '100%',
+                }),
+                new Rule('.ar-map__chrome', {
+                    alignItems    : 'center',
+                    background    : 'var(--arianna-bg, #ffffff)',
+                    borderTop     : '1px solid var(--arianna-border, #d8d8d8)',
+                    display       : 'flex',
+                    justifyContent: 'space-between',
+                    padding       : '6px 10px',
+                }),
+                new Rule('.ar-map__badge', {
+                    border       : '1px solid var(--arianna-primary, #1f6feb)',
+                    borderRadius : '10px',
+                    color        : 'var(--arianna-primary, #1f6feb)',
+                    font         : '10px ui-monospace, monospace',
+                    letterSpacing: '0.08em',
+                    padding      : '2px 8px',
+                    textTransform: 'uppercase',
+                }),
+                new Rule('.ar-map__open', {
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: '3px',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    font        : '11px sans-serif',
+                    padding     : '3px 8px',
+                    textDecoration: 'none',
+                    transition  : 'background 0.14s ease',
+                }),
+                new Rule('.ar-map__open:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+
+                // Fallback card (used by AppleMap when MapKit token absent + by BingMap)
+                new Rule('.ar-map__fallback', {
+                    alignItems    : 'center',
+                    color         : 'var(--arianna-muted, #6e6b62)',
+                    display       : 'flex',
+                    flexDirection : 'column',
+                    gap           : '10px',
+                    height        : '100%',
+                    justifyContent: 'center',
+                    padding       : '24px',
+                    position      : 'absolute',
+                    inset         : '0',
+                    textAlign     : 'center',
+                }),
+                new Rule('.ar-map__fallback svg', { opacity: '0.4' }),
+                new Rule('.ar-map__fallback a', {
+                    color        : 'var(--arianna-primary, #1f6feb)',
+                    fontWeight   : '600',
+                    textDecoration: 'none',
+                }),
+                new Rule('.ar-map__fallback a:hover', { textDecoration: 'underline' }),
+
+                // Deprecation banner (used by BingMap)
+                new Rule('.ar-map__deprecation', {
+                    background : 'var(--arianna-warning-bg, #fff8e1)',
+                    borderBottom: '1px solid var(--arianna-warning, #f5a623)',
+                    color      : 'var(--arianna-warning-text, #7a4a00)',
+                    fontSize   : '11px',
+                    padding    : '6px 10px',
+                    textAlign  : 'center',
+                }),
+
+                new Rule('@media (max-width: 600px)', {
+                    '.ar-map__stage':  { minHeight: '160px' },
+                    '.ar-map__chrome': { padding: '4px 8px' },
+                    '.ar-map__badge':  { fontSize: '9px', padding: '1px 6px' },
+                } as never),
+            ]
+        );
     }
 }

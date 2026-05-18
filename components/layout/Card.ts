@@ -1,73 +1,140 @@
 /**
- * @module    Card
+ * @module    components/layout/Card
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
  *
- * Content card with optional header, body, footer, media.
+ * Card — container with optional header / body / footer slots. Supports an
+ * elevation tier (0..3) and an optional interactive (clickable) mode.
  *
- * @example
- *   const card = new Card('#root', { elevation: 2 });
- *   card.title   = 'Card Title';
- *   card.content = '<p>Body text</p>';
- *   card.footer  = '<button>Action</button>';
+ * Three layout strategies (in order of precedence):
+ *   1. Children with `slot="header"`, `slot="body"`, `slot="footer"` →
+ *      projected into the corresponding slot regions.
+ *   2. No slotted children + `title` attribute set → an automatic header
+ *      with the title text is generated.
+ *   3. Otherwise the children render into the default body slot.
+ *
+ * @example JS
+ *   const c = new Card();
+ *   c.title       = 'Welcome';
+ *   c.elevation   = 2;
+ *   c.interactive = true;
+ *   document.body.append(c);
+ *
+ * @example HTML
+ *   <arianna-card title="Settings" elevation="2">
+ *     <p slot="body">Body content</p>
+ *     <button slot="footer">Save</button>
+ *   </arianna-card>
+ *
+ * Events:
+ *   - arianna:click   fired when `interactive` and the card is clicked
+ *
+ * Slots:  header, body (default), footer
+ * Attrs:  title, elevation, interactive
  */
-import { Control } from '../core/Control.ts';
 
-export interface CardOptions { elevation?: 0|1|2|3; variant?: 'outlined'|'filled'|'ghost'; class?: string; }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-export class Card extends Control<CardOptions> {
-  private _title    = '';
-  private _subtitle = '';
-  private _media: string|HTMLElement = '';
-  private _content: string|HTMLElement = '';
-  private _footer: string|HTMLElement  = '';
-
-  constructor(container: string | HTMLElement | null = null, opts: CardOptions = {}) {
-    super(container, 'div', { elevation: 1, variant: 'outlined', ...opts });
-    this.el.className = `ar-card ar-card--${opts.variant??'outlined'} ar-card--e${opts.elevation??1}${opts.class?' '+opts.class:''}`;
-  }
-
-  set title(v: string)               { this._title = v;    this._set('title' as never, v as never); }
-  set subtitle(v: string)            { this._subtitle = v; this._set('subtitle' as never, v as never); }
-  set media(v: string|HTMLElement)   { this._media = v;    this._set('media' as never, v as never); }
-  set content(v: string|HTMLElement) { this._content = v;  this._set('content' as never, v as never); }
-  set footer(v: string|HTMLElement)  { this._footer = v;   this._set('footer' as never, v as never); }
-
-  protected _build() {
-    this.el.innerHTML = '';
-    if (this._media) {
-      const m = this._el('div', 'ar-card__media', this.el);
-      if (typeof this._media === 'string') m.innerHTML = this._media; else m.appendChild(this._media);
-    }
-    if (this._title || this._subtitle) {
-      const h = this._el('div', 'ar-card__header', this.el);
-      if (this._title)    { const t = this._el('div', 'ar-card__title',    h); t.textContent = this._title; }
-      if (this._subtitle) { const s = this._el('div', 'ar-card__subtitle', h); s.textContent = this._subtitle; }
-    }
-    if (this._content) {
-      const b = this._el('div', 'ar-card__body', this.el);
-      if (typeof this._content === 'string') b.innerHTML = this._content; else b.appendChild(this._content);
-    }
-    if (this._footer) {
-      const f = this._el('div', 'ar-card__footer', this.el);
-      if (typeof this._footer === 'string') f.innerHTML = this._footer; else f.appendChild(this._footer);
-    }
-  }
+export interface CardOptions {
+    title?       : string;
+    elevation?   : 0 | 1 | 2 | 3;
+    interactive? : boolean;
 }
 
-export const CardCSS = `
-.ar-card{background:var(--ar-bg2);border-radius:var(--ar-radius-lg);overflow:hidden;display:flex;flex-direction:column}
-.ar-card--outlined{border:1px solid var(--ar-border)}
-.ar-card--filled{background:var(--ar-bg3)}
-.ar-card--ghost{background:transparent}
-.ar-card--e0{}
-.ar-card--e1{box-shadow:0 1px 4px rgba(0,0,0,.2)}
-.ar-card--e2{box-shadow:0 4px 16px rgba(0,0,0,.3)}
-.ar-card--e3{box-shadow:0 8px 32px rgba(0,0,0,.4)}
-.ar-card__media img{width:100%;display:block}
-.ar-card__header{padding:14px 16px 4px}
-.ar-card__title{font-weight:600;font-size:.95rem}
-.ar-card__subtitle{color:var(--ar-muted);font-size:.78rem;margin-top:2px}
-.ar-card__body{padding:12px 16px;flex:1}
-.ar-card__footer{padding:10px 16px;border-top:1px solid var(--ar-border);display:flex;gap:8px;align-items:center}
-`;
+export class Card extends Component('arianna-card', HTMLElement, {}, {
+    attrs : ['title', 'elevation', 'interactive'],
+    shadow: false,
+})
+{
+    build(_opts: CardOptions = {})
+    {
+        const title = this.attrSignal('title');
+
+        this.hasTitle      = () => !!title.get();
+        this.titleText     = () => title.get() ?? '';
+        this.isInteractive = () => this.hasAttribute('interactive');
+        this.onCardClick   = () => {
+            if (!this.isInteractive()) return;
+            this.dispatchEvent(new CustomEvent('arianna:click', {
+                bubbles: true, detail: { source: this },
+            }));
+        };
+
+        this.template = html`
+            <header class="ar-card__header" a-if="this.hasTitle()">{{ this.titleText() }}</header>
+            <header class="ar-card__header"><slot name="header"></slot></header>
+            <section class="ar-card__body" @click="this.onCardClick"><slot></slot></section>
+            <footer class="ar-card__footer"><slot name="footer"></slot></footer>
+        `;
+
+        this.Sheet = Card.DefaultSheet();
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get title(): string  { return this.getAttribute('title') ?? ''; }
+    set title(v: string) { v ? this.setAttribute('title', v) : this.removeAttribute('title'); }
+
+    get elevation(): number  { return parseInt(this.getAttribute('elevation') ?? '0', 10); }
+    set elevation(v: number) { this.setAttribute('elevation', String(v)); }
+
+    get interactive(): boolean  { return this.hasAttribute('interactive'); }
+    set interactive(v: boolean) { v ? this.setAttribute('interactive', '') : this.removeAttribute('interactive'); }
+
+    private hasTitle     : () => boolean = () => false;
+    private titleText    : () => string = () => '';
+    private isInteractive: () => boolean = () => false;
+    private onCardClick  : () => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    background  : 'var(--arianna-bg, #ffffff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 8px)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    display     : 'block',
+                    overflow    : 'hidden',
+                    padding     : '0',
+                }),
+                new Rule(':root[elevation="1"]', { boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }),
+                new Rule(':root[elevation="2"]', { boxShadow: '0 2px 6px rgba(0,0,0,0.10)' }),
+                new Rule(':root[elevation="3"]', { boxShadow: '0 6px 18px rgba(0,0,0,0.14)' }),
+                new Rule(':root[interactive]',       { cursor: 'pointer', transition: 'transform 0.15s' }),
+                new Rule(':root[interactive]:hover', { transform: 'translateY(-1px)' }),
+                new Rule('.ar-card__header', {
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    fontWeight  : '600',
+                    padding     : '10px 14px',
+                }),
+                new Rule('.ar-card__header:empty', { display: 'none' }),
+                new Rule('.ar-card__body',   { padding: '12px 14px' }),
+                new Rule('.ar-card__footer', {
+                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                    padding  : '10px 14px',
+                }),
+                new Rule('.ar-card__footer:empty', { display: 'none' }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Card', {
+        value: Card, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default Card;

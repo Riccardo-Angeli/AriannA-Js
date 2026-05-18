@@ -1,11 +1,39 @@
 /**
  * @module    Context
  * @author    Riccardo Angeli
- * @version   1.2.0
+ * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026
  *
- * Context per AriannA — elimina il property drilling.
- * Signal integrati — ctx.asSignal() reagisce automaticamente a ctx.update().
+ * Scoped DOM Context — eliminates prop drilling, with nearest-provider
+ * resolution via DOM ancestry.
+ *
+ * # Model
+ *
+ *   const ThemeCtx = new Context<{ primary: string }>('theme');
+ *
+ *   // Provider — owns a value, exposes it to descendants:
+ *   ThemeCtx.provide(parentEl, { primary: '#1f6feb' });
+ *
+ *   // Consumer — finds nearest ancestor that provides this key:
+ *   const handle = ThemeCtx.consume(childEl);
+ *   handle.value;         // { primary: '#1f6feb' }
+ *   handle.signal();      // Signal<T | undefined> — reactive
+ *
+ *   // Mutate at provider:
+ *   ThemeCtx.update(parentEl, { primary: '#ff3aa1' });
+ *
+ * # Important changes from v1
+ *
+ * v1 Context used a GLOBAL registry keyed by string. Two parts of the page
+ * with the same `key` would collide.
+ *
+ * v2 Context stores values PER-PROVIDER on the provider Element itself (via
+ * WeakMap<Element, Map<key, value>>). Consumers walk the DOM ancestor chain
+ * to find the NEAREST provider for the requested key.
+ *
+ * The legacy `new Context('key', value)` global form still works for code
+ * that does not need scoping — it falls back to a single window-rooted
+ * provider.
  */
 
 import { uuid, signal } from './Observable.ts';
@@ -22,18 +50,17 @@ export interface ContextEvent<T = unknown>
 interface ConsumerHandle<T>
 {
     readonly value : T | undefined;
-    /** Signal reattivo — aggiornato automaticamente da Context.update(). */
+    /** Reactive Signal — updated automatically by Context.update(). */
     signal(): Signal<T | undefined>;
     on(types: string, cb: (e: ContextEvent<T>) => void): ConsumerHandle<T>;
     off(type: string, cb: (e: ContextEvent<T>) => void): ConsumerHandle<T>;
     detach(): void;
 }
 
-interface ContextRecord<T>
+interface ProviderRecord<T>
 {
     value     : T | undefined;
     $signal   : Signal<T | undefined>;
-    providers : Set<Element>;
     consumers : Set<ConsumerRecord<T>>;
 }
 
@@ -42,18 +69,47 @@ interface ConsumerRecord<T>
     id      : string;
     element : Element;
     events  : Map<string, Set<(e: ContextEvent<T>) => void>>;
+    provider: Element | null;
 }
 
-const _registry = new Map<string, ContextRecord<unknown>>();
+const PROVIDER_MAP: WeakMap<Element, Map<string, ProviderRecord<unknown>>> = new WeakMap();
+const GLOBAL_RECORDS: Map<string, ProviderRecord<unknown>> = new Map();
 
-function _get<T>(key: string): ContextRecord<T>
+function _ensureProviderMap(provider: Element): Map<string, ProviderRecord<unknown>>
 {
-    if (!_registry.has(key))
-        _registry.set(key, { value: undefined, $signal: signal<T | undefined>(undefined), providers: new Set(), consumers: new Set() });
-    return _registry.get(key) as ContextRecord<T>;
+    let m = PROVIDER_MAP.get(provider);
+    if (!m) { m = new Map(); PROVIDER_MAP.set(provider, m); }
+    return m;
 }
 
-function _fire<T>(record: ContextRecord<T>, key: string, nv: T, old: T | undefined): void
+function _makeRecord<T>(): ProviderRecord<T>
+{
+    return {
+        value     : undefined,
+        $signal   : signal<T | undefined>(undefined),
+        consumers : new Set(),
+    };
+}
+
+function _globalRec<T>(key: string): ProviderRecord<T>
+{
+    if (!GLOBAL_RECORDS.has(key)) GLOBAL_RECORDS.set(key, _makeRecord());
+    return GLOBAL_RECORDS.get(key) as ProviderRecord<T>;
+}
+
+function _findProvider(consumer: Element, key: string): { provider: Element | null; rec: ProviderRecord<unknown> | null }
+{
+    let cur: Element | null = consumer;
+    while (cur) {
+        const m = PROVIDER_MAP.get(cur);
+        const r = m?.get(key);
+        if (r) return { provider: cur, rec: r };
+        cur = cur.parentElement;
+    }
+    return { provider: null, rec: null };
+}
+
+function _fire<T>(record: ProviderRecord<T>, key: string, nv: T, old: T | undefined): void
 {
     record.$signal.set(nv);
     const ev: ContextEvent<T> = { Type: 'Context-Changed', Key: key, Value: nv, Old: old };
@@ -63,82 +119,142 @@ function _fire<T>(record: ContextRecord<T>, key: string, nv: T, old: T | undefin
     }
 }
 
+
 export class Context<T = unknown>
 {
     readonly #key : string;
-    readonly #rec : ContextRecord<T>;
+    #boundProvider: Element | null = null;
 
     constructor(key: string, value?: T)
     {
         this.#key = key;
-        this.#rec = _get<T>(key);
-        if (value !== undefined) { this.#rec.value = value; this.#rec.$signal.set(value); }
+        if (value !== undefined) {
+            const rec = _globalRec<T>(key);
+            rec.value = value;
+            rec.$signal.set(value);
+        }
     }
 
-    get key(): string          { return this.#key; }
-    get value(): T | undefined { return this.#rec.value; }
+    get key(): string { return this.#key; }
 
     /**
-     * Espone il valore come Signal reattivo.
-     * Gli Effect che lo leggono reagiscono automaticamente a update().
-     * @example
-     *   const $theme = ThemeCtx.asSignal();
-     *   real.style('background', () => $theme.get()?.primary ?? 'gray');
+     * Read scoped to a consumer location. Walks ancestors to find nearest
+     * provider for this key. If none, returns undefined unless a legacy
+     * global value was set.
      */
-    asSignal(): Signal<T | undefined> { return this.#rec.$signal; }
-
-    provide(element: Element): this
+    valueFor(consumer?: Element): T | undefined
     {
-        this.#rec.providers.add(element);
-        element.addEventListener('arianna:context-request', (e: Event) => {
-            const ce = e as CustomEvent<{ key: string; resolve: (v: unknown) => void }>;
-            if (ce.detail.key === this.#key) { ce.stopPropagation(); ce.detail.resolve(this.#rec.value); }
-        });
+        if (consumer) {
+            const { rec } = _findProvider(consumer, this.#key);
+            if (rec) return rec.value as T | undefined;
+        }
+        return _globalRec<T>(this.#key).value;
+    }
+
+    /** Legacy accessor — most recent globally-set value. */
+    get value(): T | undefined { return _globalRec<T>(this.#key).value; }
+
+    /**
+     * Global reactive Signal. For scoped reactivity, use `Context.consume(child).signal()`.
+     */
+    asSignal(): Signal<T | undefined> { return _globalRec<T>(this.#key).$signal; }
+
+    /**
+     * Provide a scoped value rooted at `element`. Descendant consumers will
+     * resolve this value (unless a closer ancestor also provides the same key).
+     */
+    provide(element: Element, value?: T): this
+    {
+        this.#boundProvider = element;
+        const m = _ensureProviderMap(element);
+        let rec = m.get(this.#key);
+        if (!rec) { rec = _makeRecord<T>() as ProviderRecord<unknown>; m.set(this.#key, rec); }
+        if (value !== undefined) {
+            const old = rec.value as T | undefined;
+            rec.value = value;
+            (rec as ProviderRecord<T>).$signal.set(value);
+            if (!Object.is(old, value)) _fire(rec as ProviderRecord<T>, this.#key, value, old);
+            const g = _globalRec<T>(this.#key);
+            g.value = value;
+            g.$signal.set(value);
+        }
         return this;
     }
 
-    update(value: T): this
+    update(value: T, element?: Element): this
     {
-        const old = this.#rec.value;
-        if (Object.is(old, value)) return this;
-        this.#rec.value = value;
-        _fire(this.#rec, this.#key, value, old);
+        const target = element ?? this.#boundProvider;
+        if (target) {
+            const m = _ensureProviderMap(target);
+            let rec = m.get(this.#key);
+            if (!rec) { rec = _makeRecord<T>() as ProviderRecord<unknown>; m.set(this.#key, rec); }
+            const old = rec.value as T | undefined;
+            if (Object.is(old, value)) return this;
+            rec.value = value;
+            (rec as ProviderRecord<T>).$signal.set(value);
+            _fire(rec as ProviderRecord<T>, this.#key, value, old);
+        }
+        const g = _globalRec<T>(this.#key);
+        const oldG = g.value as T | undefined;
+        if (!Object.is(oldG, value)) {
+            g.value = value;
+            g.$signal.set(value);
+            _fire(g as ProviderRecord<T>, this.#key, value, oldG);
+        }
         return this;
     }
 
     destroy(): void
-    { this.#rec.providers.clear(); this.#rec.consumers.clear(); _registry.delete(this.#key); }
-
-    static consume<T>(key: string, element: Element): ConsumerHandle<T>
     {
-        const rec = _get<T>(key);
-        const cr: ConsumerRecord<T> = { id: uuid(), element, events: new Map() };
-        rec.consumers.add(cr);
+        if (this.#boundProvider) {
+            const m = PROVIDER_MAP.get(this.#boundProvider);
+            if (m) m.delete(this.#key);
+        }
+        GLOBAL_RECORDS.delete(this.#key);
+    }
 
-        let resolved = false;
-        element.dispatchEvent(new CustomEvent('arianna:context-request', {
-            bubbles: true, composed: true,
-            detail: { key, resolve: (v: unknown) => { if (!resolved) { resolved = true; rec.value = v as T; rec.$signal.set(v as T); } } },
-        }));
+    /**
+     * Consume a context from a child element's perspective. Walks DOM
+     * ancestors to find the nearest provider.
+     */
+    static consume<T>(key: string, element: Element, opts?: { closest?: boolean }): ConsumerHandle<T>
+    {
+        const closest = opts?.closest !== false;
+        const { provider, rec: scoped } = _findProvider(element, key);
+        const rec = (scoped ?? (closest ? null : _globalRec<T>(key))) as ProviderRecord<T> | null;
+        const cr: ConsumerRecord<T> = { id: uuid(), element, events: new Map(), provider };
+        if (rec) rec.consumers.add(cr);
 
         const handle: ConsumerHandle<T> = {
-            get value() { return rec.value; },
-            signal()    { return rec.$signal; },
-            on(types, cb) { types.split(/\s+|,|\|/g).filter(Boolean).forEach(t => { const b = cr.events.get(t) ?? new Set(); b.add(cb); cr.events.set(t, b); }); return handle; },
-            off(type, cb) { cr.events.get(type)?.forEach(l => l === cb && cr.events.get(type)!.delete(l)); return handle; },
-            detach() { rec.consumers.delete(cr); },
+            get value() { return rec ? rec.value : undefined; },
+            signal()    { return (rec ?? _globalRec<T>(key)).$signal; },
+            on(types, cb) {
+                types.split(/\s+|,|\|/g).filter(Boolean).forEach(t => {
+                    const b = cr.events.get(t) ?? new Set();
+                    b.add(cb);
+                    cr.events.set(t, b);
+                });
+                return handle;
+            },
+            off(type, cb) {
+                cr.events.get(type)?.forEach(l => l === cb && cr.events.get(type)!.delete(l));
+                return handle;
+            },
+            detach() { if (rec) rec.consumers.delete(cr); },
         };
         return handle;
     }
 
-    static has(key: string, element: Element): boolean
+    static has(key: string, element?: Element): boolean
     {
-        let found = false;
-        element.dispatchEvent(new CustomEvent('arianna:context-request', { bubbles: true, composed: true, detail: { key, resolve: () => { found = true; } } }));
-        return found;
+        if (element) {
+            const { rec } = _findProvider(element, key);
+            if (rec) return true;
+        }
+        return GLOBAL_RECORDS.has(key);
     }
 
-    static keys(): string[] { return Array.from(_registry.keys()); }
+    static keys(): string[] { return Array.from(GLOBAL_RECORDS.keys()); }
 }
 
 if (typeof window !== 'undefined')

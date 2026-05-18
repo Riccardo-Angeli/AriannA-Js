@@ -1,213 +1,270 @@
-// components/layout/Dock.ts
-//
-// Dock — desktop launcher in two visual styles:
-//   • 'macos'    — bottom-centred floating dock with magnification on hover,
-//                  separator before trash, running-app dots under icons.
-//   • 'windows'  — bottom-pinned taskbar, start button on the left, system
-//                  tray on the right, flat icon tiles with active underline.
-//
-// Public API:
-//   • new Dock(container, opts)
-//   • addItem(item), removeItem(id), updateItem(id, patch), clearItems()
-//   • setStyle('macos'|'windows'), setItems(items)
-//   • setRunning(id, on), setBadge(id, count), setActive(id)
-//   • on('item-click'|'item-context'|'start'|'tray-click', cb)
+/**
+ * @module    components/layout/Dock
+ * @author    Riccardo Angeli
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Dock — desktop launcher in two visual styles:
+ *   • 'macos'    — bottom-centred floating dock with magnification on hover,
+ *                  separator before trash, running-app dots under icons.
+ *   • 'windows'  — bottom-pinned taskbar, start button on the left, system
+ *                  tray on the right, flat icon tiles with active underline.
+ *
+ * @example JS
+ *   const d = new Dock();
+ *   d.style = 'macos';
+ *   d.items = [
+ *     { id: 'finder', label: 'Finder', icon: '📁', running: true },
+ *     { id: 'mail',   label: 'Mail',   icon: '✉️',  badge: 3 },
+ *     { id: 'trash',  label: 'Trash',  icon: '🗑️',  separator: true },
+ *   ];
+ *
+ * @example HTML
+ *   <arianna-dock style="windows" start-label="Start"></arianna-dock>
+ *
+ * Events:
+ *   - arianna:item-click     detail: { id, item }
+ *   - arianna:item-context   detail: { id, item, x, y }
+ *   - arianna:start          (windows only)
+ *   - arianna:tray-click     detail: { id, item }
+ *
+ * Slots:  (none — programmatic items only)
+ * Attrs:  style ('macos' | 'windows'), magnify, position ('bottom'|'left'|'right'), start-label
+ */
 
-import { Control } from '../core/Control';
-
-// Local typed view of Control — keeps this file independent of the exact
-// TS shape of Control.ts elsewhere in the project.
-type ControlBase = Control & {
-    el        : HTMLElement;
-    _get<T = unknown>(key: string, fallback?: T): T;
-    _emit(type: string, detail?: unknown, ev?: Event): void;
-    _build(): void;
-};
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
 export type DockStyle = 'macos' | 'windows';
 
 export interface DockItem {
-    id      : string;
-    label   : string;
-    /** Inline SVG, an emoji, or an image URL. */
-    icon    : string;
-    /** Currently running / app open. */
-    running?: boolean;
-    /** Currently focused / active window. */
-    active? : boolean;
-    /** Notification badge count. */
-    badge?  : number;
-    /** Place after a separator (macOS-only conventionally for Trash). */
+    id        : string;
+    label     : string;
+    icon      : string;   // emoji, inline SVG, image URL, or text
+    running?  : boolean;
+    active?   : boolean;
+    badge?    : number;
     separator?: boolean;
-    /** Free-form payload. */
-    meta?   : unknown;
+    meta?     : unknown;
 }
 
 export interface DockOptions {
     style?      : DockStyle;
     items?      : DockItem[];
-    /** macOS only: magnification factor on hover (1.0 = off, default 1.6). */
     magnify?    : number;
-    /** Position; default 'bottom'. macOS supports 'left' and 'right' too. */
     position?   : 'bottom' | 'left' | 'right';
-    /** Windows only: text shown on the start button (or '' for icon only). */
     startLabel? : string;
-    /** Windows only: system tray content (icons/badges, right side). */
     tray?       : DockItem[];
-    /** Extra CSS class. */
-    class?      : string;
 }
 
-export class Dock extends Control {
-    private _style    : DockStyle;
-    private _items    : DockItem[] = [];
-    private _tray     : DockItem[] = [];
-    private _elTrack! : HTMLElement;
-    private _elStart? : HTMLElement;
-    private _elTray?  : HTMLElement;
+interface RenderedIcon {
+    type : 'svg' | 'img' | 'text';
+    value: string;
+}
 
-    constructor(container: HTMLElement | string, opts: DockOptions = {}) {
-        super(container as HTMLElement, 'div', {
-            style      : 'macos',
-            magnify    : 1.6,
-            position   : 'bottom',
-            startLabel : '',
-            ...opts,
-        });
-        this._style = (this as unknown as ControlBase)._get<DockStyle>('style', 'macos');
-        for (const it of opts.items ?? []) this._items.push({ ...it });
-        for (const it of opts.tray  ?? []) this._tray.push({ ...it });
-        this._injectStyles();
-        this._build();
-        this._render();
+function classifyIcon(icon: string): RenderedIcon
+{
+    const trim = icon.trim();
+    if (trim.startsWith('<svg')) return { type: 'svg', value: trim };
+    if (trim.startsWith('http') || trim.startsWith('/') || trim.startsWith('data:')) {
+        return { type: 'img', value: trim };
     }
+    return { type: 'text', value: trim };
+}
 
-    // ── Public API ─────────────────────────────────────────────────────────
-    setStyle(s: DockStyle)         : this { this._style = s; this._build(); this._render(); return this; }
-    getStyle()                     : DockStyle { return this._style; }
-    setItems(items: DockItem[])    : this { this._items = items.map(i => ({ ...i })); this._render(); return this; }
-    getItems()                     : DockItem[] { return this._items.map(i => ({ ...i })); }
-    addItem(item: DockItem)        : this { this._items.push({ ...item }); this._render(); return this; }
-    removeItem(id: string)         : this { this._items = this._items.filter(i => i.id !== id); this._render(); return this; }
-    updateItem(id: string, patch: Partial<DockItem>): this {
-        const i = this._items.findIndex(x => x.id === id);
-        if (i >= 0) { this._items[i] = { ...this._items[i], ...patch }; this._render(); }
-        return this;
-    }
-    clearItems()                   : this { this._items = []; this._render(); return this; }
-    setRunning(id: string, on: boolean): this { return this.updateItem(id, { running: on }); }
-    setBadge(id: string, n: number)    : this { return this.updateItem(id, { badge: n > 0 ? n : undefined }); }
-    setActive(id: string)              : this {
-        this._items = this._items.map(i => ({ ...i, active: i.id === id }));
-        this._render();
-        return this;
-    }
+export class Dock extends Component('arianna-dock', HTMLElement, {}, {
+    attrs : ['variant', 'magnify', 'position', 'start-label'],
+    shadow: false,
+})
+{
+    items$ : Signal<DockItem[]> = signal<DockItem[]>([]);
+    tray$  : Signal<DockItem[]> = signal<DockItem[]>([]);
+    clock$ : Signal<{ time: string; date: string }> = signal({ time: '', date: '' });
 
-    // ── Build ──────────────────────────────────────────────────────────────
-    _build(): void {
-        const self = this as unknown as ControlBase;
-        const pos = self._get<string>('position', 'bottom');
-        self.el.className = `ar-dock ar-dock--${this._style} ar-dock--${pos}`;
-        if (this._style === 'macos') {
-            self.el.innerHTML = `<div class="ar-dock__track" data-r="track"></div>`;
-            this._elTrack = self.el.querySelector('[data-r="track"]') as HTMLElement;
-            this._elTrack.addEventListener('pointermove', (e: PointerEvent) => this._magnify(e));
-            this._elTrack.addEventListener('pointerleave', () => this._unmagnify());
-        } else {
-            const startLabel = self._get<string>('startLabel', '');
-            self.el.innerHTML = `
-<button class="ar-dock__start" data-r="start" title="Start" aria-label="Start">
-  <span class="ar-dock__start-icon" aria-hidden="true">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="3"  y="3"  width="8" height="8"/><rect x="13" y="3"  width="8" height="8"/><rect x="3"  y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>
-  </span>
-  ${startLabel ? `<span class="ar-dock__start-label">${startLabel}</span>` : ''}
-</button>
-<div class="ar-dock__track" data-r="track"></div>
-<div class="ar-dock__tray" data-r="tray"></div>`;
-            this._elTrack = self.el.querySelector('[data-r="track"]') as HTMLElement;
-            this._elStart = self.el.querySelector('[data-r="start"]') as HTMLElement;
-            this._elTray  = self.el.querySelector('[data-r="tray"]')  as HTMLElement;
-            this._elStart.addEventListener('click', () => self._emit('start', {}));
-        }
-        // Microtask flush in Control may run _build a second time without our
-        // subsequent render — re-paint here so items always stay visible.
-        if (this._items.length) this._render();
-    }
+    #clockInterval = 0;
 
-    // ── Render ─────────────────────────────────────────────────────────────
-    private _render(): void {
-        if (!this._elTrack) return;
-        const self = this as unknown as ControlBase;
-        this._elTrack.innerHTML = '';
-        for (const it of this._items) {
-            if (it.separator) {
-                const sep = document.createElement('div');
-                sep.className = 'ar-dock__sep';
-                this._elTrack.appendChild(sep);
-            }
-            this._elTrack.appendChild(this._renderItem(it));
-        }
-        if (this._elTray) {
-            this._elTray.innerHTML = '';
-            for (const t of this._tray) this._elTray.appendChild(this._renderItem(t, true));
-            const clock = document.createElement('div');
-            clock.className = 'ar-dock__clock';
-            const tick = () => {
-                const d = new Date();
-                clock.innerHTML = `<div class="ar-dock__time">${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</div><div class="ar-dock__date">${d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: 'numeric' })}</div>`;
-            };
-            tick();
-            const id = setInterval(tick, 60_000);
-            (clock as unknown as { _intervalId: number })._intervalId = id;
-            this._elTray.appendChild(clock);
-        }
-        // Silence "self may be unused if no tray" — we still want the reference
-        // so subclasses or future hooks can use it.
-        void self;
-    }
+    build(_opts: DockOptions = {})
+    {
+        const styleAttr = this.attrSignal('variant');
+        const startLabel = this.attrSignal('start-label');
 
-    private _renderItem(it: DockItem, tray: boolean = false): HTMLElement {
-        const self = this as unknown as ControlBase;
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'ar-dock__item'
-            + (it.active  ? ' ar-dock__item--active'  : '')
-            + (it.running ? ' ar-dock__item--running' : '')
-            + (tray       ? ' ar-dock__item--tray'    : '');
-        btn.dataset.id = it.id;
-        btn.title = it.label;
-        btn.setAttribute('aria-label', it.label);
-        const icon = this._renderIcon(it.icon);
-        const badge = it.badge && it.badge > 0
-            ? `<span class="ar-dock__badge">${it.badge > 99 ? '99+' : it.badge}</span>` : '';
-        btn.innerHTML = `<span class="ar-dock__icon">${icon}</span>${badge}<span class="ar-dock__dot" aria-hidden="true"></span><span class="ar-dock__tooltip">${it.label}</span>`;
-        btn.addEventListener('click', () => self._emit(tray ? 'tray-click' : 'item-click', { id: it.id, item: { ...it } }));
-        btn.addEventListener('contextmenu', (e: MouseEvent) => {
+        this.dockStyle    = () => (styleAttr.get() ?? 'macos') as DockStyle;
+        this.isMacOS      = () => this.dockStyle() === 'macos';
+        this.isWindows    = () => this.dockStyle() === 'windows';
+        this.startBtnLabel = () => startLabel.get() ?? '';
+
+        this.allItems = () => this.items$.get();
+        this.trayItems = () => this.tray$.get();
+
+        this.iconCls = (icon: string) => {
+            const k = classifyIcon(icon);
+            return k.type === 'svg' ? 'ar-dock__icon ar-dock__icon--svg'
+                 : k.type === 'img' ? 'ar-dock__icon ar-dock__icon--img'
+                 :                     'ar-dock__icon ar-dock__icon--emoji';
+        };
+        this.iconHtml = (icon: string) => {
+            const k = classifyIcon(icon);
+            if (k.type === 'svg') return k.value;
+            if (k.type === 'img') return `<img src="${k.value}" alt="" draggable="false">`;
+            return `<span class="ar-dock__emoji">${k.value}</span>`;
+        };
+
+        this.itemCls = (it: DockItem, tray: boolean = false) => {
+            const parts = ['ar-dock__item'];
+            if (it.active)  parts.push('ar-dock__item--active');
+            if (it.running) parts.push('ar-dock__item--running');
+            if (tray)       parts.push('ar-dock__item--tray');
+            return parts.join(' ');
+        };
+
+        this.hasBadge   = (it: DockItem) => typeof it.badge === 'number' && it.badge > 0;
+        this.badgeText  = (it: DockItem) => (it.badge ?? 0) > 99 ? '99+' : String(it.badge ?? 0);
+        this.isSeparator = (it: DockItem) => !!it.separator;
+        this.notSeparator = (it: DockItem) => !it.separator;
+
+        this.onItemClick = (it: DockItem, e: Event) => {
+            this.dispatchEvent(new CustomEvent('arianna:item-click', {
+                bubbles: true, detail: { id: it.id, item: { ...it } },
+            }));
+            // Defensive: prevent event from being caught by other handlers
+            e.stopPropagation();
+        };
+        this.onTrayClick = (it: DockItem, e: Event) => {
+            this.dispatchEvent(new CustomEvent('arianna:tray-click', {
+                bubbles: true, detail: { id: it.id, item: { ...it } },
+            }));
+            e.stopPropagation();
+        };
+        this.onItemContext = (it: DockItem, e: Event) => {
             e.preventDefault();
-            self._emit('item-context', { id: it.id, item: { ...it }, x: e.clientX, y: e.clientY });
-        });
-        return btn;
+            const me = e as MouseEvent;
+            this.dispatchEvent(new CustomEvent('arianna:item-context', {
+                bubbles: true,
+                detail : { id: it.id, item: { ...it }, x: me.clientX, y: me.clientY },
+            }));
+        };
+        this.onStart = () => {
+            this.dispatchEvent(new CustomEvent('arianna:start', {
+                bubbles: true, detail: {},
+            }));
+        };
+
+        this.onPointerMove = (e: Event) => {
+            if (!this.isMacOS()) return;
+            this.#magnify(e as PointerEvent);
+        };
+        this.onPointerLeave = () => {
+            if (!this.isMacOS()) return;
+            this.#unmagnify();
+        };
+
+        this.clockTime = () => this.clock$.get().time;
+        this.clockDate = () => this.clock$.get().date;
+
+        this.template = html`
+            <!-- macOS layout -->
+            <div class="ar-dock__track ar-dock__track--macos"
+                 a-if="this.isMacOS()"
+                 @pointermove="this.onPointerMove"
+                 @pointerleave="this.onPointerLeave">
+                <div class="ar-dock__sep" a-for="it in this.allItems()" a-if="this.isSeparator(it)"></div>
+                <button :class="this.itemCls(it)"
+                        a-for="it in this.allItems()"
+                        a-if="this.notSeparator(it)"
+                        :title="it.label"
+                        :aria-label="it.label"
+                        @click="(e) => this.onItemClick(it, e)"
+                        @contextmenu="(e) => this.onItemContext(it, e)">
+                    <span :class="this.iconCls(it.icon)" a-html="this.iconHtml(it.icon)"></span>
+                    <span class="ar-dock__badge" a-if="this.hasBadge(it)">{{ this.badgeText(it) }}</span>
+                    <span class="ar-dock__dot" aria-hidden="true"></span>
+                    <span class="ar-dock__tooltip">{{ it.label }}</span>
+                </button>
+            </div>
+
+            <!-- Windows layout -->
+            <button class="ar-dock__start"
+                    a-if="this.isWindows()"
+                    @click="this.onStart"
+                    aria-label="Start"
+                    title="Start">
+                <span class="ar-dock__start-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="3"  y="3"  width="8" height="8"/>
+                        <rect x="13" y="3"  width="8" height="8"/>
+                        <rect x="3"  y="13" width="8" height="8"/>
+                        <rect x="13" y="13" width="8" height="8"/>
+                    </svg>
+                </span>
+                <span class="ar-dock__start-label" a-if="this.startBtnLabel()">{{ this.startBtnLabel() }}</span>
+            </button>
+            <div class="ar-dock__track ar-dock__track--windows" a-if="this.isWindows()">
+                <button :class="this.itemCls(it)"
+                        a-for="it in this.allItems()"
+                        a-if="this.notSeparator(it)"
+                        :title="it.label"
+                        :aria-label="it.label"
+                        @click="(e) => this.onItemClick(it, e)"
+                        @contextmenu="(e) => this.onItemContext(it, e)">
+                    <span :class="this.iconCls(it.icon)" a-html="this.iconHtml(it.icon)"></span>
+                    <span class="ar-dock__badge" a-if="this.hasBadge(it)">{{ this.badgeText(it) }}</span>
+                    <span class="ar-dock__dot" aria-hidden="true"></span>
+                </button>
+            </div>
+            <div class="ar-dock__tray" a-if="this.isWindows()">
+                <button :class="this.itemCls(it, true)"
+                        a-for="it in this.trayItems()"
+                        :title="it.label"
+                        :aria-label="it.label"
+                        @click="(e) => this.onTrayClick(it, e)">
+                    <span :class="this.iconCls(it.icon)" a-html="this.iconHtml(it.icon)"></span>
+                </button>
+                <div class="ar-dock__clock">
+                    <div class="ar-dock__time">{{ this.clockTime() }}</div>
+                    <div class="ar-dock__date">{{ this.clockDate() }}</div>
+                </div>
+            </div>
+        `;
+
+        this.Sheet = Dock.DefaultSheet();
     }
 
-    private _renderIcon(icon: string): string {
-        const trim = icon.trim();
-        if (trim.startsWith('<svg')) return trim;
-        if (trim.startsWith('http') || trim.startsWith('/') || trim.startsWith('data:')) {
-            return `<img src="${trim}" alt="" draggable="false">`;
-        }
-        return `<span class="ar-dock__emoji">${trim}</span>`;
+    set items(v: DockItem[]) { this.items$.set(v ?? []); }
+    get items(): DockItem[]  { return this.items$.get(); }
+
+    set tray(v: DockItem[]) { this.tray$.set(v ?? []); }
+    get tray(): DockItem[]  { return this.tray$.get(); }
+
+    addItem(item: DockItem): this { this.items$.set([...this.items$.get(), item]); return this; }
+    removeItem(id: string): this  { this.items$.set(this.items$.get().filter(i => i.id !== id)); return this; }
+    updateItem(id: string, patch: Partial<DockItem>): this {
+        this.items$.set(this.items$.get().map(i => i.id === id ? { ...i, ...patch } : i));
+        return this;
+    }
+    clearItems(): this { this.items$.set([]); return this; }
+
+    setRunning(id: string, on: boolean): this { return this.updateItem(id, { running: on }); }
+    setBadge(id: string, n: number): this     { return this.updateItem(id, { badge: n > 0 ? n : undefined }); }
+    setActive(id: string): this {
+        this.items$.set(this.items$.get().map(i => ({ ...i, active: i.id === id })));
+        return this;
     }
 
-    // ── macOS magnification ────────────────────────────────────────────────
-    private _magnify(e: PointerEvent): void {
-        if (this._style !== 'macos') return;
-        const factor = (this as unknown as ControlBase)._get<number>('magnify', 1.6);
+    #magnify(e: PointerEvent): void
+    {
+        const track = this.querySelector<HTMLElement>('.ar-dock__track--macos');
+        if (!track) return;
+        const factor = parseFloat(this.getAttribute('magnify') ?? '1.6') || 1.6;
         if (factor <= 1) return;
-        const rect = this._elTrack.getBoundingClientRect();
+        const rect = track.getBoundingClientRect();
         const x = e.clientX - rect.left;
-        const items = this._elTrack.querySelectorAll<HTMLElement>('.ar-dock__item');
+        const items = track.querySelectorAll<HTMLElement>('.ar-dock__item');
         const radius = 80;
-        items.forEach((it: HTMLElement) => {
+        items.forEach(it => {
             const ir = it.getBoundingClientRect();
             const center = ir.left - rect.left + ir.width / 2;
             const dist = Math.abs(x - center);
@@ -216,79 +273,282 @@ export class Dock extends Control {
             it.style.transform = `scale(${scale.toFixed(3)})`;
         });
     }
-    private _unmagnify(): void {
-        if (this._style !== 'macos') return;
-        this._elTrack.querySelectorAll<HTMLElement>('.ar-dock__item').forEach((it: HTMLElement) => {
+
+    #unmagnify(): void
+    {
+        const track = this.querySelector<HTMLElement>('.ar-dock__track--macos');
+        if (!track) return;
+        track.querySelectorAll<HTMLElement>('.ar-dock__item').forEach(it => {
             it.style.transform = '';
         });
     }
 
-    // ── Styles ─────────────────────────────────────────────────────────────
-    private _injectStyles(): void {
-        if (document.getElementById('ar-dock-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-dock-styles';
-        s.textContent = `
-.ar-dock { position:relative; display:flex; align-items:center; user-select:none; font:13px -apple-system,system-ui,sans-serif; box-sizing:border-box; }
-.ar-dock__track { display:flex; align-items:flex-end; gap:6px; padding:6px 10px; }
-.ar-dock__item { position:relative; background:none; border:0; padding:0; cursor:pointer; display:flex; flex-direction:column; align-items:center; transform-origin:bottom center; transition:transform .12s ease-out; }
-.ar-dock__icon { display:flex; align-items:center; justify-content:center; }
-.ar-dock__icon svg, .ar-dock__icon img { width:100%; height:100%; display:block; pointer-events:none; }
-.ar-dock__emoji { font-size:32px; line-height:1; }
-.ar-dock__tooltip { position:absolute; bottom:calc(100% + 8px); background:#111; color:#fff; padding:3px 8px; font:11px sans-serif; border-radius:4px; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .12s; }
-.ar-dock__item:hover .ar-dock__tooltip { opacity:1; }
-.ar-dock__badge { position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 4px; background:#ef4444; color:#fff; border-radius:8px; font:600 10px sans-serif; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px #161616; }
-.ar-dock__dot { position:absolute; width:4px; height:4px; border-radius:50%; opacity:0; transition:opacity .12s; }
-.ar-dock__item--running .ar-dock__dot { opacity:1; }
+    #startClock(): void
+    {
+        const tick = () => {
+            const d = new Date();
+            this.clock$.set({
+                time: d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+                date: d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: 'numeric' }),
+            });
+        };
+        tick();
+        this.#clockInterval = window.setInterval(tick, 60_000);
+    }
 
-/* macOS style — translucent floating dock */
-.ar-dock--macos { background:rgba(28, 28, 30, 0.6); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border-radius:18px; border:1px solid rgba(255,255,255,.08); padding:0; height:78px; }
-.ar-dock--macos .ar-dock__item { width:56px; height:62px; }
-.ar-dock--macos .ar-dock__icon { width:48px; height:48px; border-radius:11px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,.4); background:linear-gradient(135deg, #2a2a2c 0%, #1c1c1e 100%); }
-.ar-dock--macos .ar-dock__emoji { font-size:36px; }
-.ar-dock--macos .ar-dock__sep { width:1px; height:48px; background:rgba(255,255,255,.18); margin:0 4px; align-self:center; }
-.ar-dock--macos .ar-dock__dot { bottom:0; background:#d4d4d4; }
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount() {
+        // Start clock if windows style — restart on style change
+        if (this.dockStyle() === 'windows') this.#startClock();
+    }
+    onBeforeUpdate()  {}
+    onUpdate() {
+        // If style changed to windows and clock wasn't running, start it
+        if (this.dockStyle() === 'windows' && this.#clockInterval === 0) this.#startClock();
+        if (this.dockStyle() !== 'windows' && this.#clockInterval !== 0) {
+            clearInterval(this.#clockInterval);
+            this.#clockInterval = 0;
+        }
+    }
+    onBeforeUnmount() {}
+    onUnmount() {
+        if (this.#clockInterval !== 0) {
+            clearInterval(this.#clockInterval);
+            this.#clockInterval = 0;
+        }
+    }
 
-/* Windows style — flat bottom taskbar */
-.ar-dock--windows { background:rgba(32, 32, 36, 0.92); backdrop-filter:blur(40px); -webkit-backdrop-filter:blur(40px); height:48px; padding:0 4px; gap:4px; border-top:1px solid rgba(255,255,255,.04); }
-.ar-dock--windows .ar-dock__start { display:flex; align-items:center; gap:6px; background:transparent; border:0; color:#d4d4d4; height:40px; padding:0 12px; border-radius:6px; cursor:pointer; transition:background .12s; }
-.ar-dock--windows .ar-dock__start:hover { background:rgba(255,255,255,.08); }
-.ar-dock--windows .ar-dock__start-icon { display:flex; align-items:center; justify-content:center; color:#60a5fa; }
-.ar-dock--windows .ar-dock__start-label { font:13px sans-serif; }
-.ar-dock--windows .ar-dock__track { flex:1; padding:0 4px; gap:2px; align-items:center; height:48px; overflow:hidden; }
-.ar-dock--windows .ar-dock__item { width:40px; height:40px; flex-direction:column; justify-content:center; border-radius:6px; transition:background .12s; }
-.ar-dock--windows .ar-dock__item:hover { background:rgba(255,255,255,.08); }
-.ar-dock--windows .ar-dock__item--active { background:rgba(255,255,255,.12); }
-.ar-dock--windows .ar-dock__icon { width:22px; height:22px; }
-.ar-dock--windows .ar-dock__emoji { font-size:20px; }
-.ar-dock--windows .ar-dock__dot { bottom:2px; height:3px; width:16px; border-radius:2px; background:#60a5fa; }
-.ar-dock--windows .ar-dock__item--running.ar-dock__item--active .ar-dock__dot { width:24px; }
-.ar-dock--windows .ar-dock__tray { display:flex; align-items:center; gap:4px; padding:0 8px 0 4px; height:48px; border-left:1px solid rgba(255,255,255,.04); }
-.ar-dock--windows .ar-dock__item--tray { width:28px; height:28px; }
-.ar-dock--windows .ar-dock__item--tray .ar-dock__icon { width:18px; height:18px; }
-.ar-dock--windows .ar-dock__item--tray .ar-dock__emoji { font-size:16px; }
-.ar-dock--windows .ar-dock__clock { display:flex; flex-direction:column; align-items:flex-end; padding:0 8px; font:11px sans-serif; color:#d4d4d4; line-height:1.2; cursor:default; }
-.ar-dock--windows .ar-dock__clock:hover { background:rgba(255,255,255,.08); }
-.ar-dock--windows .ar-dock__time { font-weight:500; }
-.ar-dock--windows .ar-dock__date { font-size:10px; opacity:.85; }
-.ar-dock--windows .ar-dock__sep { display:none; }
+    // ── Attr getters / setters ───────────────────────────────────────────────
 
-@media (max-width: 600px) {
-  .ar-dock--macos { height:64px; border-radius:14px; }
-  .ar-dock--macos .ar-dock__item { width:44px; height:50px; }
-  .ar-dock--macos .ar-dock__icon { width:38px; height:38px; border-radius:9px; }
-  .ar-dock--macos .ar-dock__emoji { font-size:28px; }
-  .ar-dock--windows { height:42px; }
-  .ar-dock--windows .ar-dock__item { width:34px; height:34px; }
-  .ar-dock--windows .ar-dock__icon { width:18px; height:18px; }
-  .ar-dock--windows .ar-dock__emoji { font-size:16px; }
-  .ar-dock--windows .ar-dock__start-label { display:none; }
-  .ar-dock--windows .ar-dock__tray .ar-dock__item--tray { width:24px; height:24px; }
-  .ar-dock--windows .ar-dock__clock { font-size:10px; padding:0 4px; }
-  .ar-dock--windows .ar-dock__date { display:none; }
-  .ar-dock__tooltip { display:none; }
-}
-`;
-        document.head.appendChild(s);
+    get variant(): DockStyle  { return (this.getAttribute('variant') ?? 'macos') as DockStyle; }
+    set variant(v: DockStyle) { this.setAttribute('variant', v); }
+
+    get magnify(): number  { return parseFloat(this.getAttribute('magnify') ?? '1.6'); }
+    set magnify(v: number) { this.setAttribute('magnify', String(v)); }
+
+    get position(): 'bottom' | 'left' | 'right' { return (this.getAttribute('position') ?? 'bottom') as never; }
+    set position(v: 'bottom' | 'left' | 'right') { this.setAttribute('position', v); }
+
+    get startLabel(): string  { return this.getAttribute('start-label') ?? ''; }
+    set startLabel(v: string) { v ? this.setAttribute('start-label', v) : this.removeAttribute('start-label'); }
+
+    // ── Template helpers ─────────────────────────────────────────────────────
+
+    private dockStyle     : () => DockStyle = () => 'macos';
+    private isMacOS       : () => boolean = () => true;
+    private isWindows     : () => boolean = () => false;
+    private startBtnLabel : () => string  = () => '';
+    private allItems      : () => DockItem[] = () => [];
+    private trayItems     : () => DockItem[] = () => [];
+    private iconCls       : (icon: string) => string = () => '';
+    private iconHtml      : (icon: string) => string = () => '';
+    private itemCls       : (it: DockItem, tray?: boolean) => string = () => '';
+    private hasBadge      : (it: DockItem) => boolean = () => false;
+    private badgeText     : (it: DockItem) => string  = () => '';
+    private isSeparator   : (it: DockItem) => boolean = () => false;
+    private notSeparator  : (it: DockItem) => boolean = () => true;
+    private onItemClick   : (it: DockItem, e: Event) => void = () => {};
+    private onTrayClick   : (it: DockItem, e: Event) => void = () => {};
+    private onItemContext : (it: DockItem, e: Event) => void = () => {};
+    private onStart       : () => void = () => {};
+    private onPointerMove : (e: Event) => void = () => {};
+    private onPointerLeave: (e?: Event) => void = () => {};
+    private clockTime     : () => string = () => '';
+    private clockDate     : () => string = () => '';
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    position  : 'relative',
+                    display   : 'flex',
+                    alignItems: 'center',
+                    userSelect: 'none',
+                    font      : '13px -apple-system, system-ui, sans-serif',
+                    boxSizing : 'border-box',
+                }),
+                new Rule(':root[variant="macos"]', {
+                    background           : 'rgba(28, 28, 30, 0.6)',
+                    backdropFilter       : 'blur(20px)',
+                    'WebkitBackdropFilter': 'blur(20px)',
+                    borderRadius         : '18px',
+                    border               : '1px solid rgba(255,255,255,0.08)',
+                    padding              : '0',
+                    height               : '78px',
+                }),
+                new Rule(':root[variant="windows"]', {
+                    background           : 'rgba(32, 32, 36, 0.92)',
+                    backdropFilter       : 'blur(40px)',
+                    'WebkitBackdropFilter': 'blur(40px)',
+                    height               : '48px',
+                    padding              : '0 4px',
+                    gap                  : '4px',
+                    borderTop            : '1px solid rgba(255,255,255,0.04)',
+                }),
+
+                // Track + items
+                new Rule('.ar-dock__track', {
+                    display   : 'flex',
+                    alignItems: 'flex-end',
+                    gap       : '6px',
+                    padding   : '6px 10px',
+                }),
+                new Rule('.ar-dock__track--windows', {
+                    flex      : '1', padding: '0 4px', gap: '2px',
+                    alignItems: 'center', height: '48px', overflow: 'hidden',
+                }),
+                new Rule('.ar-dock__item', {
+                    position    : 'relative',
+                    background  : 'none',
+                    border      : '0',
+                    padding     : '0',
+                    cursor      : 'pointer',
+                    display     : 'flex',
+                    flexDirection: 'column',
+                    alignItems  : 'center',
+                    transformOrigin: 'bottom center',
+                    transition  : 'transform 0.12s ease-out',
+                }),
+
+                // macOS sizes
+                new Rule(':root[variant="macos"] .ar-dock__item', { width: '56px', height: '62px' }),
+                new Rule(':root[variant="macos"] .ar-dock__icon', {
+                    width       : '48px', height: '48px', borderRadius: '11px',
+                    overflow    : 'hidden', boxShadow: '0 4px 10px rgba(0,0,0,0.4)',
+                    background  : 'linear-gradient(135deg, #2a2a2c 0%, #1c1c1e 100%)',
+                    display     : 'flex', alignItems: 'center', justifyContent: 'center',
+                }),
+                new Rule(':root[variant="macos"] .ar-dock__icon .ar-dock__emoji, :root[variant="macos"] .ar-dock__icon--emoji', {
+                    fontSize: '36px',
+                }),
+                new Rule(':root[variant="macos"] .ar-dock__sep', {
+                    width   : '1px',
+                    height  : '48px',
+                    background: 'rgba(255,255,255,0.18)',
+                    margin  : '0 4px',
+                    alignSelf: 'center',
+                }),
+                new Rule(':root[variant="macos"] .ar-dock__dot', {
+                    bottom: '0', background: '#d4d4d4',
+                }),
+
+                // Windows sizes
+                new Rule(':root[variant="windows"] .ar-dock__start', {
+                    display    : 'flex', alignItems: 'center', gap: '6px',
+                    background : 'transparent', border: '0',
+                    color      : '#d4d4d4', height: '40px', padding: '0 12px',
+                    borderRadius: '6px', cursor: 'pointer',
+                    transition : 'background 0.12s ease',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__start:hover', {
+                    background: 'rgba(255,255,255,0.08)',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__start-icon', {
+                    display     : 'flex', alignItems: 'center', justifyContent: 'center',
+                    color       : '#60a5fa',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__start-label', {
+                    font: '13px sans-serif',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__item', {
+                    width      : '40px', height: '40px',
+                    flexDirection: 'column', justifyContent: 'center',
+                    borderRadius: '6px',
+                    transition : 'background 0.12s ease',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__item:hover', {
+                    background: 'rgba(255,255,255,0.08)',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__item--active', {
+                    background: 'rgba(255,255,255,0.12)',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__icon', { width: '22px', height: '22px' }),
+                new Rule(':root[variant="windows"] .ar-dock__emoji, :root[variant="windows"] .ar-dock__icon--emoji', {
+                    fontSize: '20px',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__dot', {
+                    bottom: '2px', height: '3px', width: '16px',
+                    borderRadius: '2px', background: '#60a5fa',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__item--running.ar-dock__item--active .ar-dock__dot', {
+                    width: '24px',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__tray', {
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    padding: '0 8px 0 4px', height: '48px',
+                    borderLeft: '1px solid rgba(255,255,255,0.04)',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__item--tray', {
+                    width: '28px', height: '28px',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__item--tray .ar-dock__icon', {
+                    width: '18px', height: '18px',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__item--tray .ar-dock__emoji', { fontSize: '16px' }),
+                new Rule(':root[variant="windows"] .ar-dock__clock', {
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+                    padding: '0 8px', font: '11px sans-serif',
+                    color  : '#d4d4d4', lineHeight: '1.2', cursor: 'default',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__time', { fontWeight: '500' }),
+                new Rule(':root[variant="windows"] .ar-dock__date', { fontSize: '10px', opacity: '0.85' }),
+
+                // Shared item internals
+                new Rule('.ar-dock__icon', {
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }),
+                new Rule('.ar-dock__icon svg, .ar-dock__icon img', {
+                    width: '100%', height: '100%', display: 'block', pointerEvents: 'none',
+                }),
+                new Rule('.ar-dock__emoji', { fontSize: '32px', lineHeight: '1' }),
+                new Rule('.ar-dock__tooltip', {
+                    position    : 'absolute',
+                    bottom      : 'calc(100% + 8px)',
+                    background  : '#111',
+                    color       : '#fff',
+                    padding     : '3px 8px',
+                    font        : '11px sans-serif',
+                    borderRadius: '4px',
+                    whiteSpace  : 'nowrap',
+                    pointerEvents: 'none',
+                    opacity     : '0',
+                    transition  : 'opacity 0.12s ease',
+                }),
+                new Rule(':root[variant="windows"] .ar-dock__tooltip', { display: 'none' }),
+                new Rule('.ar-dock__item:hover .ar-dock__tooltip', { opacity: '1' }),
+                new Rule('.ar-dock__badge', {
+                    position    : 'absolute',
+                    top         : '-2px',
+                    right       : '-2px',
+                    minWidth    : '16px',
+                    height      : '16px',
+                    padding     : '0 4px',
+                    background  : 'var(--arianna-danger, #cf222e)',
+                    color       : '#fff',
+                    borderRadius: '8px',
+                    font        : '600 10px sans-serif',
+                    display     : 'flex',
+                    alignItems  : 'center',
+                    justifyContent: 'center',
+                    boxShadow   : '0 0 0 2px #161616',
+                }),
+                new Rule('.ar-dock__dot', {
+                    position: 'absolute', width: '4px', height: '4px',
+                    borderRadius: '50%', opacity: '0',
+                    transition: 'opacity 0.12s ease',
+                }),
+                new Rule('.ar-dock__item--running .ar-dock__dot', { opacity: '1' }),
+            ]
+        );
     }
 }
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Dock', {
+        value: Dock, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default Dock;

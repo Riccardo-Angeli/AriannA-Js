@@ -27,7 +27,7 @@
  *   │        ↑                                                    │
  *   │       Sheet ← Rule                                          │
  *   │        ↑                                                    │
- *   │       Stylesheet                                            │
+ *   │       Sheet                                                 │
  *   │        ↑                                                    │
  *   │       Context ← Directive                                   │
  *   └─────────────────────────────────────────────────────────────┘
@@ -63,6 +63,9 @@ export interface TypeDescriptor
     Standard    : boolean;
     Custom      : boolean;
     Style       : Record<string, string>;
+    /** The factory built by Namespace.Define — `new`-able to produce an instance. */
+    Factory?    : new (...args: unknown[]) => Element;
+    /** Called by Core.Observer when an element is added via markup. */
     Update?     : (element: Element) => void;
 }
 
@@ -248,6 +251,75 @@ export function RegisterNamespace(key: string, ns: NamespaceDescriptor): void
         return;
     }
     Namespaces[key] = ns;
+
+    // Populate fast-lookup indexes (Map/WeakMap) so GetDescriptor becomes O(1)
+    // regardless of namespace + interface count.
+    const std = ns.types?.standard;
+    const cst = ns.types?.custom;
+    if (std) {
+        for (const ifaceName of Object.keys(std.interfaces ?? {})) {
+            _indexInterface(ifaceName, std.interfaces[ifaceName]);
+        }
+        for (const tag of Object.keys(std.tags ?? {})) {
+            _indexTag(tag, std.tags[tag]);
+        }
+    }
+    if (cst) {
+        for (const ifaceName of Object.keys(cst.interfaces ?? {})) {
+            _indexInterface(ifaceName, cst.interfaces[ifaceName]);
+        }
+        for (const tag of Object.keys(cst.tags ?? {})) {
+            _indexTag(tag, cst.tags[tag]);
+        }
+    }
+}
+
+// ── Fast-lookup indexes (Map/WeakMap) ─────────────────────────────────────────
+//
+// Three indexes used by GetDescriptor for O(1) lookups, populated by
+// RegisterNamespace (for standard interfaces) and IndexCustom (called from
+// Namespace.Define when a Custom descriptor is registered).
+//
+// • _tagIndex   — Map<lowercase tag, descriptor>
+// • _nameIndex  — Map<interface name (any case), descriptor>
+// • _ctorIndex  — WeakMap<Function, descriptor>
+//
+// WeakMap keys are constructors — they can be GC'd if user code drops its
+// references to a custom class, freeing the descriptor too. Good for hot
+// module reload.
+
+const _tagIndex  : Map<string, TypeDescriptor>       = new Map();
+const _nameIndex : Map<string, TypeDescriptor>       = new Map();
+const _ctorIndex : WeakMap<Function, TypeDescriptor> = new WeakMap();
+
+function _indexInterface(ifaceName: string, d: TypeDescriptor): void
+{
+    if (!d) return;
+    _nameIndex.set(ifaceName, d);
+    _nameIndex.set(ifaceName.toLowerCase(), d);
+    if (d.Constructor) _ctorIndex.set(d.Constructor as Function, d);
+    if (d.Interface && d.Interface !== d.Constructor) {
+        _ctorIndex.set(d.Interface as Function, d);
+    }
+    for (const t of (d.Tags ?? [])) _tagIndex.set(t.toLowerCase(), d);
+}
+
+function _indexTag(tag: string, d: TypeDescriptor): void
+{
+    if (!d) return;
+    _tagIndex.set(tag.toLowerCase(), d);
+}
+
+/**
+ * Index a freshly-created Custom descriptor. Called by Namespace.Define
+ * immediately after the descriptor is added to namespace.Custom.{Interfaces,Tags}.
+ * Keeps Core's fast-lookup indexes in sync so GetDescriptor stays O(1).
+ */
+export function IndexCustom(d: TypeDescriptor): void
+{
+    if (!d) return;
+    if (d.Name) _indexInterface(d.Name, d);
+    for (const t of (d.Tags ?? [])) _indexTag(t, d);
 }
 
 // ── Type descriptor registry ──────────────────────────────────────────────────
@@ -270,9 +342,33 @@ export function GetDescriptor(
 {
     if (!obj) return false;
 
-    let key: string;
     const t = typeof obj;
 
+    // ── Fast-path lookups via Map / WeakMap (O(1)) ────────────────────────
+    if (t === 'string') {
+        const k = (obj as string).toLowerCase();
+        const hit = _tagIndex.get(k) ?? _nameIndex.get(k);
+        if (hit) return hit;
+    }
+    else if (t === 'function') {
+        const ctorHit = _ctorIndex.get(obj as Function);
+        if (ctorHit) return ctorHit;
+        const name = (obj as { name?: string }).name;
+        if (name) {
+            const nameHit = _nameIndex.get(name) ?? _nameIndex.get(name.toLowerCase());
+            if (nameHit) return nameHit;
+        }
+    }
+    else if (obj instanceof Node) {
+        const k = obj.nodeName.toLowerCase();
+        const hit = _tagIndex.get(k);
+        if (hit) return hit;
+    }
+
+    // ── Slow-path fallback (scan all namespaces) ──────────────────────────
+    // Used when an interface isn't yet in the indexes (very early bootstrap)
+    // or for plain objects with a Tag property.
+    let key: string;
     if (t === 'string') {
         key = (obj as string).toLowerCase();
     } else if (t === 'function') {
@@ -282,7 +378,6 @@ export function GetDescriptor(
         key = obj.nodeName.toLowerCase();
     } else
     {
-        // Plain object — look for a Tag property
         const o = obj as Record<string, unknown>;
         const tagKey = Object.keys(o).find(k => k.toUpperCase() === 'TAG');
         if (!tagKey) return false;
@@ -295,8 +390,6 @@ export function GetDescriptor(
         const std = ns.types.standard;
         const cst = ns.types.custom;
 
-        // Fast path: exact key match.
-        // Tags are always lowercase; interface keys are PascalCase.
         const found =
             std.tags[key]        ??
             std.interfaces[key]  ??
@@ -305,11 +398,6 @@ export function GetDescriptor(
 
         if (found) return found;
 
-        // Slow path — only for constructor lookups.
-        // When `obj` is a function, `key` is obj.name.toLowerCase() (e.g. "htmldivelement")
-        // but interface keys are PascalCase ("HTMLDivElement"), so we scan:
-        //   1. lowercase name match
-        //   2. direct Constructor / Interface reference match (most reliable)
         if (typeof obj === 'function') {
             for (const k of Object.keys(std.interfaces))
             {
@@ -324,6 +412,65 @@ export function GetDescriptor(
         }
     }
     return false;
+}
+
+// ── Convenience query helpers (mirror Golem v1 Component.Types.Get*) ──────────
+
+/**
+ * Returns `descriptor.Type`: "STANDARD" | "CUSTOM" | "INVALID".
+ * Mirrors `Component.Types.GetType` from the v1 Golem sources.
+ */
+export function GetType(obj: Parameters<typeof GetDescriptor>[0]): string
+{
+    const d = GetDescriptor(obj);
+    return d ? (d.Type ?? 'INVALID') : 'INVALID';
+}
+
+/**
+ * Returns `descriptor.Constructor` — the user's class/function for Custom types,
+ * or the native IDL interface (HTMLDivElement, SVGSVGElement…) for Standard.
+ * Mirrors `Component.Types.GetConstructor`.
+ */
+export function GetConstructor(obj: Parameters<typeof GetDescriptor>[0]): (new (...a: never[]) => Element) | undefined
+{
+    const d = GetDescriptor(obj);
+    return d && d.Constructor ? d.Constructor as new (...a: never[]) => Element : undefined;
+}
+
+/**
+ * Returns `descriptor.Interface` — the first native IDL super class
+ * (e.g. HTMLDivElement for a custom <my-div>).
+ * Mirrors `Component.Types.GetInterface`.
+ */
+export function GetInterface(obj: Parameters<typeof GetDescriptor>[0]): (new (...a: never[]) => Element) | undefined
+{
+    const d = GetDescriptor(obj);
+    return d && d.Interface ? d.Interface as new (...a: never[]) => Element : undefined;
+}
+
+/**
+ * Returns `descriptor.Tags` — every tag name that resolves to this type.
+ * Mirrors `Component.Types.GetTags`.
+ */
+export function GetTags(obj: Parameters<typeof GetDescriptor>[0]): string[]
+{
+    const d = GetDescriptor(obj);
+    return d && d.Tags ? d.Tags : [];
+}
+
+/**
+ * Returns the descriptor's owning Namespace descriptor.
+ *
+ * When called with a namespace key string ('html', 'svg', 'mathML', 'x3d')
+ * directly, returns that namespace by key. Otherwise it resolves to a
+ * descriptor first and then returns descriptor.Namespace.
+ * Mirrors `Component.Types.GetNamespace`.
+ */
+export function GetNamespace(obj: Parameters<typeof GetDescriptor>[0]): NamespaceDescriptor | undefined
+{
+    if (typeof obj === 'string' && Namespaces[obj]) return Namespaces[obj];
+    const d = GetDescriptor(obj);
+    return d && d.Namespace ? d.Namespace : undefined;
 }
 
 /**
@@ -356,25 +503,59 @@ export function Define(
     constructor : new (...args: unknown[]) => Element,
     base        : new (...args: unknown[]) => Element = HTMLElement,
     style       : Record<string, string> = {},
-): TypeDescriptor | false
+): new (...args: unknown[]) => Element
 {
     const ct = tag.toLowerCase();
 
-    // Already registered? Return existing descriptor (idempotent).
-    const existing = GetDescriptor(ct);
-    if (existing)
+    // ── Introspect base from `class X extends Y { ... }` ─────────────────
+    // When the user omits the base argument, scan the ctor body for an
+    // `extends Y` clause. If Y is a known native interface (HTMLDivElement,
+    // SVGSVGElement, …) in any registered namespace, promote it to `base`.
+    //
+    // This makes the call site clean:
+    //   class FormC extends HTMLDivElement { ... }
+    //   Core.Define('form-c', FormC);             // base auto-resolved
+    //
+    // Equivalent to:
+    //   Core.Define('form-c', FormC, HTMLDivElement);
+    //
+    // Without this, the factory falls back to baseTag='address' (the first
+    // tag mapped to HTMLElement) and the prototype chain loses the user's
+    // intended interface.
+    if (base === HTMLElement)
     {
-        console.warn(`Core.Define: '${ct}' already registered.`);
-        return existing;
+        try {
+            const src = constructor.toString();
+            const m = src.match(/extends\s+([A-Z][A-Za-z0-9_]*)/);
+            if (m) {
+                const ifaceName = m[1];
+                const win = (typeof window !== 'undefined' ? window : globalThis) as Record<string, unknown>;
+                const candidate = win[ifaceName];
+                if (typeof candidate === 'function' && candidate !== HTMLElement) {
+                    // Verify it's a registered native interface in some namespace
+                    const desc = GetDescriptor(candidate as new (...a: unknown[]) => Element);
+                    if (desc && desc.Standard) {
+                        base = candidate as new (...args: unknown[]) => Element;
+                    }
+                }
+            }
+        } catch { /* introspection is best-effort */ }
+    }
+
+    // Already registered? Return existing factory (idempotent).
+    const existing = GetDescriptor(ct);
+    if (existing && existing.Factory)
+    {
+        return existing.Factory;
     }
 
     // ── Locate the correct namespace ───────────────────────────────────────────
     //
-    // Strategy (mirrors original Real.js Define logic):
+    // Strategy:
     //   1. Try GetDescriptor(base) — fast path for known tag/interface names
     //   2. Scan all NS: check if ns.base === base (catches SVGElement, MathMLElement)
     //   3. Scan all NS interfaces for matching Constructor or Interface reference
-    //   4. Fallback to html namespace — never throws, always succeeds
+    //   4. Fallback to html namespace — never throws
     //
     let ns: NamespaceDescriptor | null = null;
 
@@ -388,14 +569,12 @@ export function Define(
         {
             const candidate = Namespaces[nsKey];
 
-            // Direct match on the namespace base class (e.g. SVGElement, MathMLElement)
             if (candidate.base === base)
             {
                 ns = candidate;
                 break;
             }
 
-            // Match via standard interface Constructor or Interface reference
             for (const k of Object.keys(candidate.types.standard.interfaces))
             {
                 const d = candidate.types.standard.interfaces[k];
@@ -409,15 +588,28 @@ export function Define(
         }
     }
 
-    // Fallback: html namespace (safe default — never throws)
     if (!ns)
     {
         ns = Namespaces['html'] ?? Object.values(Namespaces)[0];
         console.warn(`Core.Define: base '${base.name}' not found in any registered namespace — defaulting to html.`);
     }
 
-    const isClass = /^class[\s{]/.test(constructor.toString());
+    // ── Delegate to the Namespace's Define ─────────────────────────────────
+    // The Namespace descriptor exposes a `Define` bridge that delegates to
+    // the live Namespace instance (set up in Namespace.toDescriptor()).
+    // This avoids relying on window.Core which may not be ready yet during
+    // bootstrap.
+    const nsAny = ns as NamespaceDescriptor & { Define?: typeof Define };
 
+    if (nsAny.Define && typeof nsAny.Define === 'function')
+    {
+        return nsAny.Define(ct, constructor, base, style);
+    }
+
+    // Fallback: construct a minimal descriptor and register manually
+    // (shouldn't happen in practice — included for robustness)
+    console.warn(`Core.Define: namespace '${ns.name}' has no Define() method — using fallback.`);
+    const isClass = /^class[\s{]/.test(constructor.toString());
     const descriptor: TypeDescriptor = {
         Name        : constructor.name,
         Tags        : [ct],
@@ -432,46 +624,66 @@ export function Define(
         Standard    : false,
         Custom      : true,
         Style       : style,
-        Update      : (el: Element) => {
-            // Insert base.prototype into constructor's chain first
-            Object.setPrototypeOf(constructor.prototype, base.prototype);
-            // Then give element that chain
-            Object.setPrototypeOf(el, constructor.prototype);
-
-            if (isClass)
-            {
-                // Class constructors cannot be invoked with .call()/.apply().
-                // Solution mirrors original Real.js: extract the constructor body
-                // and re-run it as a plain function bound to el.
-                // This applies inline styles and textContent without needing new/super().
-                try
-                {
-                    const src = constructor.toString();
-                    const m   = src.match(/constructor\s*\(\s*\)\s*\{([\s\S]*?)\}(?=\s*\})/);
-                    if (m)
-                    {
-                        // eslint-disable-next-line no-new-func
-                        const fn = new Function(`return function(){${m[1]}}`)() as (this: Element) => void;
-                        fn.call(el);
-                    }
-                } catch (_) { /* silent */ }
-            } else
-            {
-                // ES5 function constructors — call directly with el as `this`
-                (constructor as unknown as (this: Element) => void).call(el);
-            }
-        },
     };
-
     ns.types.custom.interfaces[constructor.name] = descriptor;
     ns.types.custom.tags[ct]                     = descriptor;
+    document.dispatchEvent(new CustomEvent('arianna-wip:defined', { detail: { tag: ct, descriptor } }));
+    return constructor;
+}
 
-    // Notify other modules (Observer, Component, etc.)
-    document.dispatchEvent(new CustomEvent('arianna-wip:defined', {
-        detail: { tag: ct, descriptor },
-    }));
 
-    return descriptor;
+/**
+ * Create an element by tag, applying the registered descriptor's upgrade
+ * **synchronously** before returning. The JS-side equivalent of writing
+ * the tag in markup — but you don't have to wait for the MutationObserver
+ * microtask to inspect/manipulate the upgraded element.
+ *
+ * Use this whenever you need a custom-tag element programmatically and want
+ * outerHTML / style / facilities to be ready immediately. For higher-level
+ * fluent chains use `new Real(tag)`.
+ *
+ * @example
+ *   Core.Define('my-card', function() { this.textContent = 'Hello'; },
+ *               HTMLDivElement, { Background: 'crimson', Padding: '12px' });
+ *
+ *   const el = Core.Create('my-card');
+ *   el.outerHTML;
+ *   // → '<my-card style="background: crimson; padding: 12px;">Hello</my-card>'
+ *
+ *   document.body.appendChild(el);
+ */
+export function Create(tag: string): Element | null
+{
+    const ct = tag.toLowerCase();
+    const d  = GetDescriptor(ct);
+
+    // Unknown tag — fall back to plain createElement.
+    if (!d || !d.Namespace) {
+        try { return document.createElement(ct); } catch { return null; }
+    }
+
+    const ns = d.Namespace as NamespaceDescriptor & {
+        Create?: (tag: string) => Element | null;
+        Update?: (el: Element, hint?: TypeDescriptor) => void;
+    };
+
+    // Create via the owning namespace so SVG/MathML/X3D use createElementNS.
+    let el: Element | null = null;
+    if (typeof ns.Create === 'function') {
+        el = ns.Create(ct);
+    } else {
+        try { el = document.createElement(ct); } catch { /* SSR */ }
+    }
+    if (!el) return null;
+
+    // Run the namespace's Update synchronously for Custom tags. Idempotent via
+    // the descriptor's __ariannaUpgraded flag, so a subsequent DOM insertion
+    // (which triggers Core.Observer) won't re-process this element.
+    if (d.Custom && typeof ns.Update === 'function') {
+        try { ns.Update(el, d); }
+        catch (e) { console.warn('[arianna] Core.Create: Update failed:', e); }
+    }
+    return el;
 }
 
 // ── DOM Events static bus ─────────────────────────────────────────────────────
@@ -595,8 +807,20 @@ export const Observer = new MutationObserver((mutations: MutationRecord[]) => {
                 if (node instanceof Element)
                     node.dispatchEvent(new CustomEvent('arianna-wip:nodeadding', { detail }));
 
-                if (d && d.Custom && d.Constructor && d.Update)
-                    d.Update(node as Element);
+                if (d && d.Custom && d.Constructor)
+                {
+                    // Prefer Namespace.Update — the Namespace owns the upgrade
+                    // logic (prototype-swap, body re-run, Component(el) install).
+                    // descriptor.Update is the legacy fallback path.
+                    const ns = d.Namespace as unknown as { Update?: (el: Element, hint?: unknown) => void };
+                    if (ns && typeof ns.Update === 'function') {
+                        try { ns.Update(node as Element, d); }
+                        catch (e) { console.warn('[Core.Observer] namespace.Update failed:', e); }
+                    } else if (d.Update) {
+                        try { d.Update(node as Element); }
+                        catch (e) { console.warn('[Core.Observer] descriptor.Update failed:', e); }
+                    }
+                }
 
                 detail.state = { loading: false, loaded: true, name: 'Loaded' };
                 document.dispatchEvent(new CustomEvent('arianna-wip:nodeadded', { detail }));
@@ -1371,7 +1595,14 @@ function _buildCore()
         Namespaces,
         RegisterNamespace,
         GetDescriptor,
+        GetType,
+        GetConstructor,
+        GetInterface,
+        GetTags,
+        GetNamespace,
+        IndexCustom,
         Define,
+        Create,
         Events,
         Observer,
         Property,

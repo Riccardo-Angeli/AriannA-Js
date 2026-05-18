@@ -4,15 +4,27 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Catmull-Clark subdivision surface.
+ * Catmull-Clark style subdivision surface (midpoint subdivision).
+ *
+ * @example HTML
+ *   <arianna-subdivision for="m1" iterations="2"></arianna-subdivision>
+ *
+ * Attrs (declarative): for, iterations, enabled
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, type MeshLike, type Geometry3Like, type Vec3Like } from './Base.ts';
+import { Component } from '../../../core/Component.ts';
+import {
+    Modifier3D, Modifier3DElement,
+    _cloneGeom, _recomputeNormals,
+    type MeshLike, type Geometry3Like, type Vec3Like,
+} from './Base.ts';
 
 export class SubdivisionModifier extends Modifier3D {
     #iterations: number;
 
     constructor(mesh: MeshLike, iterations = 1) { super(mesh); this.#iterations = iterations; }
+
+    setIterations(n: number): this { this.#iterations = n; return this; }
 
     apply(): this {
         if (!this.enabled) return this;
@@ -25,7 +37,8 @@ export class SubdivisionModifier extends Modifier3D {
     #subdivide(g: Geometry3Like): Geometry3Like {
         const out: Geometry3Like = {
             vertices: [...g.vertices.map(v => ({ ...v }))],
-            normals: [], indices: [],
+            normals: [],
+            indices: [],
             clone() { return _cloneGeom(this); },
         };
         const midCache = new Map<string, number>();
@@ -51,3 +64,21 @@ export class SubdivisionModifier extends Modifier3D {
         return out;
     }
 }
+
+export class SubdivisionModifierElement extends (Component('arianna-subdivision', HTMLElement, {}, {
+    attrs : ['for', 'iterations', 'enabled'],
+    shadow: false,
+}) as typeof Modifier3DElement) {
+    protected createModifier(mesh: MeshLike): Modifier3D {
+        const iterations = parseInt(this.getAttribute('iterations') ?? '1', 10) || 1;
+        return new SubdivisionModifier(mesh, iterations);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'SubdivisionModifier', {
+        value: SubdivisionModifier, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default SubdivisionModifier;

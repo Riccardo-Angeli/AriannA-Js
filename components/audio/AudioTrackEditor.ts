@@ -1,942 +1,499 @@
 /**
- * @module    AudioTrackEditor
+ * @module    components/audio/AudioTrackEditor
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
  *
- * Multi-track audio editor with waveform display per clip and standard
- * cut/move/resize/copy/paste/zoom operations. Pure UI/data layer —
- * actual audio rendering happens in Web Audio when clips are played
- * via the connected output (one BufferSource per clip).
+ * AudioTrackEditor — multi-track timeline editor (DAW-style):
  *
- * @example
- *   import { AudioTrackEditor } from 'ariannajs/components/audio';
+ *   ┌──────────────────────────────────────────────────────────────┐
+ *   │ Tracks            │  bars: 1     2     3     4     5    6    │
+ *   ├───────────────────┼──────────────────────────────────────────┤
+ *   │ ▶ Vocals      [M] │     ╔══════════╗                         │
+ *   │   ┌─────┐         │                                          │
+ *   │ ▶ Drums       [M] │  ╔════════╗      ╔═════╗                 │
+ *   │ ▶ Bass        [M] │           ╔══════════╗                   │
+ *   └───────────────────┴──────────────────────────────────────────┘
  *
- *   const ed = new AudioTrackEditor('#root', { tracks: 4, bpm: 120 });
+ * Three co-located custom elements registered from this single file:
  *
- *   ed.addTrack({ id:'vox', name:'Vocals', color:'#e40c88' });
- *   const buffer = await ed.loadFile('vocals.wav');
- *   ed.addClip('vox', { buffer, start: 0, name: 'Take 1' });
+ *   • <arianna-audio-track-editor>   — root container with timeline
+ *   • <arianna-audio-track>          — per-track lane (bus = root)
+ *   • <arianna-audio-part>           — clip inside a track (bus = track)
  *
- *   ed.on('change', e => console.log(e));
+ *   const ed = new AudioTrackEditor({ bars: 16 });
+ *   const t  = new AudioTrack({ name: 'Vocals' });
+ *   const p  = new AudioPart({ start: 0, length: 4, label: 'verse 1' });
+ *   t.add(p); ed.add(t);
+ *   ed.append(document.body);
+ *
+ *   <arianna-audio-track-editor bars="16">
+ *     <arianna-audio-track name="Vocals">
+ *       <arianna-audio-part start="0" length="4" label="verse 1"></arianna-audio-part>
+ *     </arianna-audio-track>
+ *   </arianna-audio-track-editor>
+ *
+ * Events:
+ *   arianna:track-add        { track }
+ *   arianna:track-remove     { track }
+ *   arianna:track-mute       { track, value }
+ *   arianna:track-solo       { track, value }
+ *   arianna:part-move        { part, start }
+ *   arianna:part-resize      { part, length }
+ *   arianna:part-select      { part }
+ *   arianna:editor-playhead  { beat }
  */
 
-import { AudioComponent, type AudioComponentOptions } from './AudioComponent.ts';
+import { Component } from '../../core/Component.ts';
+import { signal, effect, type Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule } from '../../core/Rule.ts';
 
-export interface AudioTrack {
-    id     : string;
-    name   : string;
-    color? : string;
+const BEAT_PX_DEFAULT = 20;     // px per beat at zoom = 1
+const BEATS_PER_BAR    = 4;
+
+// ── AudioPart ────────────────────────────────────────────────────────────
+
+export interface AudioPartOptions {
+    start?  : number;   // beats
+    length? : number;   // beats
+    label?  : string;
+    color?  : string;
+}
+
+export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, {
+    attrs : ['start', 'length', 'label', 'color', 'selected'],
+    shadow: false,
+})
+{
+    readonly start$ : Signal<number> = signal(0);
+    readonly length$: Signal<number> = signal(4);
+    readonly color$ : Signal<string> = signal('');
+
+    constructor(opts: AudioPartOptions = {}) {
+        super(opts as never);
+        const self = this as unknown as { render(): HTMLElement };
+        const el = self.render();
+        if (opts.start  != null) el.setAttribute('start',  String(opts.start));
+        if (opts.length != null) el.setAttribute('length', String(opts.length));
+        if (opts.label)          el.setAttribute('label',  opts.label);
+        if (opts.color)          el.setAttribute('color',  opts.color);
+        if (opts.start  != null) this.start$.set(opts.start);
+        if (opts.length != null) this.length$.set(opts.length);
+        if (opts.color)          this.color$.set(opts.color);
+    }
+
+    build(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            fire(t: string, init?: CustomEventInit): void;
+            attrSignal(name: string): Signal<string | null> | undefined;
+            Sheet: Sheet | null;
+        };
+        const el = self.render();
+        if (el.querySelector('.ap-label')) return;
+
+        const label = document.createElement('span');
+        label.className = 'ap-label';
+        const grip = document.createElement('span');
+        grip.className = 'ap-grip';
+        el.appendChild(label);
+        el.appendChild(grip);
+
+        const sStart  = self.attrSignal('start');
+        const sLen    = self.attrSignal('length');
+        const sLabel  = self.attrSignal('label');
+        const sColor  = self.attrSignal('color');
+
+        effect(() => {
+            const v = sStart?.get();
+            if (v != null) this.start$.set(parseFloat(v) || 0);
+            el.style.left = `calc(${this.start$.get()} * var(--beat-px, ${BEAT_PX_DEFAULT}px))`;
+        });
+        effect(() => {
+            const v = sLen?.get();
+            if (v != null) this.length$.set(parseFloat(v) || 1);
+            el.style.width = `calc(${this.length$.get()} * var(--beat-px, ${BEAT_PX_DEFAULT}px))`;
+        });
+        effect(() => { label.textContent = sLabel?.get() ?? ''; });
+        effect(() => {
+            const c = sColor?.get() ?? this.color$.get();
+            el.style.background = c || 'var(--ar-primary, #7eb8f7)';
+        });
+
+        // Drag to move / resize
+        let dragKind: 'move' | 'resize' | null = null;
+        let startX = 0, origStart = 0, origLen = 0;
+
+        el.addEventListener('pointerdown', (e: PointerEvent) => {
+            const targetIsGrip = (e.target as HTMLElement).classList.contains('ap-grip');
+            dragKind = targetIsGrip ? 'resize' : 'move';
+            startX = e.clientX;
+            origStart = this.start$.peek();
+            origLen   = this.length$.peek();
+            el.setPointerCapture(e.pointerId);
+            // Select
+            el.setAttribute('selected', '');
+            self.fire('arianna:part-select', { detail: { part: this, source: this }, bubbles: true });
+        });
+        el.addEventListener('pointermove', (e: PointerEvent) => {
+            if (!dragKind) return;
+            const beatPx = this.#getBeatPx(el);
+            const dBeats = (e.clientX - startX) / beatPx;
+            if (dragKind === 'move') {
+                const next = Math.max(0, Math.round((origStart + dBeats) * 4) / 4);
+                this.start$.set(next);
+                el.setAttribute('start', String(next));
+                self.fire('arianna:part-move', { detail: { part: this, start: next, source: this }, bubbles: true });
+            } else {
+                const next = Math.max(0.25, Math.round((origLen + dBeats) * 4) / 4);
+                this.length$.set(next);
+                el.setAttribute('length', String(next));
+                self.fire('arianna:part-resize', { detail: { part: this, length: next, source: this }, bubbles: true });
+            }
+        });
+        el.addEventListener('pointerup', (e: PointerEvent) => {
+            el.releasePointerCapture(e.pointerId);
+            dragKind = null;
+        });
+
+        self.Sheet = AudioPart.DefaultSheet();
+    }
+
+    #getBeatPx(el: HTMLElement): number {
+        const cs = getComputedStyle(el);
+        const v = parseFloat(cs.getPropertyValue('--beat-px'));
+        return isFinite(v) && v > 0 ? v : BEAT_PX_DEFAULT;
+    }
+
+    static DefaultSheet(): Sheet {
+        return new Sheet([
+            new Rule(':root', {
+                background  : 'var(--ar-primary, #7eb8f7)',
+                border      : '1px solid rgba(0,0,0,0.3)',
+                borderRadius: '3px',
+                color       : '#000',
+                cursor      : 'grab',
+                display     : 'block',
+                fontSize    : '0.7rem',
+                overflow    : 'hidden',
+                padding     : '2px 6px',
+                position    : 'absolute',
+                top         : '4px',
+                bottom      : '4px',
+                userSelect  : 'none',
+                whiteSpace  : 'nowrap',
+            }),
+            new Rule(':root[selected]', {
+                boxShadow: '0 0 0 2px var(--ar-warning, #ff9800)',
+                zIndex   : '2',
+            }),
+            new Rule(':root .ap-label', {
+                pointerEvents : 'none',
+            }),
+            new Rule(':root .ap-grip', {
+                bottom    : '0',
+                cursor    : 'ew-resize',
+                position  : 'absolute',
+                right     : '0',
+                top       : '0',
+                width     : '6px',
+            }),
+        ]);
+    }
+}
+
+// ── AudioTrack ───────────────────────────────────────────────────────────
+
+export interface AudioTrackOptions {
+    name?  : string;
     muted? : boolean;
     soloed?: boolean;
+    color? : string;
 }
 
-export interface AudioClip {
-    id        : string;
-    trackId   : string;
-    buffer    : AudioBuffer;
-    /** Start in seconds along the timeline. */
-    start     : number;
-    /** Offset into the buffer in seconds (for trim-from-start). */
-    offset    : number;
-    /** Duration to play in seconds (for trim end). */
-    duration  : number;
-    name?     : string;
-}
+export class AudioTrack extends Component('arianna-audio-track', HTMLElement, {}, {
+    attrs : ['name', 'muted', 'soloed', 'color'],
+    shadow: false,
+    bus   : 'arianna-audio-track-editor',
+})
+{
+    constructor(opts: AudioTrackOptions = {}) {
+        super(opts as never);
+        const self = this as unknown as { render(): HTMLElement };
+        const el = self.render();
+        if (opts.name)   el.setAttribute('name',   opts.name);
+        if (opts.muted)  el.setAttribute('muted',  '');
+        if (opts.soloed) el.setAttribute('soloed', '');
+        if (opts.color)  el.setAttribute('color',  opts.color);
+    }
 
-export interface AudioTrackEditorOptions extends AudioComponentOptions {
-    tracks?   : number;
-    bpm?      : number;
-    /** Pixels per second at zoom 1. Default 50. */
-    pxPerSec? : number;
-    /** Initial zoom factor. Default 1. */
-    zoom?     : number;
-}
+    build(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            fire(t: string, init?: CustomEventInit): void;
+            attrSignal(name: string): Signal<string | null> | undefined;
+            Sheet: Sheet | null;
+        };
+        const el = self.render();
+        if (el.querySelector('.at-head')) return;
 
-const TRACK_HEIGHT = 80;
-const HEADER_W     = 140;
-const RULER_H      = 22;
+        // Header
+        const head = document.createElement('div');
+        head.className = 'at-head';
 
-export class AudioTrackEditor extends AudioComponent<AudioTrackEditorOptions> {
-    private _tracks  : AudioTrack[] = [];
-    private _clips   : AudioClip[]  = [];
-    private _nextId  = 1;
-    private _zoom    : number;
-    private _pxPerSec: number;
+        const name = document.createElement('span');
+        name.className = 'at-name';
+        const sName = self.attrSignal('name');
+        effect(() => { name.textContent = sName?.get() ?? 'Track'; });
 
-    private _selected = new Set<string>();
-    private _selectedTracks = new Set<string>();
-    private _clipboard: AudioClip[] = [];
+        const btnMute = document.createElement('button');
+        btnMute.type = 'button'; btnMute.className = 'at-btn at-mute'; btnMute.textContent = 'M';
+        const btnSolo = document.createElement('button');
+        btnSolo.type = 'button'; btnSolo.className = 'at-btn at-solo'; btnSolo.textContent = 'S';
 
-    // Loop state — Task B (Loop selection)
-    private _loop = { start: 0, end: 0, enabled: false };
-    private _elLoopRange?      : HTMLElement;
-    private _elLoopHandleLeft? : HTMLElement;
-    private _elLoopHandleRight?: HTMLElement;
+        head.append(name, btnMute, btnSolo);
 
-    protected declare _output: GainNode;
-    private _activeSources: AudioBufferSourceNode[] = [];
-    private _playing = false;
-    private _playStart = 0;
-    private _playRAF = 0;
-    private _playhead = 0;     // seconds
+        // Lane (where parts live)
+        const lane = document.createElement('div');
+        lane.className = 'at-lane';
 
-    // DOM
-    private _elTrackHeads!: HTMLElement;
-    private _elTrackBodies!: HTMLElement;
-    private _elRuler!     : HTMLElement;
-    private _elPlayhead!  : HTMLElement;
-    private _elScroller!  : HTMLElement;
+        // Move any pre-existing AudioPart children into the lane
+        Array.from(el.querySelectorAll('arianna-audio-part'))
+             .forEach(p => lane.appendChild(p));
 
-    constructor(container: string | HTMLElement | null, opts: AudioTrackEditorOptions = {}) {
-        super(container, 'div', {
-            tracks   : 4,
-            bpm      : 120,
-            pxPerSec : 50,
-            zoom     : 1,
-            ...opts,
+        el.appendChild(head);
+        el.appendChild(lane);
+
+        // Mute / Solo handlers
+        btnMute.addEventListener('click', () => {
+            const v = !el.hasAttribute('muted');
+            if (v) el.setAttribute('muted', ''); else el.removeAttribute('muted');
+            self.fire('arianna:track-mute', { detail: { track: this, value: v, source: this }, bubbles: true });
+        });
+        btnSolo.addEventListener('click', () => {
+            const v = !el.hasAttribute('soloed');
+            if (v) el.setAttribute('soloed', ''); else el.removeAttribute('soloed');
+            self.fire('arianna:track-solo', { detail: { track: this, value: v, source: this }, bubbles: true });
         });
 
-        this.el.className = `ar-audiotrack${opts.class ? ' ' + opts.class : ''}`;
-        this._zoom     = this._get<number>('zoom', 1);
-        this._pxPerSec = this._get<number>('pxPerSec', 50);
-        this._injectStyles();
-        this._buildAudioGraph();
-        this._buildShell();
+        effect(() => { btnMute.classList.toggle('active', el.hasAttribute('muted')); });
+        effect(() => { btnSolo.classList.toggle('active', el.hasAttribute('soloed')); });
 
-        // Default tracks
-        const n = this._get<number>('tracks', 4);
-        for (let i = 0; i < n; i++) {
-            this.addTrack({ id: `t${i+1}`, name: `Track ${i+1}` });
-        }
-
-        // Keyboard shortcuts (scoped via document but only when our element is focused)
-        this._on(document as unknown as HTMLElement, 'keydown', (e: KeyboardEvent) => {
-            if (!this.el.contains(document.activeElement) && document.activeElement !== document.body) return;
-            const tg = e.target as HTMLElement;
-            if (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA') return;
-            if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) { this.copy();  e.preventDefault(); }
-            if ((e.metaKey || e.ctrlKey) && (e.key === 'v' || e.key === 'V')) { this.paste(this._playhead); e.preventDefault(); }
-            if ((e.metaKey || e.ctrlKey) && (e.key === 'x' || e.key === 'X')) { this.cut();   e.preventDefault(); }
-            if (e.key === 'Delete' || e.key === 'Backspace') { this.deleteSelection(); e.preventDefault(); }
-            if (e.key === ' ') { e.preventDefault(); this._playing ? this.stop() : this.play(); }
-        });
+        self.Sheet = AudioTrack.DefaultSheet();
     }
 
-    // ── Track / Clip API ────────────────────────────────────────────────────
-
-    addTrack(t: Partial<AudioTrack> & { id: string; name: string }): AudioTrack {
-        const tk: AudioTrack = { color: '#e40c88', muted: false, soloed: false, ...t };
-        this._tracks.push(tk);
-        this._renderTracks();
-        this._emit('change', { kind: 'add-track', track: tk });
-        return tk;
-    }
-
-    removeTrack(id: string): void {
-        this._tracks = this._tracks.filter(t => t.id !== id);
-        this._clips  = this._clips.filter(c => c.trackId !== id);
-        this._renderTracks();
-        this._renderClips();
-        this._emit('change', { kind: 'remove-track', id });
-    }
-
-    addClip(trackId: string, opts: { buffer: AudioBuffer; start: number; offset?: number; duration?: number; name?: string }): AudioClip {
-        const clip: AudioClip = {
-            id      : `c${this._nextId++}`,
-            trackId,
-            buffer  : opts.buffer,
-            start   : opts.start,
-            offset  : opts.offset ?? 0,
-            duration: opts.duration ?? opts.buffer.duration,
-            name    : opts.name,
-        };
-        this._clips.push(clip);
-        this._renderClips();
-        this._emit('change', { kind: 'add-clip', clip });
-        return clip;
-    }
-
-    removeClip(id: string): void {
-        this._clips = this._clips.filter(c => c.id !== id);
-        this._selected.delete(id);
-        this._renderClips();
-        this._emit('change', { kind: 'remove-clip', id });
-    }
-
-    /** Load an audio file URL or a File object into an AudioBuffer. */
-    async loadFile(src: string | File | ArrayBuffer): Promise<AudioBuffer> {
-        let arr: ArrayBuffer;
-        if (typeof src === 'string')      arr = await (await fetch(src)).arrayBuffer();
-        else if (src instanceof File)     arr = await src.arrayBuffer();
-        else                              arr = src;
-        return await this._audioCtx.decodeAudioData(arr);
-    }
-
-    // ── Edit operations ─────────────────────────────────────────────────────
-
-    copy(): void {
-        this._clipboard = [...this._selected].map(id => {
-            const c = this._clips.find(x => x.id === id);
-            return c ? { ...c } : null;
-        }).filter(Boolean) as AudioClip[];
-    }
-
-    cut(): void {
-        this.copy();
-        this.deleteSelection();
-    }
-
-    paste(atTime: number): void {
-        if (this._clipboard.length === 0) return;
-        const baseTime = Math.min(...this._clipboard.map(c => c.start));
-        const offset = atTime - baseTime;
-        for (const c of this._clipboard) {
-            this._clips.push({ ...c, id: `c${this._nextId++}`, start: c.start + offset });
-        }
-        this._renderClips();
-        this._emit('change', { kind: 'paste' });
-    }
-
-    deleteSelection(): void {
-        // Remove clips first (either explicitly selected, or living on a track that's about to die)
-        const trackIds = this._selectedTracks;
-        this._clips = this._clips.filter(c => !this._selected.has(c.id) && !trackIds.has(c.trackId));
-        this._selected.clear();
-
-        // Then remove selected tracks themselves
-        if (trackIds.size > 0) {
-            this._tracks = this._tracks.filter(t => !trackIds.has(t.id));
-            this._selectedTracks.clear();
-            this._renderTracks();
-        } else {
-            this._renderClips();
-        }
-        this._emit('change', { kind: 'delete-selection' });
-    }
-
-    /** Split a clip at given time (timeline seconds). */
-    splitClip(id: string, atTime: number): [AudioClip, AudioClip] | null {
-        const c = this._clips.find(x => x.id === id);
-        if (!c) return null;
-        const local = atTime - c.start;
-        if (local <= 0 || local >= c.duration) return null;
-
-        const left:  AudioClip = { ...c, duration: local };
-        const right: AudioClip = { ...c, id: `c${this._nextId++}`, start: c.start + local, offset: c.offset + local, duration: c.duration - local };
-
-        this._clips = this._clips.filter(x => x.id !== id);
-        this._clips.push(left, right);
-        this._renderClips();
-        this._emit('change', { kind: 'split', original: id, parts: [left, right] });
-        return [left, right];
-    }
-
-    setZoom(z: number): this {
-        this._zoom = Math.max(0.1, Math.min(8, z));
-        this._renderRuler();
-        this._renderClips();
-        this._emit('change', { kind: 'zoom', value: this._zoom });
+    /** Add a part to this track's lane (places into the lane container). */
+    addPart(p: AudioPart): this {
+        const self = this as unknown as { render(): HTMLElement };
+        const lane = self.render().querySelector('.at-lane');
+        if (!lane) return this;
+        const partEl = (p as unknown as { render(): HTMLElement }).render();
+        lane.appendChild(partEl);
         return this;
     }
 
-    // ── Playback ────────────────────────────────────────────────────────────
-
-    play(): this {
-        if (this._playing) return this;
-        AudioComponent.resume();
-        this._playing = true;
-        this._playStart = this._audioCtx.currentTime - this._playhead;
-
-        const soloed = this._tracks.filter(t => t.soloed).map(t => t.id);
-        const isAudible = (trackId: string): boolean => {
-            const t = this._tracks.find(x => x.id === trackId);
-            if (!t) return false;
-            if (soloed.length > 0) return soloed.includes(trackId);
-            return !t.muted;
-        };
-
-        for (const c of this._clips) {
-            if (!isAudible(c.trackId)) continue;
-            const src = this._audioCtx.createBufferSource();
-            src.buffer = c.buffer;
-            src.connect(this._output);
-            const startAt = Math.max(0, c.start - this._playhead);
-            const offsetIn = c.start < this._playhead ? c.offset + (this._playhead - c.start) : c.offset;
-            const dur = c.duration - (offsetIn - c.offset);
-            if (dur > 0) src.start(this._audioCtx.currentTime + startAt, offsetIn, dur);
-            this._activeSources.push(src);
-        }
-
-        this._tickPlayhead();
-        this._emit('play', {});
-        return this;
-    }
-
-    pause(): this {
-        if (!this._playing) return this;
-        this._playing = false;
-        for (const s of this._activeSources) { try { s.stop(); } catch {} }
-        this._activeSources = [];
-        if (this._playRAF) cancelAnimationFrame(this._playRAF);
-        this._emit('pause', {});
-        return this;
-    }
-
-    stop(): this {
-        this.pause();
-        this._playhead = 0;
-        this._renderPlayhead();
-        return this;
-    }
-
-    private _tickPlayhead = (): void => {
-        if (!this._playing) return;
-        let pos = this._audioCtx.currentTime - this._playStart;
-
-        // Loop wrap during playback (Task B)
-        if (this._loop.enabled && this._loop.end > this._loop.start && pos >= this._loop.end)
-        {
-            // Restart playback from loop.start by re-anchoring _playStart
-            const overshoot = pos - this._loop.start;
-            this._playStart = this._audioCtx.currentTime - this._loop.start;
-            pos = this._audioCtx.currentTime - this._playStart;
-            this._emit('loop-wrap', { start: this._loop.start, end: this._loop.end, overshoot });
-            // Note: the audio sources themselves don't auto-reseek — host must
-            // restart playback. We emit the event; for fully-automatic loop
-            // playback the host would call .pause() then .play() inside the
-            // 'loop-wrap' handler.
-        }
-
-        this._playhead = pos;
-        this._renderPlayhead();
-        this._playRAF = requestAnimationFrame(this._tickPlayhead);
-    };
-
-    // ── Internal ────────────────────────────────────────────────────────────
-
-    protected _buildAudioGraph(): void {
-        this._output = this._audioCtx.createGain();
-        this._output.connect(this._audioCtx.destination);
-        // No input: this is a source/composer
-    }
-
-    protected _build(): void { /* shell built explicitly */ }
-
-    private _buildShell(): void {
-        this.el.innerHTML = `
-<div class="ar-audiotrack__toolbar">
-  <button class="ar-audiotrack__btn" data-r="play">▶ Play</button>
-  <button class="ar-audiotrack__btn" data-r="stop">■ Stop</button>
-  <button class="ar-audiotrack__btn" data-r="add-track">+ Track</button>
-  <span class="ar-audiotrack__lbl">Zoom</span>
-  <input type="range" class="ar-audiotrack__zoom" data-r="zoom" min="0.1" max="4" step="0.1" value="1">
-</div>
-<div class="ar-audiotrack__main" data-r="scroller">
-  <div class="ar-audiotrack__heads" data-r="heads"></div>
-  <div class="ar-audiotrack__rest">
-    <div class="ar-audiotrack__ruler" data-r="ruler"></div>
-    <div class="ar-audiotrack__bodies" data-r="bodies">
-      <div class="ar-audiotrack__playhead" data-r="playhead" style="display:none"></div>
-    </div>
-  </div>
-</div>`;
-
-        const r = (n: string) => this.el.querySelector<HTMLElement>(`[data-r="${n}"]`)!;
-        this._elTrackHeads  = r('heads');
-        this._elTrackBodies = r('bodies');
-        this._elRuler       = r('ruler');
-        this._elPlayhead    = r('playhead');
-        this._elScroller    = r('scroller');
-
-        r('play').addEventListener('click', () => this._playing ? this.pause() : this.play());
-        r('stop').addEventListener('click', () => this.stop());
-        r('add-track').addEventListener('click', () => {
-            const i = this._tracks.length + 1;
-            this.addTrack({ id: `t${this._nextId++}`, name: `Track ${i}` });
-        });
-        const elZoom = r('zoom') as HTMLInputElement;
-        elZoom.addEventListener('input', () => this.setZoom(parseFloat(elZoom.value)));
-
-        // Ruler interactions: shift+drag → loop range, plain click → seek
-        this._elRuler.addEventListener('pointerdown', e => this._onRulerDown(e));
-
-        this._renderRuler();
-    }
-
-    private _renderTracks(): void {
-        this._elTrackHeads.innerHTML = '';
-        for (const t of this._tracks) {
-            const head = document.createElement('div');
-            head.className = 'ar-audiotrack__head';
-            if (this._selectedTracks.has(t.id)) head.classList.add('selected');
-            head.dataset.trackId = t.id;
-            head.style.borderLeft = `4px solid ${t.color}`;
-            head.innerHTML = `
-<div class="ar-audiotrack__head-row">
-  <span class="ar-audiotrack__head-name">${t.name}</span>
-  <button class="ar-audiotrack__head-x" data-act="remove" aria-label="Remove track">×</button>
-</div>
-<div class="ar-audiotrack__head-row">
-  <button class="ar-audiotrack__btn-sm mute ${t.muted ? 'active':''}" data-act="mute">M</button>
-  <button class="ar-audiotrack__btn-sm solo ${t.soloed ? 'active':''}" data-act="solo">S</button>
-  <label class="ar-audiotrack__btn-sm" style="cursor:pointer">+
-    <input type="file" accept="audio/*" data-act="upload" style="display:none">
-  </label>
-</div>`;
-            // Selection: click anywhere on head (except the action buttons) toggles track selection.
-            // Shift-click for multi-select; plain click selects only this track.
-            head.addEventListener('pointerdown', (e: PointerEvent) => {
-                const tgt = e.target as HTMLElement;
-                if (tgt.closest('button, input, label')) return; // don't hijack actions
-                if (!e.shiftKey) this._selectedTracks.clear();
-                if (this._selectedTracks.has(t.id)) this._selectedTracks.delete(t.id);
-                else this._selectedTracks.add(t.id);
-                this._renderTracks();
-                this._emit('change', { kind: 'select-tracks', ids: [...this._selectedTracks] });
-            });
-            head.querySelector('[data-act="remove"]')!.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.removeTrack(t.id);
-            });
-            head.querySelector('[data-act="mute"]')!  .addEventListener('click', (e) => { e.stopPropagation(); t.muted  = !t.muted;  this._renderTracks(); });
-            head.querySelector('[data-act="solo"]')!  .addEventListener('click', (e) => { e.stopPropagation(); t.soloed = !t.soloed; this._renderTracks(); });
-            head.querySelector('[data-act="upload"]')!.addEventListener('change', async (e) => {
-                e.stopPropagation();
-                const f = (e.target as HTMLInputElement).files?.[0];
-                if (!f) return;
-                const buf = await this.loadFile(f);
-                this.addClip(t.id, { buffer: buf, start: 0, name: f.name });
-            });
-            this._elTrackHeads.appendChild(head);
-        }
-        // Match height of bodies
-        for (const t of this._tracks) {
-            let body = this._elTrackBodies.querySelector<HTMLElement>(`[data-track-row="${t.id}"]`);
-            if (!body) {
-                body = document.createElement('div');
-                body.className = 'ar-audiotrack__body';
-                body.dataset.trackRow = t.id;
-                this._elTrackBodies.insertBefore(body, this._elPlayhead);
-            }
-        }
-        // Remove orphans
-        this._elTrackBodies.querySelectorAll<HTMLElement>('[data-track-row]').forEach(el => {
-            if (!this._tracks.find(t => t.id === el.dataset.trackRow)) el.remove();
-        });
-        this._renderClips();
-    }
-
-    private _renderRuler(): void {
-        this._elRuler.innerHTML = '';
-        const totalSec = 120; // default 2 min
-        const px = this._pxPerSec * this._zoom;
-        this._elRuler.style.width = (totalSec * px) + 'px';
-        this._elTrackBodies.style.width = (totalSec * px) + 'px';
-        for (let s = 0; s <= totalSec; s++) {
-            if (s % 5 === 0) {
-                const t = document.createElement('div');
-                t.className = 'ar-audiotrack__ruler-tick';
-                t.style.left = (s * px) + 'px';
-                this._elRuler.appendChild(t);
-                const lbl = document.createElement('div');
-                lbl.className = 'ar-audiotrack__ruler-lbl';
-                lbl.style.left = (s * px + 2) + 'px';
-                lbl.textContent = formatTime(s);
-                this._elRuler.appendChild(lbl);
-            }
-        }
-
-        // Loop overlay (Task B) — re-mounted on every ruler render
-        this._renderLoopOverlay();
-    }
-
-    /**
-     * Render the loop-range overlay and resize handles on the ruler.
-     * Visible only when `_loop.enabled && start < end`. Re-rendered after
-     * every zoom / pxPerSec change to stay aligned with the timeline.
-     */
-    private _renderLoopOverlay(): void
-    {
-        if (this._elLoopRange)       this._elLoopRange.remove();
-        if (this._elLoopHandleLeft)  this._elLoopHandleLeft.remove();
-        if (this._elLoopHandleRight) this._elLoopHandleRight.remove();
-        this._elLoopRange = this._elLoopHandleLeft = this._elLoopHandleRight = undefined;
-
-        if (!this._loop.enabled || this._loop.end <= this._loop.start) return;
-
-        const px = this._pxPerSec * this._zoom;
-        const left  = this._loop.start * px;
-        const width = (this._loop.end - this._loop.start) * px;
-
-        const range = document.createElement('div');
-        range.className = 'ar-audiotrack__loop-range';
-        range.style.left  = left + 'px';
-        range.style.width = width + 'px';
-        this._elRuler.appendChild(range);
-
-        const hL = document.createElement('div');
-        hL.className = 'ar-audiotrack__loop-handle ar-audiotrack__loop-handle--left';
-        hL.style.left = left + 'px';
-        this._elRuler.appendChild(hL);
-
-        const hR = document.createElement('div');
-        hR.className = 'ar-audiotrack__loop-handle ar-audiotrack__loop-handle--right';
-        hR.style.left = (left + width) + 'px';
-        this._elRuler.appendChild(hR);
-
-        this._elLoopRange       = range;
-        this._elLoopHandleLeft  = hL;
-        this._elLoopHandleRight = hR;
-
-        hL.addEventListener('pointerdown', e => this._onLoopHandleDown(e, 'left'));
-        hR.addEventListener('pointerdown', e => this._onLoopHandleDown(e, 'right'));
-        range.addEventListener('pointerdown', e => this._onLoopRangeDown(e));
-    }
-
-    private _onLoopHandleDown(e: PointerEvent, which: 'left' | 'right'): void
-    {
-        e.preventDefault();
-        e.stopPropagation();
-        const px = this._pxPerSec * this._zoom;
-        const startX = e.clientX;
-        const startLoop = { ...this._loop };
-        const handle = e.currentTarget as HTMLElement;
-        handle.setPointerCapture(e.pointerId);
-
-        const onMove = (ev: PointerEvent) => {
-            const dt = (ev.clientX - startX) / px;
-            if (which === 'left')
-            {
-                this._loop.start = Math.max(0, Math.min(startLoop.start + dt, this._loop.end - 0.05));
-            }
-            else
-            {
-                this._loop.end = Math.max(this._loop.start + 0.05, startLoop.end + dt);
-            }
-            this._renderLoopOverlay();
-        };
-        const onUp = () => {
-            handle.removeEventListener('pointermove', onMove);
-            handle.removeEventListener('pointerup',   onUp);
-            this._emit('change', { kind: 'loop', loop: { ...this._loop } });
-        };
-        handle.addEventListener('pointermove', onMove);
-        handle.addEventListener('pointerup',   onUp);
-    }
-
-    private _onLoopRangeDown(e: PointerEvent): void
-    {
-        e.preventDefault();
-        e.stopPropagation();
-        const px = this._pxPerSec * this._zoom;
-        const startX = e.clientX;
-        const startLoop = { ...this._loop };
-        const range = e.currentTarget as HTMLElement;
-        range.setPointerCapture(e.pointerId);
-
-        const onMove = (ev: PointerEvent) => {
-            const dt = (ev.clientX - startX) / px;
-            const len = startLoop.end - startLoop.start;
-            this._loop.start = Math.max(0, startLoop.start + dt);
-            this._loop.end   = this._loop.start + len;
-            this._renderLoopOverlay();
-        };
-        const onUp = () => {
-            range.removeEventListener('pointermove', onMove);
-            range.removeEventListener('pointerup',   onUp);
-            this._emit('change', { kind: 'loop', loop: { ...this._loop } });
-        };
-        range.addEventListener('pointermove', onMove);
-        range.addEventListener('pointerup',   onUp);
-    }
-
-    /**
-     * Pointer-down on the timeline ruler: shift+drag → create loop range,
-     * plain click → seek the playhead.
-     */
-    private _onRulerDown(e: PointerEvent): void
-    {
-        const target = e.target as HTMLElement;
-        if (target.classList.contains('ar-audiotrack__loop-range') ||
-            target.classList.contains('ar-audiotrack__loop-handle')) return;
-
-        const px = this._pxPerSec * this._zoom;
-        const rect = this._elRuler.getBoundingClientRect();
-        const x0 = e.clientX - rect.left + this._elRuler.scrollLeft;
-        const t0 = x0 / px;
-
-        if (e.shiftKey)
-        {
-            e.preventDefault();
-            e.stopPropagation();
-            this._loop.start   = t0;
-            this._loop.end     = t0 + 0.001;
-            this._loop.enabled = true;
-            this._renderLoopOverlay();
-            this._elRuler.setPointerCapture(e.pointerId);
-
-            const onMove = (ev: PointerEvent) => {
-                const x = ev.clientX - rect.left + this._elRuler.scrollLeft;
-                const t = x / px;
-                if (t >= t0) { this._loop.start = t0; this._loop.end = t; }
-                else         { this._loop.start = t;  this._loop.end = t0; }
-                this._renderLoopOverlay();
-            };
-            const onUp = () => {
-                this._elRuler.removeEventListener('pointermove', onMove);
-                this._elRuler.removeEventListener('pointerup',   onUp);
-                if (this._loop.end - this._loop.start < 0.05)
-                {
-                    this._loop = { start: 0, end: 0, enabled: false };
-                    this._renderLoopOverlay();
-                }
-                this._emit('change', { kind: 'loop', loop: { ...this._loop } });
-            };
-            this._elRuler.addEventListener('pointermove', onMove);
-            this._elRuler.addEventListener('pointerup',   onUp);
-            return;
-        }
-
-        // Plain click on ruler → seek
-        this.setPlayhead(t0);
-    }
-
-    // ── Loop API (Task B) ──────────────────────────────────────────────────
-
-    getLoop(): { start: number; end: number; enabled: boolean }
-    {
-        return { ...this._loop };
-    }
-
-    setLoop(loop: { start: number; end?: number; enabled?: boolean }): this
-    {
-        this._loop.start   = Math.max(0, loop.start);
-        if (loop.end !== undefined)     this._loop.end     = Math.max(this._loop.start + 0.05, loop.end);
-        if (loop.enabled !== undefined) this._loop.enabled = loop.enabled;
-        this._renderLoopOverlay();
-        this._emit('change', { kind: 'loop', loop: { ...this._loop } });
-        return this;
-    }
-
-    enableLoop(enabled: boolean): this
-    {
-        this._loop.enabled = enabled;
-        this._renderLoopOverlay();
-        this._emit('change', { kind: 'loop', loop: { ...this._loop } });
-        return this;
-    }
-
-    clearLoop(): this
-    {
-        this._loop = { start: 0, end: 0, enabled: false };
-        this._renderLoopOverlay();
-        this._emit('change', { kind: 'loop', loop: { ...this._loop } });
-        return this;
-    }
-
-    /**
-     * Programmatically move the playhead. If a loop range is active and the
-     * new position is past `loop.end`, wraps to `loop.start` and emits
-     * `loop-wrap` so the host playback engine can resync. This is also called
-     * automatically by `_tickPlayhead` during real-time playback.
-     */
-    setPlayhead(t: number): this
-    {
-        let pos = Math.max(0, t);
-        if (this._loop.enabled && this._loop.end > this._loop.start && pos >= this._loop.end)
-        {
-            pos = this._loop.start;
-            this._emit('loop-wrap', { start: this._loop.start, end: this._loop.end });
-        }
-        this._playhead = pos;
-        this._renderPlayhead();
-        return this;
-    }
-
-    private _renderClips(): void {
-        this._elTrackBodies.querySelectorAll('.ar-audiotrack__clip').forEach(n => n.remove());
-        const px = this._pxPerSec * this._zoom;
-
-        for (const c of this._clips) {
-            const row = this._elTrackBodies.querySelector<HTMLElement>(`[data-track-row="${c.trackId}"]`);
-            if (!row) continue;
-            const t = this._tracks.find(x => x.id === c.trackId);
-
-            const el = document.createElement('div');
-            el.className = 'ar-audiotrack__clip';
-            el.dataset.clipId = c.id;
-            el.style.left  = (c.start * px) + 'px';
-            el.style.width = Math.max(20, c.duration * px) + 'px';
-            el.style.background = (t?.color || '#e40c88') + '33';
-            el.style.borderColor = t?.color || '#e40c88';
-            if (this._selected.has(c.id)) el.classList.add('selected');
-
-            // Waveform canvas
-            const canvas = document.createElement('canvas');
-            canvas.className = 'ar-audiotrack__wave';
-            const w = Math.max(20, c.duration * px) | 0;
-            canvas.width  = w;
-            canvas.height = TRACK_HEIGHT - 22;
-            this._drawWaveform(canvas, c);
-            el.appendChild(canvas);
-
-            const lbl = document.createElement('div');
-            lbl.className = 'ar-audiotrack__clip-lbl';
-            lbl.textContent = c.name || c.id;
-            el.appendChild(lbl);
-
-            // Resize handles
-            const lh = document.createElement('div'); lh.className = 'ar-audiotrack__clip-h left';   el.appendChild(lh);
-            const rh = document.createElement('div'); rh.className = 'ar-audiotrack__clip-h right';  el.appendChild(rh);
-
-            el.addEventListener('pointerdown', e => this._onClipDown(e, c, el, lh, rh));
-            row.appendChild(el);
-        }
-    }
-
-    private _onClipDown(e: PointerEvent, c: AudioClip, el: HTMLElement, lh: HTMLElement, rh: HTMLElement): void {
-        e.preventDefault();
-        e.stopPropagation();
-        const px = this._pxPerSec * this._zoom;
-
-        // Selection
-        if (!this._selected.has(c.id)) {
-            if (!e.shiftKey) {
-                this._selected.clear();
-                this.el.querySelectorAll('.ar-audiotrack__clip.selected').forEach(n => n.classList.remove('selected'));
-            }
-            this._selected.add(c.id);
-            el.classList.add('selected');
-        }
-
-        // Resize-left / resize-right / move
-        const mode = e.target === lh ? 'resize-left'
-                   : e.target === rh ? 'resize-right'
-                                     : 'move';
-
-        const startX        = e.clientX;
-        const startStart    = c.start, startDur = c.duration, startOffset = c.offset;
-        const startTrackId  = c.trackId;
-
-        // Cross-track drag bookkeeping — capture row bounds at start, and
-        // re-capture every time we auto-create a track during the drag so the
-        // clientY → row mapping stays accurate.
-        let rowRects: Array<{ id: string; top: number; bottom: number }> = [];
-        const captureRowRects = () => {
-            rowRects = [];
-            this._elTrackBodies.querySelectorAll<HTMLElement>('[data-track-row]').forEach(row => {
-                const rect = row.getBoundingClientRect();
-                rowRects.push({ id: row.dataset.trackRow!, top: rect.top, bottom: rect.bottom });
-            });
-        };
-        captureRowRects();
-
-        // One-track-per-gesture throttle (see VideoTrackEditor for rationale).
-        let autoCreatedThisDrag = false;
-        const autoCreateTrackBelow = (): string | null => {
-            const idx   = this._tracks.length + 1;
-            // Avoid id collisions if the user previously removed/re-added tracks.
-            let bump   = idx;
-            let unique = `t${bump}`;
-            while (this._tracks.find(t => t.id === unique)) {
-                bump += 1;
-                unique = `t${bump}`;
-            }
-            // Detach the dragged element before addTrack triggers _renderTracks
-            // (which mutates the bodies container).
-            const parent = el.parentElement;
-            if (parent) parent.removeChild(el);
-
-            const newTrack = this.addTrack({ id: unique, name: `Track ${idx}` });
-
-            const newRow = this._elTrackBodies.querySelector<HTMLElement>(`[data-track-row="${newTrack.id}"]`);
-            if (newRow) newRow.appendChild(el);
-
-            captureRowRects();
-            autoCreatedThisDrag = true;
-            return newTrack.id;
-        };
-
-        const rowAt = (clientY: number): string | null => {
-            for (const r of rowRects) if (clientY >= r.top && clientY < r.bottom) return r.id;
-            if (rowRects.length === 0) return null;
-            if (clientY < rowRects[0]!.top) return rowRects[0]!.id;
-            // Below last row: do NOT snap — onMove decides whether to auto-create.
-            return null;
-        };
-
-        let highlightedRow: HTMLElement | null = null;
-        const setHighlight = (rowId: string | null) => {
-            if (highlightedRow) highlightedRow.classList.remove('ar-audiotrack__body--dropping');
-            highlightedRow = rowId
-                ? this._elTrackBodies.querySelector<HTMLElement>(`[data-track-row="${rowId}"]`)
-                : null;
-            if (highlightedRow) highlightedRow.classList.add('ar-audiotrack__body--dropping');
-        };
-
-        // Best-effort pointer capture (kept as belt-and-braces; the real safety
-        // net is the window-level listeners below, which survive any DOM
-        // reparenting we do during cross-track drag).
-        try { el.setPointerCapture(e.pointerId); } catch { /* not supported / detached */ }
-
-        const onMove = (ev: PointerEvent) => {
-            if (ev.pointerId !== e.pointerId) return;
-            const dx = (ev.clientX - startX) / px;
-            if (mode === 'move') {
-                c.start = Math.max(0, startStart + dx);
-            } else if (mode === 'resize-right') {
-                c.duration = Math.max(0.05, startDur + dx);
-            } else if (mode === 'resize-left') {
-                const newStart = Math.max(0, startStart + dx);
-                const delta = newStart - startStart;
-                c.start = newStart;
-                c.offset = startOffset + delta;
-                c.duration = Math.max(0.05, startDur - delta);
-            }
-            el.style.left  = (c.start * px) + 'px';
-            el.style.width = Math.max(20, c.duration * px) + 'px';
-
-            // Cross-track Y movement — reparent the clip element under the new row.
-            // Because move/up listeners live on `window`, this reparenting cannot
-            // break the drag (which was the bug in the previous implementation).
-            if (mode === 'move') {
-                let targetTrackId = rowAt(ev.clientY);
-
-                // Drop-below: spawn a new track and target it.
-                const lastBottom = rowRects.length ? rowRects[rowRects.length - 1]!.bottom : 0;
-                if (!targetTrackId && !autoCreatedThisDrag && ev.clientY >= lastBottom) {
-                    targetTrackId = autoCreateTrackBelow();
-                }
-                // Lifted back into existing rows: lift the throttle so the user
-                // can drop below again to spawn another track.
-                if (targetTrackId && rowRects.length > 0 && ev.clientY < lastBottom - 4) {
-                    autoCreatedThisDrag = false;
-                }
-
-                if (targetTrackId && targetTrackId !== c.trackId) {
-                    c.trackId = targetTrackId;
-                    const newRow = this._elTrackBodies.querySelector<HTMLElement>(`[data-track-row="${targetTrackId}"]`);
-                    if (newRow && el.parentElement !== newRow) newRow.appendChild(el);
-                    const t = this._tracks.find(x => x.id === targetTrackId);
-                    if (t) {
-                        el.style.background  = (t.color || '#3b82f6') + '33';
-                        el.style.borderColor =  t.color || '#3b82f6';
-                    }
-                    setHighlight(targetTrackId);
-                } else if (!targetTrackId) {
-                    setHighlight(null);
-                } else {
-                    setHighlight(targetTrackId);
-                }
-            }
-        };
-
-        const cleanup = () => {
-            window.removeEventListener('pointermove',   onMove);
-            window.removeEventListener('pointerup',     onUp);
-            window.removeEventListener('pointercancel', onUp);
-            try { el.releasePointerCapture(e.pointerId); } catch { /* may already be released */ }
-        };
-        const onUp = (ev: PointerEvent) => {
-            if (ev.pointerId !== e.pointerId) return;
-            cleanup();
-            setHighlight(null);
-            this._renderClips();
-            if (mode === 'move' && c.trackId !== startTrackId) {
-                this._emit('change', { kind: 'move-clip-track', clip: c, fromTrack: startTrackId, toTrack: c.trackId });
-            }
-            this._emit('change', { kind: mode + '-clip', clip: c });
-        };
-        window.addEventListener('pointermove',   onMove);
-        window.addEventListener('pointerup',     onUp);
-        window.addEventListener('pointercancel', onUp);
-    }
-
-    private _drawWaveform(canvas: HTMLCanvasElement, c: AudioClip): void {
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        const w = canvas.width, h = canvas.height;
-        const data = c.buffer.getChannelData(0);
-        const startSample = Math.floor(c.offset * c.buffer.sampleRate);
-        const endSample   = Math.min(data.length, startSample + Math.floor(c.duration * c.buffer.sampleRate));
-        const samplesPerPx = (endSample - startSample) / w;
-
-        ctx.fillStyle = 'rgba(255,255,255,.7)';
-        const mid = h / 2;
-        for (let x = 0; x < w; x++) {
-            const i = startSample + Math.floor(x * samplesPerPx);
-            const j = Math.min(endSample, i + Math.ceil(samplesPerPx));
-            let min = 1, max = -1;
-            for (let k = i; k < j; k++) {
-                const v = data[k] || 0;
-                if (v < min) min = v;
-                if (v > max) max = v;
-            }
-            const y1 = mid - max * mid;
-            const y2 = mid - min * mid;
-            ctx.fillRect(x, y1, 1, Math.max(1, y2 - y1));
-        }
-    }
-
-    private _renderPlayhead(): void {
-        const px = this._pxPerSec * this._zoom;
-        this._elPlayhead.style.display = 'block';
-        this._elPlayhead.style.left = (this._playhead * px) + 'px';
-    }
-
-    private _injectStyles(): void {
-        if (document.getElementById('ar-audiotrack-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-audiotrack-styles';
-        s.textContent = `
-.ar-audiotrack { font:12px -apple-system,system-ui,sans-serif; background:#1e1e1e; color:#d4d4d4; border-radius:4px; display:flex; flex-direction:column; height:100%; min-height:300px; user-select:none; }
-.ar-audiotrack__toolbar { background:#252525; padding:6px 10px; display:flex; gap:8px; align-items:center; border-bottom:1px solid #333; flex-shrink:0; }
-.ar-audiotrack__btn { background:transparent; border:1px solid #444; color:#d4d4d4; padding:4px 10px; font:12px sans-serif; border-radius:3px; cursor:pointer; }
-.ar-audiotrack__btn:hover { background:#2a2a2a; }
-.ar-audiotrack__lbl { font:11px sans-serif; color:#888; }
-.ar-audiotrack__zoom { width:120px; -webkit-appearance:none; height:3px; background:#444; border-radius:2px; outline:none; cursor:pointer; }
-.ar-audiotrack__zoom::-webkit-slider-thumb { -webkit-appearance:none; width:10px; height:10px; border-radius:50%; background:#e40c88; cursor:pointer; }
-.ar-audiotrack__main { flex:1; display:flex; min-height:0; overflow:hidden; }
-.ar-audiotrack__heads { width:140px; background:#252525; border-right:1px solid #333; overflow-y:auto; flex-shrink:0; }
-.ar-audiotrack__head { height:80px; padding:6px 8px; border-bottom:1px solid #333; box-sizing:border-box; cursor:pointer; touch-action:manipulation; }
-.ar-audiotrack__head.selected { background:rgba(228,12,136,0.12); box-shadow:inset 0 0 0 2px #e40c88; }
-.ar-audiotrack__head-row { display:flex; align-items:center; gap:4px; margin:2px 0; }
-.ar-audiotrack__head-name { flex:1; font-weight:600; font-size:11px; }
-.ar-audiotrack__head-x { background:transparent; border:0; color:#666; font-size:18px; line-height:1; cursor:pointer; padding:6px 10px; min-width:32px; min-height:28px; border-radius:3px; touch-action:manipulation; }
-.ar-audiotrack__head-x:hover { color:#dc2626; background:rgba(220,38,38,0.1); }
-.ar-audiotrack__btn-sm { background:transparent; border:1px solid #444; color:#d4d4d4; padding:4px 10px; font:10px sans-serif; font-weight:600; border-radius:2px; cursor:pointer; touch-action:manipulation; min-height:24px; }
-.ar-audiotrack__btn-sm.mute.active { background:#dc2626; border-color:#dc2626; color:#fff; }
-.ar-audiotrack__btn-sm.solo.active { background:#eab308; border-color:#eab308; color:#1f1f1f; }
-.ar-audiotrack__rest { flex:1; overflow:auto; }
-.ar-audiotrack__ruler { background:#252525; border-bottom:1px solid #333; height:22px; position:relative; touch-action:none; }
-.ar-audiotrack__ruler-tick { position:absolute; top:0; bottom:0; width:1px; background:#555; }
-.ar-audiotrack__ruler-lbl  { position:absolute; top:4px; font:10px ui-monospace,monospace; color:#999; }
-.ar-audiotrack__bodies { position:relative; min-height:200px; }
-.ar-audiotrack__body { height:80px; border-bottom:1px solid #333; position:relative; }
-.ar-audiotrack__clip { position:absolute; top:4px; bottom:4px; border:1.5px solid #e40c88; border-radius:3px; background:rgba(228,12,136,.2); cursor:move; overflow:hidden; touch-action:none; }
-.ar-audiotrack__clip.selected { box-shadow:0 0 0 2px #fff inset; }
-.ar-audiotrack__clip-lbl { position:absolute; top:2px; left:6px; font:10px sans-serif; color:#fff; pointer-events:none; }
-.ar-audiotrack__clip-h { position:absolute; top:0; bottom:0; width:10px; cursor:ew-resize; touch-action:none; }
-.ar-audiotrack__clip-h.left { left:0; }
-.ar-audiotrack__clip-h.right { right:0; }
-.ar-audiotrack__wave { position:absolute; left:0; top:18px; pointer-events:none; }
-.ar-audiotrack__playhead { position:absolute; top:0; bottom:0; width:2px; background:#16a34a; pointer-events:none; box-shadow:0 0 4px rgba(22,163,74,.5); z-index:10; }
-
-/* Cross-track drag — destination row highlight (Task A) */
-.ar-audiotrack__body--dropping { background:rgba(228,12,136,0.10); outline:1px dashed #e40c88; outline-offset:-1px; }
-
-/* Loop selection — overlay on the ruler (Task B) */
-.ar-audiotrack__loop-range  { position:absolute; top:0; bottom:0; background:rgba(228,12,136,0.18); border-top:2px solid #e40c88; border-bottom:2px solid #e40c88; cursor:grab; z-index:5; }
-.ar-audiotrack__loop-range:active { cursor:grabbing; }
-.ar-audiotrack__loop-handle { position:absolute; top:0; bottom:0; width:6px; margin-left:-3px; background:#e40c88; cursor:ew-resize; z-index:6; }
-.ar-audiotrack__loop-handle::after { content:''; position:absolute; top:50%; left:50%; width:2px; height:8px; margin:-4px 0 0 -1px; background:rgba(255,255,255,0.7); border-radius:1px; }
-`;
-        document.head.appendChild(s);
+    static DefaultSheet(): Sheet {
+        return new Sheet([
+            new Rule(':root', {
+                borderBottom: '1px solid var(--ar-border, #2a2a2a)',
+                display     : 'grid',
+                gridTemplateColumns: '160px 1fr',
+                height      : '56px',
+            }),
+            new Rule(':root .at-head', {
+                alignItems   : 'center',
+                background   : 'var(--ar-bg2, #161616)',
+                borderRight  : '1px solid var(--ar-border, #2a2a2a)',
+                display      : 'flex',
+                gap          : '4px',
+                padding      : '0 8px',
+            }),
+            new Rule(':root .at-name', {
+                color    : 'var(--ar-text, #e0e0e0)',
+                flex     : '1',
+                fontSize : '0.78rem',
+                overflow : 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+            }),
+            new Rule(':root .at-btn', {
+                background  : 'var(--ar-bg3, #1e1e1e)',
+                border      : '1px solid var(--ar-border, #2a2a2a)',
+                borderRadius: 'var(--ar-radius-sm, 3px)',
+                color       : 'var(--ar-text, #e0e0e0)',
+                cursor      : 'pointer',
+                font        : 'inherit',
+                fontSize    : '0.68rem',
+                minWidth    : '24px',
+                padding     : '2px 6px',
+            }),
+            new Rule(':root .at-mute.active', { background: 'var(--ar-danger, #f44336)', color: '#fff' }),
+            new Rule(':root .at-solo.active', { background: 'var(--ar-warning, #ff9800)', color: '#fff' }),
+            new Rule(':root[muted] .at-lane', { opacity: '0.4' }),
+            new Rule(':root .at-lane', {
+                background: 'var(--ar-bg, #0d0d0d)',
+                position  : 'relative',
+            }),
+        ]);
     }
 }
 
-function formatTime(s: number): string {
-    const m = Math.floor(s / 60);
-    const r = Math.floor(s % 60);
-    return `${m}:${r.toString().padStart(2, '0')}`;
+// ── AudioTrackEditor (root) ──────────────────────────────────────────────
+
+export interface AudioTrackEditorOptions {
+    bars?       : number;
+    beatsPerBar?: number;
+    beatPx?     : number;
 }
+
+export class AudioTrackEditor extends Component('arianna-audio-track-editor', HTMLElement, {}, {
+    attrs : ['bars', 'beats-per-bar', 'beat-px'],
+    shadow: false,
+})
+{
+    readonly playhead$: Signal<number> = signal(0);    // in beats
+
+    #bars        = 16;
+    #beatsPerBar = BEATS_PER_BAR;
+    #beatPx      = BEAT_PX_DEFAULT;
+
+    constructor(opts: AudioTrackEditorOptions = {}) {
+        super(opts as never);
+        const self = this as unknown as { render(): HTMLElement };
+        const el = self.render();
+        if (opts.bars        != null) el.setAttribute('bars',          String(opts.bars));
+        if (opts.beatsPerBar != null) el.setAttribute('beats-per-bar', String(opts.beatsPerBar));
+        if (opts.beatPx      != null) el.setAttribute('beat-px',       String(opts.beatPx));
+    }
+
+    build(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            fire(t: string, init?: CustomEventInit): void;
+            attrSignal(name: string): Signal<string | null> | undefined;
+            Sheet: Sheet | null;
+        };
+        const root = self.render();
+        if (root.querySelector('.ate-ruler')) return;
+
+        this.#bars        = parseInt(self.attrSignal('bars')?.peek()          ?? '16', 10) || 16;
+        this.#beatsPerBar = parseInt(self.attrSignal('beats-per-bar')?.peek() ?? '4',  10) || 4;
+        this.#beatPx      = parseInt(self.attrSignal('beat-px')?.peek()       ?? String(BEAT_PX_DEFAULT), 10) || BEAT_PX_DEFAULT;
+        root.style.setProperty('--beat-px', this.#beatPx + 'px');
+
+        // Ruler (top bar with bar numbers)
+        const ruler = document.createElement('div');
+        ruler.className = 'ate-ruler';
+        const corner = document.createElement('div');
+        corner.className = 'ate-corner';
+        const rulerInner = document.createElement('div');
+        rulerInner.className = 'ate-ruler-inner';
+        for (let b = 1; b <= this.#bars; b++) {
+            const tick = document.createElement('span');
+            tick.className = 'ate-tick';
+            tick.style.left = ((b - 1) * this.#beatsPerBar * this.#beatPx) + 'px';
+            tick.textContent = String(b);
+            rulerInner.appendChild(tick);
+        }
+        const totalWidth = this.#bars * this.#beatsPerBar * this.#beatPx;
+        rulerInner.style.width = totalWidth + 'px';
+        ruler.append(corner, rulerInner);
+
+        // Body — tracks
+        const body = document.createElement('div');
+        body.className = 'ate-body';
+        // Move pre-existing tracks
+        Array.from(root.querySelectorAll('arianna-audio-track'))
+             .forEach(t => body.appendChild(t));
+
+        // Playhead overlay
+        const playhead = document.createElement('div');
+        playhead.className = 'ate-playhead';
+        effect(() => {
+            const b = this.playhead$.get();
+            playhead.style.left = (160 + b * this.#beatPx) + 'px';
+        });
+
+        root.append(ruler, body, playhead);
+
+        self.Sheet = AudioTrackEditor.DefaultSheet();
+    }
+
+    /** Set the playhead in beats. */
+    setPlayhead(beats: number): this {
+        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        this.playhead$.set(beats);
+        self.fire('arianna:editor-playhead', { detail: { beat: beats, source: this }, bubbles: true });
+        return this;
+    }
+
+    /** All AudioTrack children registered to this editor (via bus). */
+    get tracks(): AudioTrack[] {
+        const self = this as unknown as { _children: AudioTrack[] };
+        return self._children;
+    }
+
+    static DefaultSheet(): Sheet {
+        return new Sheet([
+            new Rule(':root', {
+                background  : 'var(--ar-bg, #0d0d0d)',
+                border      : '1px solid var(--ar-border, #2a2a2a)',
+                borderRadius: 'var(--ar-radius, 5px)',
+                color       : 'var(--ar-text, #e0e0e0)',
+                display     : 'block',
+                font        : 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
+                overflow    : 'hidden',
+                position    : 'relative',
+                userSelect  : 'none',
+            }),
+            new Rule(':root .ate-ruler', {
+                background : 'var(--ar-bg2, #161616)',
+                borderBottom: '1px solid var(--ar-border, #2a2a2a)',
+                display    : 'grid',
+                gridTemplateColumns: '160px 1fr',
+                height     : '24px',
+                overflow   : 'hidden',
+            }),
+            new Rule(':root .ate-corner', {
+                background : 'var(--ar-bg2, #161616)',
+                borderRight: '1px solid var(--ar-border, #2a2a2a)',
+            }),
+            new Rule(':root .ate-ruler-inner', {
+                position: 'relative',
+            }),
+            new Rule(':root .ate-tick', {
+                color    : 'var(--ar-muted, #888)',
+                fontSize : '0.66rem',
+                position : 'absolute',
+                top      : '4px',
+            }),
+            new Rule(':root .ate-body', {
+                display : 'block',
+                maxHeight: '380px',
+                overflow: 'auto',
+            }),
+            new Rule(':root .ate-playhead', {
+                background    : 'var(--ar-danger, #f44336)',
+                bottom        : '0',
+                pointerEvents : 'none',
+                position      : 'absolute',
+                top           : '24px',
+                width         : '2px',
+            }),
+        ]);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'AudioTrackEditor', {
+        value: AudioTrackEditor, writable: false, enumerable: false, configurable: false,
+    });
+    Object.defineProperty(window, 'AudioTrack', {
+        value: AudioTrack, writable: false, enumerable: false, configurable: false,
+    });
+    Object.defineProperty(window, 'AudioPart', {
+        value: AudioPart, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default AudioTrackEditor;

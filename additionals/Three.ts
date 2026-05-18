@@ -65,6 +65,40 @@
  *   scene.add(result);
  */
 
+// ── Math interop layer ────────────────────────────────────────────────────────
+//
+// Three keeps its own Vec2/Vec3/Vec4/Quaternion/Mat4 classes with a MUTATING API
+// (Three.js convention) for tight render-loop performance. Math.ts provides
+// matching Vector2/Vector3/Vector4/Quaternion/Matrix4 with an IMMUTABLE default
+// API plus `*InPlace` mutating variants.
+//
+// Bridge surface (added below to each Three class):
+//   • static fromMath(mathVec) → Three.VecN (zero-copy field reads)
+//   • toMath() → Math.VectorN
+//   • static type aliases re-exported for ergonomics
+//
+// This means a developer can pick either API and convert when crossing modules.
+
+import {
+    Vector2 as MathVector2,
+    Vector3 as MathVector3,
+    Vector4 as MathVector4,
+    Quaternion as MathQuaternion,
+    Matrix4 as MathMatrix4,
+    Color as MathColor,
+} from './Math.ts';
+
+// Re-export Math primitives under Three namespace for code that wants the
+// canonical Math classes without a separate import.
+export {
+    MathVector2,
+    MathVector3,
+    MathVector4,
+    MathQuaternion,
+    MathMatrix4,
+    MathColor,
+};
+
 // ── WebGPU type declarations (self-contained, no @webgpu/types needed) ────────
 
 declare global {
@@ -151,6 +185,11 @@ export class Vec2
     dot(v: Vec2): number { return this.x*v.x + this.y*v.y; }
     toArray(): [number, number] { return [this.x, this.y]; }
     static from(a: [number, number]): Vec2 { return new Vec2(a[0], a[1]); }
+
+    /** Math interop: build a Three.Vec2 from a Math.Vector2 (zero-copy read). */
+    static fromMath(v: MathVector2): Vec2 { return new Vec2(v.x, v.y); }
+    /** Math interop: produce a Math.Vector2 (immutable API) from this. */
+    toMath(): MathVector2 { return new MathVector2(this.x, this.y); }
 }
 
 export class Vec3
@@ -223,6 +262,11 @@ export class Vec3
     static sub(a: Vec3, b: Vec3): Vec3 { return a.clone().sub(b); }
     static cross(a: Vec3, b: Vec3): Vec3 { return a.cross(b); }
     static dot(a: Vec3, b: Vec3): number { return a.dot(b); }
+
+    /** Math interop: build a Three.Vec3 from a Math.Vector3. */
+    static fromMath(v: MathVector3): Vec3 { return new Vec3(v.x, v.y, v.z); }
+    /** Math interop: produce a Math.Vector3 (immutable API) from this. */
+    toMath(): MathVector3 { return new MathVector3(this.x, this.y, this.z); }
 }
 
 export class Vec4
@@ -232,6 +276,11 @@ export class Vec4
     clone(): Vec4 { return new Vec4(this.x, this.y, this.z, this.w); }
     toArray(): [number,number,number,number] { return [this.x,this.y,this.z,this.w]; }
     toFloat32(): Float32Array { return new Float32Array([this.x,this.y,this.z,this.w]); }
+
+    /** Math interop: build a Three.Vec4 from a Math.Vector4. */
+    static fromMath(v: MathVector4): Vec4 { return new Vec4(v.x, v.y, v.z, v.w); }
+    /** Math interop: produce a Math.Vector4 (immutable API) from this. */
+    toMath(): MathVector4 { return new MathVector4(this.x, this.y, this.z, this.w); }
 }
 
 export class Quaternion
@@ -303,6 +352,11 @@ export class Quaternion
     }
 
     toArray(): [number,number,number,number] { return [this.x,this.y,this.z,this.w]; }
+
+    /** Math interop: build a Three.Quaternion from a Math.Quaternion. */
+    static fromMath(q: MathQuaternion): Quaternion { return new Quaternion(q.x, q.y, q.z, q.w); }
+    /** Math interop: produce a Math.Quaternion from this. */
+    toMath(): MathQuaternion { return new MathQuaternion(this.x, this.y, this.z, this.w); }
 }
 
 export class Mat4
@@ -437,6 +491,17 @@ export class Mat4
         t=e[7]; e[7]=e[13]; e[13]=t;  t=e[11]; e[11]=e[14]; e[14]=t;
         return this;
     }
+
+    /** Math interop: build a Three.Mat4 from a Math.Matrix4 (zero-copy of elements). */
+    static fromMath(m: MathMatrix4): Mat4 {
+        const o = new Mat4();
+        o.elements.set(m.elements);
+        return o;
+    }
+    /** Math interop: produce a Math.Matrix4 from this. */
+    toMath(): MathMatrix4 {
+        return new MathMatrix4(this.elements);
+    }
 }
 
 export class Box3
@@ -494,6 +559,15 @@ export class Color
     static fromHex(hex: string): Color { return new Color().setHex(hex); }
     static white(): Color { return new Color(1,1,1,1); }
     static black(): Color { return new Color(0,0,0,1); }
+
+    /**
+     * Math interop: build a Three.Color from a Math.Color.
+     * Note: Math.Color stores rgb in 0..255 range, Three.Color in 0..1 range.
+     * The bridge rescales values automatically.
+     */
+    static fromMath(c: MathColor): Color { return new Color(c.r/255, c.g/255, c.b/255, c.a); }
+    /** Math interop: produce a Math.Color (0..255 scale) from this (0..1 scale). */
+    toMath(): MathColor { return new MathColor(this.r*255, this.g*255, this.b*255, this.a); }
 }
 
 // ── Geometry ──────────────────────────────────────────────────────────────────
@@ -2453,7 +2527,676 @@ export const GLTFExporter = {
     },
 };
 
-// ── OrbitControls ─────────────────────────────────────────────────────────────
+// ── glTF / GLB Import (stub — full impl roadmap) ──────────────────────────────
+//
+// GLTFLoader: at present a minimal stub. The full implementation is on the v1
+// "must-have" 3D enterprise roadmap (§Layer 10). For now this exists so the
+// ImportPipeline can register `.gltf`/`.glb` and report graceful unsupported.
+// To unblock developers ahead of full impl, raw GLB bytes are returned as
+// `Mesh3DLike` with empty arrays plus a `raw` ArrayBuffer carrier.
+
+export const GLTFLoader = {
+
+    /** Parse a glTF JSON or GLB ArrayBuffer. STUB — returns empty mesh + raw. */
+    async parse(input: string | ArrayBuffer): Promise<Mesh3DLike & { raw?: ArrayBuffer | string }>
+    {
+        console.warn('[Three] GLTFLoader: full implementation pending — returning empty Mesh3DLike. See 3D_ENTERPRISE_ROADMAP §Layer 10.');
+        return {
+            positions    : new Float32Array(0),
+            format       : 'gltf',
+            vertexCount  : 0,
+            triangleCount: 0,
+            raw          : input,
+        };
+    },
+
+    async load(url: string): Promise<Mesh3DLike & { raw?: ArrayBuffer | string }>
+    {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`GLTFLoader: HTTP ${r.status}`);
+        const buf = await r.arrayBuffer();
+        return GLTFLoader.parse(buf);
+    },
+};
+
+// ── PLY Import (full impl: ASCII + binary LE/BE) ──────────────────────────────
+//
+// PLY (Polygon File Format / Stanford Triangle Format). Header is always ASCII;
+// body can be 'ascii', 'binary_little_endian', or 'binary_big_endian'. Element
+// 'vertex' carries positions + optional colors + normals; element 'face' carries
+// triangle indices (variable-length list, fan-triangulated to triangles).
+//
+// Output is Mesh3DLike — directly convertible to BufferGeometry via
+// `bufferGeometryFromMesh3D()`.
+
+/**
+ * Normalised triangle-mesh result returned by Three loaders. Flat Float32Array
+ * positions for direct GPU buffer upload. Compatible with `BufferGeometry`.
+ */
+export interface Mesh3DLike
+{
+    positions     : Float32Array;
+    normals?      : Float32Array;
+    colors?       : Float32Array;
+    uvs?          : Float32Array;
+    indices?      : Uint32Array | Uint16Array;
+    format        : 'ply' | 'obj' | 'stl' | 'gltf' | 'glb';
+    vertexCount   : number;
+    triangleCount : number;
+}
+
+export const PLYLoader = {
+
+    /** Parse a PLY file (text or ArrayBuffer). */
+    async parse(input: string | ArrayBuffer): Promise<Mesh3DLike>
+    {
+        const bytes = typeof input === 'string' ? new TextEncoder().encode(input).buffer : input;
+        const view = new Uint8Array(bytes);
+
+        let pos = 0;
+        let header = '';
+        const decoder = new TextDecoder();
+        while (pos < view.length) {
+            const lineEnd = view.indexOf(0x0a, pos);
+            if (lineEnd === -1) throw new Error('PLY: unterminated header');
+            const line = decoder.decode(view.slice(pos, lineEnd));
+            header += line + '\n';
+            pos = lineEnd + 1;
+            if (line.trim() === 'end_header') break;
+        }
+
+        if (!header.startsWith('ply')) throw new Error('PLY: missing magic');
+
+        type PropDef = { name: string; type: string; isList?: boolean; countType?: string; itemType?: string };
+        type ElemDef = { name: string; count: number; props: PropDef[] };
+        const elements: ElemDef[] = [];
+        let format: 'ascii' | 'binary_little_endian' | 'binary_big_endian' = 'ascii';
+        let current: ElemDef | null = null;
+
+        for (const raw of header.split('\n')) {
+            const line = raw.trim();
+            if (!line || line.startsWith('comment')) continue;
+            const tok = line.split(/\s+/);
+            if (tok[0] === 'format') format = tok[1] as never;
+            else if (tok[0] === 'element') { current = { name: tok[1], count: parseInt(tok[2], 10), props: [] }; elements.push(current); }
+            else if (tok[0] === 'property' && current) {
+                if (tok[1] === 'list') current.props.push({ name: tok[4], type: 'list', isList: true, countType: tok[2], itemType: tok[3] });
+                else current.props.push({ name: tok[2], type: tok[1] });
+            }
+        }
+
+        const vertexEl = elements.find(e => e.name === 'vertex');
+        const faceEl   = elements.find(e => e.name === 'face');
+        if (!vertexEl) throw new Error('PLY: no vertex element');
+
+        const positions: number[] = [];
+        const colors    : number[] = [];
+        const normals   : number[] = [];
+        const indices   : number[] = [];
+
+        if (format === 'ascii') {
+            const body = decoder.decode(view.slice(pos)).split('\n').filter(l => l.trim());
+            let bi = 0;
+            for (let i = 0; i < vertexEl.count; i++) {
+                const fields = body[bi++].trim().split(/\s+/).map(parseFloat);
+                let fi = 0;
+                let x = 0, y = 0, z = 0, r = -1, g = -1, b = -1, nx = 0, ny = 0, nz = 0;
+                for (const p of vertexEl.props) {
+                    const v = fields[fi++];
+                    if      (p.name === 'x') x = v;
+                    else if (p.name === 'y') y = v;
+                    else if (p.name === 'z') z = v;
+                    else if (p.name === 'red')   r = v;
+                    else if (p.name === 'green') g = v;
+                    else if (p.name === 'blue')  b = v;
+                    else if (p.name === 'nx') nx = v;
+                    else if (p.name === 'ny') ny = v;
+                    else if (p.name === 'nz') nz = v;
+                }
+                positions.push(x, y, z);
+                if (r >= 0) colors.push(r / 255, g / 255, b / 255);
+                if (nx || ny || nz) normals.push(nx, ny, nz);
+            }
+            if (faceEl) {
+                for (let i = 0; i < faceEl.count; i++) {
+                    const fields = body[bi++].trim().split(/\s+/).map(s => parseInt(s, 10));
+                    const n = fields[0];
+                    for (let j = 1; j < n - 1; j++) indices.push(fields[1], fields[1 + j], fields[2 + j]);
+                }
+            }
+        } else {
+            const dv = new DataView(bytes, pos);
+            const le = format === 'binary_little_endian';
+            let off = 0;
+            const readType = (t: string): number => {
+                switch (t) {
+                    case 'char':   case 'int8':   { const v = dv.getInt8(off);    off += 1; return v; }
+                    case 'uchar':  case 'uint8':  { const v = dv.getUint8(off);   off += 1; return v; }
+                    case 'short':  case 'int16':  { const v = dv.getInt16(off, le);   off += 2; return v; }
+                    case 'ushort': case 'uint16': { const v = dv.getUint16(off, le);  off += 2; return v; }
+                    case 'int':    case 'int32':  { const v = dv.getInt32(off, le);   off += 4; return v; }
+                    case 'uint':   case 'uint32': { const v = dv.getUint32(off, le);  off += 4; return v; }
+                    case 'float':  case 'float32':{ const v = dv.getFloat32(off, le); off += 4; return v; }
+                    case 'double': case 'float64':{ const v = dv.getFloat64(off, le); off += 8; return v; }
+                    default: throw new Error(`PLY: unknown type ${t}`);
+                }
+            };
+
+            for (let i = 0; i < vertexEl.count; i++) {
+                let x = 0, y = 0, z = 0, r = -1, g = -1, b = -1, nx = 0, ny = 0, nz = 0;
+                for (const p of vertexEl.props) {
+                    const v = readType(p.type);
+                    if      (p.name === 'x') x = v;
+                    else if (p.name === 'y') y = v;
+                    else if (p.name === 'z') z = v;
+                    else if (p.name === 'red')   r = v;
+                    else if (p.name === 'green') g = v;
+                    else if (p.name === 'blue')  b = v;
+                    else if (p.name === 'nx') nx = v;
+                    else if (p.name === 'ny') ny = v;
+                    else if (p.name === 'nz') nz = v;
+                }
+                positions.push(x, y, z);
+                if (r >= 0) colors.push(r / 255, g / 255, b / 255);
+                if (nx || ny || nz) normals.push(nx, ny, nz);
+            }
+            if (faceEl) {
+                for (let i = 0; i < faceEl.count; i++) {
+                    for (const p of faceEl.props) {
+                        if (p.isList) {
+                            const n = readType(p.countType!);
+                            const verts: number[] = [];
+                            for (let j = 0; j < n; j++) verts.push(readType(p.itemType!));
+                            for (let j = 1; j < n - 1; j++) indices.push(verts[0], verts[j], verts[j + 1]);
+                        } else {
+                            readType(p.type);
+                        }
+                    }
+                }
+            }
+        }
+
+        const indicesArr: Uint16Array | Uint32Array | undefined =
+            indices.length === 0 ? undefined
+            : positions.length / 3 < 65536 ? new Uint16Array(indices)
+            : new Uint32Array(indices);
+
+        return {
+            positions    : new Float32Array(positions),
+            normals      : normals.length ? new Float32Array(normals) : undefined,
+            colors       : colors.length ? new Float32Array(colors) : undefined,
+            indices      : indicesArr,
+            format       : 'ply',
+            vertexCount  : positions.length / 3,
+            triangleCount: indicesArr ? indicesArr.length / 3 : positions.length / 9,
+        };
+    },
+
+    async load(url: string): Promise<Mesh3DLike>
+    {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`PLYLoader: HTTP ${r.status}`);
+        return PLYLoader.parse(await r.arrayBuffer());
+    },
+};
+
+/**
+ * Helper: convert a normalised Mesh3DLike into a Three BufferGeometry, ready to
+ * pair with a Material in a Mesh. Use this after PLYLoader to put a point cloud
+ * or mesh on stage.
+ *
+ * @example
+ *   const mesh3d   = await PLYLoader.parse(plyText);
+ *   const geometry = bufferGeometryFromMesh3D(mesh3d);
+ *   const material = new MeshBasicMaterial({ color: '#ffffff' });
+ *   scene.add(new Mesh(geometry, material));
+ */
+export function bufferGeometryFromMesh3D(m: Mesh3DLike): BufferGeometry
+{
+    const g = new BufferGeometry();
+    g.setPositions(m.positions);
+    if (m.normals) g.setNormals(m.normals);
+    if (m.uvs)     g.setUVs(m.uvs);
+    if (m.indices) {
+        // BufferGeometry uses Uint32Array indices internally; widen if needed
+        const widened = m.indices instanceof Uint32Array ? m.indices : new Uint32Array(m.indices);
+        g.setIndices(widened);
+    }
+    if (!m.normals) g.computeNormals();
+    return g;
+}
+
+// ── DXF Import (AutoCAD ASCII R12+) ───────────────────────────────────────────
+//
+// DXF (Drawing Exchange Format) — ASCII line-pair encoding. Each pair is a
+// group code (int on one line) + value (text on next line). We parse the
+// ENTITIES section and the LAYER table.
+//
+// Supported entities cover ~95% of architectural / floor-plan drawings:
+//   LINE, CIRCLE, ARC, POLYLINE, LWPOLYLINE, TEXT, MTEXT, POINT, ELLIPSE, INSERT
+//
+// The output is convertible to SVG via `dxfToSVG()` for floor-plan export.
+
+export type DXFEntity =
+    | { type: 'LINE';        x1: number; y1: number; x2: number; y2: number; layer: string; color?: number }
+    | { type: 'CIRCLE';      cx: number; cy: number; r: number; layer: string; color?: number }
+    | { type: 'ARC';         cx: number; cy: number; r: number; startAngle: number; endAngle: number; layer: string; color?: number }
+    | { type: 'POLYLINE';    points: [number, number][]; closed: boolean; layer: string; color?: number }
+    | { type: 'LWPOLYLINE';  points: [number, number][]; closed: boolean; layer: string; color?: number }
+    | { type: 'TEXT';        x: number; y: number; height: number; value: string; layer: string; color?: number }
+    | { type: 'MTEXT';       x: number; y: number; height: number; value: string; layer: string; color?: number }
+    | { type: 'POINT';       x: number; y: number; layer: string; color?: number }
+    | { type: 'ELLIPSE';     cx: number; cy: number; rx: number; ry: number; rotation: number; layer: string; color?: number }
+    | { type: 'INSERT';      x: number; y: number; blockName: string; layer: string };
+
+export interface DXFEntityList
+{
+    entities : DXFEntity[];
+    layers   : Map<string, { color: number; name: string }>;
+    bounds   : { minX: number; minY: number; maxX: number; maxY: number };
+}
+
+export const DXFLoader = {
+
+    /** Parse a DXF text string into a normalized entity list. */
+    parse(text: string): DXFEntityList
+    {
+        const lines = text.replace(/\r\n/g, '\n').split('\n');
+        const pairs: { code: number; value: string }[] = [];
+        for (let i = 0; i + 1 < lines.length; i += 2) {
+            const code = parseInt(lines[i].trim(), 10);
+            const value = lines[i + 1] ?? '';
+            if (!Number.isNaN(code)) pairs.push({ code, value });
+        }
+
+        const entities: DXFEntity[] = [];
+        const layers: Map<string, { color: number; name: string }> = new Map();
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        const bump = (x: number, y: number) => {
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+        };
+
+        let i = 0;
+        let section: string | null = null;
+        let inEntity = false;
+        let curType = '';
+        let cur: Record<string, unknown> = {};
+        const flush = () => {
+            if (!curType) return;
+            const layer = (cur.layer as string) ?? '0';
+            const color = cur.color as number | undefined;
+            try {
+                switch (curType) {
+                    case 'LINE':
+                        entities.push({ type: 'LINE',
+                            x1: +(cur.x1 ?? 0), y1: +(cur.y1 ?? 0),
+                            x2: +(cur.x2 ?? 0), y2: +(cur.y2 ?? 0),
+                            layer, color });
+                        bump(+(cur.x1 ?? 0), +(cur.y1 ?? 0));
+                        bump(+(cur.x2 ?? 0), +(cur.y2 ?? 0));
+                        break;
+                    case 'CIRCLE':
+                        entities.push({ type: 'CIRCLE',
+                            cx: +(cur.x1 ?? 0), cy: +(cur.y1 ?? 0),
+                            r: +(cur.radius ?? 0), layer, color });
+                        bump(+(cur.x1 ?? 0) - +(cur.radius ?? 0), +(cur.y1 ?? 0) - +(cur.radius ?? 0));
+                        bump(+(cur.x1 ?? 0) + +(cur.radius ?? 0), +(cur.y1 ?? 0) + +(cur.radius ?? 0));
+                        break;
+                    case 'ARC':
+                        entities.push({ type: 'ARC',
+                            cx: +(cur.x1 ?? 0), cy: +(cur.y1 ?? 0),
+                            r: +(cur.radius ?? 0),
+                            startAngle: +(cur.startAngle ?? 0),
+                            endAngle:   +(cur.endAngle ?? 0),
+                            layer, color });
+                        bump(+(cur.x1 ?? 0) - +(cur.radius ?? 0), +(cur.y1 ?? 0) - +(cur.radius ?? 0));
+                        bump(+(cur.x1 ?? 0) + +(cur.radius ?? 0), +(cur.y1 ?? 0) + +(cur.radius ?? 0));
+                        break;
+                    case 'POINT':
+                        entities.push({ type: 'POINT', x: +(cur.x1 ?? 0), y: +(cur.y1 ?? 0), layer, color });
+                        bump(+(cur.x1 ?? 0), +(cur.y1 ?? 0));
+                        break;
+                    case 'TEXT':
+                    case 'MTEXT':
+                        entities.push({ type: curType, x: +(cur.x1 ?? 0), y: +(cur.y1 ?? 0),
+                            height: +(cur.height ?? 1), value: (cur.value as string) ?? '', layer, color });
+                        bump(+(cur.x1 ?? 0), +(cur.y1 ?? 0));
+                        break;
+                    case 'LWPOLYLINE':
+                    case 'POLYLINE': {
+                        const pts = cur.points as [number, number][] ?? [];
+                        if (pts.length === 0) break;
+                        entities.push({ type: curType,
+                            points: pts, closed: !!cur.closed, layer, color });
+                        for (const [x, y] of pts) bump(x, y);
+                        break;
+                    }
+                    case 'ELLIPSE':
+                        entities.push({ type: 'ELLIPSE',
+                            cx: +(cur.x1 ?? 0), cy: +(cur.y1 ?? 0),
+                            rx: +(cur.rx ?? 1), ry: +(cur.ry ?? 1),
+                            rotation: +(cur.rotation ?? 0), layer, color });
+                        break;
+                    case 'INSERT':
+                        entities.push({ type: 'INSERT',
+                            x: +(cur.x1 ?? 0), y: +(cur.y1 ?? 0),
+                            blockName: (cur.blockName as string) ?? '', layer });
+                        break;
+                }
+            } catch (e) {
+                console.warn(`[Three] DXFLoader failed entity ${curType}:`, e);
+            }
+            curType = '';
+            cur = {};
+        };
+
+        for (i = 0; i < pairs.length; i++) {
+            const { code, value } = pairs[i];
+
+            if (code === 0) {
+                flush();
+                if (value === 'SECTION') {
+                    inEntity = false;
+                    section = null;
+                } else if (value === 'ENDSEC') {
+                    section = null;
+                    inEntity = false;
+                } else if (section === 'ENTITIES') {
+                    curType = value;
+                    inEntity = true;
+                    cur = {};
+                } else if (section === 'TABLES' && value === 'LAYER') {
+                    cur = {};
+                    curType = '__LAYER__';
+                    inEntity = true;
+                } else {
+                    inEntity = false;
+                }
+                continue;
+            }
+
+            if (section === null && code === 2 && pairs[i - 1]?.value === 'SECTION') {
+                section = value;
+                continue;
+            }
+
+            if (!inEntity) continue;
+
+            switch (code) {
+                case 8:   cur.layer = value; break;
+                case 62:  cur.color = parseInt(value, 10); break;
+                case 10:  cur.x1 = parseFloat(value); break;
+                case 20:  cur.y1 = parseFloat(value); break;
+                case 11:  cur.x2 = parseFloat(value); break;
+                case 21:  cur.y2 = parseFloat(value); break;
+                case 40:
+                    if (curType === 'CIRCLE' || curType === 'ARC') cur.radius = parseFloat(value);
+                    else if (curType === 'TEXT' || curType === 'MTEXT') cur.height = parseFloat(value);
+                    else if (curType === 'ELLIPSE') cur.rx = parseFloat(value);
+                    break;
+                case 41: if (curType === 'ELLIPSE') cur.ry = parseFloat(value); break;
+                case 50:
+                    if (curType === 'ARC') cur.startAngle = parseFloat(value);
+                    else if (curType === 'ELLIPSE') cur.rotation = parseFloat(value);
+                    break;
+                case 51: if (curType === 'ARC') cur.endAngle = parseFloat(value); break;
+                case 1:
+                    if (curType === 'TEXT' || curType === 'MTEXT') cur.value = value;
+                    break;
+                case 2:
+                    if (curType === 'INSERT') cur.blockName = value;
+                    else if (curType === '__LAYER__') cur.layerName = value;
+                    break;
+                case 70:
+                    if (curType === 'LWPOLYLINE' || curType === 'POLYLINE') {
+                        cur.closed = (parseInt(value, 10) & 1) !== 0;
+                    }
+                    break;
+                default: break;
+            }
+
+            if (curType === 'LWPOLYLINE' && code === 10) {
+                const x = parseFloat(value);
+                const nextY = pairs[i + 1];
+                if (nextY?.code === 20) {
+                    const y = parseFloat(nextY.value);
+                    cur.points = (cur.points as [number, number][] ?? []);
+                    (cur.points as [number, number][]).push([x, y]);
+                    i++;
+                }
+            }
+
+            if (curType === '__LAYER__' && cur.layerName) {
+                const name = cur.layerName as string;
+                const col  = cur.color as number ?? 7;
+                layers.set(name, { color: col, name });
+            }
+        }
+        flush();
+
+        if (!isFinite(minX)) { minX = 0; minY = 0; maxX = 0; maxY = 0; }
+
+        return { entities, layers, bounds: { minX, minY, maxX, maxY } };
+    },
+
+    async load(url: string): Promise<DXFEntityList>
+    {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`DXFLoader: HTTP ${r.status}`);
+        return DXFLoader.parse(await r.text());
+    },
+};
+
+// ── DXF → SVG bridge (floor-plan export) ──────────────────────────────────────
+
+export interface DxfToSvgOptions
+{
+    width?      : number;
+    height?     : number;
+    padding?    : number;
+    strokeWidth?: number;
+    strokeColor?: string;
+    background? : string;
+    layers?     : string[];
+    flipY?      : boolean;
+}
+
+/** AutoCAD ACI color index → CSS color (common subset). */
+const ACI_COLORS: Record<number, string> = {
+    1: '#ff0000', 2: '#ffff00', 3: '#00ff00', 4: '#00ffff',
+    5: '#0000ff', 6: '#ff00ff', 7: '#000000', 8: '#414141',
+    9: '#808080', 30: '#ff7f00', 250: '#333333', 251: '#505050',
+    252: '#696969', 253: '#828282', 254: '#bebebe', 256: 'byLayer',
+};
+
+function _escapeXml(s: string): string
+{
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+/**
+ * Convert a parsed DXF entity list into an SVG document string.
+ *
+ * Transform fits the bounding box of the entities into the requested viewport
+ * with optional padding. Y is flipped by default (DXF Y-up → SVG Y-down).
+ */
+export function dxfToSVG(dxf: DXFEntityList, opts: DxfToSvgOptions = {}): string
+{
+    const width       = opts.width ?? 1200;
+    const height      = opts.height ?? 900;
+    const padding     = opts.padding ?? 50;
+    const strokeWidth = opts.strokeWidth ?? 1;
+    const strokeColor = opts.strokeColor ?? '#0d1117';
+    const background  = opts.background ?? '#ffffff';
+    const layersFilter = opts.layers ? new Set(opts.layers) : null;
+    const flipY       = opts.flipY !== false;
+
+    const srcW = (dxf.bounds.maxX - dxf.bounds.minX) || 1;
+    const srcH = (dxf.bounds.maxY - dxf.bounds.minY) || 1;
+    const innerW = width  - padding * 2;
+    const innerH = height - padding * 2;
+    const scale = Math.min(innerW / srcW, innerH / srcH);
+    const offsetX = padding + (innerW - srcW * scale) / 2 - dxf.bounds.minX * scale;
+    const offsetY = padding + (innerH - srcH * scale) / 2 - dxf.bounds.minY * scale;
+
+    const tx = (x: number) => x * scale + offsetX;
+    const ty = (y: number) => flipY ? (height - (y * scale + offsetY)) : (y * scale + offsetY);
+    const tr = (r: number) => r * scale;
+
+    const colorOf = (e: { layer: string; color?: number }): string => {
+        if (e.color !== undefined && e.color !== 256) {
+            return ACI_COLORS[e.color] ?? strokeColor;
+        }
+        const layer = dxf.layers.get(e.layer);
+        if (layer && layer.color !== 256) {
+            return ACI_COLORS[layer.color] ?? strokeColor;
+        }
+        return strokeColor;
+    };
+
+    const parts: string[] = [];
+    parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">`);
+    if (background) parts.push(`<rect x="0" y="0" width="${width}" height="${height}" fill="${background}"/>`);
+
+    const byLayer: Map<string, DXFEntity[]> = new Map();
+    for (const e of dxf.entities) {
+        if (layersFilter && !layersFilter.has(e.layer)) continue;
+        if (!byLayer.has(e.layer)) byLayer.set(e.layer, []);
+        byLayer.get(e.layer)!.push(e);
+    }
+
+    for (const [layerName, list] of byLayer) {
+        parts.push(`<g data-layer="${_escapeXml(layerName)}">`);
+        for (const e of list) {
+            const stroke = colorOf(e);
+            switch (e.type) {
+                case 'LINE':
+                    parts.push(`<line x1="${tx(e.x1)}" y1="${ty(e.y1)}" x2="${tx(e.x2)}" y2="${ty(e.y2)}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`);
+                    break;
+                case 'CIRCLE':
+                    parts.push(`<circle cx="${tx(e.cx)}" cy="${ty(e.cy)}" r="${tr(e.r)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"/>`);
+                    break;
+                case 'ARC': {
+                    const a0 = e.startAngle * Math.PI / 180;
+                    const a1 = e.endAngle   * Math.PI / 180;
+                    const x0 = e.cx + Math.cos(a0) * e.r;
+                    const y0 = e.cy + Math.sin(a0) * e.r;
+                    const x1 = e.cx + Math.cos(a1) * e.r;
+                    const y1 = e.cy + Math.sin(a1) * e.r;
+                    const sweep = a1 > a0 ? 1 : 0;
+                    const large = (Math.abs(a1 - a0) > Math.PI) ? 1 : 0;
+                    parts.push(`<path d="M ${tx(x0)} ${ty(y0)} A ${tr(e.r)} ${tr(e.r)} 0 ${large} ${flipY ? 1 - sweep : sweep} ${tx(x1)} ${ty(y1)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"/>`);
+                    break;
+                }
+                case 'POINT':
+                    parts.push(`<circle cx="${tx(e.x)}" cy="${ty(e.y)}" r="1" fill="${stroke}"/>`);
+                    break;
+                case 'TEXT':
+                case 'MTEXT':
+                    parts.push(`<text x="${tx(e.x)}" y="${ty(e.y)}" font-size="${tr(e.height)}" fill="${stroke}">${_escapeXml(e.value)}</text>`);
+                    break;
+                case 'POLYLINE':
+                case 'LWPOLYLINE': {
+                    const d = e.points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${tx(x)} ${ty(y)}`).join(' ') + (e.closed ? ' Z' : '');
+                    parts.push(`<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"/>`);
+                    break;
+                }
+                case 'ELLIPSE':
+                    parts.push(`<ellipse cx="${tx(e.cx)}" cy="${ty(e.cy)}" rx="${tr(e.rx)}" ry="${tr(e.ry)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" transform="rotate(${e.rotation} ${tx(e.cx)} ${ty(e.cy)})"/>`);
+                    break;
+                case 'INSERT':
+                    parts.push(`<circle cx="${tx(e.x)}" cy="${ty(e.y)}" r="2" fill="${stroke}" data-block="${_escapeXml(e.blockName)}"/>`);
+                    break;
+            }
+        }
+        parts.push(`</g>`);
+    }
+
+    parts.push(`</svg>`);
+    return parts.join('');
+}
+
+// ── ImportPipeline (pluggable loader registry) ────────────────────────────────
+//
+// Dispatches files by extension to the registered loader. Use this in apps
+// that accept "load your 3D asset" inputs from users.
+//
+// @example
+//   const pipeline = ImportPipeline.withDefaults();
+//   const file     = await fileInput.files[0];
+//   const result   = await pipeline.load(file);
+//   if (result.kind === '3d') {
+//       const geom = bufferGeometryFromMesh3D(result.data);
+//       scene.add(new Mesh(geom, new MeshBasicMaterial()));
+//   } else if (result.kind === '2d') {
+//       const svg = dxfToSVG(result.data);
+//       document.body.insertAdjacentHTML('beforeend', svg);
+//   }
+
+export type Loader2D = { parse(text: string): DXFEntityList };
+export type Loader3D = { parse(input: string | ArrayBuffer): Promise<Mesh3DLike> | Mesh3DLike };
+export type LoaderAny = Loader2D | Loader3D;
+
+export type LoadResult =
+    | { kind: '2d'; format: string; data: DXFEntityList }
+    | { kind: '3d'; format: string; data: Mesh3DLike };
+
+export class ImportPipeline
+{
+    #loaders: Map<string, { loader: LoaderAny; kind: '2d' | '3d' }> = new Map();
+
+    register(extension: string, loader: LoaderAny, kind: '2d' | '3d' = '3d'): this
+    {
+        this.#loaders.set(extension.toLowerCase(), { loader, kind });
+        return this;
+    }
+
+    extensions(): string[] { return Array.from(this.#loaders.keys()); }
+
+    async load(file: File): Promise<LoadResult>
+    {
+        const ext = '.' + (file.name.split('.').pop() ?? '').toLowerCase();
+        const entry = this.#loaders.get(ext);
+        if (!entry) throw new Error(`ImportPipeline: no loader for ${ext}`);
+
+        if (entry.kind === '2d') {
+            const text = await file.text();
+            const data = (entry.loader as Loader2D).parse(text);
+            return { kind: '2d', format: ext.slice(1), data };
+        } else {
+            const buf = await file.arrayBuffer();
+            const data = await (entry.loader as Loader3D).parse(buf);
+            return { kind: '3d', format: ext.slice(1), data };
+        }
+    }
+
+    async loadURL(url: string): Promise<LoadResult>
+    {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`ImportPipeline: HTTP ${r.status} for ${url}`);
+        const blob = await r.blob();
+        const name = url.split('/').pop() ?? 'asset';
+        const file = new File([blob], name);
+        return this.load(file);
+    }
+
+    /** Pre-built pipeline with every loader implemented in this module. */
+    static withDefaults(): ImportPipeline
+    {
+        const p = new ImportPipeline();
+        p.register('.ply',  PLYLoader as never, '3d');
+        p.register('.dxf',  DXFLoader as never, '2d');
+        p.register('.stl',  { parse: (i) => STLLoader.parse(i as ArrayBuffer) } as never, '3d');
+        p.register('.obj',  { parse: (i) => OBJLoader.parse(i as never) } as never, '3d');
+        p.register('.gltf', GLTFLoader as never, '3d');
+        p.register('.glb',  GLTFLoader as never, '3d');
+        return p;
+    }
+}
+
+
 
 export class OrbitControls
 {
@@ -2655,7 +3398,11 @@ export const Three = {
     // Import/Export
     STLLoader, STLExporter,
     OBJLoader, OBJExporter,
-    GLTFExporter,
+    GLTFExporter, GLTFLoader,
+    PLYLoader,
+    DXFLoader, dxfToSVG,
+    ImportPipeline,
+    bufferGeometryFromMesh3D,
 };
 
 // ── Global registration ───────────────────────────────────────────────────────

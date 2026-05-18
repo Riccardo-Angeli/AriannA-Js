@@ -1,30 +1,119 @@
 /**
+ * @module    components/display/Divider
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Divider — horizontal or vertical separator with optional centred label.
+ *
+ * @example JS
+ *   const d = new Divider();
+ *   d.label = 'OR';
+ *
+ * @example HTML
+ *   <arianna-divider></arianna-divider>
+ *   <arianna-divider orientation="vertical"></arianna-divider>
+ *   <arianna-divider variant="dashed" label="Section"></arianna-divider>
+ *
+ * Events: (none)
+ * Slots:  default — alternative to `label` attribute
+ * Attrs:  orientation, variant, label
  */
 
-/**
- * @module Divider
- * @example
- *   const LICENSES = new Divider('#root', { label: 'OR' });
- *   // Vertical:
- *   const dv = new Divider('#root', { orientation: 'vertical' });
- */
-import { Control } from '../core/Control.ts';
-export interface DividerOptions { label?: string; orientation?: 'horizontal'|'vertical'; variant?: 'solid'|'dashed'|'dotted'; class?: string; }
-export class Divider extends Control<DividerOptions> {
-  constructor(container: string | HTMLElement | null = null, opts: DividerOptions = {}) {
-    super(container, 'div', { orientation: 'horizontal', variant: 'solid', ...opts });
-    this.el.className = `ar-divider ar-divider--${opts.orientation??'horizontal'} ar-divider--${opts.variant??'solid'}${opts.class?' '+opts.class:''}`;
-    this.el.setAttribute('role', 'separator');
-  }
-  set label(v: string) { this._set('label' as never, v as never); }
-  protected _build() {
-    this.el.innerHTML = '';
-    const lbl = this._get('label', '') as string;
-    this._el('span', 'ar-divider__line', this.el);
-    if (lbl) this._el('span', 'ar-divider__label', this.el).textContent = lbl;
-    if (lbl) this._el('span', 'ar-divider__line', this.el);
-  }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
+
+export interface DividerOptions {
+    orientation? : 'horizontal' | 'vertical';
+    variant?     : 'solid' | 'dashed' | 'dotted';
+    label?       : string;
 }
-export const DividerCSS = `.ar-divider{display:flex;align-items:center;gap:10px}.ar-divider--horizontal{width:100%}.ar-divider--vertical{align-self:stretch;flex-direction:column;width:auto}.ar-divider__line{border-top:1px solid var(--ar-border);flex:1}.ar-divider--vertical .ar-divider__line{border-top:none;border-left:1px solid var(--ar-border);flex:1}.ar-divider--dashed .ar-divider__line{border-style:dashed}.ar-divider--dotted .ar-divider__line{border-style:dotted}.ar-divider__label{color:var(--ar-muted);font-size:.78rem;white-space:nowrap}`;
+
+export class Divider extends Component('arianna-divider', HTMLElement, {}, {
+    attrs : ['orientation', 'variant', 'label'],
+    shadow: false,
+})
+{
+    build(_opts: DividerOptions = {})
+    {
+        this.setAttribute('role', 'separator');
+        const label = this.attrSignal('label');
+
+        this.hasLabel  = () => !!label.get();
+        this.labelText = () => label.get() ?? '';
+
+        this.template = html`
+            <span class="ar-divider__line"></span>
+            <span class="ar-divider__label" a-if="this.hasLabel()">{{ this.labelText() }}</span>
+            <span class="ar-divider__line"  a-if="this.hasLabel()"></span>
+        `;
+
+        this.Sheet = Divider.DefaultSheet();
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get orientation(): 'horizontal' | 'vertical' { return (this.getAttribute('orientation') ?? 'horizontal') as never; }
+    set orientation(v: 'horizontal' | 'vertical') { this.setAttribute('orientation', v); }
+
+    get variant(): 'solid' | 'dashed' | 'dotted' { return (this.getAttribute('variant') ?? 'solid') as never; }
+    set variant(v: 'solid' | 'dashed' | 'dotted') { this.setAttribute('variant', v); }
+
+    get label(): string  { return this.getAttribute('label') ?? ''; }
+    set label(v: string) { v ? this.setAttribute('label', v) : this.removeAttribute('label'); }
+
+    private hasLabel : () => boolean = () => false;
+    private labelText: () => string  = () => '';
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    display    : 'flex',
+                    alignItems : 'center',
+                    gap        : '10px',
+                }),
+                new Rule(':root[orientation="horizontal"]', { width: '100%' }),
+                new Rule(':root:not([orientation])',         { width: '100%' }),
+                new Rule(':root[orientation="vertical"]', {
+                    alignSelf    : 'stretch',
+                    flexDirection: 'column',
+                    width        : 'auto',
+                }),
+                new Rule('.ar-divider__line', {
+                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                    flex     : '1',
+                }),
+                new Rule(':root[orientation="vertical"] .ar-divider__line', {
+                    borderTop : 'none',
+                    borderLeft: '1px solid var(--arianna-border, #d8d8d8)',
+                    flex      : '1',
+                }),
+                new Rule(':root[variant="dashed"] .ar-divider__line', { borderStyle: 'dashed' }),
+                new Rule(':root[variant="dotted"] .ar-divider__line', { borderStyle: 'dotted' }),
+                new Rule('.ar-divider__label', {
+                    color     : 'var(--arianna-muted, #8b949e)',
+                    fontSize  : '0.78rem',
+                    whiteSpace: 'nowrap',
+                }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Divider', {
+        value: Divider, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default Divider;

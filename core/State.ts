@@ -1,25 +1,43 @@
 /**
- * @module    State
+ * @module    core/State
  * @author    Riccardo Angeli
- * @version   1.2.0
- * @copyright Riccardo Angeli 2012-2026
+ * @version   2.0.0
+ * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  *
- * Deep reactive state container per AriannA.
- * I primitivi Signal sono importati da Observable — zero duplicazione.
+ * State<T> — Observable + named snapshots + mutation history.
  *
- *   State.signal(v)       → Signal<T> atomico
- *   State.signalMono(v)   → SignalMono<T> slot singolo
- *   State.effect(fn)      → Effect isolato con cleanup
- *   State.computed(fn)    → Signal derivato read-only
- *   State.batch(fn)       → flush raggruppato
- *   State.untrack(fn)     → lettura senza dipendenze
- *   new State({ ... })    → deep reactive con Proxy + getter/setter
+ * Built on top of Observable: shares the same reactive Proxy engine.
+ *
+ *   .Value   — preferred (Observable parent)
+ *   .State   — alias of .Value (backward compatibility)
+ *   .States  — Map of named snapshots
+ *   .History — Array of every mutation, with ts + path
+ *   addState/removeState — snapshot management
+ *
+ * # Hierarchy
+ *
+ *   Observable (reactive base)
+ *     └─ State    (snapshots + history)
+ *
+ * # API preservation
+ *
+ * legacy using `state.State.name = 'X'` continues to work — .State is
+ * an alias of .Value (the proxy).  Event listeners via on()/off()/fire() are
+ * inherited from Observable.  StateEvent type is preserved.
  */
 
-import { signal, signalMono, sinkText, effect, computed, batch, untrack, uuid } from './Observable.ts';
-import type { Signal, SignalMono, ReadonlySignal, AriannAEvent } from './Observable.ts';
+import {
+    Observable,
+    signal, signalMono, sinkText, effect, computed, batch, untrack, uuid,
+    type ChangeEvent, type Signal, type SignalMono, type ReadonlySignal, type AriannAEvent,
+} from './Observable.ts';
 
 export type { Signal, SignalMono, ReadonlySignal };
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  StateEvent — legacy shape, still emitted for backward compat
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface StateEvent extends AriannAEvent
 {
@@ -28,20 +46,33 @@ export interface StateEvent extends AriannAEvent
     Property : { Name: string | symbol; Old: unknown; New: unknown };
 }
 
-interface Listener { readonly Id: string; Handler: (e: StateEvent) => void; Target: object; }
 
-const COLLECTION_MUTATORS = new Set(['set','add','delete','clear','push','pop','shift','unshift','splice','fill','sort','reverse','copyWithin']);
+// ─────────────────────────────────────────────────────────────────────────────
+//  State<T> class
+// ─────────────────────────────────────────────────────────────────────────────
 
-export class State<T extends object>
+export interface StateOptions
 {
-    readonly #events  = new Map<string, Set<Listener>>();
-    readonly #states  = new Map<string, Partial<T>>();
-    readonly #history : Array<{ key: string | symbol; old: unknown; new: unknown; ts: number }> = [];
-    #source  : T;
-    #state!  : T;
+    /**
+     * Track every mutation in `.History` (older→newer).
+     * - true        : track all mutations (default, kept for back-compat)
+     * - false       : skip history entirely (lower memory for large objects)
+     * - { max:N }   : track at most N most recent entries (circular)
+     *
+     * For large objects or hot mutation paths, switching to `false` or
+     * `{ max: 100 }` removes hidden cost.
+     */
+    history? : boolean | { max: number };
+}
 
-    // ── Static fine-grain API ─────────────────────────────────────────────────
+export class State<T extends object = object> extends Observable<T>
+{
+    readonly #states   : Map<string, Partial<T>> = new Map();
+    readonly #history2 : Array<{ key: string | symbol; old: unknown; new: unknown; ts: number }> = [];
+    readonly #historyEnabled: boolean;
+    readonly #historyMax: number;
 
+    // ── Static fine-grain API (re-exported from Observable) ───────────────────
     static signal     = signal;
     static signalMono = signalMono;
     static sinkText   = sinkText;
@@ -50,98 +81,109 @@ export class State<T extends object>
     static batch      = batch;
     static untrack    = untrack;
 
-    constructor(source: T)
+    constructor(source: T, opts: StateOptions = {})
     {
-        this.#source = source;
-        this.#state  = this.#load(source);
-        this.#history.push({ key: '__init__', old: undefined, new: source, ts: Date.now() });
+        super(source, { history: false });   // we manage our own history
 
-        Object.defineProperty(this, 'State',   { enumerable: true, configurable: false, get: () => this.#state, set: (v: T) => { if (v && typeof v === 'object') { this.#source = v; this.#state = this.#load(v); } } });
-        Object.defineProperty(this, 'States',  { enumerable: true, configurable: false, get: () => this.#states });
-        Object.defineProperty(this, 'History', { enumerable: true, configurable: false, get: () => this.#history });
-    }
+        const histOpt = opts.history ?? true;
+        if (histOpt === false) {
+            this.#historyEnabled = false;
+            this.#historyMax     = 0;
+        } else if (histOpt === true) {
+            this.#historyEnabled = true;
+            this.#historyMax     = Number.POSITIVE_INFINITY;
+        } else {
+            this.#historyEnabled = true;
+            this.#historyMax     = Math.max(1, histOpt.max);
+        }
 
-    declare readonly State   : T;
-    declare readonly States  : Map<string, Partial<T>>;
-    declare readonly History : Array<{ key: string | symbol; old: unknown; new: unknown; ts: number }>;
+        if (this.#historyEnabled) {
+            this.#history2.push({ key: '__init__', old: undefined, new: source, ts: Date.now() });
+        }
 
-    on(types: string, cb: (e: StateEvent) => void): this
-    {
-        const ls: Listener = { Id: uuid(), Handler: cb, Target: this };
-        types.split(/(?!-)\W/g).filter(Boolean).forEach(t => { const b = this.#events.get(t) ?? new Set<Listener>(); b.add(ls); this.#events.set(t, b); });
-        return this;
-    }
-
-    off(type: string, cb: (e: StateEvent) => void): this
-    { this.#events.get(type)?.forEach(l => l.Handler === cb && this.#events.get(type)!.delete(l)); return this; }
-
-    fire(event: StateEvent): this
-    { if (!event?.Type) return this; this.#events.get(event.Type)?.forEach(l => l.Handler.call(l.Target, event)); return this; }
-
-    match(types: string, cb: (e: StateEvent) => void): this { return this.on(types, cb); }
-    addState(name: string, snapshot: Partial<T>): this    { this.#states.set(name, snapshot); return this; }
-    removeState(name: string): this                        { this.#states.delete(name); return this; }
-
-    #emit(key: string | symbol, old: unknown, newVal: unknown, target: object): void
-    {
-        const k  = String(key);
-        const ev : StateEvent = { Type: '', Target: target, State: this, Property: { Name: key, Old: old, New: newVal } };
-        const fire = (type: string) => { ev.Type = type; this.fire(ev); };
-        fire('State-Changing'); fire(`State-${k}-Changing`);
-        fire(`State-${k}-Changed`); fire('State-Changed');
-        this.#history.push({ key, old, new: newVal, ts: Date.now() });
-        if (this.#states.size) this.#states.forEach(snap => {
-            if ((snap as Record<string, unknown>)[k] === newVal) {
-                const se = { ...ev }; se.Type = 'State-Reached'; this.fire(se);
-                se.Type = `State-${k}-Reached`; this.fire(se);
+        // Wire 'change-after' to populate history + emit legacy StateEvents.
+        // Events are always emitted; only history list write is opt-out.
+        super.on('change-after', (e: ChangeEvent) => {
+            if (this.#historyEnabled) {
+                this.#history2.push({ key: e.Key, old: e.Old, new: e.New, ts: Date.now() });
+                if (this.#history2.length > this.#historyMax) {
+                    this.#history2.splice(0, this.#history2.length - this.#historyMax);
+                }
             }
+            this.#emitStateEvents(e);
         });
     }
 
-    #proxyHandler(parent: object): ProxyHandler<object>
-    {
-        const self = this;
-        return {
-            get(target, key, recv) {
-                const val = Reflect.get(target, key, recv);
-                if (typeof val === 'function' && COLLECTION_MUTATORS.has(String(key).toLowerCase()))
-                    return function(this: object, ...args: unknown[]) { const old = Array.isArray(target) ? [...target] : undefined; self.#emit(key, old, args[0], target); return (val as (...a: unknown[]) => unknown).apply(target, args); };
-                return val;
-            },
-            set(target, key, value, recv): boolean { const old = (target as Record<string|symbol, unknown>)[key]; if (old === value) return true; Reflect.set(target, key, value, recv); self.#emit(key, old, value, target); return true; },
-        };
-    }
+    /** Alias of .Value — backward-compatible legacy accessor. */
+    get State(): T { return this.Value; }
 
-    #load(source: T): T
+    /** Named snapshots map.  Use addState(name, snap) to populate. */
+    get States(): Map<string, Partial<T>> { return this.#states; }
+
+    /** Full mutation history (older first). */
+    get History(): Array<{ key: string | symbol; old: unknown; new: unknown; ts: number }>
+    { return this.#history2; }
+
+    /** Register a named snapshot.  Useful for save/restore patterns. */
+    addState(name: string, snapshot: Partial<T>): this
+    { this.#states.set(name, snapshot); return this; }
+
+    /** Remove a named snapshot. */
+    removeState(name: string): this
+    { this.#states.delete(name); return this; }
+
+    /**
+     * Emit the legacy State-* events that older code expects:
+     *   - State-Changing
+     *   - State-<key>-Changing
+     *   - State-<key>-Changed
+     *   - State-Changed
+     *   - State-Reached  (if a snapshot matches the new value)
+     */
+    #emitStateEvents(e: ChangeEvent): void
     {
-        const s = { ...source } as Record<string, unknown>;
-        const wrap = (o: Record<string, unknown>): Record<string, unknown> => {
-            for (const k of Object.keys(o)) {
-                let v = o[k];
-                Object.defineProperty(o, k, {
-                    enumerable: true, configurable: true,
-                    get: () => v,
-                    set: (V: unknown) => {
-                        if (v === V) return;
-                        const old = v; v = V;
-                        this.#emit(k, old, V, o);
-                        if (V && typeof V === 'object' && !(V instanceof Map) && !(V instanceof Set) && !(V instanceof WeakMap) && !(V instanceof WeakSet) && !Array.isArray(V))
-                            v = wrap(V as Record<string, unknown>);
-                    },
-                });
-                if (v && typeof v === 'object') {
-                    if (v instanceof Map || v instanceof WeakMap || v instanceof Set || v instanceof WeakSet || Array.isArray(v))
-                        o[k] = v = new Proxy(v as object, this.#proxyHandler(o));
-                    else o[k] = v = wrap(v as Record<string, unknown>);
+        const k = String(e.Key);
+        const stateEv: StateEvent = {
+            Type     : '',
+            Target   : e.Target,
+            State    : this as unknown as State<object>,
+            Property : { Name: e.Key, Old: e.Old, New: e.New },
+        };
+
+        const stages: string[] = [
+            'State-Changing',
+            `State-${k}-Changing`,
+            `State-${k}-Changed`,
+            'State-Changed',
+        ];
+        for (const t of stages) {
+            stateEv.Type = t;
+            super.fire(t, { Path: e.Path, Key: e.Key, Old: e.Old, New: e.New, Kind: e.Kind });
+        }
+
+        // Snapshot match → State-Reached
+        if (this.#states.size > 0) {
+            for (const snap of this.#states.values()) {
+                if ((snap as Record<string, unknown>)[k] === e.New) {
+                    stateEv.Type = 'State-Reached';
+                    super.fire('State-Reached', { Path: e.Path, Key: e.Key, Old: e.Old, New: e.New, Kind: e.Kind });
+                    stateEv.Type = `State-${k}-Reached`;
+                    super.fire(`State-${k}-Reached`, { Path: e.Path, Key: e.Key, Old: e.Old, New: e.New, Kind: e.Kind });
                 }
             }
-            return o;
-        };
-        return wrap(s) as T;
+        }
     }
 }
 
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'State', { enumerable: true, configurable: false, writable: false, value: State });
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Module side-effects + default
+// ─────────────────────────────────────────────────────────────────────────────
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'State', {
+        enumerable: true, configurable: false, writable: false, value: State,
+    });
+}
 
 export default State;

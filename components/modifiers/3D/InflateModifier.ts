@@ -5,14 +5,26 @@
  * @license   MIT / Commercial (dual license)
  *
  * Expand geometry along vertex normals.
+ *
+ * @example HTML
+ *   <arianna-inflate for="m1" amount="0.1"></arianna-inflate>
+ *
+ * Attrs (declarative): for, amount, enabled
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, _vAdd, _vScale, _v3, type MeshLike } from './Base.ts';
+import { Component } from '../../../core/Component.ts';
+import {
+    Modifier3D, Modifier3DElement,
+    _cloneGeom, _recomputeNormals, _vAdd, _vScale, _v3,
+    type MeshLike,
+} from './Base.ts';
 
 export class InflateModifier extends Modifier3D {
     #amount: number;
 
     constructor(mesh: MeshLike, amount = 0.1) { super(mesh); this.#amount = amount; }
+
+    setAmount(a: number): this { this.#amount = a; return this; }
 
     apply(): this {
         if (!this.enabled) return this;
@@ -24,3 +36,21 @@ export class InflateModifier extends Modifier3D {
         return this;
     }
 }
+
+export class InflateModifierElement extends (Component('arianna-inflate', HTMLElement, {}, {
+    attrs : ['for', 'amount', 'enabled'],
+    shadow: false,
+}) as typeof Modifier3DElement) {
+    protected createModifier(mesh: MeshLike): Modifier3D {
+        const amount = parseFloat(this.getAttribute('amount') ?? '0.1') || 0.1;
+        return new InflateModifier(mesh, amount);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'InflateModifier', {
+        value: InflateModifier, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default InflateModifier;

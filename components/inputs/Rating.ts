@@ -1,43 +1,139 @@
 /**
+ * @module    components/inputs/Rating
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Rating — star rating input (0 to max).
+ *
+ * @example HTML
+ *   <arianna-rating max="5" value="3"></arianna-rating>
+ *
+ * Events: arianna:change  detail: { value }
+ * Attrs:  max, value, readonly, disabled, icon, empty-icon
  */
 
-/**
- * @module Rating
- * @example
- *   const r = new Rating('#root', { max: 5 });
- *   r.value = 3;
- *   r.on('change', ({ value }) => console.log(value));
- */
-import { Control } from '../core/Control.ts';
-export interface RatingOptions { max?: number; readonly?: boolean; icon?: string; emptyIcon?: string; class?: string; }
-export class Rating extends Control<RatingOptions> {
-  private _value = 0;
-  private _hover = 0;
-  constructor(container: string | HTMLElement | null = null, opts: RatingOptions = {}) {
-    super(container, 'div', { max: 5, icon: '★', emptyIcon: '☆', ...opts });
-    this.el.className = `ar-rating${opts.class?' '+opts.class:''}`;
-    this.el.setAttribute('role', 'slider');
-  }
-  set value(v: number) { this._value = v; this._build(); }
-  get value()          { return this._value; }
-  protected _build() {
-    this.el.innerHTML = '';
-    const max   = this._get('max', 5) as number;
-    const ro    = this._get('readonly', false) as boolean;
-    const icon  = this._get('icon', '★') as string;
-    const empty = this._get('emptyIcon', '☆') as string;
-    for (let i = 1; i <= max; i++) {
-      const filled = i <= (this._hover || this._value);
-      const star = this._el('span', `ar-rating__star${filled?' ar-rating__star--filled':''}`, this.el);
-      star.textContent = filled ? icon : empty;
-      if (!ro) {
-        star.addEventListener('click',      () => { this._value = i; this._emit('change', { value: i }); this._build(); });
-        star.addEventListener('mouseenter', () => { this._hover = i; this._build(); });
-        star.addEventListener('mouseleave', () => { this._hover = 0; this._build(); });
-      }
-    }
-  }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
+
+export interface RatingOptions {
+    max?       : number;
+    value?     : number;
+    readonly?  : boolean;
+    disabled?  : boolean;
+    icon?      : string;
+    emptyIcon? : string;
 }
-export const RatingCSS = `.ar-rating{display:inline-flex;gap:2px}.ar-rating__star{color:var(--ar-dim);cursor:pointer;font-size:1.3rem;transition:color var(--ar-transition),transform var(--ar-transition)}.ar-rating__star--filled{color:var(--ar-warning)}.ar-rating__star:hover{transform:scale(1.15)}`;
+
+interface Star {
+    index : number;
+    filled: boolean;
+    cls   : string;
+    icon  : string;
+}
+
+export class Rating extends Component('arianna-rating', HTMLElement, {}, {
+    attrs : ['max', 'value', 'readonly', 'disabled', 'icon', 'empty-icon'],
+    shadow: false,
+})
+{
+    build(_opts: RatingOptions = {})
+    {
+        const max   = this.attrSignal('max');
+        const value = this.attrSignal('value');
+        const icon  = this.attrSignal('icon');
+        const emptyIcon = this.attrSignal('empty-icon');
+
+        this.maxVal      = () => parseInt(max.get() ?? '5', 10) || 5;
+        this.currentVal  = () => parseFloat(value.get() ?? '0') || 0;
+        this.isReadonly  = () => this.hasAttribute('readonly');
+        this.isDisabled  = () => this.hasAttribute('disabled');
+        this.fullIcon    = () => icon.get() ?? '★';
+        this.unfilledIcon = () => emptyIcon.get() ?? '☆';
+
+        this.stars = (): Star[] => {
+            const m = this.maxVal();
+            const v = this.currentVal();
+            const out: Star[] = [];
+            for (let i = 1; i <= m; i++) {
+                const filled = i <= v;
+                out.push({
+                    index : i,
+                    filled,
+                    cls   : 'ar-rating__star' + (filled ? ' ar-rating__star--filled' : ''),
+                    icon  : filled ? this.fullIcon() : this.unfilledIcon(),
+                });
+            }
+            return out;
+        };
+
+        this.onStarClick = (star: Star) => {
+            if (this.isReadonly() || this.isDisabled()) return;
+            this.setAttribute('value', String(star.index));
+            this.dispatchEvent(new CustomEvent('arianna:change', {
+                bubbles: true, detail: { value: star.index },
+            }));
+        };
+
+        this.template = html`
+            <button :class="s.cls"
+                    a-for="s in this.stars()"
+                    :disabled="this.isDisabled()"
+                    @click="(e) => this.onStarClick(s)">{{ s.icon }}</button>
+        `;
+
+        this.Sheet = Rating.DefaultSheet();
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get max(): number  { return parseInt(this.getAttribute('max') ?? '5', 10); }
+    set max(v: number) { this.setAttribute('max', String(v)); }
+
+    get value(): number  { return parseFloat(this.getAttribute('value') ?? '0'); }
+    set value(v: number) { this.setAttribute('value', String(v)); }
+
+    private maxVal      : () => number = () => 5;
+    private currentVal  : () => number = () => 0;
+    private isReadonly  : () => boolean = () => false;
+    private isDisabled  : () => boolean = () => false;
+    private fullIcon    : () => string = () => '★';
+    private unfilledIcon: () => string = () => '☆';
+    private stars       : () => Star[] = () => [];
+    private onStarClick : (s: Star) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', { display: 'inline-flex', gap: '2px' }),
+                new Rule('.ar-rating__star', {
+                    background: 'none',
+                    border    : 'none',
+                    color     : 'var(--arianna-border, #d8d8d8)',
+                    cursor    : 'pointer',
+                    fontSize  : '1.2rem',
+                    padding   : '0 2px',
+                    transition: 'color 0.14s ease, transform 0.14s ease',
+                }),
+                new Rule('.ar-rating__star--filled', { color: '#f5a623' }),
+                new Rule('.ar-rating__star:hover:not(:disabled)', { transform: 'scale(1.15)' }),
+                new Rule('.ar-rating__star:disabled', { cursor: 'not-allowed', opacity: '0.5' }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Rating', { value: Rating, writable: false, enumerable: false, configurable: false });
+}
+
+export default Rating;

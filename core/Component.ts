@@ -1,440 +1,729 @@
 /**
- * @module    Component
+ * @module    core/Component
  * @author    Riccardo Angeli
- * @version   1.2.0
- * @copyright Riccardo Angeli 2012-2026
+ * @version   2.0.0
+ * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  *
- * Component — dual-mode AriannA component system.
- * Dedicated with love to Arianna. ♡
+ * Component — dual-callable function + namespace. ♡ Arianna.
  *
- * Fine-grain Signal+Sink — same fluent API as Real and Virtual.
+ * Reimplements the legacy Golem Component logic (Component.js, 12421 LOC)
+ * in modern TypeScript, leveraging the existing Core / Namespace / Real /
+ * Virtual primitives.  Distilled from the canonical Define algorithm:
  *
- *   .text(getter)     → reactive TextNode Sink
- *   .attr(name, g)    → Attribute Sink
- *   .cls(name, g)     → Class Sink
- *   .prop(name, g)    → Property Sink
- *   .style(prop, g)   → Style Sink
- *   .bind(g, s?)      → Two-way binding
- *   .destroy()        → deregister all Effects
+ *   1) GetDescriptor(Interface) — must be Standard, throws otherwise
+ *   2) Build window[Class.name] as a FACTORY:
+ *        const el = namespace.Create(_tag);
+ *        if (componentMarker) Component(el);   // install AriannA facilities
+ *        if (isFunction)      Class.apply(el, args);
+ *        return Object.setPrototypeOf(el, this.constructor.prototype);
+ *   3) Splice the prototype chain:
+ *        Object.setPrototypeOf(window[Class.name], _interface);
+ *        Object.setPrototypeOf(window[Class.name].prototype, _interface.prototype);
+ *        window[Class.name].prototype.constructor = window[Class.name];
+ *   4) Register the descriptor in namespace.Custom.{interfaces,tags}
  *
- * @Prop() uses signal() internally — every prop becomes a Signal.
- * @Watch and Effects reading that prop react granularly without
- * re-rendering the entire component.
+ * Result: `new MyCustom()` and `<my-custom>` markup both produce DOM
+ * elements with identical prototype chains — without DFS / MutationObserver
+ * tricks.  Core.Observer only handles markup-instantiated elements via the
+ * descriptor.Update(el) callback already present in Core.Define.
  *
- * @example
- *   const title = signal('hello');
- *   new Component('h1')
- *     .text(() => title.get())
- *     .append(document.body);
- *   title.set('world');   // only the TextNode updates
+ * # The five forms (all equivalent in final DOM)
  *
- * @example
- *   @ComponentDecorator({ tag: 'my-card' })
- *   class MyCard extends HTMLElement {
- *     @Prop() name = '';
- *     @Ref()  nameEl!: HTMLSpanElement;
+ *   A) function MyFn() { /* no Component(this); raw tag * / }
+ *      Core.Define('my-fn', MyFn);
  *
- *     @Watch('name')
- *     onName(next: string) {
- *       if (this.nameEl) this.nameEl.textContent = next;
- *     }
- *   }
+ *   B) class MyB { constructor() { Component(this); } }
+ *      Core.Define('my-b', MyB);
+ *
+ *   C) class MyC extends HTMLDivElement {
+ *          constructor() { super(); Component(this); }
+ *      }
+ *      Core.Define('my-c', MyC);
+ *
+ *   D) class MyD extends SVGCircleElement {
+ *          constructor() { super(); Component(this); }
+ *      }
+ *      Core.Define('my-d', MyD);
+ *
+ *   E) class MyE extends Component('arianna-e', HTMLButtonElement) {
+ *          build() { /* user code * / }
+ *      }
+ *
+ * # Component factory signatures
+ *
+ *   Component(el)                                   // instance form
+ *   Component(tag, Base)                            // 2 args
+ *   Component(tag, Base, css)                       // 3 args — pure CSS
+ *   Component(tag, Base, css, def)                  // 4 args — split form
+ *   Component(tag, Base, { ...css, ...def })        // 3 args — compact mixed
  */
 
-import Real, { type ShadowState, type ShadowMode, type ShadowLayer, type ShadowOptions } from './Real.ts';
-import { VirtualNode } from './Virtual.ts';
-import Core            from './Core.ts';
-import { signal }      from './Observable.ts';
-import type { Signal } from './Observable.ts';
+import Core, {
+    Define as CoreDefine,
+    GetDescriptor,
+    GetPrototypeChain,
+    Namespaces,
+} from './Core.ts';
+import { signal, effect, type Signal } from './Observable.ts';
+import { Sheet } from './Sheet.ts';
+import { readDottedPath, writeDottedPath, makeSubAccessor, type SubAccessor } from './Real.ts';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Public types
+// ─────────────────────────────────────────────────────────────────────────────
 
-export type RenderMode = 'real' | 'virtual';
+export type ShadowSetting = false | true | 'open' | 'close' | 'drop' | 'inset' | 'glow' | 'layered';
+export type RenderMode    = 'real' | 'virtual';
 
-export interface ComponentOptions extends Record<string, unknown>
+export interface ComponentDef
 {
-    mode?: RenderMode;
+    attrs?  : string[];
+    shadow? : ShadowSetting;
+    render? : RenderMode;
+    bus?    : string;
+    css?    : Record<string, string>;
 }
 
-type ComponentTarget =
-    | string
-    | Element
-    | Real
-    | VirtualNode
-    | { render(): Element };
-
-type Delegate = Real | VirtualNode;
-type Getter<T> = () => T;
-
-// ── Component class ────────────────────────────────────────────────────────────
-
-export class Component
+/**
+ * Public surface of an AriannA component instance.
+ *
+ * Every class produced by `Component('arianna-x', HTMLElement, …)` is a
+ * `HTMLElement` at runtime AND additionally exposes the methods/properties
+ * installed by `_installFacilities()` on construction. This interface is
+ * the canonical type for those extras — subclasses pick it up automatically
+ * because the factory's return type is `new (...a) => AriannaElement`.
+ *
+ * Notes:
+ *   • `attrSignal(name)` returns a non-null Signal for any attribute
+ *     declared in the component's `attrs` list (runtime guarantee). Use
+ *     `attr-fallback ?? undefined` if you need to feed it into a typed
+ *     `string | undefined` slot.
+ *   • Lifecycle hooks are declared as optional — only override the ones
+ *     your subclass needs.
+ *   • `_children` is populated automatically by `bus`-coupled child
+ *     components (see `ComponentDef.bus`).
+ */
+export interface AriannaElement extends HTMLElement
 {
-    readonly #delegate : Delegate;
-    readonly mode      : RenderMode;
+    /** Reactive Signal for a declared component attribute. */
+    attrSignal(name: string): Signal<string | null>;
 
-    static readonly Instances: Component[] = [];
+    /** Dispatch a CustomEvent of the given type. */
+    fire(type: string, init?: CustomEventInit): void;
 
-    constructor(
-        arg0       : ComponentTarget,
-        arg1?      : ComponentOptions | Record<string, unknown>,
-        ...children: unknown[]
-    )
-    {
-        const opts  = (arg1 ?? {}) as ComponentOptions;
-        const mode  : RenderMode              = (opts.mode as RenderMode) ?? 'real';
-        const attrs : Record<string, unknown> = { ...opts };
-        delete attrs['mode'];
+    /** Resolve the rendered host element (light DOM or shadow root). */
+    render(): HTMLElement;
 
-        this.mode = mode;
+    /** Current Sheet for this component. Assigning replaces it. */
+    Sheet: Sheet | null;
 
-        if (mode === 'virtual') {
-            // FIX: VirtualNode is a class — always use `new`, never call directly
-            this.#delegate = arg0 instanceof VirtualNode
-                ? arg0
-                : new VirtualNode(
-                    arg0 as string,
-                    attrs as Record<string, string>,
-                    ...(children as never[]),
-                  );
-        } else {
-            this.#delegate = arg0 instanceof VirtualNode
-                ? new Real(arg0.render())
-                : new Real(arg0 as never, attrs as never, ...children as never[]);
+    /** Reactive template (Vue-style DSL via core/Template.ts). */
+    template: unknown;
+
+    /** Lifecycle hooks — override as needed. */
+    onCreated?      (): void;
+    onBeforeMount?  (): void;
+    onMount?        (): void;
+    onBeforeUpdate? (): void;
+    onUpdate?       (): void;
+    onBeforeUnmount?(): void;
+    onUnmount?      (): void;
+
+    /** Marker injected by the factory's `_installFacilities`. */
+    readonly __ariannaComponent?: boolean;
+
+    /** Children collected via the component bus (set when `bus` is configured). */
+    readonly _children?: HTMLElement[];
+
+    /** Fluent sugar mirroring Real (set/get/add/push/append/remove/find/…). */
+    set(name: string, value: unknown): this;
+    get(name: string): unknown;
+    /**
+     * Fluent sub-property accessor for nested objects (e.g. `style`, `dataset`).
+     *
+     *   this.sub('style').set('background', 'orange').set('color', 'white');
+     *   this.sub('style').get('background');     // 'orange'
+     *   this.sub('style').sub('transform');      // further nesting
+     */
+    sub(path: string): SubAccessor;
+}
+
+// ── Private flags & registries ──────────────────────────────────────────────
+
+const FACILITY_FLAG = Symbol.for('arianna.component.installed');
+const BUSES: Record<string, Signal<unknown[]>> = {};
+const DEF_KEYS = new Set(['attrs', 'shadow', 'render', 'bus', 'css']);
+
+function _bus(parentTag: string): Signal<unknown[]>
+{
+    if (!BUSES[parentTag]) BUSES[parentTag] = signal<unknown[]>([]);
+    return BUSES[parentTag];
+}
+
+function _isMixedDef(obj: unknown): boolean
+{
+    if (!obj || typeof obj !== 'object') return false;
+    for (const k of Object.keys(obj as Record<string, unknown>))
+        if (DEF_KEYS.has(k)) return true;
+    return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Component(el) — install AriannA facilities on a live DOM element
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _installFacilities(el: Element): Element
+{
+    const flagged = el as Element & { [FACILITY_FLAG]?: boolean };
+    if (flagged[FACILITY_FLAG]) return el;
+    flagged[FACILITY_FLAG] = true;
+
+    const stash = el as Element & {
+        __effects?     : Array<() => void>;
+        __attrSignals? : Record<string, Signal<string | null>>;
+        __sheet?       : Sheet | null;
+        __styleNode?   : HTMLStyleElement | null;
+        __instanceId?  : string;
+        __isMounted?   : boolean;
+        __isBuilt?     : boolean;
+        __disposers?   : Array<() => void>;
+        __mountFns?    : Array<() => void>;
+        __unmountFns?  : Array<() => void>;
+    };
+    stash.__effects     = [];
+    stash.__attrSignals = {};
+    stash.__sheet       = null;
+    stash.__styleNode   = null;
+    stash.__instanceId  = 'c' + Math.random().toString(36).slice(2, 10);
+    stash.__isMounted   = false;
+    stash.__isBuilt     = false;
+    stash.__disposers   = [];
+    stash.__mountFns    = [];
+    stash.__unmountFns  = [];
+
+    // Methods defined once as a frozen pool, then attached per-element with the
+    // bound element captured in `this`.
+    Object.defineProperties(el, {
+        // ── Fluent sugar (Real mirror) ─────────────────────────────────────
+        set: { configurable: true, writable: false, value(this: Element, name: string, value: unknown) {
+            if (name.indexOf('.') !== -1) {
+                writeDottedPath(this as unknown as Record<string, unknown>, name, value);
+                return this;
+            }
+            this.setAttribute(name, String(value)); return this;
+        }},
+        get: { configurable: true, writable: false, value(this: Element, name: string) {
+            if (name.indexOf('.') !== -1) {
+                const v = readDottedPath(this as unknown as Record<string, unknown>, name);
+                return v === undefined ? null : v;
+            }
+            return this.getAttribute(name);
+        }},
+        sub: { configurable: true, writable: false, value(this: Element, path: string) {
+            return makeSubAccessor(this as unknown as Record<string, unknown>, path, this);
+        }},
+        add: { configurable: true, writable: false, value(this: Element, ...args: (Node | string | number)[]) {
+            const last  = args[args.length - 1];
+            const items = typeof last === 'number' ? args.slice(0, -1) : args;
+            const idx   = typeof last === 'number' ? (last as number) : this.childNodes.length;
+            const ref   = this.childNodes[idx] ?? null;
+            const frag  = document.createDocumentFragment();
+            for (const it of items as (Node | string)[])
+                frag.appendChild(typeof it === 'string' ? document.createTextNode(it) : it);
+            this.insertBefore(frag, ref);
+            return this;
+        }},
+        push:    { configurable: true, writable: false, value(this: Element, ...n: (Node | string)[]) {
+            return (this as unknown as { add: (...a: unknown[]) => Element }).add(...n);
+        }},
+        unshift: { configurable: true, writable: false, value(this: Element, ...n: (Node | string)[]) {
+            return (this as unknown as { add: (...a: unknown[]) => Element }).add(...n, 0);
+        }},
+        append:  { configurable: true, writable: false, value(this: Element, parent: string | Element | null) {
+            const p = typeof parent === 'string' ? document.querySelector(parent) : parent;
+            if (p) p.appendChild(this);
+            return this;
+        }},
+        remove:  { configurable: true, writable: false, value(this: Element, ...targets: (string | Node | number)[]) {
+            for (const t of targets) {
+                let n: Node | null = null;
+                if (typeof t === 'number')      n = this.childNodes[t] ?? null;
+                else if (typeof t === 'string') n = this.querySelector(t);
+                else                            n = t;
+                if (n && this.contains(n)) this.removeChild(n);
+            }
+            return this;
+        }},
+        show:    { configurable: true, writable: false, value(this: Element) { (this as HTMLElement).style.display = '';     return this; }},
+        hide:    { configurable: true, writable: false, value(this: Element) { (this as HTMLElement).style.display = 'none'; return this; }},
+
+        // ── Reactive sinks ──────────────────────────────────────────────────
+        text:   { configurable: true, writable: false, value(this: Element, getter: () => string) {
+            const n = document.createTextNode(getter());
+            this.appendChild(n);
+            stash.__effects!.push(effect(() => { n.nodeValue = getter(); }));
+            return this;
+        }},
+        attr:   { configurable: true, writable: false, value(this: Element, name: string, getter: () => string | null) {
+            stash.__effects!.push(effect(() => {
+                const v = getter();
+                if (v === null) this.removeAttribute(name);
+                else            this.setAttribute(name, v);
+            }));
+            return this;
+        }},
+        cls:    { configurable: true, writable: false, value(this: Element, name: string, getter: () => boolean) {
+            stash.__effects!.push(effect(() => {
+                if (getter()) this.classList.add(name);
+                else          this.classList.remove(name);
+            }));
+            return this;
+        }},
+        prop:   { configurable: true, writable: false, value(this: Element, name: string, getter: () => unknown) {
+            stash.__effects!.push(effect(() => {
+                (this as unknown as Record<string, unknown>)[name] = getter();
+            }));
+            return this;
+        }},
+        // NOTE: NOT named `style` — that would shadow the native CSSStyleDeclaration
+        // accessor (el.style.background = 'crimson' would set a property on this
+        // function instead of triggering the real CSS setter). The reactive
+        // single-property binder lives on `styleSignal` instead.
+        styleSignal:  { configurable: true, writable: false, value(this: Element, prop: string, getter: () => string) {
+            const css = prop.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`);
+            stash.__effects!.push(effect(() => {
+                (this as HTMLElement).style.setProperty(css, getter());
+            }));
+            return this;
+        }},
+        bind:   { configurable: true, writable: false, value(this: Element, getter: () => string, setter?: (v: string) => void) {
+            stash.__effects!.push(effect(() => {
+                (this as unknown as Record<string, unknown>).value = getter();
+            }));
+            if (setter) this.addEventListener('input', e => setter((e.target as HTMLInputElement).value));
+            return this;
+        }},
+        effectFn: { configurable: true, writable: false, value(this: Element, fn: () => void) {
+            stash.__effects!.push(effect(fn));
+            return this;
+        }},
+
+        // ── Sheet ──────────────────────────────────────────────────────────
+        Sheet: {
+            configurable: true,
+            get(this: Element): Sheet | null { return stash.__sheet ?? null; },
+            set(this: Element, next: Sheet | null) { _applySheet(this, next); },
+        },
+        Css: {
+            configurable: true,
+            get(this: Element): string { return stash.__sheet ? stash.__sheet.toString() : ''; },
+        },
+
+        // ── attrSignal accessor ────────────────────────────────────────────
+        attrSignal: { configurable: true, writable: false, value(this: Element, name: string) {
+            return stash.__attrSignals?.[name];
+        }},
+
+        // ── _children (sub-component bus) ──────────────────────────────────
+        _children: {
+            configurable: true,
+            get(this: Element): Element[] {
+                const tag = this.tagName.toLowerCase();
+                const b   = BUSES[tag];
+                return b ? (b.get() as Element[]) : [];
+            },
+        },
+
+        // ── Lifecycle ────────────────────────────────────────────────────
+        // mount()       Called by Core.Observer when element enters the DOM.
+        //               Idempotent: a second call while already mounted is
+        //               a no-op (prevents double mount when element is moved
+        //               within the DOM). Fires onMount() if user defined it,
+        //               then runs registered __mountFns in order.
+        // unmount()     Called by Core.Observer when element leaves the DOM.
+        //               Runs all __disposers (effects from build, registered
+        //               cleanups), then __unmountFns, then onUnmount() user hook.
+        //               Sets __isMounted = false so a later remount works.
+        // isMounted     Boolean readonly accessor.
+        // addDisposer() Register a cleanup fn invoked on unmount.
+        // onMount/onUnmount  User-overridable instance methods. If the user
+        //               defines them on their class, mount/unmount calls them.
+        mount: { configurable: true, writable: false, value(this: Element & typeof stash) {
+            if (this.__isMounted) return this;
+            this.__isMounted = true;
+            // Run onMount user hook if defined on the prototype chain
+            const userHook = (this as unknown as { onMount?: () => void }).onMount;
+            if (typeof userHook === 'function') {
+                try { userHook.call(this); }
+                catch (e) { console.warn('[arianna] onMount threw:', e); }
+            }
+            // Run any registered __mountFns
+            for (const fn of (this.__mountFns ?? [])) {
+                try { fn(); }
+                catch (e) { console.warn('[arianna] mountFn threw:', e); }
+            }
+            return this;
+        }},
+        unmount: { configurable: true, writable: false, value(this: Element & typeof stash) {
+            if (!this.__isMounted) return this;
+            this.__isMounted = false;
+            // Run disposers in reverse registration order (LIFO)
+            const ds = this.__disposers ?? [];
+            for (let i = ds.length - 1; i >= 0; i--) {
+                try { ds[i](); }
+                catch (e) { console.warn('[arianna] disposer threw:', e); }
+            }
+            ds.length = 0;
+            // Run unmount fns
+            for (const fn of (this.__unmountFns ?? [])) {
+                try { fn(); }
+                catch (e) { console.warn('[arianna] unmountFn threw:', e); }
+            }
+            // User hook last
+            const userHook = (this as unknown as { onUnmount?: () => void }).onUnmount;
+            if (typeof userHook === 'function') {
+                try { userHook.call(this); }
+                catch (e) { console.warn('[arianna] onUnmount threw:', e); }
+            }
+            return this;
+        }},
+        isMounted: {
+            configurable: true,
+            get(this: Element & typeof stash): boolean { return !!this.__isMounted; },
+        },
+        addDisposer: { configurable: true, writable: false, value(this: Element & typeof stash, fn: () => void) {
+            if (typeof fn === 'function') (this.__disposers ??= []).push(fn);
+            return this;
+        }},
+        // .shadow(mode?) — attach (or return existing) Shadow DOM root.
+        //
+        //   const root = this.shadow();          // mode: 'open' (default)
+        //   const root = this.shadow('closed');  // closed mode (no .shadowRoot exposure)
+        //   const root = this.shadow();          // returns existing if already attached
+        //
+        // Mode argument is honoured only on the first attach call. Subsequent
+        // calls return the existing ShadowRoot (mode can't be changed after
+        // attach — that's a browser constraint, not ours).
+        shadow: { configurable: true, writable: false, value(this: Element, mode: 'open' | 'closed' = 'open') {
+            const existing = (this as HTMLElement).shadowRoot;
+            if (existing) return existing;
+            try { return (this as HTMLElement).attachShadow({ mode }); }
+            catch (e) {
+                console.warn('[arianna] .shadow() failed — element type does not support Shadow DOM:', e);
+                return null;
+            }
+        }},
+    });
+
+    // Apply def-driven features stored on the constructor.
+    const ctor = el.constructor as unknown as { __ariannaDef?: ComponentDef };
+    const def  = ctor.__ariannaDef ?? {};
+
+    if (def.attrs && def.attrs.length) _wireAttrs(el, def.attrs);
+    if (def.bus) {
+        const b = _bus(def.bus);
+        const list = b.peek();
+        if (!list.includes(el)) b.set([...list, el]);
+    }
+    if (def.css && Object.keys(def.css).length) {
+        // CSS-only convenience: forward to inline style.
+        // Use the browser's CSSStyleDeclaration via bracket notation
+        // (camelCase) — same Golem v1 pattern as Namespace.applyRulesToStyle.
+        // The browser handles the kebab translation internally.
+        const style = (el as HTMLElement).style as unknown as Record<string, string>;
+        for (const k of Object.keys(def.css)) {
+            const camelKey = k[0].toLowerCase() + k.slice(1);
+            try { style[camelKey] = def.css[k]; }
+            catch { /* unsupported property — skip */ }
         }
-
-        Component.Instances.push(this);
     }
 
-    // ── Core API ──────────────────────────────────────────────────────────────
-
-    render(): Element       { return this.#delegate.render(); }
-    valueOf(): Element      { return this.render(); }
-    log(v?: unknown): this  { this.#delegate.log(v); return this; }
-
-    on(type: string, cb: EventListener, opts?: AddEventListenerOptions): this
-    { this.#delegate.on(type, cb, opts); return this; }
-
-    off(type: string, cb: EventListener, opts?: boolean | EventListenerOptions): this
-    { this.#delegate.off(type, cb, opts as never); return this; }
-
-    fire(type: string, init?: CustomEventInit): this
-    { this.#delegate.fire(type, init); return this; }
-
-    append(parent: string | Element | Component | VirtualNode | { render(): Element }): this
-    {
-        const target = parent instanceof Component ? parent.render() : parent;
-        this.#delegate.append(target as never);
-        return this;
+    // Call build() synchronously now that facilities are installed.
+    // For classes that `extends Component(tag, Base)`, this is the only place
+    // build() can be invoked automatically — the patched native constructor
+    // (HTMLDivElement, etc.) can't see the user's body, and a microtask
+    // schedule would fail the contract of test 3.1 which reads `trace` SYNC
+    // right after `new MyComp(opts)`.
+    //
+    // Args: read from el.__buildArgs which the Bound constructor stashed
+    // before delegating to ComponentFn. Falls back to [] (markup / Core.Create
+    // path: no constructor args available).
+    //
+    // Guarded by __isBuilt — runs once per element lifetime.
+    if (!stash.__isBuilt) {
+        const userBuild = (el as unknown as { build?: (...a: unknown[]) => void }).build;
+        if (typeof userBuild === 'function') {
+            stash.__isBuilt = true;
+            const args = (el as unknown as { __buildArgs?: unknown[] }).__buildArgs ?? [];
+            try { userBuild.apply(el, args); }
+            catch (e) { console.warn('[arianna] build() threw:', e); }
+        }
     }
 
-    add(...args: (Component | Element | VirtualNode | string | number)[]): this
-    {
-        const normalized = args.map(a => a instanceof Component ? a.render() : a);
-        (this.#delegate.add as (...a: unknown[]) => unknown)(...normalized);
-        return this;
-    }
-
-    unshift(...nodes: (Component | Element | VirtualNode | string)[]): this
-    { return this.add(...nodes, 0); }
-
-    push(...nodes: (Component | Element | VirtualNode | string)[]): this
-    { return this.add(...nodes); }
-
-    remove(...targets: (Component | Element | VirtualNode | string | number)[]): this
-    {
-        const normalized = targets.map(t => t instanceof Component ? t.render() : t);
-        (this.#delegate.remove as (...a: unknown[]) => unknown)(...normalized);
-        return this;
-    }
-
-    shift(n = 1): this { this.#delegate.shift(n); return this; }
-    pop(n = 1):   this { this.#delegate.pop(n);   return this; }
-
-    get(name: string): string | undefined
-    { return this.#delegate.get(name) ?? undefined; }
-
-    set(name: string, value: string): this
-    { this.#delegate.set(name, value); return this; }
-
-    show(): this { this.#delegate.show(); return this; }
-    hide(): this { this.#delegate.hide(); return this; }
-
-    /**
-     * Returns true if the rendered element contains all given nodes.
-     * FIX: implemented directly on the DOM element — Real/VirtualNode
-     * do not expose a .contains() method.
-     */
-    contains(...nodes: (Component | Element | VirtualNode | string)[]): boolean
-    {
-        const root = this.render();
-        return nodes.every(n => {
-            if (n instanceof Component)   return root.contains(n.render());
-            if (n instanceof VirtualNode) return root.contains(n.render());
-            if (n instanceof Element)     return root.contains(n);
-            if (typeof n === 'string')    return !!root.querySelector(n);
-            return false;
-        });
-    }
-
-    css(prop: string, value: string): this
-    {
-        const el = this.render();
-        // FIX: double-cast via `unknown` to satisfy TS2352
-        if (el instanceof HTMLElement)
-            (el.style as unknown as Record<string, string>)[prop] = value;
-        return this;
-    }
-
-    // ── Fine-grain Signal+Sink API ─────────────────────────────────────────────
-
-    text(getter: Getter<string>): this
-    { (this.#delegate as Real & VirtualNode).text(getter); return this; }
-
-    attr(name: string, getter: Getter<string | null>): this
-    { (this.#delegate as Real & VirtualNode).attr(name, getter); return this; }
-
-    cls(name: string, getter: Getter<boolean>): this
-    { (this.#delegate as Real & VirtualNode).cls(name, getter); return this; }
-
-    prop(name: string, getter: Getter<unknown>): this
-    { (this.#delegate as Real & VirtualNode).prop(name, getter); return this; }
-
-    style(prop: string, getter: Getter<string>): this
-    { (this.#delegate as Real & VirtualNode).style(prop, getter); return this; }
-
-    bind(getter: Getter<string>, setter?: (v: string) => void): this
-    { (this.#delegate as Real & VirtualNode).bind(getter, setter); return this; }
-
-    destroy(): this
-    { (this.#delegate as Real & VirtualNode).destroy(); return this; }
-
-    /**
-     * Applica o rimuove un box-shadow delegando a Real / VirtualNode.
-     * @example
-     *   new Component('div').shadow('open', 'glow', { color: '#e40c88', blur: 24 })
-     *   new Component('div').shadow('close')
-     */
-    shadow(state: ShadowState, mode: ShadowMode | ShadowLayer[] = 'drop', opts: ShadowOptions = {}): this
-    { (this.#delegate as Real & VirtualNode).shadow(state, mode as never, opts); return this; }
-
-    // ── Static API ────────────────────────────────────────────────────────────
-
-    static Define(
-        tag   : string,
-        ctor  : new (...a: unknown[]) => Element,
-        base  : new (...a: unknown[]) => Element = HTMLElement,
-        style : Record<string, string>           = {},
-    )
-    {
-        return Core.Define(tag, ctor, base, style);
-    }
-
-    static get Namespaces() { return Core.Namespaces; }
+    return el;
 }
 
-// ── Callable factory ──────────────────────────────────────────────────────────
-// Allows both `new Component(...)` and `Component(...)` call patterns
-// without relying on Reflect.construct (which requires ES2015+ lib).
+// ── attribute → Signal bridge ────────────────────────────────────────────────
 
-function _cFactory(
-    this  : unknown,
-    arg0  : ComponentTarget,
-    arg1? : ComponentOptions | Record<string, unknown>,
-    ...rest: unknown[]
-): Component
+function _wireAttrs(el: Element, attrs: string[]): void
 {
-    return new Component(arg0, arg1, ...rest);
-}
-
-Object.defineProperties(_cFactory, {
-    prototype : { value: Component.prototype, writable: false },
-    name      : { value: 'Component' },
-});
-
-// ── Decorator: @ComponentDecorator({ tag, mode? }) ────────────────────────────
-// FIX: was named `ComponentDecorator` locally but exported as `Component`,
-// causing TS2323 (redeclare) and TS2484 (export conflict).
-// Now exported under its real name `ComponentDecorator`.
-
-export function ComponentDecorator(opts: {
-    tag      : string;
-    mode?    : RenderMode;
-    extends? : string;
-})
-{
-    return function <T extends new (...a: unknown[]) => HTMLElement>(ctor: T): T
-    {
-        Core.Define(opts.tag, ctor as unknown as new () => Element, HTMLElement);
-        return ctor;
+    const stash = el as Element & {
+        __attrSignals? : Record<string, Signal<string | null>>;
+        __effects?     : Array<() => void>;
     };
-}
+    if (!stash.__attrSignals) stash.__attrSignals = {};
+    if (!stash.__effects)     stash.__effects     = [];
 
-// ── Decorator: @Prop() ────────────────────────────────────────────────────────
-
-/**
- * Reactive property backed by a Signal.
- *
- * Each prop becomes an internal Signal<T>.
- * Effects and @Watch handlers reading this prop react granularly.
- * Dispatches 'prop-change' CustomEvent for external observers.
- *
- * @example
- *   @Prop() count = 0;
- */
-export function Prop()
-{
-    return function (target: object, key: string): void
+    for (const name of attrs)
     {
-        const sigKey = `__sig_${key}__`;
+        const sig = signal<string | null>(el.getAttribute(name));
+        stash.__attrSignals[name] = sig;
 
-        Object.defineProperty(target, key, {
-            get(this: Record<string, unknown>)
-            {
-                if (!this[sigKey]) this[sigKey] = signal<unknown>(undefined);
-                return (this[sigKey] as Signal<unknown>).get();
-            },
-            set(
-                this: HTMLElement
-                    & Record<string, unknown>
-                    & { render?: () => string; _root?: Element },
-                v: unknown,
-            )
-            {
-                if (!this[sigKey]) this[sigKey] = signal<unknown>(undefined);
-                const sig  = this[sigKey] as Signal<unknown>;
-                const prev = sig.peek();
-                if (Object.is(prev, v)) return;
+        const evName = name.split(/[-_]/)[0].toLowerCase() + '-change';
+        el.addEventListener(evName, () => { sig.set(el.getAttribute(name)); });
 
-                sig.set(v);
+        stash.__effects.push(effect(() => {
+            const v = sig.get();
+            if (v === null) { if (el.hasAttribute(name)) el.removeAttribute(name); }
+            else if (el.getAttribute(name) !== v) { el.setAttribute(name, v); }
+        }));
+    }
+}
 
-                const watchKey = `__watch_${key}__`;
-                const watchers = this[watchKey];
-                if (Array.isArray(watchers))
-                    (watchers as Array<(n: unknown, p: unknown) => void>)
-                        .forEach(fn => fn.call(this, v, prev));
+// ── Sheet application (auto-scope :root/&, shadow-aware) ─────────────────────
 
-                if (typeof (this as { render?: () => string }).render === 'function') {
-                    const html = (this as { render(): string }).render();
-                    if (this._root)                    this._root.innerHTML = html;
-                    else if (typeof html === 'string') this.innerHTML       = html;
-                    _resolveRefs(this);
-                }
-
-                this.dispatchEvent(new CustomEvent('prop-change', {
-                    detail: { key, value: v, prev }, bubbles: true,
-                }));
-            },
-            enumerable  : true,
-            configurable: true,
-        });
+function _applySheet(el: Element, next: Sheet | null): void
+{
+    const stash = el as Element & {
+        __sheet?     : Sheet | null;
+        __styleNode? : HTMLStyleElement | null;
+        __instanceId?: string;
     };
+
+    if (stash.__styleNode && stash.__styleNode.parentNode)
+        stash.__styleNode.parentNode.removeChild(stash.__styleNode);
+    stash.__styleNode = null;
+    stash.__sheet     = next;
+    if (!next) return;
+    if (!stash.__instanceId) stash.__instanceId = 'c' + Math.random().toString(36).slice(2, 10);
+
+    const tag       = el.tagName.toLowerCase();
+    const useShadow = !!(el as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot;
+    const replace   = useShadow ? ':host' : tag;
+
+    let css = '';
+    for (const r of next.Rules) {
+        const scoped = r.Text.replace(/(^|,\s*|\s)(:root|&)(?![\w-])/g, (_m, pre: string) => pre + replace);
+        css += scoped + '\n';
+    }
+
+    const styleEl = document.createElement('style');
+    styleEl.textContent = css;
+    styleEl.setAttribute('data-arianna-sheet',    tag);
+    styleEl.setAttribute('data-arianna-instance', stash.__instanceId);
+
+    if (useShadow) (el as Element & { shadowRoot: ShadowRoot }).shadowRoot.appendChild(styleEl);
+    else {
+        const head = document.head ?? document.documentElement;
+        const existing = head.querySelector<HTMLStyleElement>(
+            `style[data-arianna-sheet="${tag}"][data-arianna-instance="${stash.__instanceId}"]`,
+        );
+        if (existing) existing.remove();
+        head.appendChild(styleEl);
+    }
+    stash.__styleNode = styleEl;
 }
 
-/**
- * Access the raw Signal of a @Prop for fine-grain Effect wiring.
- *
- * @example
- *   const sig = PropSignal.of(this, 'name');
- *   effect(() => { nameNode.nodeValue = sig.get(); });
- */
-export const PropSignal = {
-    of<T>(instance: Record<string, unknown>, key: string): Signal<T> | undefined {
-        return instance[`__sig_${key}__`] as Signal<T> | undefined;
-    },
-};
 
-// ── Decorator: @Watch(key) ────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  REMOVED in v2: _define()
+//  The factory-building logic now lives in Namespace.Define(). Core.Define
+//  is the public entry that resolves the namespace and delegates there.
+// ─────────────────────────────────────────────────────────────────────────────
 
-export function Watch(key: string)
+// ─────────────────────────────────────────────────────────────────────────────
+//  The dual-form Component callable
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ComponentCallable
 {
-    return function (
-        target     : object,
-        _methodKey : string,
-        descriptor : PropertyDescriptor,
-    ): PropertyDescriptor
-    {
-        const original = descriptor.value as (next: unknown, prev: unknown) => void;
-        const watchKey = `__watch_${key}__`;
-        const proto    = target as Record<string, unknown[]>;
-        if (!proto[watchKey]) proto[watchKey] = [];
-        proto[watchKey].push(function (this: unknown, next: unknown, prev: unknown) {
-            original.call(this, next, prev);
-        });
-        return descriptor;
+    (el: Element): AriannaElement;
+    (tag: string, base: new (...a: never[]) => Element): new (...a: never[]) => AriannaElement;
+    (tag: string, base: new (...a: never[]) => Element, css: Record<string, string>): new (...a: never[]) => AriannaElement;
+    (tag: string, base: new (...a: never[]) => Element, css: Record<string, string>, def: ComponentDef): new (...a: never[]) => AriannaElement;
+    (tag: string, base: new (...a: never[]) => Element, mixed: ComponentDef & Record<string, string>): new (...a: never[]) => AriannaElement;
+}
+
+function ComponentFn(this: unknown, ...args: unknown[]): unknown
+{
+    // Instance form: Component(el)
+    if (args.length === 1 && args[0] instanceof Element)
+        return _installFacilities(args[0]);
+
+    // Factory form: Component(tag, Base, ...)
+    const tag  = args[0];
+    const base = args[1];
+    if (typeof tag !== 'string' || typeof base !== 'function')
+        throw new Error('Component(...) expects (Element) | (tag, Base, [css|def], [def]).');
+
+    const arg3 = args[2];
+    const arg4 = args[3];
+
+    let css: Record<string, string> = {};
+    let def: ComponentDef            = {};
+
+    if (arg3 !== undefined) {
+        if (_isMixedDef(arg3)) {
+            def = arg3 as ComponentDef;
+            css = (arg3 as ComponentDef & Record<string, string>).css ?? {};
+        } else {
+            css = arg3 as Record<string, string>;
+            if (arg4) def = arg4 as ComponentDef;
+        }
+    }
+
+    // Build the bound class that the user will `extends`.  Constructor body
+    // is intentionally trivial — Component(this) is called explicitly so the
+    // factory's introspection picks it up.  The factory below replaces this
+    // class entirely; what the user `extends` is the factory.
+    //
+    // We forward the user's constructor arguments to ComponentFn so that
+    // build(opts) receives whatever the user passed to `new MyComp(opts)`.
+    // The args are stashed on the element under __buildArgs for the microtask
+    // scheduler in _installFacilities to pick up.
+    //
+    // NOTE on descriptor identity: Component(tag, Base, ...) registers `Bound`
+    // in the descriptor, but the actual user class (e.g. `_CodeEditor extends
+    // Component(...)`) lives one level deeper. Namespace.Update repoints the
+    // descriptor to the most-derived user class on first call (via the
+    // window.<PascalCase> convention) — that's where markup-instantiated
+    // elements have their user methods spliced from.
+    const Bound = class extends (base as new () => HTMLElement) {
+        constructor(...args: unknown[]) {
+            super();
+            (this as unknown as { __buildArgs?: unknown[] }).__buildArgs = args;
+            ComponentFn.call(null, this);
+        }
     };
+    (Bound as unknown as { __ariannaComponent: boolean }).__ariannaComponent = true;
+    (Bound as unknown as { __ariannaDef: ComponentDef }).__ariannaDef         = def;
+
+    const pretty = tag
+        .replace(/^arianna-/, '')
+        .replace(/-(.)/g, (_, c: string) => c.toUpperCase())
+        .replace(/^./, c => c.toUpperCase());
+    try { Object.defineProperty(Bound, 'name', { value: pretty }); } catch { /* native */ }
+
+    // Register the tag via Core.Define (terminal — does NOT return a factory).
+    // What `extends Component('my-tag', HTMLDivElement)` extends is the Bound
+    // class declared above. The user's class chain:
+    //
+    //   UserClass -> Bound -> HTMLDivElement -> HTMLElement -> ...
+    //
+    // When the user creates the element via markup (<my-tag>),
+    // document.createElement, or Core.Create, the Observer/Update path
+    // splices the user's prototype + applies CSS + runs body.
+    CoreDefine(
+        tag,
+        Bound as unknown as new (...a: unknown[]) => Element,
+        base as unknown as new (...a: unknown[]) => Element,
+        css,
+    );
+    return Bound as unknown as new (...a: never[]) => Element;
 }
 
-// ── Decorator: @Emit(event?) ──────────────────────────────────────────────────
+Object.defineProperty(ComponentFn, 'name', { value: 'Component' });
 
-export function Emit(eventName?: string)
-{
-    return function (
-        target     : object,
-        methodKey  : string,
-        descriptor : PropertyDescriptor,
-    ): PropertyDescriptor
-    {
-        const original = descriptor.value as (...args: unknown[]) => unknown;
-        descriptor.value = function (this: HTMLElement, ...args: unknown[]) {
-            const result = original.apply(this, args);
-            const name   = eventName ?? methodKey;
-            // FIX: type the Promise.then callback explicitly (TS7044)
-            if (result instanceof Promise)
-                void result.then((v: unknown) =>
-                    this.dispatchEvent(new CustomEvent(name, { detail: v, bubbles: true })));
-            else
-                this.dispatchEvent(new CustomEvent(name, { detail: result, bubbles: true }));
-            return result;
-        };
-        return descriptor;
-    };
-}
+// NOTE: Component.Types is intentionally REMOVED in v2.
+// Use Core.Define(tag, ctor, Base, css) instead — it auto-resolves the
+// namespace from the Base interface and delegates to Namespace.Define.
+//
+// Migration:
+//   Component.Types.Define(tag, ctor, Base, css)   → Core.Define(tag, ctor, Base, css)
+//   Component.Types.GetPrototypeChain(el)          → Core.GetPrototypeChain(el)
+//   Component.Types.GetDescriptor(query)           → Core.GetDescriptor(query)
+//   Component.Types.Namespaces                      → Core.Namespaces
 
-// ── Decorator: @Ref() ─────────────────────────────────────────────────────────
-
-export function Ref()
-{
-    return function (target: object, key: string): void
-    {
-        Object.defineProperty(target, key, {
-            get(this: HTMLElement)
-            { return this.querySelector(`[data-ref="${key}"]`) ?? null; },
-            enumerable  : true,
-            configurable: true,
-        });
-    };
-}
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
-
-function _resolveRefs(el: HTMLElement): void
-{
-    el.querySelectorAll('[data-ref]').forEach(ref => {
-        const key = ref.getAttribute('data-ref');
-        if (key && key in el) (el as unknown as Record<string, unknown>)[key] = ref;
-    });
-}
-
-// ── Window registration ───────────────────────────────────────────────────────
-
-if (typeof window !== 'undefined')
-{
-    Object.defineProperty(window, 'Component', {
-        value      : _cFactory,
-        writable   : false,
-        enumerable : false,
-        configurable: false,
-    });
-}
-
-// ── Exports ───────────────────────────────────────────────────────────────────
-// FIX summary:
-//   - Removed conflicting `export { ComponentDecorator as Component }`
-//   - ComponentDecorator is now exported under its own name
-//   - Component class exported as ComponentClass for named import
-//   - Default export remains the Component class
-
-export { Component as ComponentClass };
-export type { ComponentTarget };
+export const Component = ComponentFn as ComponentCallable;
 export default Component;
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Component', {
+        value: Component, writable: false, enumerable: true, configurable: false,
+    });
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  M2 STEP 1 — Lifecycle wiring to Core.Observer
+//
+//  Core.Observer already emits:
+//    - 'arianna-wip:nodeadded'   on document   when a node enters the DOM
+//    - 'arianna-wip:noderemoved' on document   when a node leaves the DOM
+//
+//  We hook these to call mount()/unmount() on elements with facilities installed.
+//  No changes to Core.ts needed.
+//
+//  Anti-double-mount: mount()/unmount() are themselves idempotent (check
+//  __isMounted), so MutationObserver fires on element movement won't double
+//  fire user hooks.
+//
+//  Subtree walk: when a parent enters the DOM, every descendant element that
+//  has facilities also gets mount() called. This handles off-tree subtree
+//  construction (build card off-DOM, then attach — descendants need mount).
+// ─────────────────────────────────────────────────────────────────────────────
+
+if (typeof document !== 'undefined')
+{
+    const callMountRecursive = (root: Element) => {
+        const stash = root as Element & { __isMounted?: boolean; mount?: () => void };
+        if (typeof stash.mount === 'function' && !stash.__isMounted) {
+            try { stash.mount(); }
+            catch (e) { console.warn('[arianna] mount() failed:', e); }
+        }
+        // Walk descendants
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+        let n: Element | null = walker.nextNode() as Element | null;
+        while (n) {
+            const ns = n as Element & { __isMounted?: boolean; mount?: () => void };
+            if (typeof ns.mount === 'function' && !ns.__isMounted) {
+                try { ns.mount(); }
+                catch (e) { console.warn('[arianna] mount() failed:', e); }
+            }
+            n = walker.nextNode() as Element | null;
+        }
+    };
+
+    const callUnmountRecursive = (root: Element) => {
+        // Walk descendants first (LIFO unmount order — children before parent)
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+        const descendants: Element[] = [];
+        let n: Element | null = walker.nextNode() as Element | null;
+        while (n) { descendants.push(n); n = walker.nextNode() as Element | null; }
+
+        for (let i = descendants.length - 1; i >= 0; i--) {
+            const ns = descendants[i] as Element & { __isMounted?: boolean; unmount?: () => void };
+            if (typeof ns.unmount === 'function' && ns.__isMounted) {
+                try { ns.unmount(); }
+                catch (e) { console.warn('[arianna] unmount() failed:', e); }
+            }
+        }
+        const stash = root as Element & { __isMounted?: boolean; unmount?: () => void };
+        if (typeof stash.unmount === 'function' && stash.__isMounted) {
+            try { stash.unmount(); }
+            catch (e) { console.warn('[arianna] unmount() failed:', e); }
+        }
+    };
+
+    document.addEventListener('arianna-wip:nodeadded', (e: Event) => {
+        const ce = e as CustomEvent<{ node: Node }>;
+        const node = ce.detail?.node;
+        if (node instanceof Element) callMountRecursive(node);
+    });
+
+    document.addEventListener('arianna-wip:noderemoved', (e: Event) => {
+        const ce = e as CustomEvent<{ node: Node }>;
+        const node = ce.detail?.node;
+        if (node instanceof Element) callUnmountRecursive(node);
+    });
+}

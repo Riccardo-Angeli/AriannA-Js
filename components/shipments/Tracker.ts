@@ -1,27 +1,25 @@
 /**
- * @module    components/tracking/Tracker
+ * @module    components/shipments/Tracker
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
  * Carrier-agnostic shipment-tracker base widget. Renders a unified timeline
  * of `TrackingEvent`s with status icon, location, timestamp, and a final
- * "Track on <carrier> →" button that opens the carrier's own tracking page
- * in a new tab. The 4 carrier-specific subclasses (DHL, UPS, FedEx, BRT)
- * configure brand colours, logos, the public tracking URL pattern, and a
- * regex for tracking-number validation; everything else is shared.
+ * "Track on <carrier> →" button that opens the carrier's public tracking
+ * page in a new tab.
+ *
+ * The 4 carrier-specific subclasses (DHL, UPS, FedEx, BRT) configure brand
+ * colours, logos, the public tracking URL pattern, and a regex for tracking-
+ * number validation; everything else is shared.
  *
  *   ┌─────────────────────────────────────────────┐
  *   │ DHL · 1234567890                            │
  *   ├─────────────────────────────────────────────┤
  *   │ ● Delivered — Roma, IT — 06 May, 14:22       │
- *   │ │                                            │
- *   │ ● Out for delivery — Roma, IT — 06 May, 09:11│
- *   │ │                                            │
+ *   │ ●  Out for delivery — Roma, IT — 06 May, 09:11│
  *   │ ○ Arrived at hub — Milano, IT — 05 May, 23:14│
- *   │ │                                            │
  *   │ ○ In transit — DE → IT — 05 May, 06:00       │
- *   │ │                                            │
  *   │ ○ Picked up — Berlin, DE — 04 May, 18:30     │
  *   ├─────────────────────────────────────────────┤
  *   │       [ Track on DHL → ]                     │
@@ -30,288 +28,374 @@
  * IMPORTANT — API access: live carrier APIs require server-side credentials
  * (DHL Tracking API key, UPS OAuth, FedEx API client, BRT auth) that must
  * NEVER ship to the browser. The widget therefore expects the merchant
- * server to fetch, normalise, and feed it the events. As an escape hatch,
- * the widget can also operate in pure "link" mode where no events are
- * displayed and only the public tracking URL is exposed.
+ * server to fetch, normalise, and feed it the events via `setEvents()`. As
+ * an escape hatch, the widget can also operate in pure "link" mode where no
+ * events are displayed and only the public tracking URL is exposed.
+ *
+ * The base class is concrete — it can be used directly with a custom
+ * `CarrierConfig`; the four subclasses pre-bind the well-known carriers.
  *
  * @example
- *   import { DHLTracker } from 'ariannajs/components/tracking';
+ *   import { Tracker } from 'arianna/components/shipments';
  *
- *   const t = new DHLTracker('#track', { trackingNumber: '1234567890' });
+ *   // Use the base directly with a custom carrier
+ *   const t = new Tracker();
+ *   t.setCarrier({
+ *     id: 'gls', name: 'GLS', color: '#0033a0',
+ *     publicUrl: 'https://gls-group.com/track/{n}', logo: '...',
+ *   });
+ *   t.setTrackingNumber('123456789');
+ *   t.setEvents(eventsFromServer);
  *
- *   // Server fetched the events server-side; pass them in:
- *   t.setEvents([
- *       { kind: 'delivered',    location: 'Roma, IT',    at: Date.now() },
- *       { kind: 'out-delivery', location: 'Roma, IT',    at: Date.now() - 18000000 },
- *       { kind: 'arrived',      location: 'Milano, IT',  at: Date.now() - 50000000 },
- *   ]);
+ *   // Subscribe to portal-open clicks
+ *   t.addEventListener('arianna:tracking-portal', e =>
+ *     analytics.track('portal_open', { carrier: e.detail.carrier }));
  *
- *   t.on('open-portal', e => analytics.track('tracker_external_open', { carrier: 'dhl' }));
+ * Events:
+ *   arianna:tracking-portal  detail: { carrier: string, url: string }
+ *   arianna:tracking-event   detail: { event: TrackingEvent }  (fired per setEvents change)
+ *
+ * Attrs: tracking-number, carrier, locale
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-/**
- * Normalised event kinds — every carrier's raw status text is mapped onto
- * one of these by the merchant's server. The widget knows how to colour /
- * icon each kind consistently across carriers.
- */
 export type TrackingEventKind =
-    | 'created'         // shipment label printed
-    | 'picked-up'       // courier collected from sender
-    | 'in-transit'      // travelling between hubs
-    | 'arrived'         // arrived at a hub
-    | 'customs'         // held at customs
-    | 'out-delivery'    // out for delivery on local vehicle
-    | 'delivered'       // delivered to recipient
-    | 'failed'          // failed delivery attempt (returns next day, redirect, etc.)
-    | 'returned'        // returned to sender
-    | 'exception'       // generic problem (lost, damaged, address issue, …)
+    | 'created'
+    | 'picked-up'
+    | 'in-transit'
+    | 'arrived'
+    | 'customs'
+    | 'out-delivery'
+    | 'delivered'
+    | 'failed'
+    | 'returned'
+    | 'exception'
     | 'unknown';
 
-export interface TrackingEvent
-{
+export interface TrackingEvent {
     kind     : TrackingEventKind;
-    /** Free-form raw status text from the carrier (shown next to the kind label). */
     raw?     : string;
-    /** Human-readable location string. */
     location?: string;
     /** Unix ms. */
     at       : number;
 }
 
-export interface CarrierConfig
-{
-    /** Carrier id (lowercase). */
-    id          : string;
-    /** Display name. */
-    name        : string;
-    /** Public tracking URL pattern. `{n}` is replaced with the tracking number. */
-    publicUrl   : string;
-    /** Brand colour. */
-    color       : string;
-    /** SVG logo (inline). */
-    logo        : string;
-    /** Regex that validates a tracking number for this carrier. */
-    pattern?    : RegExp;
+export interface CarrierConfig {
+    id        : string;
+    name      : string;
+    publicUrl : string;
+    color     : string;
+    logo      : string;
+    pattern?  : RegExp;
 }
 
-export interface TrackerOptions extends CtrlOptions
-{
-    trackingNumber : string;
-    /** Initial events. May be empty; populate later via `setEvents`. */
-    events?        : TrackingEvent[];
-    /** Locale. Default browser default. */
-    locale?        : string;
-    /** Show the "Track on <carrier> →" button. Default true. */
-    showPortalLink?: boolean;
-    /** Open the portal link in a new tab. Default true. */
-    openInNewTab?  : boolean;
+export interface TrackerOptions {
+    trackingNumber? : string;
+    carrier?        : CarrierConfig;
+    events?         : TrackingEvent[];
+    locale?         : string;
 }
 
-// ── Base component ──────────────────────────────────────────────────────────
-
-/**
- * Abstract base. Subclasses provide a `_carrier()` method returning their
- * `CarrierConfig`. Everything else is reused.
- */
-export abstract class Tracker<O extends TrackerOptions = TrackerOptions> extends Control<O>
-{
-    private _events : TrackingEvent[] = [];
-    private _elList!   : HTMLElement;
-    private _elHeader! : HTMLElement;
-    private _elFooter! : HTMLElement;
-
-    constructor(container: string | HTMLElement | null, opts: O)
-    {
-        super(container, 'div', {
-            showPortalLink: true,
-            openInNewTab  : true,
-            ...opts,
-        });
-
-        this.el.className = `ar-trk ar-trk--${this._carrier().id}${opts.class ? ' ' + opts.class : ''}`;
-        this._events = (opts.events ?? []).slice();
-        this._injectSharedStyles();
-        this._build();
-    }
-
-    /** Subclasses provide their CarrierConfig. */
-    protected abstract _carrier(): CarrierConfig;
-
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    /** Replace the events list. Most-recent-first ordering is enforced. */
-    setEvents(events: TrackingEvent[]): this
-    {
-        this._events = events.slice().sort((a, b) => b.at - a.at);
-        this._renderTimeline();
-        this._emit('events', { events: this._events.slice() });
-        return this;
-    }
-
-    /** Append a single event (maintains sort order). */
-    addEvent(e: TrackingEvent): this { return this.setEvents([...this._events, e]); }
-
-    /** Current events (deep cloned). */
-    getEvents(): TrackingEvent[] { return this._events.map(e => ({ ...e })); }
-
-    /** The latest event, or null. */
-    getLatest(): TrackingEvent | null { return this._events[0] ?? null; }
-
-    /** The carrier-specific public URL for the current tracking number. */
-    getPortalUrl(): string
-    {
-        const n = encodeURIComponent(this._get<string>('trackingNumber', ''));
-        return this._carrier().publicUrl.replace('{n}', n);
-    }
-
-    /** Open the carrier portal. */
-    openPortal(): this
-    {
-        const url = this.getPortalUrl();
-        this._emit('open-portal', { url });
-        if (this._get<boolean>('openInNewTab', true)) window.open(url, '_blank', 'noopener');
-        else                                          window.location.href = url;
-        return this;
-    }
-
-    /**
-     * Validate the configured tracking number against the carrier's pattern.
-     * Returns null if valid, or an error message.
-     */
-    validate(): string | null
-    {
-        const n = (this._get<string>('trackingNumber', '') || '').trim();
-        if (!n) return 'tracking number missing';
-        const p = this._carrier().pattern;
-        if (p && !p.test(n)) return `does not look like a ${this._carrier().name} tracking number`;
-        return null;
-    }
-
-    // ── Internal build / render ────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        const c = this._carrier();
-        this.el.innerHTML = `
-<div class="ar-trk__header" data-r="header"></div>
-<div class="ar-trk__list"   data-r="list"></div>
-<div class="ar-trk__footer" data-r="footer"></div>`;
-        this._elHeader = this.el.querySelector<HTMLElement>('[data-r="header"]')!;
-        this._elList   = this.el.querySelector<HTMLElement>('[data-r="list"]')!;
-        this._elFooter = this.el.querySelector<HTMLElement>('[data-r="footer"]')!;
-
-        // Header
-        this._elHeader.style.borderLeft = `4px solid ${c.color}`;
-        this._elHeader.innerHTML = `
-<span class="ar-trk__logo">${c.logo}</span>
-<span class="ar-trk__carrier">${escapeHtml(c.name)}</span>
-<span class="ar-trk__number">${escapeHtml(this._get<string>('trackingNumber', ''))}</span>`;
-
-        this._renderTimeline();
-
-        // Footer
-        if (this._get<boolean>('showPortalLink', true))
-        {
-            this._elFooter.innerHTML = `<button class="ar-trk__portal" data-r="portal" type="button">Track on ${escapeHtml(c.name)} →</button>`;
-            this._elFooter.querySelector<HTMLButtonElement>('[data-r="portal"]')?.addEventListener('click', () => this.openPortal());
-        }
-    }
-
-    private _renderTimeline(): void
-    {
-        if (!this._events.length)
-        {
-            this._elList.innerHTML = `<div class="ar-trk__empty">No tracking updates yet.</div>`;
-            return;
-        }
-
-        const locale = this._get<string>('locale', '') || undefined;
-        const html = this._events.map((e, i) => {
-            const top = i === 0;
-            return `
-<div class="ar-trk__row${top ? ' ar-trk__row--top' : ''} ar-trk__row--${e.kind}">
-  <div class="ar-trk__dot"></div>
-  <div class="ar-trk__body">
-    <div class="ar-trk__kind">${escapeHtml(EVENT_LABEL[e.kind] ?? e.kind)}</div>
-    ${e.raw ? `<div class="ar-trk__raw">${escapeHtml(e.raw)}</div>` : ''}
-    <div class="ar-trk__meta">
-      ${e.location ? `<span class="ar-trk__loc">${escapeHtml(e.location)}</span>` : ''}
-      <span class="ar-trk__time">${formatTime(e.at, locale)}</span>
-    </div>
-  </div>
-</div>`;
-        }).join('');
-        this._elList.innerHTML = html;
-    }
-
-    private _injectSharedStyles(): void
-    {
-        if (document.getElementById('ar-trk-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-trk-styles';
-        s.textContent = `
-.ar-trk { display:flex; flex-direction:column; max-width:520px; background:#1e1e1e; border:1px solid #333; border-radius:8px; color:#d4d4d4; font:13px -apple-system,system-ui,sans-serif; overflow:hidden; }
-.ar-trk__header { display:flex; align-items:center; gap:10px; padding:12px 16px; background:#252525; border-bottom:1px solid #333; }
-.ar-trk__logo svg { display:block; height:20px; width:auto; }
-.ar-trk__carrier { font:600 14px sans-serif; flex:1; }
-.ar-trk__number  { font:12px ui-monospace,monospace; color:#888; }
-.ar-trk__list { padding:12px 16px; max-height:340px; overflow-y:auto; }
-.ar-trk__empty { padding:30px 0; text-align:center; color:#666; font-size:12px; }
-.ar-trk__row { display:flex; gap:12px; padding-bottom:12px; position:relative; }
-.ar-trk__row:not(:last-child)::before { content:''; position:absolute; left:5px; top:14px; bottom:0; width:2px; background:#333; }
-.ar-trk__dot { width:12px; height:12px; border-radius:50%; background:#333; flex-shrink:0; margin-top:2px; z-index:1; border:2px solid #1e1e1e; }
-.ar-trk__row--top .ar-trk__dot { background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,0.6); }
-.ar-trk__row--exception .ar-trk__dot, .ar-trk__row--failed .ar-trk__dot { background:#dc2626; }
-.ar-trk__row--customs .ar-trk__dot, .ar-trk__row--returned .ar-trk__dot { background:#eab308; }
-.ar-trk__body { flex:1; min-width:0; }
-.ar-trk__kind { font:600 13px sans-serif; }
-.ar-trk__raw { font:12px sans-serif; color:#888; margin:1px 0; }
-.ar-trk__meta { display:flex; gap:8px; font:11px sans-serif; color:#888; margin-top:2px; }
-.ar-trk__loc::after  { content:'·'; margin-left:8px; }
-.ar-trk__footer { padding:10px 16px; background:#181818; border-top:1px solid #333; }
-.ar-trk__portal { width:100%; background:transparent; border:1px solid #444; color:#d4d4d4; padding:8px 14px; font:600 12px sans-serif; border-radius:4px; cursor:pointer; transition:all .12s; }
-.ar-trk__portal:hover { background:#2a2a2a; border-color:#666; }
-`;
-        document.head.appendChild(s);
-    }
-}
-
-// ── Shared label table ──────────────────────────────────────────────────────
-
-const EVENT_LABEL: Record<TrackingEventKind, string> = {
-    'created':      'Label created',
-    'picked-up':    'Picked up',
-    'in-transit':   'In transit',
-    'arrived':      'Arrived at hub',
-    'customs':      'Customs clearance',
-    'out-delivery': 'Out for delivery',
-    'delivered':    'Delivered',
-    'failed':       'Delivery attempt failed',
-    'returned':     'Returned to sender',
-    'exception':    'Exception',
-    'unknown':      'Update',
+const KIND_LABELS: Record<TrackingEventKind, string> = {
+    'created'      : 'Created',
+    'picked-up'    : 'Picked up',
+    'in-transit'   : 'In transit',
+    'arrived'      : 'Arrived at hub',
+    'customs'      : 'In customs',
+    'out-delivery' : 'Out for delivery',
+    'delivered'    : 'Delivered',
+    'failed'       : 'Delivery failed',
+    'returned'     : 'Returned',
+    'exception'    : 'Exception',
+    'unknown'      : 'Unknown',
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+const KIND_ICONS: Record<TrackingEventKind, string> = {
+    'created'      : '○',
+    'picked-up'    : '○',
+    'in-transit'   : '○',
+    'arrived'      : '○',
+    'customs'      : '⊘',
+    'out-delivery' : '◐',
+    'delivered'    : '●',
+    'failed'       : '✕',
+    'returned'     : '↩',
+    'exception'    : '⚠',
+    'unknown'      : '?',
+};
 
-function formatTime(at: number, locale?: string): string
-{
-    const d = new Date(at);
-    const date = d.toLocaleDateString(locale, { day: '2-digit', month: 'short' });
-    const time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-    return `${date}, ${time}`;
+const TERMINAL: TrackingEventKind[] = ['delivered', 'returned'];
+
+function formatDate(ts: number, locale: string): string {
+    try {
+        return new Intl.DateTimeFormat(locale, {
+            day: '2-digit', month: 'short',
+            hour: '2-digit', minute: '2-digit',
+        }).format(new Date(ts));
+    } catch {
+        return new Date(ts).toLocaleString();
+    }
 }
 
-function escapeHtml(s: string): string
+export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
+    attrs : ['tracking-number', 'carrier', 'locale'],
+    shadow: false,
+})
 {
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
+    events$  : Signal<TrackingEvent[]> = signal<TrackingEvent[]>([]);
+    carrier$ : Signal<CarrierConfig | null> = signal<CarrierConfig | null>(null);
+
+    build(_opts: TrackerOptions = {})
+    {
+        const numberAttr = this.attrSignal('tracking-number');
+        const localeAttr = this.attrSignal('locale');
+
+        this.headerTitle = () => {
+            const c = this.carrier$.get();
+            const n = numberAttr.get();
+            if (!c && !n) return 'Shipment tracker';
+            const parts: string[] = [];
+            if (c?.name) parts.push(c.name);
+            if (n)       parts.push(n);
+            return parts.join(' · ');
+        };
+
+        this.headerStyle = () => {
+            const c = this.carrier$.get();
+            return c?.color ? `border-left: 3px solid ${c.color}` : '';
+        };
+
+        this.logoHtml = () => this.carrier$.get()?.logo ?? '';
+
+        this.hasEvents = () => this.events$.get().length > 0;
+        this.hasCarrierLink = () => {
+            const c = this.carrier$.get();
+            const n = numberAttr.get();
+            return !!(c?.publicUrl && n);
+        };
+
+        this.portalLabel = () => {
+            const c = this.carrier$.get();
+            return c ? `Track on ${c.name} →` : 'Open portal →';
+        };
+
+        this.eventList = (): Array<{ icon: string; label: string; raw: string; location: string; date: string; cls: string }> => {
+            const locale = localeAttr.get() ?? 'en';
+            // Sort descending by `at` (most recent first)
+            return [...this.events$.get()].sort((a, b) => b.at - a.at).map(e => ({
+                icon    : KIND_ICONS[e.kind] ?? KIND_ICONS.unknown,
+                label   : KIND_LABELS[e.kind] ?? e.kind,
+                raw     : e.raw     ?? '',
+                location: e.location ?? '',
+                date    : formatDate(e.at, locale),
+                cls     : 'ar-trk__event ar-trk__event--' + e.kind
+                          + (TERMINAL.includes(e.kind) ? ' ar-trk__event--terminal' : ''),
+            }));
+        };
+
+        this.onPortalClick = () => {
+            const c = this.carrier$.get();
+            const n = numberAttr.get();
+            if (!c?.publicUrl || !n) return;
+            const url = c.publicUrl.replace('{n}', encodeURIComponent(n));
+            this.dispatchEvent(new CustomEvent('arianna:tracking-portal', {
+                bubbles: true, detail: { carrier: c.id, url },
+            }));
+            window.open(url, '_blank', 'noopener');
+        };
+
+        this.template = html`
+            <div class="ar-trk">
+                <header class="ar-trk__header" :style="this.headerStyle()">
+                    <span class="ar-trk__logo" a-if="this.logoHtml()"
+                          .innerHTML="this.logoHtml()"></span>
+                    <span class="ar-trk__title">{{ this.headerTitle() }}</span>
+                </header>
+                <ol class="ar-trk__events" a-if="this.hasEvents()">
+                    <li a-for="e in this.eventList()" :class="e.cls">
+                        <span class="ar-trk__icon">{{ e.icon }}</span>
+                        <div class="ar-trk__body">
+                            <div class="ar-trk__label">{{ e.label }}</div>
+                            <div class="ar-trk__meta">
+                                <span a-if="e.location">{{ e.location }}</span>
+                                <span class="ar-trk__date">{{ e.date }}</span>
+                            </div>
+                            <div class="ar-trk__raw" a-if="e.raw">{{ e.raw }}</div>
+                        </div>
+                    </li>
+                </ol>
+                <div class="ar-trk__empty" a-if="!this.hasEvents()">
+                    No tracking events yet.
+                </div>
+                <button type="button" class="ar-trk__portal"
+                        a-if="this.hasCarrierLink()"
+                        @click="this.onPortalClick">{{ this.portalLabel() }}</button>
+            </div>
+        `;
+
+        this.Sheet = Tracker.DefaultSheet();
+    }
+
+    // ── Public API ───────────────────────────────────────────────────────────
+
+    setCarrier(c: CarrierConfig): this {
+        this.carrier$.set({ ...c });
+        this.setAttribute('carrier', c.id);
+        return this;
+    }
+    getCarrier(): CarrierConfig | null { return this.carrier$.get(); }
+
+    setTrackingNumber(n: string): this {
+        this.setAttribute('tracking-number', n);
+        return this;
+    }
+    getTrackingNumber(): string { return this.getAttribute('tracking-number') ?? ''; }
+
+    setEvents(events: TrackingEvent[]): this {
+        const sanitized = events.map(e => ({ ...e }));
+        this.events$.set(sanitized);
+        // Fire one event per setEvents call (last event = most recent)
+        const last = sanitized[sanitized.length - 1];
+        if (last) {
+            this.dispatchEvent(new CustomEvent('arianna:tracking-event', {
+                bubbles: true, detail: { event: { ...last } },
+            }));
+        }
+        return this;
+    }
+    getEvents(): TrackingEvent[] { return this.events$.get().map(e => ({ ...e })); }
+
+    validateNumber(n: string): boolean {
+        const c = this.carrier$.get();
+        if (!c?.pattern) return n.length > 0;
+        return c.pattern.test(n);
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    private headerTitle    : () => string = () => 'Shipment tracker';
+    private headerStyle    : () => string = () => '';
+    private logoHtml       : () => string = () => '';
+    private hasEvents      : () => boolean = () => false;
+    private hasCarrierLink : () => boolean = () => false;
+    private portalLabel    : () => string = () => 'Open portal →';
+    private eventList      : () => Array<{ icon: string; label: string; raw: string; location: string; date: string; cls: string }> = () => [];
+    private onPortalClick  : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', {
+                    display: 'block',
+                    fontFamily: '-apple-system, system-ui, sans-serif',
+                    fontSize: '13px',
+                    color: 'var(--arianna-text, #1f2328)',
+                    maxWidth: '480px',
+                }),
+                new Rule('.ar-trk', {
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 8px)',
+                    overflow: 'hidden',
+                }),
+                new Rule('.ar-trk__header', {
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '12px 16px',
+                    background: 'var(--arianna-bg-3, #f3f3f3)',
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                }),
+                new Rule('.ar-trk__logo', { display: 'inline-flex', alignItems: 'center' }),
+                new Rule('.ar-trk__logo svg', { height: '20px' }),
+                new Rule('.ar-trk__title', { fontWeight: '600', fontSize: '13px' }),
+                new Rule('.ar-trk__events', {
+                    listStyle: 'none', margin: '0', padding: '12px 16px',
+                    display: 'flex', flexDirection: 'column', gap: '14px',
+                }),
+                new Rule('.ar-trk__event', {
+                    display: 'flex', gap: '12px',
+                    position: 'relative',
+                }),
+                new Rule('.ar-trk__event:not(:last-child)::after', {
+                    content: '""',
+                    position: 'absolute',
+                    left: '8px', top: '20px', bottom: '-14px',
+                    width: '1px',
+                    background: 'var(--arianna-border, #d8d8d8)',
+                }),
+                new Rule('.ar-trk__icon', {
+                    width: '18px', height: '18px',
+                    display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    fontSize: '14px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    flexShrink: '0',
+                    background: 'var(--arianna-bg, #fff)',
+                    position: 'relative',
+                    zIndex: '1',
+                }),
+                new Rule('.ar-trk__event--terminal .ar-trk__icon', {
+                    color: 'var(--arianna-bull, #1f883d)',
+                }),
+                new Rule('.ar-trk__event--failed .ar-trk__icon, .ar-trk__event--exception .ar-trk__icon', {
+                    color: 'var(--arianna-danger, #cf222e)',
+                }),
+                new Rule('.ar-trk__body', { flex: '1', minWidth: '0' }),
+                new Rule('.ar-trk__label', { fontWeight: '600', fontSize: '13px' }),
+                new Rule('.ar-trk__meta', {
+                    display: 'flex',
+                    gap: '8px',
+                    fontSize: '11px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    marginTop: '2px',
+                }),
+                new Rule('.ar-trk__date', { fontFamily: 'ui-monospace, monospace' }),
+                new Rule('.ar-trk__raw', {
+                    fontSize: '11px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    marginTop: '4px',
+                    fontStyle: 'italic',
+                }),
+                new Rule('.ar-trk__empty', {
+                    padding: '24px 16px',
+                    textAlign: 'center',
+                    fontSize: '12px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                }),
+                new Rule('.ar-trk__portal', {
+                    width: '100%',
+                    padding: '11px',
+                    background: 'transparent',
+                    color: 'var(--arianna-text, #1f2328)',
+                    border: 'none',
+                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'background 0.1s',
+                }),
+                new Rule('.ar-trk__portal:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+            ]
+        );
+    }
 }
 
-// Re-export the helper so subclasses (and the multi-tracker) can reuse it
-export { escapeHtml as _escapeHtml };
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Tracker', {
+        value: Tracker, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default Tracker;

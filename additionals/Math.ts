@@ -24,7 +24,8 @@
  *   const m = Matrix4.perspective(Math.PI/4, 16/9, 0.1, 1000);
  */
 
-import { Core } from "../core";
+// Note: `Core.use(Math)` mentioned in JSDoc is a legacy convention; no runtime
+// Core import is required here — Math.ts is self-contained.
 
 // ── MathConstants ─────────────────────────────────────────────────────────────
 // All 32 constants preserved
@@ -318,19 +319,42 @@ export class Vector2 {
   static up    = new Vector2(0, 1);
   static right = new Vector2(1, 0);
 
+  // ── Immutable operations (return NEW Vector2; preserve original) ──────────
   add     (v: Vector2): Vector2    { return new Vector2(this.x+v.x, this.y+v.y); }
   sub     (v: Vector2): Vector2    { return new Vector2(this.x-v.x, this.y-v.y); }
   scale   (s: number) : Vector2    { return new Vector2(this.x*s,   this.y*s); }
+  mul     (v: Vector2): Vector2    { return new Vector2(this.x*v.x, this.y*v.y); }
+  negate  ()          : Vector2    { return new Vector2(-this.x, -this.y); }
   dot     (v: Vector2): number     { return this.x*v.x + this.y*v.y; }
+  cross   (v: Vector2): number     { return this.x*v.y - this.y*v.x; }
   length  ()          : number     { return Math.sqrt(this.x**2+this.y**2); }
+  lengthSq()          : number     { return this.x*this.x + this.y*this.y; }
   normalize()         : Vector2    { const l=this.length(); return l>0?this.scale(1/l):Vector2.zero; }
   angle   ()          : number     { return Math.atan2(this.y, this.x); }
   rotate  (rad:number): Vector2    { const c=Math.cos(rad),s=Math.sin(rad); return new Vector2(c*this.x-s*this.y,s*this.x+c*this.y); }
   lerp    (v:Vector2,t:number):Vector2 { return this.add(v.sub(this).scale(t)); }
   distance(v: Vector2): number     { return this.sub(v).length(); }
+  distanceTo(v: Vector2): number   { return this.distance(v); }            // alias
   toArray (): [number,number]      { return [this.x, this.y]; }
   clone   (): Vector2              { return new Vector2(this.x, this.y); }
+  copy    (v: Vector2): this       { this.x = v.x; this.y = v.y; return this; }
+  set     (x:number,y:number):this { this.x = x; this.y = y; return this; }
+  equals  (v: Vector2, eps=1e-6): boolean { return Math.abs(this.x-v.x)<eps && Math.abs(this.y-v.y)<eps; }
   toString(): string               { return `Vector2(${this.x}, ${this.y})`; }
+
+  // ── Mutating operations (modify this; return this for chaining) ───────────
+  // These exist so high-frequency code (renderers, physics loops) can avoid
+  // allocations. Use the immutable versions for readability when allocation
+  // cost is not critical.
+  addInPlace      (v: Vector2): this { this.x += v.x; this.y += v.y; return this; }
+  subInPlace      (v: Vector2): this { this.x -= v.x; this.y -= v.y; return this; }
+  scaleInPlace    (s: number) : this { this.x *= s; this.y *= s; return this; }
+  mulInPlace      (v: Vector2): this { this.x *= v.x; this.y *= v.y; return this; }
+  addScalarInPlace(s: number) : this { this.x += s; this.y += s; return this; }
+  negateInPlace   ()          : this { this.x = -this.x; this.y = -this.y; return this; }
+  normalizeInPlace()          : this { const l = this.length() || 1; this.x /= l; this.y /= l; return this; }
+  rotateInPlace   (rad:number): this { const c=Math.cos(rad),s=Math.sin(rad),x=this.x,y=this.y; this.x = c*x-s*y; this.y = s*x+c*y; return this; }
+  lerpInPlace     (v: Vector2, t: number): this { this.x += (v.x-this.x)*t; this.y += (v.y-this.y)*t; return this; }
 }
 
 // ── Vector3 ───────────────────────────────────────────────────────────────────
@@ -344,31 +368,131 @@ export class Vector3 {
   static zero  = new Vector3(0, 0, 0);
   static one   = new Vector3(1, 1, 1);
 
+  // ── Immutable operations ──────────────────────────────────────────────────
   add     (v: Vector3): Vector3     { return new Vector3(this.x+v.x,this.y+v.y,this.z+v.z); }
   sub     (v: Vector3): Vector3     { return new Vector3(this.x-v.x,this.y-v.y,this.z-v.z); }
   scale   (s: number) : Vector3     { return new Vector3(this.x*s,this.y*s,this.z*s); }
+  mul     (v: Vector3): Vector3     { return new Vector3(this.x*v.x, this.y*v.y, this.z*v.z); }
+  negate  ()          : Vector3     { return new Vector3(-this.x, -this.y, -this.z); }
   dot     (v: Vector3): number      { return this.x*v.x+this.y*v.y+this.z*v.z; }
   cross   (v: Vector3): Vector3     { return new Vector3(this.y*v.z-this.z*v.y,this.z*v.x-this.x*v.z,this.x*v.y-this.y*v.x); }
   length  ()          : number      { return Math.sqrt(this.dot(this)); }
+  lengthSq()          : number      { return this.x*this.x + this.y*this.y + this.z*this.z; }
   normalize()         : Vector3     { const l=this.length(); return l>0?this.scale(1/l):Vector3.zero; }
   lerp    (v:Vector3,t:number):Vector3 { return this.add(v.sub(this).scale(t)); }
   distance(v: Vector3): number      { return this.sub(v).length(); }
+  distanceTo(v: Vector3): number    { return this.distance(v); }           // alias
   reflect (n: Vector3): Vector3     { return this.sub(n.scale(2*this.dot(n))); }
   toArray (): [number,number,number]{ return [this.x,this.y,this.z]; }
   toVec4  (w=1): Vector4            { return new Vector4(this.x,this.y,this.z,w); }
   clone   (): Vector3               { return new Vector3(this.x,this.y,this.z); }
+  copy    (v: Vector3): this        { this.x = v.x; this.y = v.y; this.z = v.z; return this; }
+  set     (x:number,y:number,z:number): this { this.x = x; this.y = y; this.z = z; return this; }
+  equals  (v: Vector3, eps=1e-6): boolean { return Math.abs(this.x-v.x)<eps && Math.abs(this.y-v.y)<eps && Math.abs(this.z-v.z)<eps; }
   toString(): string                { return `Vector3(${this.x.toFixed(4)},${this.y.toFixed(4)},${this.z.toFixed(4)})`; }
+
+  // ── Apply transforms (returns new vector) ─────────────────────────────────
+  applyMat4(m: Matrix4): Vector3 {
+    const e = m.elements ?? (m as unknown as { values: number[] }).values;
+    const x = this.x, y = this.y, z = this.z;
+    const w = 1 / ((e[3]*x + e[7]*y + e[11]*z + e[15]) || 1);
+    return new Vector3(
+      (e[0]*x + e[4]*y + e[8]*z  + e[12]) * w,
+      (e[1]*x + e[5]*y + e[9]*z  + e[13]) * w,
+      (e[2]*x + e[6]*y + e[10]*z + e[14]) * w,
+    );
+  }
+  applyQuat(q: Quaternion): Vector3 {
+    const x = this.x, y = this.y, z = this.z;
+    const qx = q.x, qy = q.y, qz = q.z, qw = q.w;
+    const ix =  qw*x + qy*z - qz*y;
+    const iy =  qw*y + qz*x - qx*z;
+    const iz =  qw*z + qx*y - qy*x;
+    const iw = -qx*x - qy*y - qz*z;
+    return new Vector3(
+      ix*qw + iw*-qx + iy*-qz - iz*-qy,
+      iy*qw + iw*-qy + iz*-qx - ix*-qz,
+      iz*qw + iw*-qz + ix*-qy - iy*-qx,
+    );
+  }
+
+  // ── Mutating operations (high-perf, no alloc) ─────────────────────────────
+  addInPlace      (v: Vector3): this { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
+  subInPlace      (v: Vector3): this { this.x -= v.x; this.y -= v.y; this.z -= v.z; return this; }
+  scaleInPlace    (s: number) : this { this.x *= s; this.y *= s; this.z *= s; return this; }
+  mulInPlace      (v: Vector3): this { this.x *= v.x; this.y *= v.y; this.z *= v.z; return this; }
+  addScalarInPlace(s: number) : this { this.x += s; this.y += s; this.z += s; return this; }
+  negateInPlace   ()          : this { this.x = -this.x; this.y = -this.y; this.z = -this.z; return this; }
+  normalizeInPlace()          : this { const l = this.length() || 1; this.x /= l; this.y /= l; this.z /= l; return this; }
+  crossInPlace    (v: Vector3): this {
+    const ax = this.x, ay = this.y, az = this.z;
+    this.x = ay*v.z - az*v.y;
+    this.y = az*v.x - ax*v.z;
+    this.z = ax*v.y - ay*v.x;
+    return this;
+  }
+  lerpInPlace     (v: Vector3, t: number): this {
+    this.x += (v.x-this.x)*t;
+    this.y += (v.y-this.y)*t;
+    this.z += (v.z-this.z)*t;
+    return this;
+  }
+  applyMat4InPlace(m: Matrix4): this {
+    const e = m.elements ?? (m as unknown as { values: number[] }).values;
+    const x = this.x, y = this.y, z = this.z;
+    const w = 1 / ((e[3]*x + e[7]*y + e[11]*z + e[15]) || 1);
+    this.x = (e[0]*x + e[4]*y + e[8]*z  + e[12]) * w;
+    this.y = (e[1]*x + e[5]*y + e[9]*z  + e[13]) * w;
+    this.z = (e[2]*x + e[6]*y + e[10]*z + e[14]) * w;
+    return this;
+  }
+  applyQuatInPlace(q: Quaternion): this {
+    const x = this.x, y = this.y, z = this.z;
+    const qx = q.x, qy = q.y, qz = q.z, qw = q.w;
+    const ix =  qw*x + qy*z - qz*y;
+    const iy =  qw*y + qz*x - qx*z;
+    const iz =  qw*z + qx*y - qy*x;
+    const iw = -qx*x - qy*y - qz*z;
+    this.x = ix*qw + iw*-qx + iy*-qz - iz*-qy;
+    this.y = iy*qw + iw*-qy + iz*-qx - ix*-qz;
+    this.z = iz*qw + iw*-qz + ix*-qy - iy*-qx;
+    return this;
+  }
 }
 
 // ── Vector4 ───────────────────────────────────────────────────────────────────
 
 export class Vector4 {
   constructor(public x=0,public y=0,public z=0,public w=1) {}
+  static zero = new Vector4(0,0,0,0);
+  static one  = new Vector4(1,1,1,1);
+
   add     (v: Vector4): Vector4 { return new Vector4(this.x+v.x,this.y+v.y,this.z+v.z,this.w+v.w); }
+  sub     (v: Vector4): Vector4 { return new Vector4(this.x-v.x,this.y-v.y,this.z-v.z,this.w-v.w); }
   scale   (s: number) : Vector4 { return new Vector4(this.x*s,this.y*s,this.z*s,this.w*s); }
+  mul     (v: Vector4): Vector4 { return new Vector4(this.x*v.x,this.y*v.y,this.z*v.z,this.w*v.w); }
+  negate  ()          : Vector4 { return new Vector4(-this.x,-this.y,-this.z,-this.w); }
+  dot     (v: Vector4): number  { return this.x*v.x + this.y*v.y + this.z*v.z + this.w*v.w; }
+  length  ()          : number  { return Math.sqrt(this.dot(this)); }
+  lengthSq()          : number  { return this.dot(this); }
+  normalize()         : Vector4 { const l=this.length(); return l>0?this.scale(1/l):Vector4.zero; }
   toVec3  (): Vector3           { return new Vector3(this.x/this.w,this.y/this.w,this.z/this.w); }
   toArray (): [number,number,number,number] { return [this.x,this.y,this.z,this.w]; }
+  clone   (): Vector4           { return new Vector4(this.x,this.y,this.z,this.w); }
+  copy    (v: Vector4): this    { this.x = v.x; this.y = v.y; this.z = v.z; this.w = v.w; return this; }
+  set     (x:number,y:number,z:number,w:number): this { this.x=x; this.y=y; this.z=z; this.w=w; return this; }
+  equals  (v: Vector4, eps=1e-6): boolean {
+    return Math.abs(this.x-v.x)<eps && Math.abs(this.y-v.y)<eps && Math.abs(this.z-v.z)<eps && Math.abs(this.w-v.w)<eps;
+  }
   toString(): string            { return `Vector4(${this.x},${this.y},${this.z},${this.w})`; }
+
+  // Mutating
+  addInPlace      (v: Vector4): this { this.x+=v.x; this.y+=v.y; this.z+=v.z; this.w+=v.w; return this; }
+  subInPlace      (v: Vector4): this { this.x-=v.x; this.y-=v.y; this.z-=v.z; this.w-=v.w; return this; }
+  scaleInPlace    (s: number) : this { this.x*=s; this.y*=s; this.z*=s; this.w*=s; return this; }
+  mulInPlace      (v: Vector4): this { this.x*=v.x; this.y*=v.y; this.z*=v.z; this.w*=v.w; return this; }
+  negateInPlace   ()          : this { this.x=-this.x; this.y=-this.y; this.z=-this.z; this.w=-this.w; return this; }
+  normalizeInPlace()          : this { const l = this.length() || 1; this.x/=l; this.y/=l; this.z/=l; this.w/=l; return this; }
 }
 
 // ── Quaternion ────────────────────────────────────────────────────────────────
@@ -417,6 +541,33 @@ export class Quaternion {
     const siny_cosp=2*(this.w*this.z+this.x*this.y),cosy_cosp=1-2*(this.y**2+this.z**2);
     return [Math.atan2(sinr_cosp,cosr_cosp), Math.abs(sinp)>=1?Math.sign(sinp)*Math.PI/2:Math.asin(sinp), Math.atan2(siny_cosp,cosy_cosp)];
   }
+
+  // ── set / copy / clone / equals ──────────────────────────────────────────
+  set    (x:number,y:number,z:number,w:number): this { this.x=x; this.y=y; this.z=z; this.w=w; return this; }
+  copy   (q: Quaternion): this                       { this.x=q.x; this.y=q.y; this.z=q.z; this.w=q.w; return this; }
+  clone  (): Quaternion                              { return new Quaternion(this.x,this.y,this.z,this.w); }
+  equals (q: Quaternion, eps=1e-6): boolean          {
+    return Math.abs(this.x-q.x)<eps && Math.abs(this.y-q.y)<eps && Math.abs(this.z-q.z)<eps && Math.abs(this.w-q.w)<eps;
+  }
+  toArray(): [number,number,number,number]           { return [this.x,this.y,this.z,this.w]; }
+
+  // ── Mutating versions ────────────────────────────────────────────────────
+  multiplyInPlace (q: Quaternion): this {
+    const ax=this.x, ay=this.y, az=this.z, aw=this.w;
+    this.x = aw*q.x + ax*q.w + ay*q.z - az*q.y;
+    this.y = aw*q.y - ax*q.z + ay*q.w + az*q.x;
+    this.z = aw*q.z + ax*q.y - ay*q.x + az*q.w;
+    this.w = aw*q.w - ax*q.x - ay*q.y - az*q.z;
+    return this;
+  }
+  normalizeInPlace(): this {
+    const l = Math.sqrt(this.x*this.x + this.y*this.y + this.z*this.z + this.w*this.w);
+    if (l > 0) { this.x/=l; this.y/=l; this.z/=l; this.w/=l; }
+    else { this.x=0; this.y=0; this.z=0; this.w=1; }
+    return this;
+  }
+  invertInPlace  (): this { this.x=-this.x; this.y=-this.y; this.z=-this.z; return this; }
+  invert         (): Quaternion { return new Quaternion(-this.x,-this.y,-this.z,this.w); }
 }
 
 // ── Matrix4 ───────────────────────────────────────────────────────────────────
@@ -466,6 +617,118 @@ export class Matrix4 {
   toString      (): string {
     const m=this._m;
     return `Matrix4:\n[${m[0].toFixed(3)} ${m[4].toFixed(3)} ${m[8].toFixed(3)} ${m[12].toFixed(3)}]\n[${m[1].toFixed(3)} ${m[5].toFixed(3)} ${m[9].toFixed(3)} ${m[13].toFixed(3)}]\n[${m[2].toFixed(3)} ${m[6].toFixed(3)} ${m[10].toFixed(3)} ${m[14].toFixed(3)}]\n[${m[3].toFixed(3)} ${m[7].toFixed(3)} ${m[11].toFixed(3)} ${m[15].toFixed(3)}]`;
+  }
+
+  // ── Three-compat surface (Matrix4 ↔ Three.Mat4) ──────────────────────────
+  /** Underlying 16-element array (column-major). Compatible with Three.Mat4. */
+  get elements(): Float32Array { return this._m; }
+
+  /** Three.js-style setter: 16 scalar args (row-major input, transposed to column). */
+  set(
+    n11: number, n12: number, n13: number, n14: number,
+    n21: number, n22: number, n23: number, n24: number,
+    n31: number, n32: number, n33: number, n34: number,
+    n41: number, n42: number, n43: number, n44: number,
+  ): this {
+    const m = this._m;
+    m[0]=n11; m[4]=n12; m[8]=n13;  m[12]=n14;
+    m[1]=n21; m[5]=n22; m[9]=n23;  m[13]=n24;
+    m[2]=n31; m[6]=n32; m[10]=n33; m[14]=n34;
+    m[3]=n41; m[7]=n42; m[11]=n43; m[15]=n44;
+    return this;
+  }
+
+  clone (): Matrix4         { return new Matrix4(this._m); }
+  copy  (m: Matrix4): this  { this._m.set(m._m); return this; }
+  equals(m: Matrix4, eps=1e-6): boolean {
+    for (let i = 0; i < 16; i++) if (Math.abs(this._m[i] - m._m[i]) > eps) return false;
+    return true;
+  }
+
+  /** Reset this matrix to identity (mutating). */
+  makeIdentity(): this { this._m.set([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]); return this; }
+
+  /** Three.js-style compose: position + quaternion + scale → this matrix. */
+  compose(pos: Vector3, q: Quaternion, scale: Vector3): this {
+    const m = this._m;
+    const x = q.x, y = q.y, z = q.z, w = q.w;
+    const x2 = x+x, y2 = y+y, z2 = z+z;
+    const xx = x*x2, xy = x*y2, xz = x*z2;
+    const yy = y*y2, yz = y*z2, zz = z*z2;
+    const wx = w*x2, wy = w*y2, wz = w*z2;
+    const sx = scale.x, sy = scale.y, sz = scale.z;
+    m[0]=(1-(yy+zz))*sx; m[1]=(xy+wz)*sx;     m[2]=(xz-wy)*sx;     m[3]=0;
+    m[4]=(xy-wz)*sy;     m[5]=(1-(xx+zz))*sy; m[6]=(yz+wx)*sy;     m[7]=0;
+    m[8]=(xz+wy)*sz;     m[9]=(yz-wx)*sz;     m[10]=(1-(xx+yy))*sz; m[11]=0;
+    m[12]=pos.x;         m[13]=pos.y;         m[14]=pos.z;          m[15]=1;
+    return this;
+  }
+
+  /** Mutating multiply: this = this * b. */
+  multiplyInPlace(b: Matrix4): this {
+    const a = this._m, bm = b._m;
+    const a11=a[0],a12=a[4],a13=a[8],a14=a[12];
+    const a21=a[1],a22=a[5],a23=a[9],a24=a[13];
+    const a31=a[2],a32=a[6],a33=a[10],a34=a[14];
+    const a41=a[3],a42=a[7],a43=a[11],a44=a[15];
+    const b11=bm[0],b12=bm[4],b13=bm[8],b14=bm[12];
+    const b21=bm[1],b22=bm[5],b23=bm[9],b24=bm[13];
+    const b31=bm[2],b32=bm[6],b33=bm[10],b34=bm[14];
+    const b41=bm[3],b42=bm[7],b43=bm[11],b44=bm[15];
+    a[0]=a11*b11+a12*b21+a13*b31+a14*b41;
+    a[4]=a11*b12+a12*b22+a13*b32+a14*b42;
+    a[8]=a11*b13+a12*b23+a13*b33+a14*b43;
+    a[12]=a11*b14+a12*b24+a13*b34+a14*b44;
+    a[1]=a21*b11+a22*b21+a23*b31+a24*b41;
+    a[5]=a21*b12+a22*b22+a23*b32+a24*b42;
+    a[9]=a21*b13+a22*b23+a23*b33+a24*b43;
+    a[13]=a21*b14+a22*b24+a23*b34+a24*b44;
+    a[2]=a31*b11+a32*b21+a33*b31+a34*b41;
+    a[6]=a31*b12+a32*b22+a33*b32+a34*b42;
+    a[10]=a31*b13+a32*b23+a33*b33+a34*b43;
+    a[14]=a31*b14+a32*b24+a33*b34+a34*b44;
+    a[3]=a41*b11+a42*b21+a43*b31+a44*b41;
+    a[7]=a41*b12+a42*b22+a43*b32+a44*b42;
+    a[11]=a41*b13+a42*b23+a43*b33+a44*b43;
+    a[15]=a41*b14+a42*b24+a43*b34+a44*b44;
+    return this;
+  }
+
+  /** Invert (returns new matrix); throws if singular. */
+  invert(): Matrix4 {
+    const m = this._m;
+    const m00=m[0],m01=m[1],m02=m[2],m03=m[3];
+    const m10=m[4],m11=m[5],m12=m[6],m13=m[7];
+    const m20=m[8],m21=m[9],m22=m[10],m23=m[11];
+    const m30=m[12],m31=m[13],m32=m[14],m33=m[15];
+
+    const t11 =  m12*m23*m31 - m13*m22*m31 + m13*m21*m32 - m11*m23*m32 - m12*m21*m33 + m11*m22*m33;
+    const t12 =  m03*m22*m31 - m02*m23*m31 - m03*m21*m32 + m01*m23*m32 + m02*m21*m33 - m01*m22*m33;
+    const t13 =  m02*m13*m31 - m03*m12*m31 + m03*m11*m32 - m01*m13*m32 - m02*m11*m33 + m01*m12*m33;
+    const t14 =  m03*m12*m21 - m02*m13*m21 - m03*m11*m22 + m01*m13*m22 + m02*m11*m23 - m01*m12*m23;
+
+    const det = m00*t11 + m10*t12 + m20*t13 + m30*t14;
+    if (det === 0) throw new Error('Matrix4.invert: singular matrix');
+    const inv = 1 / det;
+
+    const out = new Float32Array(16);
+    out[0] = t11 * inv;
+    out[1] = (m13*m22*m30 - m12*m23*m30 - m13*m20*m32 + m10*m23*m32 + m12*m20*m33 - m10*m22*m33) * inv;
+    out[2] = (m11*m23*m30 - m13*m21*m30 + m13*m20*m31 - m10*m23*m31 - m11*m20*m33 + m10*m21*m33) * inv;
+    out[3] = (m12*m21*m30 - m11*m22*m30 - m12*m20*m31 + m10*m22*m31 + m11*m20*m32 - m10*m21*m32) * inv;
+    out[4] = t12 * inv;
+    out[5] = (m02*m23*m30 - m03*m22*m30 + m03*m20*m32 - m00*m23*m32 - m02*m20*m33 + m00*m22*m33) * inv;
+    out[6] = (m03*m21*m30 - m01*m23*m30 - m03*m20*m31 + m00*m23*m31 + m01*m20*m33 - m00*m21*m33) * inv;
+    out[7] = (m01*m22*m30 - m02*m21*m30 + m02*m20*m31 - m00*m22*m31 - m01*m20*m32 + m00*m21*m32) * inv;
+    out[8] = t13 * inv;
+    out[9] = (m03*m12*m30 - m02*m13*m30 - m03*m10*m32 + m00*m13*m32 + m02*m10*m33 - m00*m12*m33) * inv;
+    out[10]= (m01*m13*m30 - m03*m11*m30 + m03*m10*m31 - m00*m13*m31 - m01*m10*m33 + m00*m11*m33) * inv;
+    out[11]= (m02*m11*m30 - m01*m12*m30 - m02*m10*m31 + m00*m12*m31 + m01*m10*m32 - m00*m11*m32) * inv;
+    out[12]= t14 * inv;
+    out[13]= (m02*m13*m20 - m03*m12*m20 + m03*m10*m22 - m00*m13*m22 - m02*m10*m23 + m00*m12*m23) * inv;
+    out[14]= (m03*m11*m20 - m01*m13*m20 - m03*m10*m21 + m00*m13*m21 + m01*m10*m23 - m00*m11*m23) * inv;
+    out[15]= (m01*m12*m20 - m02*m11*m20 + m02*m10*m21 - m00*m12*m21 - m01*m10*m22 + m00*m11*m22) * inv;
+    return new Matrix4(out);
   }
 }
 
@@ -595,7 +858,7 @@ export const AriannaMath = Object.freeze({
      * AriannA plugin entry point. Registers the namespace + every class on
      * `window` for back-compat with the original 12-year codebase.
      */
-    install(_core: typeof Core): void
+    install(_core?: unknown): void
     {
         try
         {

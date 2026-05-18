@@ -1,56 +1,237 @@
 /**
+ * @module    components/charts/BarChart
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ *
+ * BarChart — categorical bar chart on SVG.
+ *
+ *   const ch = new BarChart({ width: 480, height: 280 });
+ *   ch.append(document.body);
+ *   ch.data = [
+ *     { label: 'Q1', value: 120 },
+ *     { label: 'Q2', value: 180 },
+ *     { label: 'Q3', value: 95  },
+ *     { label: 'Q4', value: 210 },
+ *   ];
+ *
+ *   <arianna-bar-chart width="480" height="280"></arianna-bar-chart>
+ *
+ * Events:
+ *   arianna:chart-bar-hover { datum, index }
+ *   arianna:chart-bar-click { datum, index }
  */
 
-/**
- * @module BarChart
- * @example
- *   const chart = new BarChart('#root', { label: 'Monthly Sales' });
- *   chart.data = [{ label: 'Jan', value: 120 }, { label: 'Feb', value: 95 }];
- *   chart.on('click', ({ bar }) => console.log(bar));
- */
-import { Control } from '../core/Control.ts';
-export interface BarDataPoint { label: string; value: number; color?: string; }
-export interface BarChartOptions { label?: string; height?: number; color?: string; showValues?: boolean; class?: string; }
-export class BarChart extends Control<BarChartOptions> {
-  private _data: BarDataPoint[] = [];
-  constructor(container: string | HTMLElement | null = null, opts: BarChartOptions = {}) {
-    super(container, 'div', { height: 220, color: 'var(--ar-primary)', showValues: true, ...opts });
-    this.el.className = `ar-chart ar-barchart${opts.class?' '+opts.class:''}`;
-  }
-  set data(v: BarDataPoint[]) { this._data = v; this._set('data' as never, v as never); }
-  get data()                  { return this._data; }
-  protected _build() {
-    this.el.innerHTML = '';
-    const lbl = this._get('label', '') as string; if (lbl) this._el('div', 'ar-chart__title', this.el).textContent = lbl;
-    if (!this._data.length) { this._el('div', 'ar-chart__empty', this.el).textContent = 'No data'; return; }
-    const h     = this._get('height', 220) as number;
-    const color = this._get('color', 'var(--ar-primary)') as string;
-    const sv    = this._get('showValues', true) as boolean;
-    const max   = Math.max(...this._data.map(d => d.value));
-    const W     = this._data.length * 60;
-    const padB  = 24; const padT = 20;
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', `0 0 ${W} ${h}`); svg.style.width = '100%'; svg.style.height = h+'px'; svg.style.overflow = 'visible';
-    this._data.forEach((d, i) => {
-      const barH = max ? (d.value / max) * (h - padT - padB) : 0;
-      const x = i * 60 + 8; const bW = 44; const y = h - padB - barH;
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', String(x)); rect.setAttribute('y', String(y)); rect.setAttribute('width', String(bW)); rect.setAttribute('height', String(barH));
-      rect.setAttribute('fill', d.color ?? color); rect.setAttribute('rx', '3'); rect.style.cursor = 'pointer';
-      rect.addEventListener('click', () => this._emit('click', { bar: d }));
-      svg.appendChild(rect);
-      const tLbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      tLbl.setAttribute('x', String(x + bW/2)); tLbl.setAttribute('y', String(h - 6)); tLbl.setAttribute('text-anchor', 'middle'); tLbl.setAttribute('fill', 'var(--ar-muted)'); tLbl.setAttribute('font-size', '10');
-      tLbl.textContent = d.label; svg.appendChild(tLbl);
-      if (sv && barH > 12) {
-        const tVal = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        tVal.setAttribute('x', String(x + bW/2)); tVal.setAttribute('y', String(y - 4)); tVal.setAttribute('text-anchor', 'middle'); tVal.setAttribute('fill', 'var(--ar-text)'); tVal.setAttribute('font-size', '10');
-        tVal.textContent = String(d.value); svg.appendChild(tVal);
-      }
-    });
-    this.el.appendChild(svg);
-  }
+import { Component } from '../../core/Component.ts';
+import { signal, effect, type Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule } from '../../core/Rule.ts';
+
+export interface BarDatum {
+    label : string;
+    value : number;
+    color?: string;
 }
-export const BarChartCSS = `.ar-chart{display:flex;flex-direction:column;gap:6px}.ar-chart__title{color:var(--ar-muted);font-size:.78rem;font-weight:500}.ar-chart__empty{color:var(--ar-dim);font-size:.8rem;padding:20px;text-align:center}`;
+
+export interface BarChartOptions {
+    width?     : number;
+    height?    : number;
+    barColor?  : string;
+    showValues?: boolean;
+    showGrid?  : boolean;
+    yMin?      : number;
+    yMax?      : number;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
+    attrs : ['width', 'height', 'bar-color', 'show-values', 'show-grid', 'y-min', 'y-max'],
+    shadow: false,
+})
+{
+    readonly data$: Signal<BarDatum[]> = signal<BarDatum[]>([]);
+
+    #svg?: SVGSVGElement;
+
+    constructor(opts: BarChartOptions = {}) {
+        super(opts as never);
+        const self = this as unknown as { render(): HTMLElement };
+        const el = self.render();
+        if (opts.width      != null) el.setAttribute('width',       String(opts.width));
+        if (opts.height     != null) el.setAttribute('height',      String(opts.height));
+        if (opts.barColor)           el.setAttribute('bar-color',   opts.barColor);
+        if (opts.showValues != null) el.setAttribute('show-values', opts.showValues ? 'true' : 'false');
+        if (opts.showGrid   === false) el.setAttribute('show-grid', 'false');
+        if (opts.yMin       != null) el.setAttribute('y-min',       String(opts.yMin));
+        if (opts.yMax       != null) el.setAttribute('y-max',       String(opts.yMax));
+    }
+
+    build(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            attrSignal(name: string): Signal<string | null> | undefined;
+            Sheet: Sheet | null;
+        };
+        const root = self.render();
+        if (root.querySelector('svg')) return;
+
+        const w = parseInt(self.attrSignal('width')?.peek()  ?? '480', 10) || 480;
+        const h = parseInt(self.attrSignal('height')?.peek() ?? '280', 10) || 280;
+        const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        svg.setAttribute('width',  String(w));
+        svg.setAttribute('height', String(h));
+        svg.setAttribute('class', 'bc-svg');
+        this.#svg = svg;
+        root.appendChild(svg);
+
+        effect(() => { this.data$.get(); this.#redraw(); });
+
+        self.Sheet = BarChart.DefaultSheet();
+    }
+
+    set data(rows: BarDatum[]) { this.data$.set(rows); }
+    get data(): BarDatum[]     { return this.data$.get(); }
+
+    #redraw(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            fire(t: string, init?: CustomEventInit): void;
+            attrSignal(name: string): Signal<string | null> | undefined;
+        };
+        const svg = this.#svg;
+        if (!svg) return;
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+        const root = self.render();
+        const w = parseInt(svg.getAttribute('width')  ?? '480', 10);
+        const h = parseInt(svg.getAttribute('height') ?? '280', 10);
+        const data = this.data$.peek();
+        if (!data.length) return;
+
+        const showGrid   = self.attrSignal('show-grid')?.peek() !== 'false';
+        const showValues = self.attrSignal('show-values')?.peek() === 'true';
+        const barColor   = self.attrSignal('bar-color')?.peek() ?? '';
+        const cssBarColor = barColor || (getComputedStyle(root).getPropertyValue('--ar-primary').trim() || '#7eb8f7');
+
+        const padL = 40, padR = 12, padT = 12, padB = 28;
+        const plotW = w - padL - padR;
+        const plotH = h - padT - padB;
+
+        const userMin = parseFloat(self.attrSignal('y-min')?.peek() ?? '');
+        const userMax = parseFloat(self.attrSignal('y-max')?.peek() ?? '');
+        const dataMax = Math.max(...data.map(d => d.value));
+        const dataMin = Math.min(...data.map(d => d.value));
+        const yMax = isFinite(userMax) ? userMax : Math.max(0, dataMax) * 1.1;
+        const yMin = isFinite(userMin) ? userMin : Math.min(0, dataMin);
+        const range = (yMax - yMin) || 1;
+
+        const yOf = (v: number) => padT + plotH - ((v - yMin) / range) * plotH;
+        const barW = plotW / data.length * 0.72;
+        const gap  = plotW / data.length * 0.28;
+
+        // Grid + Y axis ticks
+        if (showGrid) {
+            const ticks = 5;
+            for (let i = 0; i <= ticks; i++) {
+                const v = yMin + (range * i / ticks);
+                const y = yOf(v);
+                const line = document.createElementNS(SVG_NS, 'line');
+                line.setAttribute('x1', String(padL));
+                line.setAttribute('x2', String(w - padR));
+                line.setAttribute('y1', String(y));
+                line.setAttribute('y2', String(y));
+                line.setAttribute('class', 'bc-grid');
+                svg.appendChild(line);
+                const lbl = document.createElementNS(SVG_NS, 'text');
+                lbl.setAttribute('x', String(padL - 4));
+                lbl.setAttribute('y', String(y + 4));
+                lbl.setAttribute('class', 'bc-tick');
+                lbl.setAttribute('text-anchor', 'end');
+                lbl.textContent = v.toFixed(range > 10 ? 0 : 1);
+                svg.appendChild(lbl);
+            }
+        }
+
+        // Bars + X labels
+        data.forEach((d, i) => {
+            const x = padL + i * (barW + gap) + gap / 2;
+            const yV = yOf(d.value);
+            const y0 = yOf(0);
+            const top = Math.min(yV, y0);
+            const ht  = Math.abs(yV - y0);
+            const rect = document.createElementNS(SVG_NS, 'rect');
+            rect.setAttribute('x', String(x));
+            rect.setAttribute('y', String(top));
+            rect.setAttribute('width',  String(barW));
+            rect.setAttribute('height', String(Math.max(1, ht)));
+            rect.setAttribute('fill', d.color ?? cssBarColor);
+            rect.setAttribute('class', 'bc-bar');
+            rect.addEventListener('mouseenter', () =>
+                self.fire('arianna:chart-bar-hover', { detail: { datum: d, index: i, source: this }, bubbles: true }));
+            rect.addEventListener('click', () =>
+                self.fire('arianna:chart-bar-click', { detail: { datum: d, index: i, source: this }, bubbles: true }));
+            svg.appendChild(rect);
+
+            if (showValues) {
+                const val = document.createElementNS(SVG_NS, 'text');
+                val.setAttribute('x', String(x + barW / 2));
+                val.setAttribute('y', String(top - 4));
+                val.setAttribute('text-anchor', 'middle');
+                val.setAttribute('class', 'bc-val');
+                val.textContent = d.value.toFixed(range > 10 ? 0 : 1);
+                svg.appendChild(val);
+            }
+
+            const lbl = document.createElementNS(SVG_NS, 'text');
+            lbl.setAttribute('x', String(x + barW / 2));
+            lbl.setAttribute('y', String(h - padB + 18));
+            lbl.setAttribute('text-anchor', 'middle');
+            lbl.setAttribute('class', 'bc-label');
+            lbl.textContent = d.label;
+            svg.appendChild(lbl);
+        });
+
+        // Zero line if range crosses zero
+        if (yMin < 0 && yMax > 0) {
+            const y0 = yOf(0);
+            const zero = document.createElementNS(SVG_NS, 'line');
+            zero.setAttribute('x1', String(padL));
+            zero.setAttribute('x2', String(w - padR));
+            zero.setAttribute('y1', String(y0));
+            zero.setAttribute('y2', String(y0));
+            zero.setAttribute('class', 'bc-zero');
+            svg.appendChild(zero);
+        }
+    }
+
+    static DefaultSheet(): Sheet {
+        return new Sheet([
+            new Rule(':root', {
+                background  : 'var(--ar-bg, #fff)',
+                border      : '1px solid var(--ar-border, #e0e0e0)',
+                borderRadius: 'var(--ar-radius, 5px)',
+                color       : 'var(--ar-text, #1a1a1a)',
+                display     : 'inline-block',
+                font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
+                padding     : '8px',
+            }),
+            new Rule(':root .bc-svg', { display: 'block' }),
+            new Rule(':root .bc-grid', { stroke: 'var(--ar-border, #e0e0e0)', strokeWidth: '1' }),
+            new Rule(':root .bc-zero', { stroke: 'var(--ar-text, #1a1a1a)', strokeWidth: '1' }),
+            new Rule(':root .bc-tick', { fill: 'var(--ar-muted, #888)', fontSize: '11px' }),
+            new Rule(':root .bc-label', { fill: 'var(--ar-text, #1a1a1a)', fontSize: '12px' }),
+            new Rule(':root .bc-val', { fill: 'var(--ar-text, #1a1a1a)', fontSize: '11px', fontWeight: '600' }),
+            new Rule(':root .bc-bar', { cursor: 'pointer', transition: 'opacity 0.15s' }),
+            new Rule(':root .bc-bar:hover', { opacity: '0.8' }),
+        ]);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'BarChart', {
+        value: BarChart, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default BarChart;

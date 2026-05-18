@@ -1,46 +1,32 @@
 /**
- * @module    components/graphics/2D/ColorPickerTile
+ * @module    components/graphics/colors/ColorPickerTile
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Tile-style colour picker — the third member of the colour-picker
- * family alongside `ColorPickerWheel` and `ColorPickerSquare`. Renders a
- * grid of swatches that the user can click. Supports:
+ * ColorPickerTile — grid-of-swatches picker. Built-in palettes (tailwind,
+ * material, pastel, web-safe, mac-os-classic) plus custom array support,
+ * "recent colours" strip, optional hex input + native color picker.
  *
- *   • Built-in tile palettes: `material`, `tailwind`, `pastel`, `web-safe`,
- *     `mac-os-classic`, or any custom array of hex strings.
- *   • A "recent colours" strip that auto-grows as the user picks.
- *   • Per-tile tooltip with the colour value in the requested space.
- *   • Optional eyedropper / hex input on the side.
+ * @example HTML
+ *   <arianna-color-picker-tile palette="material" columns="8"></arianna-color-picker-tile>
  *
- *   ┌────────────────────────────┐
- *   │ ▣ ▣ ▣ ▣ ▣ ▣ ▣ ▣           │
- *   │ ▣ ▣ ▣ ▣ ▣ ▣ ▣ ▣           │
- *   │ ▣ ▣ ▣ ▣ ▣ ▣ ▣ ▣           │
- *   ├────────────────────────────┤
- *   │ Recent: ▣ ▣ ▣ ▣            │
- *   ├────────────────────────────┤
- *   │ HEX [#e40c88 ]    [Pick]   │
- *   └────────────────────────────┘
+ * @example JS
+ *   const t = new ColorPickerTile();
+ *   t.palette = ['#ef4444', '#3b82f6', '#22c55e'];
+ *   t.addEventListener('arianna:change', e => brush.setColor(e.detail.hex));
  *
- * The displayed colour is exposed in every space supported by `additionals/Colors`:
- * RGB / HEX / HSL / HSV / CMYK / OKLCH / CIELUV / Cube.
- *
- * @example
- *   import { ColorPickerTile } from 'ariannajs/components/graphics/2D';
- *
- *   const cp = new ColorPickerTile('#tiles', { palette: 'material' });
- *   cp.on('change', e => brush.setColor(e.hex));
+ * Events: arianna:change  detail: { hex, rgb }
+ * Attrs:  palette, color, show-recent, recent-max, show-input, columns, tile-size
  */
 
-import { Control, type CtrlOptions } from '../../core/Control.ts';
-import {
-    type RGB, parseHex, rgbToHex,
-    rgbToHsl, rgbToHsv, rgbToCmyk, rgbToCieluv, rgbToOklch, rgbToCube,
-} from '../../../additionals/Colors.ts';
-
-// ── Built-in palettes ──────────────────────────────────────────────────────
+import { Component } from '../../../core/Component.ts';
+import { html }      from '../../../core/Template.ts';
+import { signal }    from '../../../core/Observable.ts';
+import type { Signal } from '../../../core/Observable.ts';
+import { Sheet } from '../../../core/Sheet.ts';
+import { Rule }      from '../../../core/Rule.ts';
+import { parseHex, rgbToHex } from './ColorPicker.ts';
 
 const PALETTES: Record<string, string[]> = {
     'tailwind': [
@@ -73,201 +59,243 @@ const PALETTES: Record<string, string[]> = {
     ],
 };
 
-// ── Options ────────────────────────────────────────────────────────────────
-
-export interface ColorPickerTileOptions extends CtrlOptions
-{
-    /** Built-in palette name OR custom array of hex colours. Default 'tailwind'. */
+export interface ColorPickerTileOptions {
     palette?    : keyof typeof PALETTES | string[];
-    /** Initially-selected colour. */
     color?      : string;
-    /** Show "recent colours" strip. Default true. */
     showRecent? : boolean;
-    /** Maximum recent colours to remember. Default 12. */
     recentMax?  : number;
-    /** Show hex input below the grid. Default true. */
     showInput?  : boolean;
-    /** Number of tile columns. Default 8. */
     columns?    : number;
-    /** Tile size in px. Default 28. */
     tileSize?   : number;
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
+interface TileState { selected: string; recent: string[]; }
 
-export class ColorPickerTile extends Control<ColorPickerTileOptions>
+export class ColorPickerTile extends Component('arianna-color-picker-tile', HTMLElement, {}, {
+    attrs : ['palette', 'color', 'show-recent', 'recent-max', 'show-input', 'columns', 'tile-size'],
+    shadow: false,
+})
 {
-    private _selected : string = '#000000';
-    private _recent   : string[] = [];
+    state$: Signal<TileState> = signal<TileState>({ selected: '#000000', recent: [] });
+    /** Custom palette override (takes precedence over attr `palette`). */
+    paletteOverride$: Signal<string[] | null> = signal<string[] | null>(null);
 
-    private _elGrid!  : HTMLElement;
-    private _elRecent?: HTMLElement;
-    private _elInput? : HTMLInputElement;
-
-    constructor(container: string | HTMLElement | null, opts: ColorPickerTileOptions = {})
+    build(_opts: ColorPickerTileOptions = {})
     {
-        super(container, 'div', {
-            palette   : 'tailwind',
-            showRecent: true,
-            recentMax : 12,
-            showInput : true,
-            columns   : 8,
-            tileSize  : 28,
-            ...opts,
-        });
-        this.el.className = `ar-cpt${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
+        const colsAttr = this.attrSignal('columns');
+        const tileSizeAttr = this.attrSignal('tile-size');
 
-        const init = this._get<string>('color', '');
-        if (init) this.setColor(init);
+        this.cols = () => parseInt(colsAttr.get() ?? '8', 10) || 8;
+        this.size = () => parseInt(tileSizeAttr.get() ?? '28', 10) || 28;
+        this.showRecent = () => this.getAttribute('show-recent') !== 'false';
+        this.showInput  = () => this.getAttribute('show-input')  !== 'false';
+
+        this.gridStyle = () => `grid-template-columns: repeat(${this.cols()}, ${this.size()}px)`;
+        this.recentStyle = () => `grid-template-columns: repeat(auto-fill, ${this.size()}px)`;
+
+        this.paletteTiles = (): Array<{ hex: string; style: string; cls: string }> => {
+            const sz = this.size();
+            const sel = this.state$.get().selected.toLowerCase();
+            return this.#resolvePalette().map(hex => ({
+                hex,
+                style: `background: ${hex}; width: ${sz}px; height: ${sz}px`,
+                cls: 'ar-cpt__tile' + (hex.toLowerCase() === sel ? ' ar-cpt__tile--sel' : ''),
+            }));
+        };
+        this.recentTiles = (): Array<{ hex: string; style: string }> => {
+            const sz = this.size();
+            return this.state$.get().recent.map(hex => ({
+                hex,
+                style: `background: ${hex}; width: ${sz}px; height: ${sz}px`,
+            }));
+        };
+        this.hasRecent = () => this.state$.get().recent.length > 0;
+        this.inputVal  = () => this.state$.get().selected;
+
+        this.onTileClick = (e: Event) => {
+            const btn = e.currentTarget as HTMLButtonElement;
+            const hex = btn.dataset.color;
+            if (hex) this.setColor(hex);
+        };
+        this.onInputChange = (e: Event) => {
+            const v = (e.target as HTMLInputElement).value.trim();
+            this.setColor(v);
+        };
+        this.onPickerInput = (e: Event) => {
+            this.setColor((e.target as HTMLInputElement).value);
+        };
+
+        this.template = html`
+            <div class="ar-cpt__grid" :style="this.gridStyle()">
+                <button type="button" a-for="t in this.paletteTiles()"
+                        :class="t.cls"
+                        :style="t.style"
+                        :data-color="t.hex"
+                        :title="t.hex"
+                        @click="this.onTileClick"></button>
+            </div>
+            <div a-if="this.showRecent()">
+                <div class="ar-cpt__sep" a-if="this.hasRecent()">Recent</div>
+                <div class="ar-cpt__recent" :style="this.recentStyle()" a-if="this.hasRecent()">
+                    <button type="button" a-for="t in this.recentTiles()"
+                            class="ar-cpt__tile"
+                            :style="t.style"
+                            :data-color="t.hex"
+                            :title="t.hex"
+                            @click="this.onTileClick"></button>
+                </div>
+            </div>
+            <div class="ar-cpt__input-row" a-if="this.showInput()">
+                <input class="ar-cpt__inp" type="text" placeholder="#rrggbb"
+                       :value="this.inputVal()" @change="this.onInputChange"/>
+                <input class="ar-cpt__cpc" type="color"
+                       :value="this.inputVal()" @input="this.onPickerInput"/>
+            </div>
+        `;
+
+        this.Sheet = ColorPickerTile.DefaultSheet();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
+    // ── Public API ───────────────────────────────────────────────────────────
 
-    /** Set the selected colour and add to recents. */
-    setColor(hex: string): this
-    {
-        const rgb = parseHex(hex);
-        if (!rgb) return this;
-        this._selected = rgbToHex(rgb);
-        this._addRecent(this._selected);
-        this._refreshSelection();
-        if (this._elInput) this._elInput.value = this._selected;
-        this._emit('change', this.getColor());
+    set palette(v: keyof typeof PALETTES | string[]) {
+        if (Array.isArray(v)) {
+            this.paletteOverride$.set(v);
+        } else {
+            this.paletteOverride$.set(null);
+            this.setAttribute('palette', v);
+        }
+    }
+    get palette(): string[] { return this.#resolvePalette(); }
+
+    setColor(hex: string): this {
+        const p = parseHex(hex);
+        if (!p) return this;
+        const canonical = rgbToHex(p.r, p.g, p.b);
+        const cur = this.state$.get();
+        const recent = [canonical, ...cur.recent.filter(c => c.toLowerCase() !== canonical.toLowerCase())]
+            .slice(0, parseInt(this.getAttribute('recent-max') ?? '12', 10) || 12);
+        this.state$.set({ selected: canonical, recent });
+        this.dispatchEvent(new CustomEvent('arianna:change', {
+            bubbles: true,
+            detail: { hex: canonical, rgb: { r: p.r, g: p.g, b: p.b } },
+        }));
         return this;
     }
 
-    /** Currently-selected colour in every supported space. */
-    getColor()
-    {
-        const rgb = parseHex(this._selected) || { r: 0, g: 0, b: 0 };
-        return {
-            rgb,
-            hex   : this._selected,
-            hsl   : rgbToHsl(rgb),
-            hsv   : rgbToHsv(rgb),
-            cmyk  : rgbToCmyk(rgb),
-            cieluv: rgbToCieluv(rgb),
-            oklch : rgbToOklch(rgb),
-            cube  : rgbToCube(rgb),
-        };
+    getColor(): { hex: string; rgb: { r: number; g: number; b: number } } {
+        const hex = this.state$.get().selected;
+        const p = parseHex(hex) ?? { r: 0, g: 0, b: 0, a: 1 };
+        return { hex, rgb: { r: p.r, g: p.g, b: p.b } };
     }
 
-    /** Recent-colours history (newest first). */
-    getRecent(): string[] { return this._recent.slice(); }
+    getRecent(): string[] { return this.state$.get().recent.slice(); }
 
-    // ── Internal ───────────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        const showRecent = this._get<boolean>('showRecent', true);
-        const showInput  = this._get<boolean>('showInput', true);
-
-        this.el.innerHTML = `
-<div class="ar-cpt__grid" data-r="grid"></div>
-${showRecent ? `<div class="ar-cpt__sep">Recent</div><div class="ar-cpt__recent" data-r="recent"></div>` : ''}
-${showInput  ? `<div class="ar-cpt__input-row">
-  <input class="ar-cpt__inp" data-r="inp" type="text" placeholder="#rrggbb">
-  <input class="ar-cpt__cpc" data-r="cpc" type="color">
-</div>` : ''}`;
-
-        this._elGrid = this.el.querySelector<HTMLElement>('[data-r="grid"]')!;
-        this._elRecent = this.el.querySelector<HTMLElement>('[data-r="recent"]') ?? undefined;
-        this._elInput  = this.el.querySelector<HTMLInputElement>('[data-r="inp"]') ?? undefined;
-        const cpc      = this.el.querySelector<HTMLInputElement>('[data-r="cpc"]');
-
-        this._renderGrid();
-
-        if (this._elInput)
-        {
-            this._elInput.addEventListener('change', () => this.setColor(this._elInput!.value));
-        }
-        if (cpc)
-        {
-            cpc.addEventListener('input', () => this.setColor(cpc.value));
-        }
+    #resolvePalette(): string[] {
+        const override = this.paletteOverride$.get();
+        if (override) return override;
+        const name = this.getAttribute('palette') ?? 'tailwind';
+        return PALETTES[name] || PALETTES['tailwind']!;
     }
 
-    private _renderGrid(): void
-    {
-        const palette = this._resolvePalette();
-        const cols = this._get<number>('columns', 8);
-        const size = this._get<number>('tileSize', 28);
-
-        this._elGrid.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
-        this._elGrid.innerHTML = '';
-
-        for (const hex of palette)
-        {
-            const tile = document.createElement('button');
-            tile.type = 'button';
-            tile.className = 'ar-cpt__tile' + (hex.toLowerCase() === this._selected.toLowerCase() ? ' ar-cpt__tile--sel' : '');
-            tile.style.background = hex;
-            tile.style.width = `${size}px`;
-            tile.style.height = `${size}px`;
-            tile.title = hex;
-            tile.dataset.color = hex;
-            tile.addEventListener('click', () => this.setColor(hex));
-            this._elGrid.appendChild(tile);
-        }
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount() {
+        const init = this.getAttribute('color');
+        if (init) this.setColor(init);
     }
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
 
-    private _resolvePalette(): string[]
-    {
-        const p = this._get<string | string[]>('palette', 'tailwind');
-        if (Array.isArray(p)) return p;
-        return PALETTES[p] || PALETTES['tailwind']!;
-    }
+    private cols        : () => number = () => 8;
+    private size        : () => number = () => 28;
+    private showRecent  : () => boolean = () => true;
+    private showInput   : () => boolean = () => true;
+    private gridStyle   : () => string = () => '';
+    private recentStyle : () => string = () => '';
+    private paletteTiles: () => Array<{ hex: string; style: string; cls: string }> = () => [];
+    private recentTiles : () => Array<{ hex: string; style: string }> = () => [];
+    private hasRecent   : () => boolean = () => false;
+    private inputVal    : () => string = () => '#000000';
+    private onTileClick : (e: Event) => void = () => {};
+    private onInputChange: (e: Event) => void = () => {};
+    private onPickerInput: (e: Event) => void = () => {};
 
-    private _addRecent(hex: string): void
+    static DefaultSheet(): Sheet
     {
-        const max = this._get<number>('recentMax', 12);
-        const idx = this._recent.indexOf(hex);
-        if (idx >= 0) this._recent.splice(idx, 1);
-        this._recent.unshift(hex);
-        if (this._recent.length > max) this._recent.length = max;
-        this._renderRecent();
-    }
-
-    private _renderRecent(): void
-    {
-        if (!this._elRecent) return;
-        const size = this._get<number>('tileSize', 28);
-        this._elRecent.innerHTML = this._recent.map(c =>
-            `<button type="button" class="ar-cpt__tile" style="background:${c};width:${size}px;height:${size}px" data-color="${c}" title="${c}"></button>`
-        ).join('');
-        this._elRecent.querySelectorAll<HTMLButtonElement>('[data-color]').forEach(btn => {
-            btn.addEventListener('click', () => this.setColor(btn.dataset.color!));
-        });
-    }
-
-    private _refreshSelection(): void
-    {
-        const sel = this._selected.toLowerCase();
-        this._elGrid.querySelectorAll<HTMLElement>('.ar-cpt__tile').forEach(t => {
-            t.classList.toggle('ar-cpt__tile--sel', t.dataset.color?.toLowerCase() === sel);
-        });
-    }
-
-    private _injectStyles(): void
-    {
-        if (document.getElementById('ar-cpt-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-cpt-styles';
-        s.textContent = `
-.ar-cpt { display:inline-flex; flex-direction:column; gap:8px; padding:12px; background:#1e1e1e; border:1px solid #333; border-radius:8px; color:#d4d4d4; font:12px -apple-system,system-ui,sans-serif; }
-.ar-cpt__grid, .ar-cpt__recent { display:grid; gap:3px; }
-.ar-cpt__recent { grid-template-columns:repeat(auto-fill, 28px); }
-.ar-cpt__sep { font:600 10px sans-serif; color:#888; letter-spacing:.06em; text-transform:uppercase; padding-top:4px; }
-.ar-cpt__tile { border:1px solid #444; border-radius:3px; cursor:pointer; padding:0; transition:transform .08s; }
-.ar-cpt__tile:hover { transform:scale(1.12); border-color:#fff; z-index:1; }
-.ar-cpt__tile--sel { border-color:#e40c88; box-shadow:0 0 0 2px rgba(228,12,136,0.4); }
-.ar-cpt__input-row { display:flex; gap:6px; align-items:center; }
-.ar-cpt__inp { flex:1; background:#0d0d0d; border:1px solid #333; color:#d4d4d4; padding:5px 8px; font:12px ui-monospace,monospace; border-radius:3px; }
-.ar-cpt__inp:focus { outline:none; border-color:#e40c88; }
-.ar-cpt__cpc { width:32px; height:28px; border:1px solid #333; border-radius:3px; padding:0; background:transparent; cursor:pointer; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', {
+                    background  : 'var(--arianna-bg, #fff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 8px)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    display     : 'inline-flex',
+                    flexDirection: 'column',
+                    fontFamily  : '-apple-system, system-ui, sans-serif',
+                    fontSize    : '12px',
+                    gap         : '8px',
+                    padding     : '12px',
+                }),
+                new Rule('.ar-cpt__grid, .ar-cpt__recent', { display: 'grid', gap: '3px' }),
+                new Rule('.ar-cpt__sep', {
+                    fontSize: '10px', fontWeight: '600',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    paddingTop: '4px', marginBottom: '4px',
+                }),
+                new Rule('.ar-cpt__tile', {
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: '3px',
+                    cursor: 'pointer',
+                    padding: '0',
+                    transition: 'transform 0.08s, border-color 0.08s',
+                }),
+                new Rule('.ar-cpt__tile:hover', {
+                    transform: 'scale(1.12)',
+                    borderColor: 'var(--arianna-text, #1f2328)',
+                    zIndex: '1',
+                }),
+                new Rule('.ar-cpt__tile--sel', {
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                    boxShadow: '0 0 0 2px rgba(31,111,235,0.30)',
+                }),
+                new Rule('.ar-cpt__input-row', {
+                    display: 'flex', gap: '6px', alignItems: 'center',
+                }),
+                new Rule('.ar-cpt__inp', {
+                    flex: '1',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    color: 'var(--arianna-text, #1f2328)',
+                    padding: '5px 8px',
+                    font: '12px ui-monospace, monospace',
+                    borderRadius: '3px',
+                }),
+                new Rule('.ar-cpt__inp:focus', {
+                    outline: 'none',
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                }),
+                new Rule('.ar-cpt__cpc', {
+                    width: '32px', height: '28px',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: '3px',
+                    padding: '0',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                }),
+            ]
+        );
     }
 }
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'ColorPickerTile', {
+        value: ColorPickerTile, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default ColorPickerTile;

@@ -393,7 +393,7 @@ const Physics = {
 // ── Side-effect: mirror flat onto window ─────────────────────────────────────
 // Existing demos use `new World(...)`, `new Body(...)`, etc. without going
 // through `AriannA.Physics.World`. We mirror with configurable: true so the
-// runtime loader in index.html can safely overwrite if needed (no
+// runtime loader in playground.html can safely overwrite if needed (no
 // `configurable: false` here — that was the root cause of the RichTextEditor
 // crash).
 

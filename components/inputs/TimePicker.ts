@@ -1,41 +1,137 @@
 /**
+ * @module    components/inputs/TimePicker
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * TimePicker — HH:MM input with optional seconds, min/max bounds.
+ *
+ * @example HTML
+ *   <arianna-time-picker label="Start" value="09:30"></arianna-time-picker>
+ *   <arianna-time-picker seconds value="14:30:00"></arianna-time-picker>
+ *
+ * Events: arianna:change  detail: { value }
+ * Attrs:  label, value, seconds, min, max, disabled
  */
 
-/**
- * @module TimePicker
- * Time input HH:MM with optional seconds.
- * @example
- *   const tp = new TimePicker('#root', { label: 'Start time', seconds: false });
- *   tp.value = '14:30';
- *   tp.on('change', ({ value }) => console.log(value));
- */
-import { Control } from '../core/Control.ts';
-export interface TimePickerOptions { label?: string; seconds?: boolean; min?: string; max?: string; disabled?: boolean; class?: string; }
-export class TimePicker extends Control<TimePickerOptions> {
-  private _value = '';
-  private _input!: HTMLInputElement;
-  constructor(container: string | HTMLElement | null = null, opts: TimePickerOptions = {}) {
-    super(container, 'div', { seconds: false, ...opts });
-    this.el.className = `ar-timepicker${opts.class?' '+opts.class:''}`;
-  }
-  set value(v: string) { this._value = v; if (this._input) this._input.value = v; }
-  get value()          { return this._input?.value ?? this._value; }
-  protected _build() {
-    this.el.innerHTML = '';
-    const lbl = this._get('label', '') as string; if (lbl) this._el('div', 'ar-timepicker__label', this.el).textContent = lbl;
-    const wrap = this._el('div', 'ar-timepicker__wrap', this.el);
-    this._el('span', 'ar-timepicker__icon', wrap).textContent = '🕐';
-    this._input = document.createElement('input');
-    this._input.type = 'time'; this._input.className = 'ar-timepicker__input';
-    this._input.value = this._value;
-    this._input.disabled = this._get('disabled', false) as boolean;
-    if (this._get('seconds', false)) this._input.step = '1';
-    const min = this._get('min', '') as string; if (min) this._input.min = min;
-    const max = this._get('max', '') as string; if (max) this._input.max = max;
-    this._input.addEventListener('change', () => { this._value = this._input.value; this._emit('change', { value: this._value }); });
-    wrap.appendChild(this._input);
-  }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
+
+export interface TimePickerOptions {
+    label?    : string;
+    value?    : string;
+    seconds?  : boolean;
+    min?      : string;
+    max?      : string;
+    disabled? : boolean;
 }
-export const TimePickerCSS = `.ar-timepicker{display:flex;flex-direction:column;gap:4px}.ar-timepicker__label{color:var(--ar-muted);font-size:.78rem;font-weight:500}.ar-timepicker__wrap{align-items:center;background:var(--ar-bg3);border:1px solid var(--ar-border);border-radius:var(--ar-radius);display:flex;gap:8px;padding:5px 10px;transition:border-color var(--ar-transition)}.ar-timepicker__wrap:focus-within{border-color:var(--ar-primary)}.ar-timepicker__icon{flex-shrink:0}.ar-timepicker__input{background:none;border:none;color:var(--ar-text);font:inherit;font-size:.82rem;outline:none}`;
+
+export class TimePicker extends Component('arianna-time-picker', HTMLElement, {}, {
+    attrs : ['label', 'value', 'seconds', 'min', 'max', 'disabled'],
+    shadow: false,
+})
+{
+    build(_opts: TimePickerOptions = {})
+    {
+        const label = this.attrSignal('label');
+        const value = this.attrSignal('value');
+
+        this.hasLabel  = () => !!label.get();
+        this.labelText = () => label.get() ?? '';
+        this.inpValue  = () => value.get() ?? '';
+        this.inpMin    = () => this.getAttribute('min') ?? '';
+        this.inpMax    = () => this.getAttribute('max') ?? '';
+        this.inpStep   = () => this.hasAttribute('seconds') ? '1' : '60';
+        this.isDisabled = () => this.hasAttribute('disabled');
+
+        this.onChange = (e: Event) => {
+            const inp = e.target as HTMLInputElement;
+            this.setAttribute('value', inp.value);
+            this.dispatchEvent(new CustomEvent('arianna:change', {
+                bubbles: true, detail: { value: inp.value },
+            }));
+        };
+
+        this.template = html`
+            <div class="ar-timepicker__label" a-if="this.hasLabel()">{{ this.labelText() }}</div>
+            <div class="ar-timepicker__wrap">
+                <span class="ar-timepicker__icon">🕐</span>
+                <input class="ar-timepicker__input"
+                       type="time"
+                       :value="this.inpValue()"
+                       :min="this.inpMin()"
+                       :max="this.inpMax()"
+                       :step="this.inpStep()"
+                       :disabled="this.isDisabled()"
+                       @change="this.onChange"/>
+            </div>
+        `;
+
+        this.Sheet = TimePicker.DefaultSheet();
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get value(): string  { return this.getAttribute('value') ?? ''; }
+    set value(v: string) { v ? this.setAttribute('value', v) : this.removeAttribute('value'); }
+
+    get label(): string  { return this.getAttribute('label') ?? ''; }
+    set label(v: string) { v ? this.setAttribute('label', v) : this.removeAttribute('label'); }
+
+    private hasLabel   : () => boolean = () => false;
+    private labelText  : () => string = () => '';
+    private inpValue   : () => string = () => '';
+    private inpMin     : () => string = () => '';
+    private inpMax     : () => string = () => '';
+    private inpStep    : () => string = () => '60';
+    private isDisabled : () => boolean = () => false;
+    private onChange   : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', { display: 'flex', flexDirection: 'column', gap: '4px' }),
+                new Rule('.ar-timepicker__label', {
+                    color     : 'var(--arianna-muted, #6e6b62)',
+                    fontSize  : '0.78rem',
+                    fontWeight: '500',
+                }),
+                new Rule('.ar-timepicker__wrap', {
+                    alignItems  : 'center',
+                    background  : 'var(--arianna-bg, #ffffff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    display     : 'flex',
+                    gap         : '8px',
+                    padding     : '5px 10px',
+                    transition  : 'border-color 0.18s ease',
+                }),
+                new Rule('.ar-timepicker__wrap:focus-within', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
+                new Rule('.ar-timepicker__icon', { flexShrink: '0' }),
+                new Rule('.ar-timepicker__input', {
+                    background: 'none',
+                    border    : 'none',
+                    color     : 'var(--arianna-text, #1f2328)',
+                    font      : 'inherit',
+                    fontSize  : '0.82rem',
+                    outline   : 'none',
+                }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'TimePicker', { value: TimePicker, writable: false, enumerable: false, configurable: false });
+}
+
+export default TimePicker;

@@ -88,6 +88,39 @@ export type SheetInput =
     | string
     | SheetObjectDef;
 
+/**
+ * Live array-like view of a Sheet's rules.
+ *
+ * Behaves as both an array (indexed access, `length`, `for…of`, `map/filter/…`,
+ * `push/pop/shift/unshift/splice`) AND as a mutation API (`add`, `Add`, `insert`,
+ * `remove`, `clear`, `contains`, `get`, `getIndex`). All mutating operations
+ * delegate to the parent Sheet and trigger a CSSOM flush + `Sheet-Changed`
+ * event automatically.
+ *
+ *   sheet.Rules.add(rule);       // flushed, emit
+ *   sheet.Rules.remove(rule);    // flushed, emit
+ *   sheet.Rules[2];              // indexed read
+ *   sheet.Rules.length;          // count
+ *   for (const r of sheet.Rules) { … }
+ */
+export interface RulesView extends ReadonlyArray<Rule>
+{
+    add(...rules: (SheetRule | SheetRule[])[]): Sheet;
+    Add(...rules: (SheetRule | SheetRule[])[]): Sheet;
+    insert(rules: SheetRule | SheetRule[], index: number): Sheet;
+    Insert(rules: SheetRule | SheetRule[], index: number): Sheet;
+    unshift(...rules: (SheetRule | SheetRule[])[]): Sheet;
+    remove(...rules: (SheetRule | number)[]): Sheet;
+    shift(n?: number): Sheet;
+    pop(n?: number): Sheet;
+    clear(): Sheet;
+    contains(...rules: SheetRule[]): boolean;
+    get(...rules: SheetRule[]): Rule | Rule[] | undefined;
+    Get(...rules: SheetRule[]): Rule | Rule[] | undefined;
+    getIndex(rule: SheetRule): number;
+    set(rule: SheetRule, value: CSSProperties | string): Sheet;
+}
+
 export interface SheetObjectDef
 {
     [name: string]: RuleDefinition | CSSProperties;
@@ -107,140 +140,17 @@ function toCamel(s: string): string
     return s.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
-// ── Less / Stylus parser ──────────────────────────────────────────────────────
+// ── Less parser — thin wrapper to additionals/Less ────────────────────────────
+//
+// Historical note: prior versions of this file embedded a minimal indentation-
+// based parser inline. The full Less.js-flavoured parser now lives in
+// `additionals/Less.ts` as a sibling of Sass / Scss / Stylus. We import it
+// here as a thin wrapper so that `Sheet.Less(text)` and `SheetES5.Less(text)`
+// keep working unchanged. The intentionally-minimal indented dialect that the
+// old internal parser implemented is also handled by additionals/Less.ts
+// thanks to its mixed brace/indent input handling.
 
-/**
- * Minimal indentation-based CSS parser (Less/Stylus subset).
- * Supports:
- *   - Indented nesting → flat CSS with concatenated selectors
- *   - Variable declarations: @primary: red  /  $primary = red  /  $primary: red
- *   - Variable substitution in values
- *   - Single-line comments (//)
- *   - Standard @-rules pass through unchanged
- *
- * This is intentionally simple — it handles the patterns present in the
- * Golem-Css-Less.html and Golem-Css-Stylus.html examples without requiring
- * an external parser library.
- */
-function parseLess(source: string): string
-{
-    // 1 — strip single-line comments
-    const lines = source.replace(/\/\/[^\n]*/g, '').split('\n');
-
-    // 2 — collect variables
-    const vars: Record<string, string> = {};
-    const cleanLines = lines.map(line => {
-        const m = /^\s*[@$]([\w-]+)\s*[:=]\s*(.+)$/.exec(line ?? '');
-        // FIX: m[1] and m[2] possibly undefined with noUncheckedIndexedAccess
-        if (m && m[1] && m[2]) { vars[m[1]] = m[2].trim(); return null; }
-        return line;
-    }).filter(l => l !== null) as string[];
-
-    // 3 — substitute variables
-    const substituted = cleanLines.map(line => {
-        return line.replace(/[@$]([\w-]+)/g, (_, name: string) => vars[name] ?? `@${name}`);
-    });
-
-    // 4 — parse indentation tree → flat CSS
-    return buildCss(substituted, 0, []).css;
-}
-
-function getIndent(line: string): number
-{
-    const m = /^(\s*)/.exec(line);
-    // FIX: m[1] possibly undefined
-    return m ? (m[1]?.length ?? 0) : 0;
-}
-
-function buildCss(
-    lines : string[],
-    start : number,
-    parentSelectors: string[],
-): { css: string; end: number }
-{
-    let out   = '';
-    let i     = start;
-    let decls : string[] = [];
-
-    function flushDecls(selectors: string[])
-    {
-        if (!decls.length) return;
-        const sel = selectors.join(', ');
-        out += `${sel} { ${decls.join('; ')}; }\n`;
-        decls = [];
-    }
-
-    // FIX: lines[start] possibly undefined
-    const baseIndent = start < lines.length ? getIndent(lines[start] ?? '') : 0;
-
-    while (i < lines.length)
-    {
-        // FIX: lines[i] possibly undefined
-        const raw = lines[i] ?? '';
-        const trimmed = raw.trim();
-
-        if (!trimmed) { i++; continue; }
-
-        const indent = getIndent(raw);
-
-        if (indent < baseIndent && i > start) break;
-
-        // FIX: lines[i + 1] possibly undefined
-        const nextLine = lines[i + 1];
-        const nextIndent = (i + 1 < lines.length && nextLine && nextLine.trim())
-            ? getIndent(nextLine)
-            : 0;
-
-        if (trimmed.endsWith('{'))
-        {
-            flushDecls(parentSelectors.length ? parentSelectors : [trimmed.slice(0, -1).trim()]);
-            out += raw + '\n';
-            i++;
-            let depth = 1;
-            while (i < lines.length && depth > 0)
-            {
-                // FIX: l possibly undefined
-                const l = lines[i] ?? '';
-                out += l + '\n';
-                depth += (l.match(/\{/g) ?? []).length - (l.match(/\}/g) ?? []).length;
-                i++;
-            }
-            continue;
-        }
-
-        if (nextIndent > indent && !trimmed.includes(':'))
-        {
-            flushDecls(parentSelectors.length ? parentSelectors : []);
-            const selectors = parentSelectors.length
-                ? parentSelectors.map(p => `${p} ${trimmed}`)
-                : [trimmed];
-            const child = buildCss(lines, i + 1, selectors);
-            out  += child.css;
-            i     = child.end;
-            continue;
-        }
-
-        // Declaration line: prop: value  or  prop value (Stylus)
-        if (trimmed.includes(':') || (trimmed.includes(' ') && !trimmed.startsWith('@')))
-        {
-            // Normalize: replace first space separator to : if no colon
-            const decl = trimmed.includes(':')
-                ? trimmed.replace(/:\s*/, ': ')
-                : trimmed.replace(/\s+/, ': ');
-            decls.push(decl.replace(/;$/, ''));
-        } else if (trimmed.startsWith('@'))
-        {
-            // @-rule — pass through
-            flushDecls(parentSelectors.length ? parentSelectors : []);
-            out += trimmed + '\n';
-        }
-
-        i++;
-    }
-
-    flushDecls(parentSelectors.length ? parentSelectors : []);
-    return { css: out, end: i };
-}
+import { parseLess } from '../additionals/Less.ts';
 
 // ── Sheet class ───────────────────────────────────────────────────────────────
 
@@ -344,11 +254,46 @@ export class Sheet
     #parseText(text: string): void
     {
         const style = document.createElement('style');
-        style.textContent = text;
+        style.textContent = this.#preprocess(text);
         this.#head.appendChild(style);
         if (style.sheet)
             this.#rules = Array.from(style.sheet.cssRules).map(r => new Rule(r));
         this.#head.removeChild(style);
+    }
+
+    /**
+     * Route input through the Less preprocessor when it is available, falling
+     * back to the browser's native parser otherwise.
+     *
+     *   • If `additionals/Less` is loaded (which is the case in the default
+     *     bundle, since Stylesheet.ts imports it at the top), the input is
+     *     first compiled to standard CSS — this lets users write Less-style
+     *     `@var: value; .x { color: @var; &:hover { ... } }` in `sheet.Text`
+     *     or `sheet.parse(string)`.
+     *
+     *   • If preprocessing throws (parser unavailable, or input is malformed
+     *     Less / pure CSS that confuses the parser), we silently use the raw
+     *     input — the browser's native parser then handles standard CSS just
+     *     fine.
+     *
+     * The preprocessor's "if there are no Less features, returns input as-is"
+     * behaviour means this is safe for ordinary CSS too: zero-cost for plain
+     * CSS, full-featured for Less.
+     */
+    #preprocess(text: string): string
+    {
+        try
+        {
+            // parseLess is imported at the top of this file when the default
+            // bundle is built. In stripped builds without additionals, the
+            // import resolves to `undefined`, which makes the call throw and
+            // we fall through to the raw browser path.
+            return typeof parseLess === 'function' ? parseLess(text) : text;
+        }
+        catch
+        {
+            return text;
+        }
     }
 
     #parseObject(obj: SheetObjectDef): void
@@ -543,7 +488,86 @@ export class Sheet
         }
     }
 
-    get Rules(): Rule[] { return [...this.#rules]; }
+    /**
+     * Live array-like view of this Sheet's rules.
+     *
+     * The returned object proxies all array reads (indexed access, length,
+     * iteration, map/filter/forEach/…) directly onto the internal `Rule[]`,
+     * AND exposes mutation methods that delegate to the Sheet itself
+     * (`add`, `insert`, `remove`, `clear`, `unshift`, `shift`, `pop`, `set`,
+     * `contains`, `get`, `Get`, `getIndex`, plus the array `push/splice` shims).
+     * Every mutation triggers a CSSOM flush and a `Sheet-Changed` event.
+     *
+     *   sheet.Rules.add(rule)        // flushed + event
+     *   sheet.Rules.remove(rule)
+     *   sheet.Rules.clear()
+     *   sheet.Rules[0]               // indexed read
+     *   sheet.Rules.length
+     *   for (const r of sheet.Rules) { … }
+     */
+    get Rules(): RulesView
+    {
+        const self = this;
+        const arr  = this.#rules;
+
+        // Method bag — mutations go through Sheet (which flushes + emits)
+        const methods: Record<string, unknown> = {
+            add     : (...args: (SheetRule | SheetRule[])[]) => self.add(...args),
+            Add     : (...args: (SheetRule | SheetRule[])[]) => self.add(...args),
+            insert  : (rules: SheetRule | SheetRule[], i: number) => self.insert(rules, i),
+            Insert  : (rules: SheetRule | SheetRule[], i: number) => self.insert(rules, i),
+            unshift : (...rules: (SheetRule | SheetRule[])[]) => self.unshift(...rules),
+            remove  : (...rules: (SheetRule | number)[]) => self.remove(...rules),
+            shift   : (n?: number) => self.shift(n),
+            pop     : (n?: number) => self.pop(n),
+            clear   : () => self.clear(),
+            contains: (...rules: SheetRule[]) => self.contains(...rules),
+            get     : (...rules: SheetRule[]) => self.get(...rules),
+            Get     : (...rules: SheetRule[]) => self.Get(...rules),
+            getIndex: (rule: SheetRule) => self.getIndex(rule),
+            set     : (rule: SheetRule, value: CSSProperties | string) => self.set(rule, value),
+            // Array shim — push is an alias for add (appends), splice routes through remove/insert.
+            push    : (...rules: SheetRule[]) => { self.add(...rules); return self.Length; },
+            splice  : (start: number, deleteCount: number = 0, ...items: SheetRule[]) =>
+            {
+                const removed: Rule[] = arr.slice(start, start + deleteCount);
+                for (let i = 0; i < deleteCount; i++) self.remove(start);
+                if (items.length) self.insert(items, start);
+                return removed;
+            },
+        };
+
+        return new Proxy(arr, {
+            get(target, prop, receiver)
+            {
+                if (typeof prop === 'string' && prop in methods)
+                    return methods[prop];
+                // Length, indexed access, Symbol.iterator, array methods (map/filter/…)
+                // all fall through to the underlying Rule[].
+                return Reflect.get(target, prop, receiver);
+            },
+            set(target, prop, value, receiver)
+            {
+                // Allow assigning by index: sheet.Rules[2] = newRule
+                if (typeof prop === 'string' && /^\d+$/.test(prop))
+                {
+                    const idx = Number(prop);
+                    if (value instanceof Rule)
+                    {
+                        target[idx] = value;
+                        // Trigger flush via the Sheet's internal mechanism
+                        (self as unknown as { ['#flushRules']?: () => void });
+                        // Use a lightweight re-flush path: re-call add with current rules
+                        // (avoid duplicate by using set/insert semantics)
+                        // Simpler: directly invoke private flush through a known public path
+                        self.parse(self.Text);
+                        return true;
+                    }
+                }
+                return Reflect.set(target, prop, value, receiver);
+            },
+        }) as unknown as RulesView;
+    }
     set Rules(v: Rule[] | CSSRuleList | string)
     {
         if (typeof v === 'string') { this.add(v); return; }
@@ -567,6 +591,15 @@ export class Sheet
     {
         if (!this.#obs) this.#obs = new Observable(this);
         this.#obs.on(types, cb);
+        return this;
+    }
+
+    /**
+     * Remove a previously-registered listener. Counterpart of `on()`.
+     */
+    off(types: string, cb: (e: object) => void): this
+    {
+        if (this.#obs) this.#obs.off(types, cb as never);
         return this;
     }
 

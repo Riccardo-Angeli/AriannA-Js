@@ -1,39 +1,127 @@
 /**
+ * @module    components/display/Tag
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Tag — group of small bordered labels. Optionally removable.
+ *
+ * @example JS
+ *   const t = new Tag();
+ *   t.items = ['TypeScript', 'AriannA', 'Rust'];
+ *   t.removable = true;
+ *   t.addEventListener('arianna:remove', e => console.log(e.detail.item));
+ *
+ * @example HTML
+ *   <arianna-tag removable></arianna-tag>
+ *   <!-- then set .items = [...] in JS -->
+ *
+ * Events:
+ *   - arianna:remove   detail: { item }
+ *
+ * Slots:  (none)
+ * Attrs:  removable
  */
 
-/**
- * @module Tag
- * Removable tag / label.
- * @example
- *   const tags = new Tag('#root');
- *   tags.items = ['TypeScript', 'AriannA', 'Rust'];
- *   tags.on('remove', ({ item }) => console.log('removed', item));
- */
-import { Control } from '../core/Control.ts';
-export interface TagOptions { removable?: boolean; class?: string; }
-export class Tag extends Control<TagOptions> {
-  private _items: string[] = [];
-  constructor(container: string | HTMLElement | null = null, opts: TagOptions = {}) {
-    super(container, 'div', { removable: false, ...opts });
-    this.el.className = `ar-tag-group${opts.class?' '+opts.class:''}`;
-  }
-  set items(v: string[])    { this._items = v; this._set('items' as never, v as never); }
-  get items()               { return this._items; }
-  add(item: string)         { this._items.push(item); this._build(); }
-  remove(item: string)      { this._items = this._items.filter(i => i !== item); this._build(); }
-  protected _build() {
-    this.el.innerHTML = '';
-    this._items.forEach(item => {
-      const tag = this._el('span', 'ar-tag', this.el);
-      tag.textContent = item;
-      if (this._get('removable', false)) {
-        const x = this._el('button', 'ar-tag__remove', tag) as HTMLButtonElement;
-        x.textContent = '✕'; x.setAttribute('aria-label', 'Remove');
-        x.addEventListener('click', () => { this.remove(item); this._emit('remove', { item }); });
-      }
-    });
-  }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
+
+export interface TagOptions {
+    removable? : boolean;
+    items?     : string[];
 }
-export const TagCSS = `.ar-tag-group{display:flex;flex-wrap:wrap;gap:6px}.ar-tag{align-items:center;background:var(--ar-bg4);border:1px solid var(--ar-border);border-radius:var(--ar-radius-sm);color:var(--ar-text);display:inline-flex;font-size:.75rem;gap:4px;padding:2px 8px}.ar-tag__remove{background:none;border:none;color:var(--ar-muted);cursor:pointer;font-size:.7rem;line-height:1;padding:0}.ar-tag__remove:hover{color:var(--ar-danger)}`;
+
+export class Tag extends Component('arianna-tag', HTMLElement, {}, {
+    attrs : ['removable'],
+    shadow: false,
+})
+{
+    items$: Signal<string[]> = signal<string[]>([]);
+
+    build(_opts: TagOptions = {})
+    {
+        this.allItems    = () => this.items$.get();
+        this.isRemovable = () => this.hasAttribute('removable');
+        this.onRemove    = (item: string) => {
+            this.items$.set(this.items$.get().filter(i => i !== item));
+            this.dispatchEvent(new CustomEvent('arianna:remove', { bubbles: true, detail: { item } }));
+        };
+
+        this.template = html`
+            <span class="ar-tag" a-for="item in this.allItems()">
+                {{ item }}
+                <button class="ar-tag__remove"
+                        a-if="this.isRemovable()"
+                        @click="(e) => this.onRemove(item)"
+                        aria-label="Remove">✕</button>
+            </span>
+        `;
+
+        this.Sheet = Tag.DefaultSheet();
+    }
+
+    set items(v: string[]) { this.items$.set(v ?? []); }
+    get items(): string[]  { return this.items$.get(); }
+
+    /** Add a single item to the list. */
+    addItem(item: string): void { this.items$.set([...this.items$.get(), item]); }
+    /** Remove a single item from the list (matches by string equality). */
+    removeItem(item: string): void { this.items$.set(this.items$.get().filter(i => i !== item)); }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get removable(): boolean  { return this.hasAttribute('removable'); }
+    set removable(v: boolean) { v ? this.setAttribute('removable', '') : this.removeAttribute('removable'); }
+
+    private allItems   : () => string[] = () => [];
+    private isRemovable: () => boolean  = () => false;
+    private onRemove   : (item: string) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', { display: 'flex', flexWrap: 'wrap', gap: '6px' }),
+                new Rule('.ar-tag', {
+                    alignItems  : 'center',
+                    background  : 'var(--arianna-bg-3, #f3f3f3)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius-sm, 4px)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    display     : 'inline-flex',
+                    fontSize    : '0.75rem',
+                    gap         : '4px',
+                    padding     : '2px 8px',
+                }),
+                new Rule('.ar-tag__remove', {
+                    background: 'none',
+                    border    : 'none',
+                    color     : 'var(--arianna-muted, #8b949e)',
+                    cursor    : 'pointer',
+                    fontSize  : '0.7rem',
+                    lineHeight: '1',
+                    padding   : '0',
+                }),
+                new Rule('.ar-tag__remove:hover', { color: 'var(--arianna-danger, #cf222e)' }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Tag', {
+        value: Tag, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default Tag;

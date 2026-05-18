@@ -363,7 +363,7 @@ async function _deflateRaw(data: Uint8Array): Promise<Uint8Array>
 {
     const cs     = new CompressionStream('deflate-raw');
     const writer = cs.writable.getWriter();
-    writer.write(data as unknown as Uint8Array<ArrayBuffer>);
+    writer.write(data as BufferSource);
     writer.close();
     const chunks: Uint8Array[] = [];
     const reader = cs.readable.getReader();

@@ -4,218 +4,230 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * PayPal Smart Button. Loads the PayPal JS SDK on demand
- * (`paypal.com/sdk/js?client-id=…`) and renders the official PayPal button
- * which itself opens the PayPal pop-up / redirect / in-context flow when
- * clicked. The component handles createOrder / onApprove / onCancel /
- * onError lifecycle and emits `success`, `cancel`, and `error` events.
+ * PayPal Smart Button widget. Loads PayPal's Smart Buttons SDK
+ * (https://www.paypal.com/sdk/js?client-id=…) on demand and mounts the
+ * official button into this widget's content area.
  *
- * The PayPal SDK supports many flow modes; this widget targets the standard
- * "Checkout" flow with a single payment. For subscriptions or vault flows,
- * pass the relevant `intent` and `vault` options.
+ * REQUIREMENTS for live PayPal:
+ *   • A PayPal business account
+ *   • A client-id from the PayPal Developer dashboard
  *
- * @example
- *   import { PayPal } from 'ariannajs/components/payments';
+ * When the SDK isn't available (network blocked, etc), the widget renders
+ * a fallback "Open PayPal" button that follows `redirect-url` if provided.
  *
- *   const pp = new PayPal('#paypal', {
- *       clientId : 'AYxxxxxxxxxxxxxxxxxxx',
- *       amount   : 99.00,
- *       currency : 'EUR',
- *       description: 'AriannA Pro license',
- *   });
- *   pp.on('success', e => api.confirm(e.orderId));
- *   pp.on('cancel',  () => console.log('Cancelled'));
- *   pp.on('error',   e => showToast(e.message));
+ * @example HTML
+ *   <arianna-paypal client-id="AYxxx" amount="99.00" currency="EUR"></arianna-paypal>
+ *
+ * Events:
+ *   arianna:payment-success  detail: { method: 'paypal', orderId: string, payerId: string }
+ *   arianna:payment-error    detail: { method: 'paypal', message: string }
+ *   arianna:payment-cancel   detail: { method: 'paypal' }
+ *
+ * Attrs: client-id, amount, currency, intent, redirect-url, button-style, button-color, button-shape
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { signal }    from '../../core/Observable.ts';
+import type { Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface PayPalOptions extends CtrlOptions
-{
-    /** PayPal REST API client-id. */
-    clientId    : string;
-    amount      : number;
-    /** ISO 4217. PayPal supports a fixed list — see PayPal docs. */
-    currency    : string;
-    /** Description shown in the order. */
-    description?: string;
-    /** Order intent. Default 'capture'. */
-    intent?     : 'capture' | 'authorize';
-    /** Locale for the button. Default browser default. */
-    locale?     : string;
-    /** Button style. */
-    buttonStyle?: {
-        layout? : 'vertical' | 'horizontal';
-        color?  : 'gold' | 'blue' | 'silver' | 'white' | 'black';
-        shape?  : 'rect' | 'pill';
-        label?  : 'paypal' | 'checkout' | 'buynow' | 'pay' | 'subscribe';
-        height? : number;     // 25..55
-    };
-    /** Disable the funding sources you don't want. */
-    disableFunding? : Array<'card' | 'credit' | 'paylater' | 'sepa' | 'venmo'>;
+export interface PayPalOptions {
+    clientId      : string;
+    amount        : number;
+    currency      : string;
+    intent?       : 'capture' | 'authorize';
+    redirectUrl?  : string;
+    buttonStyle?  : 'paypal' | 'checkout' | 'pay';
+    buttonColor?  : 'gold' | 'blue' | 'silver' | 'white' | 'black';
+    buttonShape?  : 'rect' | 'pill';
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+const SDK_BASE = 'https://www.paypal.com/sdk/js';
+let sdkLoadPromise: Promise<unknown> | null = null;
 
-export class PayPal extends Control<PayPalOptions>
-{
-    private _elHost!    : HTMLElement;
-    private _elFallback!: HTMLElement;
-
-    constructor(container: string | HTMLElement | null, opts: PayPalOptions)
-    {
-        super(container, 'div', {
-            description : '',
-            intent      : 'capture',
-            buttonStyle : { layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal' },
-            disableFunding: [],
-            ...opts,
-        });
-
-        this.el.className = `ar-paypal${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
-    }
-
-    // ── Internal ───────────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        this.el.innerHTML = `
-<div class="ar-paypal__host" data-r="host"></div>
-<div class="ar-paypal__fallback" data-r="fallback" style="display:none">
-  PayPal is not available right now.
-</div>`;
-        this._elHost     = this.el.querySelector<HTMLElement>('[data-r="host"]')!;
-        this._elFallback = this.el.querySelector<HTMLElement>('[data-r="fallback"]')!;
-
-        void this._loadAndRender();
-    }
-
-    private async _loadAndRender(): Promise<void>
-    {
-        const clientId = this._get<string>('clientId', '');
-        const currency = this._get<string>('currency', 'EUR');
-        const intent   = this._get<string>('intent', 'capture');
-        const locale   = this._get<string>('locale', '');
-        const disable  = this._get<string[]>('disableFunding', []);
-
-        try
-        {
-            await loadPayPalScript({ clientId, currency, intent, locale, disableFunding: disable });
-        }
-        catch (e)
-        {
-            this._showFallback();
-            this._emit('error', { message: 'Failed to load PayPal SDK: ' + (e as Error).message });
-            return;
-        }
-
-        const paypal = (window as unknown as { paypal?: { Buttons: (cfg: unknown) => { render: (el: HTMLElement) => Promise<void>; isEligible?: () => boolean } } }).paypal;
-        if (!paypal?.Buttons)
-        {
-            this._showFallback();
-            this._emit('error', { message: 'PayPal Buttons not available' });
-            return;
-        }
-
-        const style = this._get<PayPalOptions['buttonStyle']>('buttonStyle', {});
-        const buttons = paypal.Buttons({
-            style,
-            createOrder: (_d: unknown, actions: { order: { create: (cfg: unknown) => Promise<string> } }) => {
-                return actions.order.create({
-                    intent: intent.toUpperCase(),
-                    purchase_units: [{
-                        description: this._get<string>('description', ''),
-                        amount: { currency_code: currency, value: this._get<number>('amount', 0).toFixed(2) },
-                    }],
-                });
-            },
-            onApprove: async (_d: { orderID: string }, actions: { order: { capture?: () => Promise<unknown>; authorize?: () => Promise<unknown> } }) => {
-                try
-                {
-                    const result = intent === 'capture'
-                        ? await actions.order.capture?.()
-                        : await actions.order.authorize?.();
-                    this._emit('success', { orderId: _d.orderID, result });
-                }
-                catch (e)
-                {
-                    this._emit('error', { message: (e as Error).message });
-                }
-            },
-            onCancel: (_d: unknown) => this._emit('cancel', {}),
-            onError : (e: unknown) => this._emit('error', { message: (e as Error).message || 'PayPal error' }),
-        });
-
-        if (buttons.isEligible && !buttons.isEligible())
-        {
-            this._showFallback();
-            this._emit('ready', { available: false });
-            return;
-        }
-        try
-        {
-            await buttons.render(this._elHost);
-            this._emit('ready', { available: true });
-        }
-        catch (e)
-        {
-            this._showFallback();
-            this._emit('error', { message: 'Render failed: ' + (e as Error).message });
-        }
-    }
-
-    private _showFallback(): void
-    {
-        this._elHost.style.display = 'none';
-        this._elFallback.style.display = '';
-    }
-
-    private _injectStyles(): void
-    {
-        if (document.getElementById('ar-paypal-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-paypal-styles';
-        s.textContent = `
-.ar-paypal { display:inline-block; min-width:200px; }
-.ar-paypal__host { display:inline-block; min-width:200px; }
-.ar-paypal__fallback { color:#888; font:12px sans-serif; padding:6px 10px; }
-`;
-        document.head.appendChild(s);
-    }
-}
-
-// ── Script loader ───────────────────────────────────────────────────────────
-
-interface PayPalLoadOpts { clientId: string; currency: string; intent: string; locale?: string; disableFunding?: string[]; }
-let _ppPromise: Promise<void> | null = null;
-let _ppCacheKey = '';
-function loadPayPalScript(opts: PayPalLoadOpts): Promise<void>
-{
-    const key = `${opts.clientId}|${opts.currency}|${opts.intent}|${opts.locale ?? ''}|${(opts.disableFunding ?? []).join(',')}`;
-    if (_ppPromise && _ppCacheKey === key) return _ppPromise;
-
-    _ppCacheKey = key;
-    _ppPromise = new Promise((resolve, reject) => {
-        if (typeof document === 'undefined') { reject(new Error('no document')); return; }
-        const params = new URLSearchParams({
-            'client-id': opts.clientId,
-            currency  : opts.currency,
-            intent    : opts.intent,
-        });
-        if (opts.locale) params.set('locale', opts.locale);
-        if (opts.disableFunding && opts.disableFunding.length)
-            params.set('disable-funding', opts.disableFunding.join(','));
-
+function loadPayPalSDK(clientId: string, currency: string, intent: string): Promise<unknown> {
+    if (sdkLoadPromise) return sdkLoadPromise;
+    const url = `${SDK_BASE}?client-id=${encodeURIComponent(clientId)}&currency=${encodeURIComponent(currency)}&intent=${encodeURIComponent(intent)}`;
+    sdkLoadPromise = new Promise((resolve, reject) => {
+        const w = window as unknown as { paypal?: unknown };
+        if (w.paypal) { resolve(w.paypal); return; }
         const s = document.createElement('script');
-        s.src = `https://www.paypal.com/sdk/js?${params.toString()}`;
+        s.src = url;
         s.async = true;
-        s.onload  = () => resolve();
-        s.onerror = () => reject(new Error('script load failed'));
+        s.onload = () => resolve((window as unknown as { paypal?: unknown }).paypal);
+        s.onerror = () => reject(new Error('PayPal SDK failed to load'));
         document.head.appendChild(s);
     });
-    return _ppPromise;
+    return sdkLoadPromise;
 }
+
+export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
+    attrs : ['client-id', 'amount', 'currency', 'intent', 'redirect-url', 'button-style', 'button-color', 'button-shape'],
+    shadow: false,
+})
+{
+    sdkLoaded$: Signal<boolean> = signal<boolean>(false);
+    sdkError$ : Signal<string | null> = signal<string | null>(null);
+    busy$     : Signal<boolean> = signal<boolean>(false);
+
+    build(_opts: PayPalOptions = {} as PayPalOptions)
+    {
+        this.fallbackVisible = () => !this.sdkLoaded$.get();
+        this.fallbackLabel = () => this.sdkError$.get()
+            ? 'Open PayPal'
+            : 'Loading PayPal…';
+
+        this.onFallback = () => {
+            const url = this.getAttribute('redirect-url');
+            if (url) window.open(url, '_blank', 'noopener');
+            else void this.pay();
+        };
+
+        this.template = html`
+            <div class="ar-pp">
+                <div class="ar-pp__mount" data-r="mount"></div>
+                <button type="button" class="ar-pp__fallback"
+                        a-if="this.fallbackVisible()"
+                        @click="this.onFallback">
+                    <span class="ar-pp__logo">PayPal</span>
+                    <span>{{ this.fallbackLabel() }}</span>
+                </button>
+            </div>
+        `;
+
+        this.Sheet = PayPal.DefaultSheet();
+    }
+
+    async pay(): Promise<void> {
+        if (this.busy$.get()) return;
+        this.busy$.set(true);
+        try {
+            const url = this.getAttribute('redirect-url');
+            if (url) {
+                window.open(url, '_blank', 'noopener');
+                // We don't know the outcome — leave it to the merchant's webhook
+                return;
+            }
+            throw new Error('No PayPal SDK loaded and no redirect-url provided');
+        } catch (err) {
+            this.dispatchEvent(new CustomEvent('arianna:payment-error', {
+                bubbles: true,
+                detail: { method: 'paypal', message: err instanceof Error ? err.message : String(err) },
+            }));
+        } finally {
+            this.busy$.set(false);
+        }
+    }
+
+    async #mountSDKButtons(): Promise<void> {
+        const clientId = this.getAttribute('client-id');
+        if (!clientId) return;
+        const currency = this.getAttribute('currency') ?? 'EUR';
+        const intent   = (this.getAttribute('intent') ?? 'capture') as 'capture' | 'authorize';
+        const amount   = parseFloat(this.getAttribute('amount') ?? '0') || 0;
+        const style    = this.getAttribute('button-style') ?? 'paypal';
+        const color    = this.getAttribute('button-color') ?? 'gold';
+        const shape    = this.getAttribute('button-shape') ?? 'rect';
+
+        try {
+            const paypal = await loadPayPalSDK(clientId, currency, intent) as {
+                Buttons(cfg: unknown): { render(host: HTMLElement): Promise<void> };
+            };
+            const host = this.querySelector<HTMLElement>('[data-r="mount"]');
+            if (!host) return;
+            const buttons = paypal.Buttons({
+                style: { layout: 'vertical', color, shape, label: style },
+                createOrder: (_data: unknown, actions: { order: { create(o: unknown): unknown } }) =>
+                    actions.order.create({
+                        intent: intent.toUpperCase(),
+                        purchase_units: [{ amount: { currency_code: currency, value: amount.toFixed(2) } }],
+                    }),
+                onApprove: async (data: { orderID: string; payerID?: string }, actions: { order: { capture(): Promise<unknown> } }) => {
+                    try {
+                        const captureData = await actions.order.capture();
+                        this.dispatchEvent(new CustomEvent('arianna:payment-success', {
+                            bubbles: true,
+                            detail: {
+                                method: 'paypal',
+                                orderId: data.orderID,
+                                payerId: data.payerID ?? '',
+                                capture: captureData,
+                            },
+                        }));
+                    } catch (err) {
+                        this.dispatchEvent(new CustomEvent('arianna:payment-error', {
+                            bubbles: true,
+                            detail: { method: 'paypal', message: err instanceof Error ? err.message : String(err) },
+                        }));
+                    }
+                },
+                onCancel: () => {
+                    this.dispatchEvent(new CustomEvent('arianna:payment-cancel', {
+                        bubbles: true, detail: { method: 'paypal' },
+                    }));
+                },
+                onError: (err: unknown) => {
+                    this.dispatchEvent(new CustomEvent('arianna:payment-error', {
+                        bubbles: true,
+                        detail: { method: 'paypal', message: err instanceof Error ? err.message : String(err) },
+                    }));
+                },
+            });
+            await buttons.render(host);
+            this.sdkLoaded$.set(true);
+        } catch (err) {
+            this.sdkError$.set(err instanceof Error ? err.message : String(err));
+        }
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    async onMount() {
+        await this.#mountSDKButtons();
+    }
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    private fallbackVisible: () => boolean = () => true;
+    private fallbackLabel  : () => string = () => 'Loading PayPal…';
+    private onFallback     : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', { display: 'inline-block', minWidth: '200px' }),
+                new Rule('.ar-pp__mount', { display: 'block' }),
+                new Rule('.ar-pp__fallback', {
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    minWidth: '200px',
+                    minHeight: '44px',
+                    padding: '0 18px',
+                    background: '#ffc439',
+                    color: '#003087',
+                    border: 'none',
+                    borderRadius: '24px',
+                    cursor: 'pointer',
+                    font: 'italic 700 16px "Helvetica Neue", Arial, sans-serif',
+                }),
+                new Rule('.ar-pp__fallback:hover', { background: '#f5b730' }),
+                new Rule('.ar-pp__logo', { fontStyle: 'italic', fontWeight: '900' }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'PayPal', {
+        value: PayPal, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default PayPal;

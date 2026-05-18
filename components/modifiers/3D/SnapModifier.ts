@@ -5,9 +5,15 @@
  * @license   MIT / Commercial (dual license)
  *
  * Snap position and rotation to a grid.
+ *
+ * @example HTML
+ *   <arianna-snap for="m1" pos-grid="0.5" rot-grid-deg="15"></arianna-snap>
+ *
+ * Attrs (declarative): for, pos-grid, rot-grid-deg, enabled
  */
 
-import { Modifier3D, type MeshLike } from './Base.ts';
+import { Component } from '../../../core/Component.ts';
+import { Modifier3D, Modifier3DElement, type MeshLike } from './Base.ts';
 
 export class SnapModifier extends Modifier3D {
     #posGrid: number;
@@ -31,3 +37,22 @@ export class SnapModifier extends Modifier3D {
         return this;
     }
 }
+
+export class SnapModifierElement extends (Component('arianna-snap', HTMLElement, {}, {
+    attrs : ['for', 'pos-grid', 'rot-grid-deg', 'enabled'],
+    shadow: false,
+}) as typeof Modifier3DElement) {
+    protected createModifier(mesh: MeshLike): Modifier3D {
+        const posGrid    = parseFloat(this.getAttribute('pos-grid')     ?? '0.5') || 0.5;
+        const rotGridDeg = parseFloat(this.getAttribute('rot-grid-deg') ?? '15')  || 15;
+        return new SnapModifier(mesh, posGrid, rotGridDeg);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'SnapModifier', {
+        value: SnapModifier, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default SnapModifier;

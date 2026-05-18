@@ -1,27 +1,16 @@
 /**
- * @module    Chat
+ * @module    components/composite/Chat
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
  *
- * WhatsApp / Signal-style chat widget. Three-pane layout (sidebar +
- * conversation thread + composer), with full features:
- *
- *   • Conversation list (sidebar): ordered by last activity, badge for unread,
- *     avatar + name + last message preview.
- *   • Message thread: bubbles (incoming on left, outgoing on right), grouped
- *     by author within close timestamps, system messages centred, image &
- *     attachment messages, replies (quoted parent), reactions, read receipts
- *     (✓ sent, ✓✓ delivered, ✓✓ blue read), typing indicator.
- *   • Composer: text input, send button, attach (file picker), emoji slot,
- *     reply-to chip when replying.
+ * Chat — WhatsApp / Signal-style chat widget. Three-pane layout:
  *
  *   ┌──────────────┬───────────────────────────────────┐
- *   │  Sidebar     │   Header (peer name, presence)    │
+ *   │ Sidebar      │  Header (peer name, presence)     │
  *   │              ├───────────────────────────────────┤
- *   │ ▣ Alice  ●3 │                                   │
- *   │ ▣ Bob       │   ┌─────┐                         │
- *   │ ▣ Group #1  │   │ msg │← incoming               │
- *   │              │   └─────┘                         │
+ *   │ ▣ Alice  ●3 │   ┌─────┐                         │
+ *   │ ▣ Bob       │   │ msg │← incoming               │
+ *   │ ▣ Group #1  │   └─────┘                         │
  *   │              │              ┌──────┐             │
  *   │              │              │ mine │ outgoing    │
  *   │              │              └──────┘ ✓✓          │
@@ -29,700 +18,633 @@
  *   │              │ [✎ message]    [📎] [😊] [Send]   │
  *   └──────────────┴───────────────────────────────────┘
  *
- * The component owns its data model — a list of `Conversation`s, each with
- * `Message`s. The host application syncs incoming messages via `addMessage`
- * and listens for `send` events to push outgoing messages to its backend.
+ *   const chat = new Chat({ me: { id: 'rick', name: 'Riccardo' } });
+ *   chat.append(document.body);
+ *   chat.addConversation({ id: 'c1', peer: { id: 'a', name: 'Alice' } });
+ *   chat.addMessage('c1', { id: 'm1', author: 'a', text: 'hey', ts: Date.now() });
  *
- * @example
- *   import { Chat } from 'ariannajs/components/chat';
- *
- *   const chat = new Chat('#chat', {
- *       me: { id: 'rick', name: 'Riccardo', avatar: '/me.png' },
+ *   chat.on('arianna:chat-send', e => {
+ *     const { conversationId, text } = e.detail;
+ *     // push to backend
  *   });
- *   chat.addConversation({ id: 'alice', name: 'Alice', avatar: '/alice.png' });
- *   chat.addMessage('alice', { id: 'm1', from: 'alice', text: 'Hey!', at: Date.now() });
- *   chat.openConversation('alice');
- *   chat.on('send', e => api.sendMessage(e.conversationId, e.text));
+ *
+ * The widget owns its data model: `Conversation[]` each with `Message[]`.
+ * Host syncs incoming via `addMessage`; outgoing fires `arianna:chat-send`.
+ *
+ * Events:
+ *   arianna:chat-select   { conversationId }
+ *   arianna:chat-send     { conversationId, text, replyTo? }
+ *   arianna:chat-attach   { conversationId, files }
+ *   arianna:chat-typing   { conversationId, typing }
  */
 
-import { Control, type CtrlOptions } from '../core/Control.ts';
+import { Component } from '../../core/Component.ts';
+import { signal, effect, type Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule } from '../../core/Rule.ts';
 
-// ── Data model ───────────────────────────────────────────────────────────────
-
-export interface User {
-    id      : string;
-    name    : string;
-    avatar? : string;
+export interface ChatUser {
+    id     : string;
+    name   : string;
+    avatar?: string;
+    online?: boolean;
 }
 
-export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+export type MessageStatus = 'sent' | 'delivered' | 'read';
 
-export interface Reaction {
-    /** Unicode emoji. */
-    emoji : string;
-    /** User ids who reacted with this emoji. */
-    by    : string[];
-}
-
-export interface Attachment {
-    kind : 'image' | 'file' | 'audio' | 'video';
-    url  : string;
-    name?: string;
-    /** For images/video: pixel size. */
-    width? : number;
-    height?: number;
-    /** For audio/video: duration in seconds. */
-    duration? : number;
-}
-
-export interface Message {
+export interface ChatMessage {
     id        : string;
-    /** User id; equals conversation owner's `me.id` for outgoing. */
-    from      : string;
-    /** Body text. May be empty if pure attachment. */
-    text      : string;
-    /** Unix ms. */
-    at        : number;
+    author    : string;       // user id
+    text?     : string;
+    image?    : string;       // url
+    file?     : { name: string; url: string; size?: number };
+    ts        : number;       // ms epoch
     status?   : MessageStatus;
-    /** Sequence of attachments. */
-    attachments? : Attachment[];
-    /** id of the message being replied to (quoted). */
-    replyTo?  : string;
-    /** Reactions keyed by emoji. */
-    reactions?: Reaction[];
-    /** A system message (centred, no avatar) — e.g. "Alice joined the group". */
+    replyTo?  : string;       // message id
+    reactions?: Record<string, number>;   // emoji → count
     system?   : boolean;
 }
 
-export interface Conversation {
-    id       : string;
-    name     : string;
-    avatar?  : string;
-    /** Group conversation? Default false (1:1). */
-    group?   : boolean;
-    /** Display in italics under name when set. */
-    presence?: 'online' | 'offline' | 'typing' | string;
-    messages : Message[];
-    /** Number of unread messages — host computes & updates this. */
-    unread   : number;
+export interface ChatConversation {
+    id        : string;
+    peer      : ChatUser;     // 1:1; for groups use displayName/avatar of group
+    title?    : string;       // override for groups
+    unread?   : number;
+    messages? : ChatMessage[];
+    typing?   : boolean;
 }
 
-// ── Options ──────────────────────────────────────────────────────────────────
-
-export interface ChatOptions extends CtrlOptions {
-    /** The "me" user — outgoing messages have `from === me.id`. */
-    me           : User;
-    /** Initial conversations. */
-    conversations? : Conversation[];
-    /** Conversation id to open initially. */
-    initialOpen? : string;
-    /** Show the sidebar. Default true. Set false for embedded single-thread. */
-    showSidebar? : boolean;
-    /** Locale for formatting timestamps. Default browser default. */
-    locale?      : string;
+export interface ChatOptions {
+    me?            : ChatUser;
+    conversations? : ChatConversation[];
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+function fmtTime(ts: number): string {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
-export class Chat extends Control<ChatOptions>
+export class Chat extends Component('arianna-chat', HTMLElement, {}, {
+    attrs : [],
+    shadow: false,
+})
 {
-    private _me            : User;
-    private _conversations : Map<string, Conversation> = new Map();
-    private _open          : string | null = null;
-    private _replyTo       : string | null = null;
+    readonly conversations$ : Signal<ChatConversation[]> = signal<ChatConversation[]>([]);
+    readonly activeId$      : Signal<string | null>      = signal<string | null>(null);
+    readonly me$            : Signal<ChatUser>           = signal<ChatUser>({ id: 'me', name: 'Me' });
+    readonly replyTo$       : Signal<string | null>      = signal<string | null>(null);
 
-    // DOM
-    private _elSidebar?  : HTMLElement;
-    private _elThread!   : HTMLElement;
-    private _elHeader!   : HTMLElement;
-    private _elMessages! : HTMLElement;
-    private _elComposer! : HTMLElement;
-    private _elInput!    : HTMLTextAreaElement;
-    private _elReplyChip?: HTMLElement;
+    #sidebar? : HTMLDivElement;
+    #thread?  : HTMLDivElement;
+    #header?  : HTMLDivElement;
+    #composer?: HTMLDivElement;
+    #input?   : HTMLTextAreaElement;
+    #replyBar?: HTMLDivElement;
 
-    constructor(container: string | HTMLElement | null, opts: ChatOptions)
-    {
-        super(container, 'div', {
-            showSidebar: true,
-            ...opts,
-        });
-
-        if (!opts.me) throw new Error('Chat requires `me` option');
-        this._me = opts.me;
-
-        this.el.className = `ar-chat${opts.class ? ' ' + opts.class : ''}`;
-        for (const c of opts.conversations ?? [])
-            this._conversations.set(c.id, this._cloneConversation(c));
-
-        this._injectStyles();
-        this._build();
-
-        const initial = opts.initialOpen ?? this._conversations.keys().next().value;
-        if (initial) this.openConversation(initial);
+    constructor(opts: ChatOptions = {}) {
+        super(opts as never);
+        if (opts.me)            this.me$.set(opts.me);
+        if (opts.conversations) this.conversations$.set(opts.conversations);
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    /** All conversations, sorted by last-activity desc. */
-    getConversations(): Conversation[]
-    {
-        return [...this._conversations.values()]
-            .map(c => this._cloneConversation(c))
-            .sort((a, b) => this._lastAt(b) - this._lastAt(a));
-    }
-
-    /** Single conversation by id, or null. */
-    getConversation(id: string): Conversation | null
-    {
-        const c = this._conversations.get(id);
-        return c ? this._cloneConversation(c) : null;
-    }
-
-    /** Active (open) conversation id, or null. */
-    getOpen(): string | null { return this._open; }
-
-    /** Add or replace a conversation. */
-    addConversation(c: Omit<Conversation, 'messages' | 'unread'> & Partial<Pick<Conversation, 'messages' | 'unread'>>): Conversation
-    {
-        const conv: Conversation = {
-            id      : c.id,
-            name    : c.name,
-            avatar  : c.avatar,
-            group   : c.group,
-            presence: c.presence,
-            messages: (c.messages ?? []).map(m => this._cloneMessage(m)),
-            unread  : c.unread ?? 0,
+    build(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            fire(t: string, init?: CustomEventInit): void;
+            Sheet: Sheet | null;
         };
-        this._conversations.set(conv.id, conv);
-        this._renderSidebar();
-        return this._cloneConversation(conv);
-    }
+        const root = self.render();
+        if (root.querySelector('.ch-wrap')) return;
 
-    /** Remove a conversation. */
-    removeConversation(id: string): this
-    {
-        if (!this._conversations.has(id)) return this;
-        this._conversations.delete(id);
-        if (this._open === id) this._open = null;
-        this._renderSidebar();
-        this._renderThread();
-        return this;
-    }
+        const wrap = document.createElement('div');
+        wrap.className = 'ch-wrap';
 
-    /** Open a conversation in the thread pane. Resets its unread count. */
-    openConversation(id: string): this
-    {
-        const c = this._conversations.get(id);
-        if (!c) return this;
-        this._open = id;
-        c.unread = 0;
-        this._replyTo = null;
-        this._renderSidebar();
-        this._renderThread();
-        this._emit('open', { conversationId: id });
-        return this;
-    }
+        // Sidebar
+        const sidebar = document.createElement('div');
+        sidebar.className = 'ch-sidebar';
+        this.#sidebar = sidebar;
 
-    /**
-     * Add a message to a conversation. Bumps unread if the conversation is
-     * not currently open and the message is from someone else.
-     */
-    addMessage(conversationId: string, m: Message): Message
-    {
-        const c = this._conversations.get(conversationId);
-        if (!c) throw new Error(`Chat.addMessage: unknown conversation: ${conversationId}`);
-        c.messages.push(this._cloneMessage(m));
-        if (this._open !== conversationId && m.from !== this._me.id && !m.system)
-            c.unread++;
-        this._renderSidebar();
-        if (this._open === conversationId) this._renderThread();
-        this._emit('message', { conversationId, message: m });
-        return m;
-    }
+        // Right column
+        const right = document.createElement('div');
+        right.className = 'ch-right';
+        const header = document.createElement('div');
+        header.className = 'ch-header';
+        this.#header = header;
+        const thread = document.createElement('div');
+        thread.className = 'ch-thread';
+        this.#thread = thread;
+        const replyBar = document.createElement('div');
+        replyBar.className = 'ch-reply-bar';
+        replyBar.style.display = 'none';
+        this.#replyBar = replyBar;
+        const composer = document.createElement('div');
+        composer.className = 'ch-composer';
+        this.#composer = composer;
 
-    /** Update a message's fields (status changes, reactions, edits, ...). */
-    updateMessage(conversationId: string, messageId: string, patch: Partial<Message>): this
-    {
-        const c = this._conversations.get(conversationId);
-        if (!c) return this;
-        const i = c.messages.findIndex(m => m.id === messageId);
-        if (i < 0) return this;
-        c.messages[i] = { ...c.messages[i]!, ...patch };
-        if (patch.reactions) c.messages[i]!.reactions = patch.reactions.map(r => ({ ...r, by: [...r.by] }));
-        if (this._open === conversationId) this._renderThread();
-        this._renderSidebar();
-        return this;
-    }
+        const fileBtn = document.createElement('button');
+        fileBtn.type = 'button'; fileBtn.className = 'ch-icon-btn'; fileBtn.textContent = '📎';
+        fileBtn.title = 'attach file';
+        const fileInput = document.createElement('input') as HTMLInputElement;
+        fileInput.type = 'file'; fileInput.multiple = true; fileInput.style.display = 'none';
 
-    /** Add or remove a reaction. */
-    toggleReaction(conversationId: string, messageId: string, emoji: string, userId: string): this
-    {
-        const c = this._conversations.get(conversationId);
-        if (!c) return this;
-        const m = c.messages.find(x => x.id === messageId);
-        if (!m) return this;
-        m.reactions = m.reactions ?? [];
-        const r = m.reactions.find(x => x.emoji === emoji);
-        if (!r)
-        {
-            m.reactions.push({ emoji, by: [userId] });
-        }
-        else
-        {
-            const idx = r.by.indexOf(userId);
-            if (idx >= 0) r.by.splice(idx, 1);
-            else          r.by.push(userId);
-            if (r.by.length === 0)
-                m.reactions.splice(m.reactions.indexOf(r), 1);
-        }
-        if (this._open === conversationId) this._renderThread();
-        this._emit('reaction', { conversationId, messageId, emoji, userId });
-        return this;
-    }
+        const input = document.createElement('textarea');
+        input.className = 'ch-input';
+        input.rows = 1;
+        input.placeholder = 'Type a message…';
+        this.#input = input;
 
-    /** Set the reply-to message for the composer (chip appears above input). */
-    setReplyTo(messageId: string | null): this
-    {
-        this._replyTo = messageId;
-        this._renderReplyChip();
-        return this;
-    }
+        const emojiBtn = document.createElement('button');
+        emojiBtn.type = 'button'; emojiBtn.className = 'ch-icon-btn'; emojiBtn.textContent = '😊';
 
-    /** Set or clear the per-conversation `presence` (e.g. "typing"). */
-    setPresence(conversationId: string, presence: string | undefined): this
-    {
-        const c = this._conversations.get(conversationId);
-        if (!c) return this;
-        c.presence = presence;
-        if (this._open === conversationId) this._renderHeader();
-        this._renderSidebar();
-        return this;
-    }
+        const sendBtn = document.createElement('button');
+        sendBtn.type = 'button'; sendBtn.className = 'ch-send'; sendBtn.textContent = 'Send';
 
-    // ── Build + render ─────────────────────────────────────────────────────
+        composer.append(fileBtn, fileInput, input, emojiBtn, sendBtn);
+        right.append(header, thread, replyBar, composer);
+        wrap.append(sidebar, right);
+        root.appendChild(wrap);
 
-    protected _build(): void
-    {
-        const showSidebar = this._get<boolean>('showSidebar', true);
-        this.el.innerHTML = `
-${showSidebar ? `<aside class="ar-chat__sidebar" data-r="sidebar"></aside>` : ''}
-<section class="ar-chat__thread" data-r="thread">
-  <header class="ar-chat__header"   data-r="header"></header>
-  <div    class="ar-chat__messages" data-r="messages"></div>
-  <footer class="ar-chat__composer" data-r="composer">
-    <div class="ar-chat__reply-chip" data-r="reply-chip" style="display:none"></div>
-    <div class="ar-chat__composer-row">
-      <textarea class="ar-chat__input" data-r="input" rows="1" placeholder="Message…"></textarea>
-      <button class="ar-chat__btn ar-chat__btn--icon" data-act="attach" title="Attach">📎</button>
-      <button class="ar-chat__btn ar-chat__btn--icon" data-act="emoji"  title="Emoji">😊</button>
-      <button class="ar-chat__btn ar-chat__btn--send" data-act="send"   title="Send">➤</button>
-    </div>
-  </footer>
-</section>`;
+        // Reactive renders
+        effect(() => this.#renderSidebar());
+        effect(() => { this.activeId$.get(); this.#renderHeader(); this.#renderThread(); });
+        effect(() => { this.replyTo$.get(); this.#renderReplyBar(); });
 
-        const r = (n: string) => this.el.querySelector<HTMLElement>(`[data-r="${n}"]`);
-        if (showSidebar) this._elSidebar = r('sidebar')!;
-        this._elThread    = r('thread')!;
-        this._elHeader    = r('header')!;
-        this._elMessages  = r('messages')!;
-        this._elComposer  = r('composer')!;
-        this._elInput     = r('input') as HTMLTextAreaElement;
-        this._elReplyChip = r('reply-chip')!;
-
-        // Composer events
-        this._elInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter' && !e.shiftKey)
-            {
+        // Composer wiring
+        sendBtn.addEventListener('click', () => this.#sendCurrent());
+        input.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                this._send();
+                this.#sendCurrent();
             }
         });
-        this._elInput.addEventListener('input', () => {
-            this._autosize();
-            this._emit('typing', { conversationId: this._open });
+        input.addEventListener('input', () => {
+            // auto-resize
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, 96) + 'px';
+            // typing event
+            const cid = this.activeId$.peek();
+            if (cid) self.fire('arianna:chat-typing', { detail: { conversationId: cid, typing: input.value.length > 0, source: this }, bubbles: true });
         });
-        this._elComposer.querySelector('[data-act="send"]')?.addEventListener('click',   () => this._send());
-        this._elComposer.querySelector('[data-act="attach"]')?.addEventListener('click', () => this._emit('attach', { conversationId: this._open }));
-        this._elComposer.querySelector('[data-act="emoji"]')?.addEventListener('click',  () => this._emit('emoji-pick', { conversationId: this._open }));
+        fileBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => {
+            const cid = this.activeId$.peek();
+            if (!cid || !fileInput.files?.length) return;
+            self.fire('arianna:chat-attach', { detail: { conversationId: cid, files: Array.from(fileInput.files), source: this }, bubbles: true });
+            fileInput.value = '';
+        });
 
-        this._renderSidebar();
+        self.Sheet = Chat.DefaultSheet();
     }
 
-    private _renderSidebar(): void
-    {
-        if (!this._elSidebar) return;
-        this._elSidebar.innerHTML = '';
+    #sendCurrent(): void {
+        const input = this.#input;
+        const cid   = this.activeId$.peek();
+        if (!input || !cid) return;
+        const text = input.value.trim();
+        if (!text) return;
+        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const replyTo = this.replyTo$.peek() ?? undefined;
+        self.fire('arianna:chat-send', { detail: { conversationId: cid, text, replyTo, source: this }, bubbles: true });
+        // Optimistic local insert
+        const me = this.me$.peek();
+        this.addMessage(cid, {
+            id     : 'local-' + Date.now().toString(36),
+            author : me.id,
+            text,
+            ts     : Date.now(),
+            status : 'sent',
+            replyTo,
+        });
+        input.value = '';
+        input.style.height = 'auto';
+        this.replyTo$.set(null);
+    }
 
-        const items = [...this._conversations.values()]
-            .sort((a, b) => this._lastAt(b) - this._lastAt(a));
-
-        for (const c of items)
-        {
-            const row = document.createElement('div');
-            row.className = 'ar-chat__sidebar-row' + (c.id === this._open ? ' ar-chat__sidebar-row--active' : '');
-            row.dataset.id = c.id;
-
-            const last = c.messages[c.messages.length - 1];
-            const preview = last
-                ? (last.from === this._me.id ? 'You: ' : '') + (last.text || (last.attachments?.length ? '📎 attachment' : ''))
-                : '';
-
-            row.innerHTML = `
-<div class="ar-chat__avatar">${avatarHtml(c.name, c.avatar)}</div>
-<div class="ar-chat__sidebar-mid">
-  <div class="ar-chat__sidebar-name">${escapeHtml(c.name)}</div>
-  <div class="ar-chat__sidebar-preview">${escapeHtml(preview).slice(0, 60)}</div>
-</div>
-<div class="ar-chat__sidebar-meta">
-  ${last ? `<div class="ar-chat__sidebar-time">${formatShortTime(last.at, this._get<string>('locale', ''))}</div>` : ''}
-  ${c.unread > 0 ? `<div class="ar-chat__badge">${c.unread > 99 ? '99+' : c.unread}</div>` : ''}
-</div>`;
-            row.addEventListener('click', () => this.openConversation(c.id));
-            this._elSidebar.appendChild(row);
+    #renderSidebar(): void {
+        const sidebar = this.#sidebar;
+        if (!sidebar) return;
+        sidebar.innerHTML = '';
+        const conversations = [...this.conversations$.get()].sort((a, b) => {
+            const la = a.messages?.[a.messages.length - 1]?.ts ?? 0;
+            const lb = b.messages?.[b.messages.length - 1]?.ts ?? 0;
+            return lb - la;
+        });
+        for (const c of conversations) {
+            const it = document.createElement('div');
+            it.className = 'ch-conv-item';
+            if (c.id === this.activeId$.peek()) it.classList.add('active');
+            const avatar = document.createElement('div');
+            avatar.className = 'ch-avatar';
+            avatar.textContent = (c.peer.avatar ? '' : (c.peer.name[0] ?? '?').toUpperCase());
+            if (c.peer.avatar) avatar.style.backgroundImage = `url("${c.peer.avatar}")`;
+            const meta = document.createElement('div');
+            meta.className = 'ch-conv-meta';
+            const name = document.createElement('div');
+            name.className = 'ch-conv-name';
+            name.textContent = c.title ?? c.peer.name;
+            const last = document.createElement('div');
+            last.className = 'ch-conv-last';
+            const m = c.messages?.[c.messages.length - 1];
+            last.textContent = m?.text ?? (m?.image ? '📷 image' : m?.file ? `📎 ${m.file.name}` : '');
+            meta.append(name, last);
+            const right = document.createElement('div');
+            right.className = 'ch-conv-right';
+            if (m) {
+                const time = document.createElement('div');
+                time.className = 'ch-conv-time';
+                time.textContent = fmtTime(m.ts);
+                right.appendChild(time);
+            }
+            if (c.unread) {
+                const badge = document.createElement('div');
+                badge.className = 'ch-badge';
+                badge.textContent = String(c.unread);
+                right.appendChild(badge);
+            }
+            it.append(avatar, meta, right);
+            it.addEventListener('click', () => this.selectConversation(c.id));
+            sidebar.appendChild(it);
         }
     }
 
-    private _renderHeader(): void
-    {
-        const c = this._open ? this._conversations.get(this._open) : null;
-        if (!c)
-        {
-            this._elHeader.innerHTML = '';
-            return;
-        }
-        this._elHeader.innerHTML = `
-<div class="ar-chat__avatar">${avatarHtml(c.name, c.avatar)}</div>
-<div class="ar-chat__header-mid">
-  <div class="ar-chat__header-name">${escapeHtml(c.name)}</div>
-  ${c.presence ? `<div class="ar-chat__presence ar-chat__presence--${c.presence}">${escapeHtml(c.presence)}</div>` : ''}
-</div>`;
-    }
-
-    private _renderThread(): void
-    {
-        this._renderHeader();
-        this._renderReplyChip();
-        this._elMessages.innerHTML = '';
-
-        const c = this._open ? this._conversations.get(this._open) : null;
+    #renderHeader(): void {
+        const header = this.#header;
+        if (!header) return;
+        header.innerHTML = '';
+        const id = this.activeId$.peek();
+        if (!id) return;
+        const c = this.conversations$.peek().find(x => x.id === id);
         if (!c) return;
+        const avatar = document.createElement('div');
+        avatar.className = 'ch-avatar ch-avatar-sm';
+        avatar.textContent = (c.peer.name[0] ?? '?').toUpperCase();
+        if (c.peer.avatar) avatar.style.backgroundImage = `url("${c.peer.avatar}")`;
+        const name = document.createElement('div');
+        name.className = 'ch-header-name';
+        name.textContent = c.title ?? c.peer.name;
+        const presence = document.createElement('div');
+        presence.className = 'ch-header-presence';
+        presence.textContent = c.peer.online ? 'online' : '';
+        header.append(avatar, name, presence);
+    }
 
+    #renderThread(): void {
+        const thread = this.#thread;
+        if (!thread) return;
+        thread.innerHTML = '';
+        const id = this.activeId$.peek();
+        if (!id) return;
+        const c = this.conversations$.peek().find(x => x.id === id);
+        if (!c || !c.messages?.length) return;
+        const me = this.me$.peek();
         let prevAuthor: string | null = null;
-        let prevAt = 0;
-        const GAP_MS = 5 * 60_000;        // 5 min for grouping
-
-        for (const m of c.messages)
-        {
-            // Day separator
-            if (!sameDay(prevAt, m.at) && prevAt > 0)
-            {
-                const sep = document.createElement('div');
-                sep.className = 'ar-chat__day';
-                sep.textContent = formatDay(m.at, this._get<string>('locale', ''));
-                this._elMessages.appendChild(sep);
-            }
-
-            if (m.system)
-            {
+        let prevTs    = 0;
+        for (const m of c.messages) {
+            if (m.system) {
                 const sys = document.createElement('div');
-                sys.className = 'ar-chat__system';
-                sys.textContent = m.text;
-                this._elMessages.appendChild(sys);
+                sys.className = 'ch-sys';
+                sys.textContent = m.text ?? '';
+                thread.appendChild(sys);
                 prevAuthor = null;
-                prevAt = m.at;
                 continue;
             }
-
-            const mine = m.from === this._me.id;
-            const grouped = m.from === prevAuthor && (m.at - prevAt) < GAP_MS;
-
-            const wrap = document.createElement('div');
-            wrap.className = 'ar-chat__msg' + (mine ? ' ar-chat__msg--mine' : '') + (grouped ? ' ar-chat__msg--grouped' : '');
-            wrap.dataset.id = m.id;
-
+            const mine = m.author === me.id;
+            const grouped = prevAuthor === m.author && (m.ts - prevTs) < 60_000;
             const bubble = document.createElement('div');
-            bubble.className = 'ar-chat__bubble';
+            bubble.className = 'ch-msg ' + (mine ? 'ch-mine' : 'ch-theirs') + (grouped ? ' grouped' : '');
 
-            // Reply quote
-            if (m.replyTo)
-            {
-                const parent = c.messages.find(x => x.id === m.replyTo);
-                if (parent)
-                {
-                    const quote = document.createElement('div');
-                    quote.className = 'ar-chat__quote';
-                    quote.innerHTML = `<span class="ar-chat__quote-author">${escapeHtml(this._authorName(parent.from, c))}</span>${escapeHtml(parent.text.slice(0, 80))}`;
-                    bubble.appendChild(quote);
+            if (m.replyTo) {
+                const ref = c.messages.find(x => x.id === m.replyTo);
+                if (ref) {
+                    const q = document.createElement('div');
+                    q.className = 'ch-quote';
+                    q.textContent = ref.text ?? '(media)';
+                    bubble.appendChild(q);
                 }
             }
-
-            // Attachments
-            if (m.attachments && m.attachments.length > 0)
-            {
-                for (const a of m.attachments)
-                {
-                    if (a.kind === 'image')
-                    {
-                        const img = document.createElement('img');
-                        img.className = 'ar-chat__att-image';
-                        img.src = a.url;
-                        if (a.width)  img.width  = a.width;
-                        if (a.height) img.height = a.height;
-                        bubble.appendChild(img);
-                    }
-                    else
-                    {
-                        const f = document.createElement('div');
-                        f.className = 'ar-chat__att-file';
-                        f.textContent = (a.kind === 'audio' ? '🎵 ' : a.kind === 'video' ? '🎬 ' : '📄 ') + (a.name || a.url);
-                        bubble.appendChild(f);
-                    }
-                }
-            }
-
-            // Text
-            if (m.text)
-            {
+            if (m.text) {
                 const t = document.createElement('div');
-                t.className = 'ar-chat__text';
+                t.className = 'ch-text';
                 t.textContent = m.text;
                 bubble.appendChild(t);
             }
-
-            // Meta row (time + status)
-            const meta = document.createElement('div');
-            meta.className = 'ar-chat__meta';
-            meta.innerHTML = `
-<span class="ar-chat__time">${formatShortTime(m.at, this._get<string>('locale', ''))}</span>
-${mine ? `<span class="ar-chat__status ar-chat__status--${m.status || 'sent'}">${statusIcon(m.status)}</span>` : ''}
-`;
-            bubble.appendChild(meta);
-
-            // Reactions row
-            if (m.reactions && m.reactions.length > 0)
-            {
-                const rx = document.createElement('div');
-                rx.className = 'ar-chat__reactions';
-                for (const r of m.reactions)
-                {
-                    const chip = document.createElement('span');
-                    chip.className = 'ar-chat__reaction';
-                    chip.textContent = `${r.emoji} ${r.by.length}`;
-                    chip.addEventListener('click', () => this.toggleReaction(c.id, m.id, r.emoji, this._me.id));
-                    rx.appendChild(chip);
-                }
-                bubble.appendChild(rx);
+            if (m.image) {
+                const img = document.createElement('img');
+                img.className = 'ch-image';
+                img.src = m.image;
+                bubble.appendChild(img);
             }
-
-            // Author label for incoming group messages on first-of-cluster
-            if (!mine && c.group && !grouped)
-            {
-                const lbl = document.createElement('div');
-                lbl.className = 'ar-chat__author';
-                lbl.textContent = this._authorName(m.from, c);
-                wrap.appendChild(lbl);
+            if (m.file) {
+                const f = document.createElement('a');
+                f.className = 'ch-file';
+                f.href = m.file.url; f.target = '_blank';
+                f.textContent = `📎 ${m.file.name}`;
+                bubble.appendChild(f);
             }
-            wrap.appendChild(bubble);
-            this._elMessages.appendChild(wrap);
+            const footer = document.createElement('div');
+            footer.className = 'ch-msg-footer';
+            const time = document.createElement('span');
+            time.className = 'ch-msg-time';
+            time.textContent = fmtTime(m.ts);
+            footer.appendChild(time);
+            if (mine && m.status) {
+                const tick = document.createElement('span');
+                tick.className = 'ch-tick ch-tick-' + m.status;
+                tick.textContent = m.status === 'sent' ? '✓' : '✓✓';
+                footer.appendChild(tick);
+            }
+            bubble.appendChild(footer);
 
-            prevAuthor = m.from;
-            prevAt = m.at;
+            bubble.addEventListener('dblclick', () => this.replyTo$.set(m.id));
+
+            thread.appendChild(bubble);
+            prevAuthor = m.author;
+            prevTs     = m.ts;
         }
-
-        // Auto-scroll to bottom
-        this._elMessages.scrollTop = this._elMessages.scrollHeight;
+        if (c.typing) {
+            const t = document.createElement('div');
+            t.className = 'ch-typing';
+            t.textContent = '…';
+            thread.appendChild(t);
+        }
+        thread.scrollTop = thread.scrollHeight;
     }
 
-    private _renderReplyChip(): void
-    {
-        if (!this._elReplyChip) return;
-        if (!this._replyTo || !this._open) { this._elReplyChip.style.display = 'none'; return; }
-        const c = this._conversations.get(this._open);
-        const m = c?.messages.find(x => x.id === this._replyTo);
-        if (!m) { this._elReplyChip.style.display = 'none'; return; }
-
-        this._elReplyChip.innerHTML = `
-<span class="ar-chat__reply-chip-text">
-  <strong>${escapeHtml(this._authorName(m.from, c!))}</strong>: ${escapeHtml(m.text.slice(0, 60))}
-</span>
-<button class="ar-chat__btn ar-chat__btn--icon" data-act="cancel-reply" title="Cancel reply">×</button>`;
-        this._elReplyChip.style.display = '';
-        this._elReplyChip.querySelector('[data-act="cancel-reply"]')?.addEventListener('click', () => this.setReplyTo(null));
+    #renderReplyBar(): void {
+        const bar = this.#replyBar;
+        if (!bar) return;
+        const id  = this.replyTo$.peek();
+        const cid = this.activeId$.peek();
+        if (!id || !cid) { bar.style.display = 'none'; return; }
+        const c = this.conversations$.peek().find(x => x.id === cid);
+        const m = c?.messages?.find(x => x.id === id);
+        if (!m) { bar.style.display = 'none'; return; }
+        bar.style.display = 'flex';
+        bar.innerHTML = '';
+        const q = document.createElement('div');
+        q.className = 'ch-reply-quote';
+        q.textContent = '↩ ' + (m.text ?? '(media)');
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'ch-reply-close';
+        close.textContent = '×';
+        close.addEventListener('click', () => this.replyTo$.set(null));
+        bar.append(q, close);
     }
 
-    // ── Internal ───────────────────────────────────────────────────────────
+    // ── Public API ────────────────────────────────────────────────────────
 
-    private _send(): void
-    {
-        const text = this._elInput.value.trim();
-        if (!text || !this._open) return;
-        const replyTo = this._replyTo ?? undefined;
-        this._emit('send', { conversationId: this._open, text, replyTo });
-        this._elInput.value = '';
-        this._autosize();
-        this._replyTo = null;
-        this._renderReplyChip();
+    setMe(u: ChatUser): this { this.me$.set(u); return this; }
+
+    addConversation(c: ChatConversation): this {
+        c.messages ??= [];
+        this.conversations$.set([...this.conversations$.peek(), c]);
+        if (!this.activeId$.peek()) this.activeId$.set(c.id);
+        return this;
     }
 
-    private _autosize(): void
-    {
-        const ta = this._elInput;
-        ta.style.height = 'auto';
-        ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    selectConversation(id: string): this {
+        this.activeId$.set(id);
+        // Mark as read
+        const list = this.conversations$.peek().map(c => c.id === id ? { ...c, unread: 0 } : c);
+        this.conversations$.set(list);
+        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        self.fire('arianna:chat-select', { detail: { conversationId: id, source: this }, bubbles: true });
+        return this;
     }
 
-    private _authorName(userId: string, c: Conversation): string
-    {
-        if (userId === this._me.id) return this._me.name;
-        // 1:1 chats: peer's name = conversation name
-        if (!c.group) return c.name;
-        // Group chats — fall back to id since we don't store member roster
-        return userId;
+    addMessage(conversationId: string, msg: ChatMessage): this {
+        const list = this.conversations$.peek().map(c => {
+            if (c.id !== conversationId) return c;
+            const msgs = [...(c.messages ?? []), msg];
+            const me = this.me$.peek();
+            const isIncoming = msg.author !== me.id;
+            const unread = isIncoming && this.activeId$.peek() !== conversationId
+                ? (c.unread ?? 0) + 1
+                : 0;
+            return { ...c, messages: msgs, unread };
+        });
+        this.conversations$.set(list);
+        return this;
     }
 
-    private _lastAt(c: Conversation): number
-    {
-        const last = c.messages[c.messages.length - 1];
-        return last ? last.at : 0;
+    setMessageStatus(conversationId: string, messageId: string, status: MessageStatus): this {
+        const list = this.conversations$.peek().map(c => {
+            if (c.id !== conversationId) return c;
+            const msgs = (c.messages ?? []).map(m => m.id === messageId ? { ...m, status } : m);
+            return { ...c, messages: msgs };
+        });
+        this.conversations$.set(list);
+        return this;
     }
 
-    private _cloneConversation(c: Conversation): Conversation
-    {
-        return {
-            id: c.id, name: c.name, avatar: c.avatar, group: c.group, presence: c.presence,
-            unread: c.unread,
-            messages: c.messages.map(m => this._cloneMessage(m)),
-        };
+    setPeerTyping(conversationId: string, typing: boolean): this {
+        const list = this.conversations$.peek().map(c => c.id === conversationId ? { ...c, typing } : c);
+        this.conversations$.set(list);
+        return this;
     }
 
-    private _cloneMessage(m: Message): Message
-    {
-        return {
-            ...m,
-            attachments: m.attachments?.map(a => ({ ...a })),
-            reactions  : m.reactions?.map(r => ({ ...r, by: [...r.by] })),
-        };
-    }
-
-    private _injectStyles(): void
-    {
-        if (document.getElementById('ar-chat-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-chat-styles';
-        s.textContent = `
-.ar-chat { display:flex; height:600px; background:#1e1e1e; border:1px solid #333; border-radius:6px; overflow:hidden; color:#d4d4d4; font:13px -apple-system,system-ui,sans-serif; }
-.ar-chat__sidebar { width:280px; flex-shrink:0; background:#181818; border-right:1px solid #333; overflow:auto; }
-.ar-chat__sidebar-row { display:flex; gap:10px; padding:10px 12px; cursor:pointer; align-items:center; border-bottom:1px solid #2a2a2a; }
-.ar-chat__sidebar-row:hover { background:#222; }
-.ar-chat__sidebar-row--active { background:#252525; border-left:3px solid #e40c88; padding-left:9px; }
-.ar-chat__avatar { width:40px; height:40px; border-radius:50%; background:#444; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-weight:600; color:#fff; overflow:hidden; }
-.ar-chat__avatar img { width:100%; height:100%; object-fit:cover; }
-.ar-chat__sidebar-mid { flex:1; min-width:0; }
-.ar-chat__sidebar-name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.ar-chat__sidebar-preview { font-size:12px; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.ar-chat__sidebar-meta { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
-.ar-chat__sidebar-time { font-size:11px; color:#666; }
-.ar-chat__badge { background:#e40c88; color:#fff; font:600 10px sans-serif; padding:2px 6px; border-radius:10px; min-width:18px; text-align:center; }
-
-.ar-chat__thread { flex:1; display:flex; flex-direction:column; min-width:0; }
-.ar-chat__header { display:flex; gap:10px; padding:10px 16px; border-bottom:1px solid #333; align-items:center; flex-shrink:0; }
-.ar-chat__header-mid { display:flex; flex-direction:column; }
-.ar-chat__header-name { font-weight:600; }
-.ar-chat__presence { font-size:11px; color:#888; font-style:italic; }
-.ar-chat__presence--online { color:#22c55e; font-style:normal; }
-.ar-chat__presence--typing { color:#e40c88; }
-
-.ar-chat__messages { flex:1; overflow:auto; padding:12px 16px; display:flex; flex-direction:column; gap:6px; }
-.ar-chat__day { align-self:center; padding:4px 12px; background:#0d0d0d; border-radius:10px; font-size:11px; color:#888; margin:8px 0; }
-.ar-chat__system { align-self:center; font-size:11px; color:#666; padding:4px 12px; }
-.ar-chat__msg { display:flex; flex-direction:column; align-items:flex-start; max-width:75%; }
-.ar-chat__msg--mine { align-self:flex-end; align-items:flex-end; }
-.ar-chat__msg--grouped { margin-top:-3px; }
-.ar-chat__author { font:600 11px sans-serif; color:#e40c88; padding:2px 12px 0; }
-.ar-chat__bubble { background:#2a2a2a; padding:6px 10px; border-radius:12px; max-width:100%; word-wrap:break-word; }
-.ar-chat__msg--mine .ar-chat__bubble { background:#e40c88; color:#fff; }
-.ar-chat__quote { border-left:3px solid rgba(228,12,136,0.6); padding:2px 8px; margin-bottom:4px; font-size:12px; opacity:.85; }
-.ar-chat__quote-author { display:block; font-weight:600; color:#e40c88; }
-.ar-chat__msg--mine .ar-chat__quote-author { color:#fff; }
-.ar-chat__text { white-space:pre-wrap; }
-.ar-chat__att-image { max-width:300px; max-height:300px; border-radius:8px; margin-bottom:4px; display:block; }
-.ar-chat__att-file { background:#0d0d0d; padding:6px 10px; border-radius:4px; font-size:12px; margin-bottom:4px; }
-.ar-chat__msg--mine .ar-chat__att-file { background:rgba(0,0,0,0.3); }
-.ar-chat__meta { display:flex; gap:6px; align-items:center; justify-content:flex-end; font-size:10px; color:#888; margin-top:2px; }
-.ar-chat__msg--mine .ar-chat__meta { color:rgba(255,255,255,0.7); }
-.ar-chat__status--read { color:#3b82f6 !important; }
-.ar-chat__status--failed { color:#dc2626 !important; }
-.ar-chat__reactions { display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; }
-.ar-chat__reaction { background:#0d0d0d; padding:2px 6px; border-radius:10px; font-size:11px; cursor:pointer; border:1px solid #333; }
-.ar-chat__msg--mine .ar-chat__reaction { background:rgba(0,0,0,0.3); border-color:transparent; color:#fff; }
-
-.ar-chat__composer { border-top:1px solid #333; padding:8px 12px; flex-shrink:0; }
-.ar-chat__reply-chip { background:#0d0d0d; padding:6px 10px; border-radius:4px; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; border-left:3px solid #e40c88; }
-.ar-chat__reply-chip-text { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.ar-chat__composer-row { display:flex; gap:6px; align-items:flex-end; }
-.ar-chat__input { flex:1; background:#0d0d0d; border:1px solid #333; color:#d4d4d4; padding:8px 10px; font:13px sans-serif; border-radius:18px; resize:none; max-height:120px; }
-.ar-chat__input:focus { border-color:#e40c88; outline:none; }
-.ar-chat__btn { background:transparent; border:0; color:#888; cursor:pointer; padding:8px; font-size:18px; border-radius:50%; flex-shrink:0; }
-.ar-chat__btn:hover { background:#2a2a2a; color:#fff; }
-.ar-chat__btn--icon { width:36px; height:36px; }
-.ar-chat__btn--send { background:#e40c88; color:#fff; width:36px; height:36px; }
-.ar-chat__btn--send:hover { background:#c30b75; color:#fff; }
-`;
-        document.head.appendChild(s);
+    static DefaultSheet(): Sheet {
+        return new Sheet([
+            new Rule(':root', {
+                background  : 'var(--ar-bg, #fff)',
+                border      : '1px solid var(--ar-border, #d0d0d0)',
+                borderRadius: 'var(--ar-radius, 5px)',
+                color       : 'var(--ar-text, #1a1a1a)',
+                display     : 'block',
+                font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
+                height      : '520px',
+                overflow    : 'hidden',
+            }),
+            new Rule(':root .ch-wrap', { display: 'grid', gridTemplateColumns: '260px 1fr', height: '100%' }),
+            new Rule(':root .ch-sidebar', {
+                background : 'var(--ar-bg2, #f5f5f5)',
+                borderRight: '1px solid var(--ar-border, #d0d0d0)',
+                overflow   : 'auto',
+            }),
+            new Rule(':root .ch-conv-item', {
+                alignItems  : 'center',
+                borderBottom: '1px solid var(--ar-border, #e0e0e0)',
+                cursor      : 'pointer',
+                display     : 'grid',
+                gap         : '8px',
+                gridTemplateColumns: '40px 1fr auto',
+                padding     : '8px 10px',
+            }),
+            new Rule(':root .ch-conv-item:hover', { background: 'var(--ar-bg3, #eee)' }),
+            new Rule(':root .ch-conv-item.active', { background: 'var(--ar-bg4, #e0e0e0)' }),
+            new Rule(':root .ch-avatar', {
+                alignItems     : 'center',
+                background     : 'var(--ar-primary, #1565c0)',
+                backgroundPosition: 'center',
+                backgroundSize : 'cover',
+                borderRadius   : '50%',
+                color          : '#fff',
+                display        : 'flex',
+                fontWeight     : '600',
+                height         : '40px',
+                justifyContent : 'center',
+                width          : '40px',
+            }),
+            new Rule(':root .ch-avatar-sm', { height: '32px', width: '32px', fontSize: '0.78rem' }),
+            new Rule(':root .ch-conv-meta', { overflow: 'hidden' }),
+            new Rule(':root .ch-conv-name', { fontWeight: '600', fontSize: '0.86rem' }),
+            new Rule(':root .ch-conv-last', {
+                color    : 'var(--ar-muted, #666)',
+                fontSize : '0.78rem',
+                overflow : 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+            }),
+            new Rule(':root .ch-conv-right', {
+                alignItems: 'flex-end',
+                display   : 'flex',
+                flexDirection: 'column',
+                gap       : '4px',
+            }),
+            new Rule(':root .ch-conv-time', { color: 'var(--ar-muted, #888)', fontSize: '0.7rem' }),
+            new Rule(':root .ch-badge', {
+                background: 'var(--ar-primary, #1565c0)',
+                borderRadius: '10px',
+                color: '#fff',
+                fontSize: '0.7rem',
+                fontWeight: '600',
+                minWidth: '18px',
+                padding: '1px 6px',
+                textAlign: 'center',
+            }),
+            new Rule(':root .ch-right', { display: 'grid', gridTemplateRows: 'auto 1fr auto auto', height: '100%' }),
+            new Rule(':root .ch-header', {
+                alignItems: 'center',
+                background: 'var(--ar-bg2, #f5f5f5)',
+                borderBottom: '1px solid var(--ar-border, #d0d0d0)',
+                display: 'flex',
+                gap: '10px',
+                padding: '8px 14px',
+            }),
+            new Rule(':root .ch-header-name', { flex: '1', fontSize: '0.92rem', fontWeight: '600' }),
+            new Rule(':root .ch-header-presence', { color: 'var(--ar-success, #2e7d32)', fontSize: '0.72rem' }),
+            new Rule(':root .ch-thread', {
+                background: 'var(--ar-bg, #fff)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                overflow: 'auto',
+                padding: '12px',
+            }),
+            new Rule(':root .ch-msg', {
+                background: 'var(--ar-bg3, #eee)',
+                borderRadius: '8px',
+                maxWidth: '70%',
+                padding: '6px 10px',
+                position: 'relative',
+            }),
+            new Rule(':root .ch-msg.grouped', { marginTop: '-2px' }),
+            new Rule(':root .ch-theirs', { alignSelf: 'flex-start' }),
+            new Rule(':root .ch-mine',   { alignSelf: 'flex-end', background: 'var(--ar-primary, #1565c0)', color: '#fff' }),
+            new Rule(':root .ch-text',   { fontSize: '0.86rem', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }),
+            new Rule(':root .ch-quote',  {
+                borderLeft: '3px solid var(--ar-muted, #888)',
+                color: 'var(--ar-muted, #666)',
+                fontSize: '0.74rem',
+                marginBottom: '4px',
+                opacity: '0.85',
+                padding: '2px 6px',
+            }),
+            new Rule(':root .ch-image',  { borderRadius: '4px', maxWidth: '100%' }),
+            new Rule(':root .ch-file',   { color: 'inherit', textDecoration: 'underline', fontSize: '0.82rem' }),
+            new Rule(':root .ch-msg-footer', {
+                alignItems: 'center',
+                display: 'flex',
+                gap: '4px',
+                justifyContent: 'flex-end',
+                marginTop: '2px',
+            }),
+            new Rule(':root .ch-msg-time', { fontSize: '0.66rem', opacity: '0.7' }),
+            new Rule(':root .ch-tick',     { fontSize: '0.7rem' }),
+            new Rule(':root .ch-tick-read', { color: '#4dd0e1' }),
+            new Rule(':root .ch-sys', {
+                alignSelf: 'center',
+                background: 'var(--ar-bg3, #eee)',
+                borderRadius: '10px',
+                color: 'var(--ar-muted, #666)',
+                fontSize: '0.72rem',
+                padding: '3px 10px',
+            }),
+            new Rule(':root .ch-typing', {
+                alignSelf: 'flex-start',
+                color: 'var(--ar-muted, #888)',
+                fontSize: '0.86rem',
+            }),
+            new Rule(':root .ch-reply-bar', {
+                alignItems: 'center',
+                background: 'var(--ar-bg2, #f5f5f5)',
+                borderTop: '1px solid var(--ar-border, #d0d0d0)',
+                display: 'flex',
+                gap: '6px',
+                padding: '4px 10px',
+            }),
+            new Rule(':root .ch-reply-quote', {
+                color: 'var(--ar-muted, #666)',
+                flex: '1',
+                fontSize: '0.78rem',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+            }),
+            new Rule(':root .ch-reply-close', {
+                background: 'transparent',
+                border: '0',
+                color: 'var(--ar-muted, #666)',
+                cursor: 'pointer',
+                fontSize: '1rem',
+            }),
+            new Rule(':root .ch-composer', {
+                alignItems: 'flex-end',
+                background: 'var(--ar-bg2, #f5f5f5)',
+                borderTop: '1px solid var(--ar-border, #d0d0d0)',
+                display: 'flex',
+                gap: '6px',
+                padding: '8px 10px',
+            }),
+            new Rule(':root .ch-icon-btn', {
+                background: 'transparent',
+                border: '0',
+                cursor: 'pointer',
+                fontSize: '1.1rem',
+                padding: '4px',
+            }),
+            new Rule(':root .ch-input', {
+                background: 'var(--ar-bg, #fff)',
+                border: '1px solid var(--ar-border, #d0d0d0)',
+                borderRadius: '8px',
+                color: 'var(--ar-text, #1a1a1a)',
+                flex: '1',
+                font: 'inherit',
+                fontSize: '0.86rem',
+                maxHeight: '96px',
+                outline: 'none',
+                padding: '6px 10px',
+                resize: 'none',
+            }),
+            new Rule(':root .ch-send', {
+                background: 'var(--ar-primary, #1565c0)',
+                border: '0',
+                borderRadius: '6px',
+                color: '#fff',
+                cursor: 'pointer',
+                font: 'inherit',
+                fontWeight: '600',
+                padding: '6px 14px',
+            }),
+        ]);
     }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function escapeHtml(s: string): string
-{
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Chat', {
+        value: Chat, writable: false, enumerable: false, configurable: false,
+    });
 }
 
-function avatarHtml(name: string, src?: string): string
-{
-    if (src) return `<img src="${src}" alt="">`;
-    const safeName = (name ?? '').toString();
-    if (!safeName.trim()) return '?';
-    const initials = safeName.split(/\s+/).map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
-    return escapeHtml(initials || '?');
-}
-
-function formatShortTime(at: number, locale?: string): string
-{
-    const d = new Date(at);
-    return d.toLocaleTimeString(locale || undefined, { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatDay(at: number, locale?: string): string
-{
-    const d = new Date(at);
-    const today = new Date();
-    if (sameDay(at, today.getTime())) return 'Today';
-    const yest = new Date(today); yest.setDate(today.getDate() - 1);
-    if (sameDay(at, yest.getTime())) return 'Yesterday';
-    return d.toLocaleDateString(locale || undefined, { weekday: 'long', day: 'numeric', month: 'short' });
-}
-
-function sameDay(a: number, b: number): boolean
-{
-    const da = new Date(a), db = new Date(b);
-    return da.getFullYear() === db.getFullYear() &&
-           da.getMonth()    === db.getMonth() &&
-           da.getDate()     === db.getDate();
-}
-
-function statusIcon(s?: MessageStatus): string
-{
-    switch (s)
-    {
-        case 'sending':   return '◌';
-        case 'sent':      return '✓';
-        case 'delivered': return '✓✓';
-        case 'read':      return '✓✓';
-        case 'failed':    return '⚠';
-        default:          return '✓';
-    }
-}
+export default Chat;

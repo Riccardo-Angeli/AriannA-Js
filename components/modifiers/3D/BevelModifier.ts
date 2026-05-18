@@ -5,9 +5,20 @@
  * @license   MIT / Commercial (dual license)
  *
  * Edge bevel / chamfer — adds loop vertices offset along face normals.
+ *
+ * @example HTML
+ *   <arianna-bevel for="m1" amount="0.05" segments="2"></arianna-bevel>
+ *
+ * Attrs (declarative): for, amount, segments, enabled
  */
 
-import { Modifier3D, _cloneGeom, _recomputeNormals, _vNorm, _vCross, _vSub, _vAdd, _vScale, type MeshLike } from './Base.ts';
+import { Component } from '../../../core/Component.ts';
+import {
+    Modifier3D, Modifier3DElement,
+    _cloneGeom, _recomputeNormals,
+    _vNorm, _vCross, _vSub, _vAdd, _vScale,
+    type MeshLike,
+} from './Base.ts';
 
 export class BevelModifier extends Modifier3D {
     #amount  : number;
@@ -38,3 +49,22 @@ export class BevelModifier extends Modifier3D {
         return this;
     }
 }
+
+export class BevelModifierElement extends (Component('arianna-bevel', HTMLElement, {}, {
+    attrs : ['for', 'amount', 'segments', 'enabled'],
+    shadow: false,
+}) as typeof Modifier3DElement) {
+    protected createModifier(mesh: MeshLike): Modifier3D {
+        const amount   = parseFloat(this.getAttribute('amount')   ?? '0.05') || 0.05;
+        const segments = parseInt  (this.getAttribute('segments') ?? '2', 10) || 2;
+        return new BevelModifier(mesh, amount, segments);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'BevelModifier', {
+        value: BevelModifier, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default BevelModifier;

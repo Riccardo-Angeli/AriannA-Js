@@ -1,38 +1,144 @@
 /**
+ * @module    components/inputs/RangeSlider
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * RangeSlider — single-handle range input with optional value display.
+ *
+ * @example HTML
+ *   <arianna-range-slider min="0" max="100" value="42" label="Volume" show-value></arianna-range-slider>
+ *
+ * Events: arianna:input, arianna:change  detail: { value }
+ * Attrs:  label, min, max, step, value, show-value, disabled
  */
 
-/**
- * @module RangeSlider
- * @example
- *   const s = new RangeSlider('#root', { min: 0, max: 100, label: 'Volume' });
- *   s.value = 42;
- *   s.on('change', ({ value }) => setVolume(value));
- */
-import { Control } from '../core/Control.ts';
-export interface RangeSliderOptions { min?: number; max?: number; step?: number; label?: string; showValue?: boolean; disabled?: boolean; class?: string; }
-export class RangeSlider extends Control<RangeSliderOptions> {
-  private _value = 0;
-  private _input!: HTMLInputElement;
-  constructor(container: string | HTMLElement | null = null, opts: RangeSliderOptions = {}) {
-    super(container, 'div', { min: 0, max: 100, step: 1, showValue: true, ...opts });
-    this.el.className = `ar-slider${opts.class?' '+opts.class:''}`;
-  }
-  set value(v: number) { this._value = v; if (this._input) this._input.value = String(v); }
-  get value()          { return Number(this._input?.value ?? this._value); }
-  protected _build() {
-    this.el.innerHTML = '';
-    const lbl = this._get('label', '') as string; if (lbl) this._el('div', 'ar-slider__label', this.el).textContent = lbl;
-    const wrap = this._el('div', 'ar-slider__wrap', this.el);
-    this._input = document.createElement('input'); this._input.type = 'range'; this._input.className = 'ar-slider__input';
-    this._input.min = String(this._get('min', 0)); this._input.max = String(this._get('max', 100)); this._input.step = String(this._get('step', 1));
-    this._input.value = String(this._value); this._input.disabled = this._get('disabled', false) as boolean;
-    const val = this._get('showValue', true) ? this._el('span', 'ar-slider__value', wrap) : null;
-    if (val) val.textContent = String(this._value);
-    this._input.addEventListener('input', () => { this._value = Number(this._input.value); if (val) val.textContent = String(this._value); this._emit('input', { value: this._value }); });
-    this._input.addEventListener('change', () => this._emit('change', { value: this.value }));
-    wrap.insertBefore(this._input, val ?? null);
-  }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
+
+export interface RangeSliderOptions {
+    label?     : string;
+    min?       : number;
+    max?       : number;
+    step?      : number;
+    value?     : number;
+    showValue? : boolean;
+    disabled?  : boolean;
 }
-export const RangeSliderCSS = `.ar-slider{display:flex;flex-direction:column;gap:4px}.ar-slider__label{color:var(--ar-muted);font-size:.78rem}.ar-slider__wrap{align-items:center;display:flex;gap:10px}.ar-slider__input{accent-color:var(--ar-primary);flex:1;cursor:pointer}.ar-slider__value{color:var(--ar-primary);font-size:.82rem;font-weight:600;min-width:32px;text-align:right}`;
+
+export class RangeSlider extends Component('arianna-range-slider', HTMLElement, {}, {
+    attrs : ['label', 'min', 'max', 'step', 'value', 'show-value', 'disabled'],
+    shadow: false,
+})
+{
+    build(_opts: RangeSliderOptions = {})
+    {
+        const label = this.attrSignal('label');
+        const value = this.attrSignal('value');
+
+        this.hasLabel  = () => !!label.get();
+        this.labelText = () => label.get() ?? '';
+        this.inpMin    = () => this.getAttribute('min')  ?? '0';
+        this.inpMax    = () => this.getAttribute('max')  ?? '100';
+        this.inpStep   = () => this.getAttribute('step') ?? '1';
+        this.inpValue  = () => value.get() ?? '0';
+        this.showVal   = () => this.getAttribute('show-value') !== 'false';
+        this.valText   = () => value.get() ?? '0';
+        this.isDisabled = () => this.hasAttribute('disabled');
+
+        this.onInput = (e: Event) => {
+            const inp = e.target as HTMLInputElement;
+            this.setAttribute('value', inp.value);
+            this.dispatchEvent(new CustomEvent('arianna:input', {
+                bubbles: true, detail: { value: Number(inp.value) },
+            }));
+        };
+        this.onChange = (e: Event) => {
+            const inp = e.target as HTMLInputElement;
+            this.dispatchEvent(new CustomEvent('arianna:change', {
+                bubbles: true, detail: { value: Number(inp.value) },
+            }));
+        };
+
+        this.template = html`
+            <div class="ar-slider__label" a-if="this.hasLabel()">{{ this.labelText() }}</div>
+            <div class="ar-slider__wrap">
+                <input class="ar-slider__input"
+                       type="range"
+                       :min="this.inpMin()"
+                       :max="this.inpMax()"
+                       :step="this.inpStep()"
+                       :value="this.inpValue()"
+                       :disabled="this.isDisabled()"
+                       @input="this.onInput"
+                       @change="this.onChange"/>
+                <span class="ar-slider__value" a-if="this.showVal()">{{ this.valText() }}</span>
+            </div>
+        `;
+
+        this.Sheet = RangeSlider.DefaultSheet();
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get value(): number  { return parseFloat(this.getAttribute('value') ?? '0'); }
+    set value(v: number) { this.setAttribute('value', String(v)); }
+
+    get min(): number  { return parseFloat(this.getAttribute('min') ?? '0'); }
+    set min(v: number) { this.setAttribute('min', String(v)); }
+
+    get max(): number  { return parseFloat(this.getAttribute('max') ?? '100'); }
+    set max(v: number) { this.setAttribute('max', String(v)); }
+
+    private hasLabel  : () => boolean = () => false;
+    private labelText : () => string = () => '';
+    private inpMin    : () => string = () => '0';
+    private inpMax    : () => string = () => '100';
+    private inpStep   : () => string = () => '1';
+    private inpValue  : () => string = () => '0';
+    private showVal   : () => boolean = () => true;
+    private valText   : () => string = () => '0';
+    private isDisabled: () => boolean = () => false;
+    private onInput   : (e: Event) => void = () => {};
+    private onChange  : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', { display: 'flex', flexDirection: 'column', gap: '4px' }),
+                new Rule('.ar-slider__label', {
+                    color   : 'var(--arianna-muted, #6e6b62)',
+                    fontSize: '0.78rem',
+                }),
+                new Rule('.ar-slider__wrap', { alignItems: 'center', display: 'flex', gap: '10px' }),
+                new Rule('.ar-slider__input', {
+                    accentColor: 'var(--arianna-primary, #1f6feb)',
+                    flex       : '1',
+                    cursor     : 'pointer',
+                }),
+                new Rule('.ar-slider__value', {
+                    color    : 'var(--arianna-primary, #1f6feb)',
+                    fontSize : '0.82rem',
+                    fontWeight: '600',
+                    minWidth : '32px',
+                    textAlign: 'right',
+                }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'RangeSlider', { value: RangeSlider, writable: false, enumerable: false, configurable: false });
+}
+
+export default RangeSlider;

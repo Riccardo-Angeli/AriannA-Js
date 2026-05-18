@@ -1,227 +1,257 @@
 /**
- * @module    AudioPlayer
+ * @module    components/audio/AudioPlayer
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
  *
- * Audio playback component with transport (play/pause/stop), seek bar,
- * volume, time display, and Web Audio routing (output is a GainNode
- * that downstream components can connect to).
+ * AudioPlayer — Web Audio file player with TransportBar UI.
  *
- * @example
- *   import { AudioPlayer } from 'ariannajs/components/audio';
+ * Routes through Web Audio so the output can be connected to a ChannelStrip
+ * or any other AudioComponent. Loads files via `<audio>` (HTMLMediaElement)
+ * piped into `createMediaElementSource()`.
  *
- *   const p = new AudioPlayer('#root', {
- *     src: 'song.mp3',
- *     loop: false,
- *     volume: 0.8,
- *   });
+ *   const player = new AudioPlayer({ src: 'song.mp3' });
+ *   const strip  = new ChannelStrip();
+ *   player.connect(strip).connect(AudioComponent.context.destination);
+ *   player.append(document.body);
  *
- *   p.on('timeupdate', e => console.log(e.time, e.duration));
- *   p.on('ended',      ()  => console.log('done'));
+ *   <arianna-audio-player src="song.mp3" autoplay></arianna-audio-player>
  *
- *   // Web Audio routing
- *   p.connect(strip);
+ * Events fired:
+ *   arianna:audio-load       { duration }
+ *   arianna:audio-play
+ *   arianna:audio-pause
+ *   arianna:audio-ended
+ *   arianna:audio-time       { current, duration }
+ *   arianna:audio-error      { error }
  */
 
 import { AudioComponent, type AudioComponentOptions } from './AudioComponent.ts';
+import { TransportBar } from './TransportBar.ts';
+import { signal, effect, type Signal } from '../../core/Observable.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule } from '../../core/Rule.ts';
 
 export interface AudioPlayerOptions extends AudioComponentOptions {
-    /** Initial source URL. */
-    src?      : string;
-    /** Loop playback. Default false. */
-    loop?     : boolean;
-    /** Initial volume 0..1. Default 1. */
-    volume?   : number;
-    /** Auto-play on load (subject to browser autoplay policy). */
-    autoplay? : boolean;
-    /** Show transport controls. Default true. */
-    showControls? : boolean;
+    src?     : string;
+    autoplay?: boolean;
+    loop?    : boolean;
+    label?   : string;
 }
 
-export class AudioPlayer extends AudioComponent<AudioPlayerOptions> {
-    private _audio!     : HTMLAudioElement;
-    private _source!    : MediaElementAudioSourceNode;
-    private _gain!      : GainNode;
+export class AudioPlayer extends AudioComponent {
+    static readonly tag = 'arianna-audio-player';
 
-    private _elPlay!    : HTMLButtonElement;
-    private _elTime!    : HTMLElement;
-    private _elBar!     : HTMLInputElement;
-    private _elVolume!  : HTMLInputElement;
-    private _elDuration!: HTMLElement;
+    readonly src$    : Signal<string>  = signal('');
+    readonly label$  : Signal<string>  = signal('');
+    readonly loading$: Signal<boolean> = signal(false);
 
-    constructor(container: string | HTMLElement | null, opts: AudioPlayerOptions = {}) {
-        super(container, 'div', {
-            loop         : false,
-            volume       : 1,
-            autoplay     : false,
-            showControls : true,
-            ...opts,
+    #audio?  : HTMLAudioElement;
+    #source? : MediaElementAudioSourceNode;
+    #gain?   : GainNode;
+    #transport?: TransportBar;
+    #rafId   = 0;
+
+    constructor(opts: AudioPlayerOptions = {}) {
+        super(opts as never);
+        const self = this as unknown as { render(): HTMLElement };
+        const el = self.render();
+        if (opts.src)      el.setAttribute('src',    opts.src);
+        if (opts.autoplay) el.setAttribute('autoplay', '');
+        if (opts.loop)     el.setAttribute('loop',     '');
+        if (opts.label)    el.setAttribute('label',  opts.label);
+        if (opts.src)   this.src$.set(opts.src);
+        if (opts.label) this.label$.set(opts.label);
+    }
+
+    build(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            fire(t: string, init?: CustomEventInit): void;
+            attrSignal(name: string): Signal<string | null> | undefined;
+            Sheet: Sheet | null;
+        };
+        const root = self.render();
+        if (root.querySelector('.ap-wrap')) return;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'ap-wrap';
+
+        // Label (optional)
+        const label = document.createElement('div');
+        label.className = 'ap-label';
+        const sLabel = self.attrSignal('label');
+        effect(() => {
+            const v = sLabel?.get() ?? this.label$.get();
+            label.textContent = v ?? '';
+            label.style.display = v ? '' : 'none';
         });
 
-        this.el.className = `ar-audioplayer${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._buildAudioGraph();
-        this._buildShell();
+        // Hidden <audio> element (controls disabled — we drive it via TransportBar)
+        const audio = document.createElement('audio') as HTMLAudioElement;
+        audio.preload = 'metadata';
+        audio.crossOrigin = 'anonymous';
+        audio.style.display = 'none';
+        this.#audio = audio;
 
-        if (opts.src) this.load(opts.src);
+        // TransportBar
+        const transport = new TransportBar();
+        this.#transport = transport;
+
+        wrap.appendChild(label);
+        wrap.appendChild(audio);
+        const tEl = (transport as unknown as { render(): HTMLElement }).render();
+        wrap.appendChild(tEl);
+        root.appendChild(wrap);
+
+        // Reactive src binding (attr OR signal)
+        const sSrc = self.attrSignal('src');
+        effect(() => {
+            const v = sSrc?.get() ?? this.src$.get();
+            if (v && v !== audio.src) {
+                this.loading$.set(true);
+                audio.src = v;
+                audio.load();
+            }
+        });
+
+        // Wire audio events → component events + transport state
+        audio.addEventListener('loadedmetadata', () => {
+            transport.setDuration(audio.duration || 0);
+            this.loading$.set(false);
+            self.fire('arianna:audio-load', { detail: { duration: audio.duration, source: this }, bubbles: true });
+            if (audio.hasAttribute('autoplay') || root.hasAttribute('autoplay')) {
+                void audio.play().catch(() => { /* autoplay rejected */ });
+            }
+        });
+        audio.addEventListener('play', () => {
+            transport.setPlaying(true);
+            self.fire('arianna:audio-play', { detail: { source: this }, bubbles: true });
+            this.#startTimeUpdater();
+        });
+        audio.addEventListener('pause', () => {
+            transport.setPlaying(false);
+            self.fire('arianna:audio-pause', { detail: { source: this }, bubbles: true });
+            this.#stopTimeUpdater();
+        });
+        audio.addEventListener('ended', () => {
+            transport.setPlaying(false);
+            transport.setCurrentTime(0);
+            self.fire('arianna:audio-ended', { detail: { source: this }, bubbles: true });
+            this.#stopTimeUpdater();
+        });
+        audio.addEventListener('error', () => {
+            this.loading$.set(false);
+            self.fire('arianna:audio-error', { detail: { error: audio.error, source: this }, bubbles: true });
+        });
+
+        // Transport events → audio control
+        const tEl2 = tEl;
+        tEl2.addEventListener('arianna:transport-play',   () => { void audio.play().catch(() => {}); });
+        tEl2.addEventListener('arianna:transport-pause',  () => audio.pause());
+        tEl2.addEventListener('arianna:transport-stop',   () => { audio.pause(); audio.currentTime = 0; });
+        tEl2.addEventListener('arianna:transport-seek',   (e: Event) => {
+            const t = (e as CustomEvent<{ time: number }>).detail.time;
+            audio.currentTime = t;
+        });
+        tEl2.addEventListener('arianna:transport-volume', (e: Event) => {
+            const v = (e as CustomEvent<{ value: number }>).detail.value;
+            if (this.#gain) this.#gain.gain.value = v;
+        });
+
+        // Loop
+        effect(() => {
+            audio.loop = root.hasAttribute('loop');
+        });
+
+        self.Sheet = AudioPlayer.DefaultSheet();
     }
-
-    // ── Public API ──────────────────────────────────────────────────────────
-
-    load(src: string): this {
-        this._audio.src = src;
-        this._audio.load();
-        return this;
-    }
-
-    play(): Promise<void> {
-        // User-gesture guarantee: resume context if suspended
-        AudioComponent.resume();
-        return this._audio.play();
-    }
-
-    pause(): this { this._audio.pause(); return this; }
-    stop():  this { this._audio.pause(); this._audio.currentTime = 0; return this; }
-
-    seek(time: number): this {
-        this._audio.currentTime = Math.max(0, Math.min(time, this._audio.duration || 0));
-        return this;
-    }
-
-    setVolume(v: number): this {
-        const clamped = Math.max(0, Math.min(1, v));
-        this._audio.volume = clamped;
-        this._gain.gain.value = clamped;
-        if (this._elVolume) this._elVolume.value = String(clamped);
-        return this;
-    }
-
-    setLoop(loop: boolean): this { this._audio.loop = loop; return this; }
-
-    getCurrentTime(): number { return this._audio.currentTime; }
-    getDuration():    number { return this._audio.duration || 0; }
-    isPlaying():      boolean { return !this._audio.paused; }
-
-    // ── Internal ────────────────────────────────────────────────────────────
 
     protected _buildAudioGraph(): void {
-        this._audio = document.createElement('audio');
-        this._audio.crossOrigin = 'anonymous';
-        this._audio.loop     = this._get<boolean>('loop',     false);
-        this._audio.volume   = this._get<number>('volume',   1);
-        this._audio.autoplay = this._get<boolean>('autoplay', false);
-
-        this._source = this._audioCtx.createMediaElementSource(this._audio);
-        this._gain   = this._audioCtx.createGain();
-        this._gain.gain.value = this._get<number>('volume', 1);
-
-        this._source.connect(this._gain);
-        // Auto-connect to destination by default; user can disconnect to route elsewhere
-        this._gain.connect(this._audioCtx.destination);
-
-        this._output = this._gain;
-        // Input not used — AudioPlayer is a source
-
-        // Forward HTML media events to AriannA's event system
-        this._audio.addEventListener('play',       () => this._emit('play',       {}));
-        this._audio.addEventListener('pause',      () => this._emit('pause',      {}));
-        this._audio.addEventListener('ended',      () => this._emit('ended',      {}));
-        this._audio.addEventListener('timeupdate', () => {
-            this._refreshTime();
-            this._emit('timeupdate', { time: this._audio.currentTime, duration: this._audio.duration });
-        });
-        this._audio.addEventListener('loadedmetadata', () => {
-            this._refreshTime();
-            this._emit('loaded', { duration: this._audio.duration });
-        });
+        if (!this.#audio) return;
+        this._audioCtx = this._audioCtx ?? AudioComponent.context;
+        this.#source = this._audioCtx.createMediaElementSource(this.#audio);
+        this.#gain   = this._audioCtx.createGain();
+        this.#source.connect(this.#gain);
+        this._input  = this.#source;
+        this._output = this.#gain;
     }
 
-    protected _build(): void { /* shell built explicitly */ }
+    onMount() {
+        super.onMount();
+        // _buildAudioGraph already invoked by AudioComponent.onMount() default
+    }
 
-    private _buildShell(): void {
-        if (!this._get<boolean>('showControls', true)) {
-            this.el.appendChild(this._audio);
-            return;
+    onUnmount() {
+        this.#stopTimeUpdater();
+        if (this.#audio) {
+            try { this.#audio.pause(); } catch { /* ignore */ }
         }
-
-        this.el.innerHTML = `
-<div class="ar-audioplayer__row">
-  <button class="ar-audioplayer__btn play" data-r="play" title="Play / Pause">▶</button>
-  <button class="ar-audioplayer__btn"      data-r="stop" title="Stop">■</button>
-  <span class="ar-audioplayer__time" data-r="time">0:00</span>
-  <input  class="ar-audioplayer__bar"  data-r="bar"  type="range" min="0" max="1000" value="0">
-  <span class="ar-audioplayer__time" data-r="duration">0:00</span>
-  <span class="ar-audioplayer__lbl">Vol</span>
-  <input  class="ar-audioplayer__vol" data-r="volume" type="range" min="0" max="1" step="0.01">
-</div>`;
-        this.el.appendChild(this._audio);
-
-        const r = (n: string) => this.el.querySelector<HTMLElement>(`[data-r="${n}"]`)!;
-        this._elPlay     = r('play')     as HTMLButtonElement;
-        this._elTime     = r('time');
-        this._elDuration = r('duration');
-        this._elBar      = r('bar')      as HTMLInputElement;
-        this._elVolume   = r('volume')   as HTMLInputElement;
-
-        this._elVolume.value = String(this._get<number>('volume', 1));
-
-        this._elPlay.addEventListener('click', () => {
-            if (this.isPlaying()) this.pause();
-            else                  this.play();
-        });
-        r('stop').addEventListener('click', () => this.stop());
-
-        this._elBar.addEventListener('input', () => {
-            const frac = parseInt(this._elBar.value, 10) / 1000;
-            this.seek(frac * (this._audio.duration || 0));
-        });
-        this._elVolume.addEventListener('input', () => {
-            this.setVolume(parseFloat(this._elVolume.value));
-        });
-
-        this._audio.addEventListener('play',  () => this._elPlay.textContent = '‖');
-        this._audio.addEventListener('pause', () => this._elPlay.textContent = '▶');
-        this._audio.addEventListener('ended', () => this._elPlay.textContent = '▶');
+        super.onUnmount();
     }
 
-    private _refreshTime(): void {
-        if (!this._elTime) return;
-        const cur = this._audio.currentTime || 0;
-        const dur = this._audio.duration   || 0;
-        this._elTime.textContent     = formatTime(cur);
-        this._elDuration.textContent = formatTime(dur);
-        if (dur > 0 && this._elBar) {
-            this._elBar.value = String(Math.round(cur / dur * 1000));
-        }
+    #startTimeUpdater(): void {
+        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const tick = () => {
+            if (!this.#audio || this.#audio.paused) { this.#rafId = 0; return; }
+            const cur = this.#audio.currentTime;
+            const dur = this.#audio.duration || 0;
+            this.#transport?.setCurrentTime(cur);
+            self.fire('arianna:audio-time', { detail: { current: cur, duration: dur, source: this }, bubbles: true });
+            this.#rafId = requestAnimationFrame(tick);
+        };
+        this.#rafId = requestAnimationFrame(tick);
     }
 
-    private _injectStyles(): void {
-        if (document.getElementById('ar-audioplayer-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-audioplayer-styles';
-        s.textContent = `
-.ar-audioplayer { font:13px -apple-system,system-ui,sans-serif; background:#1e1e1e; color:#d4d4d4; padding:8px 12px; border-radius:6px; }
-.ar-audioplayer__row { display:flex; align-items:center; gap:10px; }
-.ar-audioplayer__btn { background:transparent; border:1px solid #444; color:#d4d4d4; padding:4px 10px; font:14px sans-serif; border-radius:3px; cursor:pointer; min-width:32px; }
-.ar-audioplayer__btn:hover { background:#2a2a2a; }
-.ar-audioplayer__btn.play { background:#16a34a; border-color:#16a34a; color:#fff; }
-.ar-audioplayer__btn.play:hover { background:#15803d; }
-.ar-audioplayer__time { font:11px ui-monospace,monospace; color:#888; min-width:40px; text-align:center; }
-.ar-audioplayer__bar { flex:1; -webkit-appearance:none; height:4px; background:#444; border-radius:2px; outline:none; cursor:pointer; }
-.ar-audioplayer__bar::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; border-radius:50%; background:#e40c88; cursor:pointer; }
-.ar-audioplayer__bar::-moz-range-thumb     { width:12px; height:12px; border-radius:50%; background:#e40c88; cursor:pointer; border:0; }
-.ar-audioplayer__lbl { font:10px sans-serif; color:#888; }
-.ar-audioplayer__vol { width:80px; -webkit-appearance:none; height:3px; background:#444; border-radius:2px; outline:none; cursor:pointer; }
-.ar-audioplayer__vol::-webkit-slider-thumb { -webkit-appearance:none; width:10px; height:10px; border-radius:50%; background:#d4d4d4; cursor:pointer; }
-.ar-audioplayer__vol::-moz-range-thumb     { width:10px; height:10px; border-radius:50%; background:#d4d4d4; cursor:pointer; border:0; }
-`;
-        document.head.appendChild(s);
+    #stopTimeUpdater(): void {
+        if (this.#rafId) cancelAnimationFrame(this.#rafId);
+        this.#rafId = 0;
+    }
+
+    /** Public API: set source. */
+    setSource(src: string): this {
+        this.src$.set(src);
+        const self = this as unknown as { render(): HTMLElement };
+        self.render().setAttribute('src', src);
+        return this;
+    }
+
+    /** Public API: control playback. */
+    play(): Promise<void> { return this.#audio?.play() ?? Promise.resolve(); }
+    pause(): void         { this.#audio?.pause(); }
+    seek(t: number): void { if (this.#audio) this.#audio.currentTime = t; }
+
+    get duration(): number    { return this.#audio?.duration ?? 0; }
+    get currentTime(): number { return this.#audio?.currentTime ?? 0; }
+    get isPlaying(): boolean  { return this.#audio ? !this.#audio.paused : false; }
+
+    static DefaultSheet(): Sheet {
+        return new Sheet([
+            new Rule(':root', {
+                background  : 'var(--ar-bg, #0d0d0d)',
+                border      : '1px solid var(--ar-border, #2a2a2a)',
+                borderRadius: 'var(--ar-radius, 5px)',
+                color       : 'var(--ar-text, #e0e0e0)',
+                display     : 'inline-block',
+                padding     : '8px',
+            }),
+            new Rule(':root .ap-wrap', {
+                display      : 'flex',
+                flexDirection: 'column',
+                gap          : '6px',
+            }),
+            new Rule(':root .ap-label', {
+                color    : 'var(--ar-muted, #888)',
+                fontSize : '0.8rem',
+                padding  : '0 4px',
+            }),
+        ]);
     }
 }
 
-function formatTime(s: number): string {
-    if (!isFinite(s) || s < 0) return '0:00';
-    const m = Math.floor(s / 60);
-    const r = Math.floor(s % 60);
-    return `${m}:${r.toString().padStart(2, '0')}`;
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'AudioPlayer', {
+        value: AudioPlayer, writable: false, enumerable: false, configurable: false,
+    });
 }
+
+export default AudioPlayer;

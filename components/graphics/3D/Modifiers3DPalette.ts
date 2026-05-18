@@ -1,437 +1,421 @@
 /**
- * @module    PaletteModifiers3D
+ * @module    components/graphics/3D/Modifiers3DPalette
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
  *
- * Blender-style modifier-stack panel for 3D objects. Lists the currently
- * applied modifiers on a target object plus an "+ Add modifier" picker.
+ * Modifiers3DPalette — modifier stack UI for the arianna-* 3D modifier
+ * family (bend / twist / taper / mirror / array / displace / wave / shear /
+ * lattice / smooth / decimate / subdivide / boolean / extrude-2d).
+ * Each entry shows its name, can be enabled/disabled, reordered, and
+ * exposes its parameters in an inline inspector.
  *
- *   ┌─────────────────────────┐
- *   │ Modifiers               │
- *   ├─────────────────────────┤
- *   │ ▼ 🔁 Array               × │
- *   │   count       [ 5 ]      │
- *   │   offset      [ 1.0 ]    │
- *   ├─────────────────────────┤
- *   │ ▼ 🌀 Twist                × │
- *   │   angle       [ 90° ]    │
- *   ├─────────────────────────┤
- *   │ + Add modifier        ▾ │
- *   └─────────────────────────┘
+ * @example HTML
+ *   <arianna-modifiers-3d-palette></arianna-modifiers-3d-palette>
  *
- * The panel is renderer-agnostic. It presents the catalogue, the stack, and
- * fires events; consumer code (Three.js / Wires / Daedalus) listens and
- * applies the actual mesh transformations.
+ * @example JS
+ *   const mp = new Modifiers3DPalette();
+ *   mp.addModifier({ kind: 'bend',  params: { angle: 90, axis: 'y' } });
+ *   mp.addModifier({ kind: 'twist', params: { angle: 45, axis: 'y' } });
+ *   mp.addEventListener('arianna:modifiers-change', e =>
+ *     applyToMesh(mesh, e.detail.stack));
  *
- * Built-in catalogue mirrors the 15 modifiers in `components/modifiers/3D/`:
- * Array, Bend, Bevel, Billboard, Decimate, Drag, Fade, Inflate, LOD, Mirror,
- * Smooth, Snap, Subdivision, Twist, Wave.
- *
- * @example
- *   import { PaletteModifiers3D } from 'ariannajs/components/gfx3d';
- *
- *   const pm = new PaletteModifiers3D('#mods');
- *   pm.on('add',     e => mesh.applyModifier(e.kind, e.params));
- *   pm.on('remove',  e => mesh.removeModifier(e.id));
- *   pm.on('update',  e => mesh.updateModifier(e.id, e.params));
- *   pm.on('reorder', e => mesh.reorderModifierStack(e.fromIndex, e.toIndex));
- *
- *   pm.addModifier('array', { count: 5, offset: 1.0 });
- *   pm.addModifier('twist', { angle: 90 });
+ * Events: arianna:modifiers-change  detail: { stack: ModifierEntry[] }
+ * Attrs:  (none — programmatic state)
  */
 
-import { Control, type CtrlOptions } from '../../core/Control.ts';
-
-// ── Catalogue ────────────────────────────────────────────────────────────────
+import { Component } from '../../../core/Component.ts';
+import { html }      from '../../../core/Template.ts';
+import { signal }    from '../../../core/Observable.ts';
+import type { Signal } from '../../../core/Observable.ts';
+import { Sheet } from '../../../core/Sheet.ts';
+import { Rule }      from '../../../core/Rule.ts';
 
 export type ModifierKind =
-    | 'array' | 'bend' | 'bevel' | 'billboard' | 'decimate' | 'drag'
-    | 'fade'  | 'inflate' | 'lod' | 'mirror' | 'smooth' | 'snap'
-    | 'subdivision' | 'twist' | 'wave';
+    | 'bend' | 'twist' | 'taper' | 'mirror' | 'array' | 'displace'
+    | 'wave' | 'shear' | 'lattice' | 'smooth' | 'decimate' | 'subdivide'
+    | 'boolean' | 'extrude-2d';
 
-interface ParamSpec {
-    key   : string;
-    label : string;
-    type  : 'number' | 'angle' | 'enum' | 'boolean' | 'vec3';
-    min?  : number;
-    max?  : number;
-    step? : number;
-    options? : string[];
-    /** Default value when the modifier is added. */
-    default : unknown;
+export interface ModifierEntry {
+    id      : string;
+    kind    : ModifierKind;
+    enabled : boolean;
+    params  : Record<string, number | string | boolean>;
 }
 
-interface ModSpec {
-    kind  : ModifierKind;
-    label : string;
-    icon  : string;
-    params: ParamSpec[];
+export interface Modifiers3DPaletteOptions {
+    stack? : ModifierEntry[];
 }
 
-const CATALOGUE: ModSpec[] = [
-    { kind: 'array',     label: 'Array',     icon: '🔁',
-      params: [
-          { key: 'count',  label: 'Count',  type: 'number', min: 1, max: 100, step: 1, default: 3 },
-          { key: 'offset', label: 'Offset', type: 'number', min: 0, max: 100, step: 0.1, default: 1 },
-          { key: 'axis',   label: 'Axis',   type: 'enum', options: ['X', 'Y', 'Z'], default: 'X' },
-      ] },
-    { kind: 'bend',      label: 'Bend',      icon: '↩',
-      params: [
-          { key: 'angle', label: 'Angle', type: 'angle',  min: -360, max: 360, step: 1, default: 90 },
-          { key: 'axis',  label: 'Axis',  type: 'enum',   options: ['X', 'Y', 'Z'], default: 'Y' },
-      ] },
-    { kind: 'bevel',     label: 'Bevel',     icon: '◆',
-      params: [
-          { key: 'width',     label: 'Width',     type: 'number', min: 0, max: 1, step: 0.01, default: 0.05 },
-          { key: 'segments',  label: 'Segments',  type: 'number', min: 1, max: 16, step: 1,   default: 2 },
-      ] },
-    { kind: 'billboard', label: 'Billboard', icon: '🪧',
-      params: [
-          { key: 'lockY', label: 'Lock Y', type: 'boolean', default: false },
-      ] },
-    { kind: 'decimate',  label: 'Decimate',  icon: '▽',
-      params: [
-          { key: 'ratio', label: 'Ratio', type: 'number', min: 0.01, max: 1, step: 0.01, default: 0.5 },
-      ] },
-    { kind: 'drag',      label: 'Drag',      icon: '🌬',
-      params: [
-          { key: 'damping', label: 'Damping', type: 'number', min: 0, max: 1, step: 0.01, default: 0.1 },
-      ] },
-    { kind: 'fade',      label: 'Fade',      icon: '◐',
-      params: [
-          { key: 'distance', label: 'Distance', type: 'number', min: 0, max: 1000, step: 1, default: 50 },
-      ] },
-    { kind: 'inflate',   label: 'Inflate',   icon: '🎈',
-      params: [
-          { key: 'amount', label: 'Amount', type: 'number', min: -1, max: 1, step: 0.01, default: 0.1 },
-      ] },
-    { kind: 'lod',       label: 'LOD',       icon: '🔍',
-      params: [
-          { key: 'levels',   label: 'Levels',   type: 'number', min: 1, max: 8, step: 1, default: 3 },
-          { key: 'distance', label: 'Distance', type: 'number', min: 1, max: 1000, step: 1, default: 100 },
-      ] },
-    { kind: 'mirror',    label: 'Mirror',    icon: '⟷',
-      params: [
-          { key: 'axis',  label: 'Axis',  type: 'enum',    options: ['X', 'Y', 'Z'], default: 'X' },
-          { key: 'merge', label: 'Merge', type: 'boolean', default: true },
-      ] },
-    { kind: 'smooth',    label: 'Smooth',    icon: '◎',
-      params: [
-          { key: 'iterations', label: 'Iter',  type: 'number', min: 1, max: 16, step: 1, default: 1 },
-          { key: 'factor',     label: 'Factor', type: 'number', min: 0, max: 1, step: 0.05, default: 0.5 },
-      ] },
-    { kind: 'snap',      label: 'Snap',      icon: '🔗',
-      params: [
-          { key: 'distance', label: 'Distance', type: 'number', min: 0.001, max: 10, step: 0.001, default: 0.01 },
-      ] },
-    { kind: 'subdivision', label: 'Subdivision', icon: '⊞',
-      params: [
-          { key: 'levels', label: 'Levels', type: 'number', min: 1, max: 6, step: 1, default: 2 },
-      ] },
-    { kind: 'twist',     label: 'Twist',     icon: '🌀',
-      params: [
-          { key: 'angle', label: 'Angle', type: 'angle', min: -720, max: 720, step: 1, default: 180 },
-          { key: 'axis',  label: 'Axis',  type: 'enum',  options: ['X','Y','Z'], default: 'Y' },
-      ] },
-    { kind: 'wave',      label: 'Wave',      icon: '〰',
-      params: [
-          { key: 'amplitude', label: 'Amp',  type: 'number', min: 0, max: 1, step: 0.01, default: 0.1 },
-          { key: 'frequency', label: 'Freq', type: 'number', min: 0, max: 20, step: 0.1, default: 1 },
-      ] },
+const KIND_INFO: Array<{ kind: ModifierKind; label: string; icon: string }> = [
+    { kind: 'bend',       label: 'Bend',       icon: '⏜' },
+    { kind: 'twist',      label: 'Twist',      icon: '⌇' },
+    { kind: 'taper',      label: 'Taper',      icon: '◣' },
+    { kind: 'mirror',     label: 'Mirror',     icon: '⇋' },
+    { kind: 'array',      label: 'Array',      icon: '▦' },
+    { kind: 'displace',   label: 'Displace',   icon: '∿' },
+    { kind: 'wave',       label: 'Wave',       icon: '〰' },
+    { kind: 'shear',      label: 'Shear',      icon: '◢' },
+    { kind: 'lattice',    label: 'Lattice',    icon: '⊞' },
+    { kind: 'smooth',     label: 'Smooth',     icon: '◔' },
+    { kind: 'decimate',   label: 'Decimate',   icon: '◣' },
+    { kind: 'subdivide',  label: 'Subdivide',  icon: '⊕' },
+    { kind: 'boolean',    label: 'Boolean',    icon: '◐' },
+    { kind: 'extrude-2d', label: 'Extrude 2D', icon: '⬚' },
 ];
 
-// ── Stack item ───────────────────────────────────────────────────────────────
+const DEFAULT_PARAMS: Record<ModifierKind, Record<string, number | string | boolean>> = {
+    bend:         { angle: 90, axis: 'y' },
+    twist:        { angle: 45, axis: 'y' },
+    taper:        { factor: 0.5, axis: 'y' },
+    mirror:       { axis: 'x' },
+    array:        { count: 3, offsetX: 1, offsetY: 0, offsetZ: 0 },
+    displace:     { strength: 0.5 },
+    wave:         { amplitude: 0.2, frequency: 2 },
+    shear:        { x: 0, y: 0, z: 0 },
+    lattice:      { rows: 3, cols: 3 },
+    smooth:       { iterations: 1 },
+    decimate:     { ratio: 0.5 },
+    subdivide:    { levels: 1 },
+    boolean:      { op: 'union' },
+    'extrude-2d': { depth: 1, bevel: 0 },
+};
 
-export interface StackItem {
-    id     : string;
-    kind   : ModifierKind;
-    enabled: boolean;
-    params : Record<string, unknown>;
-    expanded: boolean;
-}
+let modCounter = 0;
+const newModId = () => `M${++modCounter}`;
 
-// ── Options ──────────────────────────────────────────────────────────────────
-
-export interface PaletteModifiers3DOptions extends CtrlOptions {
-    /** Initial stack. */
-    stack? : StackItem[];
-    /** Title. Default 'Modifiers'. */
-    title? : string;
-}
-
-// ── Component ────────────────────────────────────────────────────────────────
-
-export class PaletteModifiers3D extends Control<PaletteModifiers3DOptions>
+export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette', HTMLElement, {}, {
+    attrs : [],
+    shadow: false,
+})
 {
-    private _stack  : StackItem[] = [];
-    private _nextId = 1;
+    stack$   : Signal<ModifierEntry[]> = signal<ModifierEntry[]>([]);
+    expanded$: Signal<string | null> = signal<string | null>(null);
 
-    private _elList!  : HTMLElement;
-    private _elFooter!: HTMLElement;
-
-    constructor(container: string | HTMLElement | null, opts: PaletteModifiers3DOptions = {})
+    build(_opts: Modifiers3DPaletteOptions = {})
     {
-        super(container, 'div', { stack: [], title: 'Modifiers', ...opts });
-        this.el.className = `ar-palmod${opts.class ? ' ' + opts.class : ''}`;
-        this._stack = (this._get<StackItem[]>('stack', []) || []).map(s => ({ ...s, params: { ...s.params } }));
-        this._injectStyles();
-        this._build();
-        this._renderStack();
-    }
-
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    /** Get current stack (deep cloned). */
-    getStack(): StackItem[] { return this._stack.map(s => ({ ...s, params: { ...s.params } })); }
-
-    /** Add a modifier to the bottom of the stack. */
-    addModifier(kind: ModifierKind, params: Record<string, unknown> = {}): StackItem
-    {
-        const spec = CATALOGUE.find(c => c.kind === kind);
-        if (!spec) throw new Error(`unknown modifier kind: ${kind}`);
-
-        const defaults: Record<string, unknown> = {};
-        for (const p of spec.params) defaults[p.key] = p.default;
-
-        const item: StackItem = {
-            id      : `mod-${this._nextId++}`,
-            kind,
-            enabled : true,
-            params  : { ...defaults, ...params },
-            expanded: true,
+        this.stackList = () => {
+            const exp = this.expanded$.get();
+            return this.stack$.get().map(m => ({
+                id: m.id,
+                kind: m.kind,
+                label: KIND_INFO.find(k => k.kind === m.kind)?.label ?? m.kind,
+                icon:  KIND_INFO.find(k => k.kind === m.kind)?.icon  ?? '◆',
+                enabled: m.enabled,
+                expanded: exp === m.id,
+                rowCls: 'ar-m3p__row' + (m.enabled ? '' : ' ar-m3p__row--disabled')
+                    + (exp === m.id ? ' ar-m3p__row--expanded' : ''),
+                params: Object.entries(m.params).map(([key, val]) => ({
+                    key,
+                    val: String(val),
+                    isNumber: typeof val === 'number',
+                    isBoolean: typeof val === 'boolean',
+                })),
+            }));
         };
-        this._stack.push(item);
-        this._renderStack();
-        this._emit('add', { id: item.id, kind, params: item.params, index: this._stack.length - 1 });
-        return item;
-    }
 
-    /** Remove a modifier by id. */
-    removeModifier(id: string): this
-    {
-        const i = this._stack.findIndex(s => s.id === id);
-        if (i < 0) return this;
-        this._stack.splice(i, 1);
-        this._renderStack();
-        this._emit('remove', { id, index: i });
-        return this;
-    }
+        this.addKinds = () => KIND_INFO;
 
-    /** Update a modifier's params. */
-    updateParams(id: string, patch: Record<string, unknown>): this
-    {
-        const item = this._stack.find(s => s.id === id);
-        if (!item) return this;
-        item.params = { ...item.params, ...patch };
-        this._renderStack();
-        this._emit('update', { id, params: item.params });
-        return this;
-    }
+        // ── Handlers ────────────────────────────────────────────────────
+        this.onAddClick = (e: Event) => {
+            const btn = e.currentTarget as HTMLButtonElement;
+            const kind = btn.dataset.kind as ModifierKind;
+            if (kind) this.addModifier({ kind });
+        };
+        this.onToggleEnable = (e: Event) => {
+            e.stopPropagation();
+            const btn = e.currentTarget as HTMLElement;
+            const id = btn.dataset.id;
+            if (id) this.toggleEnable(id);
+        };
+        this.onRowClick = (e: Event) => {
+            const row = e.currentTarget as HTMLElement;
+            const id = row.dataset.id;
+            if (!id) return;
+            this.expanded$.set(this.expanded$.get() === id ? null : id);
+        };
+        this.onRemove = (e: Event) => {
+            e.stopPropagation();
+            const btn = e.currentTarget as HTMLElement;
+            const id = btn.dataset.id;
+            if (id) this.removeModifier(id);
+        };
+        this.onMoveUp = (e: Event) => {
+            e.stopPropagation();
+            const id = (e.currentTarget as HTMLElement).dataset.id;
+            if (id) this.moveModifier(id, -1);
+        };
+        this.onMoveDown = (e: Event) => {
+            e.stopPropagation();
+            const id = (e.currentTarget as HTMLElement).dataset.id;
+            if (id) this.moveModifier(id, 1);
+        };
+        this.onParamChange = (e: Event) => {
+            const inp = e.target as HTMLInputElement;
+            const id = inp.dataset.id;
+            const key = inp.dataset.key;
+            if (!id || !key) return;
+            let value: number | string | boolean;
+            if (inp.type === 'number') value = parseFloat(inp.value);
+            else if (inp.type === 'checkbox') value = inp.checked;
+            else value = inp.value;
+            this.updateParam(id, key, value);
+        };
 
-    /** Toggle enabled flag (consumer can hide effect without removing item). */
-    setEnabled(id: string, enabled: boolean): this
-    {
-        const item = this._stack.find(s => s.id === id);
-        if (!item) return this;
-        item.enabled = enabled;
-        this._renderStack();
-        this._emit('toggle', { id, enabled });
-        return this;
-    }
+        this.template = html`
+            <div class="ar-m3p__addbar">
+                <span class="ar-m3p__addlabel">Add modifier:</span>
+                <select @change="this.onAddSelect">
+                    <option value="">—</option>
+                    <option a-for="k in this.addKinds()" :value="k.kind">{{ k.label }}</option>
+                </select>
+            </div>
+            <div class="ar-m3p__stack">
+                <div a-for="m in this.stackList()"
+                     :class="m.rowCls"
+                     :data-id="m.id"
+                     @click="this.onRowClick">
+                    <div class="ar-m3p__head">
+                        <button class="ar-m3p__toggle" :data-id="m.id" @click="this.onToggleEnable" title="Enable/disable">
+                            <span>{{ m.enabled ? '●' : '○' }}</span>
+                        </button>
+                        <span class="ar-m3p__icon">{{ m.icon }}</span>
+                        <span class="ar-m3p__lbl">{{ m.label }}</span>
+                        <button class="ar-m3p__small-btn" :data-id="m.id" @click="this.onMoveUp" title="Move up">↑</button>
+                        <button class="ar-m3p__small-btn" :data-id="m.id" @click="this.onMoveDown" title="Move down">↓</button>
+                        <button class="ar-m3p__small-btn ar-m3p__small-btn--danger" :data-id="m.id" @click="this.onRemove" title="Remove">×</button>
+                    </div>
+                    <div class="ar-m3p__params" a-if="m.expanded">
+                        <label a-for="p in m.params" class="ar-m3p__pfield">
+                            <span>{{ p.key }}</span>
+                            <input type="number"
+                                   a-if="p.isNumber"
+                                   step="any"
+                                   :data-id="m.id" :data-key="p.key"
+                                   :value="p.val"
+                                   @change="this.onParamChange"/>
+                            <input type="checkbox"
+                                   a-if="p.isBoolean"
+                                   :data-id="m.id" :data-key="p.key"
+                                   :checked="p.val === 'true'"
+                                   @change="this.onParamChange"/>
+                            <input type="text"
+                                   a-if="!p.isNumber && !p.isBoolean"
+                                   :data-id="m.id" :data-key="p.key"
+                                   :value="p.val"
+                                   @change="this.onParamChange"/>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        `;
 
-    /** Reorder a modifier within the stack. */
-    reorder(id: string, toIndex: number): this
-    {
-        const i = this._stack.findIndex(s => s.id === id);
-        if (i < 0) return this;
-        const [item] = this._stack.splice(i, 1);
-        const clamped = Math.max(0, Math.min(toIndex, this._stack.length));
-        this._stack.splice(clamped, 0, item!);
-        this._renderStack();
-        this._emit('reorder', { id, fromIndex: i, toIndex: clamped });
-        return this;
-    }
-
-    /** Catalogue of all available modifiers. */
-    static getCatalogue(): ReadonlyArray<{ kind: ModifierKind; label: string; icon: string }>
-    {
-        return CATALOGUE.map(c => ({ kind: c.kind, label: c.label, icon: c.icon }));
-    }
-
-    // ── Build + render ─────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        this.el.innerHTML = `
-<div class="ar-palmod__head">
-  <span class="ar-palmod__title">${escapeHtml(this._get<string>('title', 'Modifiers'))}</span>
-</div>
-<div class="ar-palmod__list" data-r="list"></div>
-<div class="ar-palmod__footer" data-r="footer">
-  <select class="ar-palmod__sel" data-r="sel">
-    <option value="">+ Add modifier</option>
-    ${CATALOGUE.map(c => `<option value="${c.kind}">${c.icon} ${c.label}</option>`).join('')}
-  </select>
-</div>`;
-        this._elList   = this.el.querySelector<HTMLElement>('[data-r="list"]')!;
-        this._elFooter = this.el.querySelector<HTMLElement>('[data-r="footer"]')!;
-
-        const sel = this._elFooter.querySelector<HTMLSelectElement>('[data-r="sel"]')!;
-        sel.addEventListener('change', () => {
-            if (!sel.value) return;
-            this.addModifier(sel.value as ModifierKind);
+        // Add-select handler binding (special: select with handler on option click)
+        this.onAddSelect = (e: Event) => {
+            const sel = e.target as HTMLSelectElement;
+            const kind = sel.value as ModifierKind;
+            if (kind) this.addModifier({ kind });
             sel.value = '';
-        });
+        };
+        // bind missing entry in handler bag — keep compat with template
+        this.onAddClick;
+
+        this.Sheet = Modifiers3DPalette.DefaultSheet();
     }
 
-    private _renderStack(): void
-    {
-        this._elList.innerHTML = '';
-        for (const item of this._stack)
-        {
-            const spec = CATALOGUE.find(c => c.kind === item.kind)!;
-            const card = document.createElement('div');
-            card.className = 'ar-palmod__card' + (item.enabled ? '' : ' ar-palmod__card--off');
-            card.dataset.id = item.id;
+    // ── Public API ───────────────────────────────────────────────────────────
 
-            const head = document.createElement('div');
-            head.className = 'ar-palmod__card-head';
-            head.innerHTML = `
-<span class="ar-palmod__chev" data-act="exp">${item.expanded ? '▼' : '▶'}</span>
-<span class="ar-palmod__icon">${escapeHtml(spec.icon)}</span>
-<span class="ar-palmod__name">${escapeHtml(spec.label)}</span>
-<span class="ar-palmod__spacer"></span>
-<button class="ar-palmod__btn" data-act="vis" title="Toggle">${item.enabled ? '👁' : '⊘'}</button>
-<button class="ar-palmod__btn" data-act="up"  title="Move up">▲</button>
-<button class="ar-palmod__btn" data-act="dn"  title="Move down">▼</button>
-<button class="ar-palmod__btn ar-palmod__btn--danger" data-act="rm" title="Remove">×</button>
-`;
-            card.appendChild(head);
-
-            // Params body (only if expanded)
-            if (item.expanded)
-            {
-                const body = document.createElement('div');
-                body.className = 'ar-palmod__card-body';
-                for (const p of spec.params)
-                {
-                    body.appendChild(this._buildParamRow(item, p));
-                }
-                card.appendChild(body);
-            }
-
-            this._wireCard(card, item);
-            this._elList.appendChild(card);
-        }
+    addModifier(opts: { kind: ModifierKind; params?: Record<string, number | string | boolean>; enabled?: boolean }): ModifierEntry {
+        const entry: ModifierEntry = {
+            id: newModId(),
+            kind: opts.kind,
+            enabled: opts.enabled ?? true,
+            params: { ...DEFAULT_PARAMS[opts.kind], ...(opts.params ?? {}) },
+        };
+        const next = this.stack$.get().slice();
+        next.push(entry);
+        this.stack$.set(next);
+        this.expanded$.set(entry.id);
+        this.#fire();
+        return entry;
+    }
+    removeModifier(id: string): this {
+        const next = this.stack$.get().filter(m => m.id !== id);
+        this.stack$.set(next);
+        if (this.expanded$.get() === id) this.expanded$.set(null);
+        this.#fire();
+        return this;
+    }
+    toggleEnable(id: string): this {
+        const next = this.stack$.get().map(m => m.id === id ? { ...m, enabled: !m.enabled } : m);
+        this.stack$.set(next);
+        this.#fire();
+        return this;
+    }
+    moveModifier(id: string, dir: -1 | 1): this {
+        const cur = this.stack$.get();
+        const idx = cur.findIndex(m => m.id === id);
+        if (idx === -1) return this;
+        const next = cur.slice();
+        const target = idx + dir;
+        if (target < 0 || target >= next.length) return this;
+        const [moved] = next.splice(idx, 1);
+        next.splice(target, 0, moved!);
+        this.stack$.set(next);
+        this.#fire();
+        return this;
+    }
+    updateParam(id: string, key: string, value: number | string | boolean): this {
+        const next = this.stack$.get().map(m => m.id === id ? { ...m, params: { ...m.params, [key]: value } } : m);
+        this.stack$.set(next);
+        this.#fire();
+        return this;
     }
 
-    private _buildParamRow(item: StackItem, p: ParamSpec): HTMLElement
-    {
-        const row = document.createElement('div');
-        row.className = 'ar-palmod__row';
-        const lbl = document.createElement('label');
-        lbl.className = 'ar-palmod__lbl';
-        lbl.textContent = p.label;
-        row.appendChild(lbl);
-
-        let inp: HTMLElement;
-        const cur = item.params[p.key];
-
-        if (p.type === 'enum')
-        {
-            const sel = document.createElement('select');
-            sel.className = 'ar-palmod__inp';
-            for (const o of p.options || []) {
-                const opt = document.createElement('option');
-                opt.value = o; opt.textContent = o;
-                if (cur === o) opt.selected = true;
-                sel.appendChild(opt);
-            }
-            sel.addEventListener('change', () => this.updateParams(item.id, { [p.key]: sel.value }));
-            inp = sel;
-        }
-        else if (p.type === 'boolean')
-        {
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.checked = !!cur;
-            cb.addEventListener('change', () => this.updateParams(item.id, { [p.key]: cb.checked }));
-            inp = cb;
-        }
-        else
-        {
-            const n = document.createElement('input');
-            n.type = 'number';
-            n.className = 'ar-palmod__inp';
-            n.value = String(cur ?? 0);
-            if (p.min !== undefined)  n.min  = String(p.min);
-            if (p.max !== undefined)  n.max  = String(p.max);
-            if (p.step !== undefined) n.step = String(p.step);
-            n.addEventListener('change', () => this.updateParams(item.id, { [p.key]: parseFloat(n.value) || 0 }));
-            inp = n;
-        }
-        row.appendChild(inp);
-        return row;
+    setStack(stack: ModifierEntry[]): this {
+        this.stack$.set(stack.map(m => ({ ...m, params: { ...m.params } })));
+        this.#fire();
+        return this;
+    }
+    getStack(): ModifierEntry[] {
+        return this.stack$.get().map(m => ({ ...m, params: { ...m.params } }));
     }
 
-    private _wireCard(card: HTMLElement, item: StackItem): void
-    {
-        card.querySelector('[data-act="exp"]')?.addEventListener('click', () => {
-            item.expanded = !item.expanded;
-            this._renderStack();
-        });
-        card.querySelector('[data-act="vis"]')?.addEventListener('click', () => {
-            this.setEnabled(item.id, !item.enabled);
-        });
-        card.querySelector('[data-act="rm"]')?.addEventListener('click', () => {
-            this.removeModifier(item.id);
-        });
-        card.querySelector('[data-act="up"]')?.addEventListener('click', () => {
-            const i = this._stack.findIndex(s => s.id === item.id);
-            if (i > 0) this.reorder(item.id, i - 1);
-        });
-        card.querySelector('[data-act="dn"]')?.addEventListener('click', () => {
-            const i = this._stack.findIndex(s => s.id === item.id);
-            if (i < this._stack.length - 1) this.reorder(item.id, i + 1);
-        });
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    #fire(): void {
+        this.dispatchEvent(new CustomEvent('arianna:modifiers-change', {
+            bubbles: true, detail: { stack: this.getStack() },
+        }));
     }
 
-    private _injectStyles(): void
+    private stackList     : () => Array<{ id: string; kind: ModifierKind; label: string; icon: string; enabled: boolean; expanded: boolean; rowCls: string; params: Array<{ key: string; val: string; isNumber: boolean; isBoolean: boolean }> }> = () => [];
+    private addKinds      : () => typeof KIND_INFO = () => KIND_INFO;
+    private onAddClick    : (e: Event) => void = () => {};
+    private onAddSelect   : (e: Event) => void = () => {};
+    private onToggleEnable: (e: Event) => void = () => {};
+    private onRowClick    : (e: Event) => void = () => {};
+    private onRemove      : (e: Event) => void = () => {};
+    private onMoveUp      : (e: Event) => void = () => {};
+    private onMoveDown    : (e: Event) => void = () => {};
+    private onParamChange : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
     {
-        if (document.getElementById('ar-palmod-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-palmod-styles';
-        s.textContent = `
-.ar-palmod { display:flex; flex-direction:column; min-width:280px; background:#1e1e1e; border:1px solid #333; border-radius:6px; color:#d4d4d4; font:12px -apple-system,system-ui,sans-serif; user-select:none; }
-.ar-palmod__head { padding:8px 12px; border-bottom:1px solid #333; }
-.ar-palmod__title { font:600 12px sans-serif; color:#e40c88; letter-spacing:.04em; text-transform:uppercase; }
-.ar-palmod__list { flex:1; overflow:auto; max-height:480px; padding:4px; display:flex; flex-direction:column; gap:4px; }
-.ar-palmod__card { background:#252525; border:1px solid #333; border-radius:4px; }
-.ar-palmod__card--off { opacity:0.5; }
-.ar-palmod__card-head { display:flex; align-items:center; gap:6px; padding:6px 8px; border-bottom:1px solid #333; }
-.ar-palmod__card:not(:has(.ar-palmod__card-body)) > .ar-palmod__card-head { border-bottom:0; }
-.ar-palmod__chev { font-size:9px; color:#888; cursor:pointer; width:12px; }
-.ar-palmod__icon { font-size:14px; }
-.ar-palmod__name { font:600 12px sans-serif; }
-.ar-palmod__spacer { flex:1; }
-.ar-palmod__btn { background:transparent; border:0; color:#888; cursor:pointer; padding:2px 6px; font-size:12px; border-radius:2px; }
-.ar-palmod__btn:hover { background:#333; color:#fff; }
-.ar-palmod__btn--danger:hover { background:#dc2626; color:#fff; }
-.ar-palmod__card-body { padding:6px 8px; display:flex; flex-direction:column; gap:4px; }
-.ar-palmod__row { display:flex; align-items:center; gap:8px; }
-.ar-palmod__lbl { min-width:60px; font:10px ui-monospace,monospace; color:#888; }
-.ar-palmod__inp { flex:1; background:#0d0d0d; border:1px solid #333; color:#d4d4d4; padding:3px 6px; font:11px ui-monospace,monospace; border-radius:2px; }
-.ar-palmod__footer { padding:8px; border-top:1px solid #333; }
-.ar-palmod__sel { width:100%; background:#0d0d0d; border:1px solid #333; color:#d4d4d4; padding:5px 8px; font:11px sans-serif; border-radius:3px; cursor:pointer; }
-.ar-palmod__sel:hover { border-color:#e40c88; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', {
+                    background  : 'var(--arianna-bg, #fff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    display     : 'flex',
+                    flexDirection: 'column',
+                    fontFamily  : '-apple-system, system-ui, sans-serif',
+                    fontSize    : '12px',
+                    width       : '280px',
+                    minHeight   : '200px',
+                    overflow    : 'hidden',
+                }),
+                new Rule('.ar-m3p__addbar', {
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '6px 8px',
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg-3, #f3f3f3)',
+                }),
+                new Rule('.ar-m3p__addlabel', {
+                    fontSize: '10px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    textTransform: 'uppercase',
+                }),
+                new Rule('.ar-m3p__addbar select', {
+                    flex: '1',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    color: 'var(--arianna-text, #1f2328)',
+                    padding: '3px 6px',
+                    font: '11px sans-serif',
+                    borderRadius: '2px',
+                }),
+                new Rule('.ar-m3p__stack', { flex: '1', overflowY: 'auto' }),
+                new Rule('.ar-m3p__row', {
+                    borderBottom: '1px solid var(--arianna-bg-3, #f3f3f3)',
+                    cursor: 'pointer',
+                }),
+                new Rule('.ar-m3p__row--disabled .ar-m3p__lbl', { opacity: '0.4' }),
+                new Rule('.ar-m3p__head', {
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    padding: '5px 8px',
+                }),
+                new Rule('.ar-m3p__row:hover .ar-m3p__head', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+                new Rule('.ar-m3p__row--expanded .ar-m3p__head', {
+                    background: 'rgba(31,111,235,0.06)',
+                }),
+                new Rule('.ar-m3p__toggle', {
+                    width: '18px', height: '18px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    padding: '0',
+                    fontSize: '11px',
+                }),
+                new Rule('.ar-m3p__icon', { fontSize: '13px' }),
+                new Rule('.ar-m3p__lbl', { flex: '1' }),
+                new Rule('.ar-m3p__small-btn', {
+                    width: '20px', height: '20px',
+                    background: 'transparent',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    borderRadius: '2px',
+                    cursor: 'pointer',
+                    padding: '0',
+                    fontSize: '10px',
+                }),
+                new Rule('.ar-m3p__small-btn:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+                new Rule('.ar-m3p__small-btn--danger:hover', {
+                    background: 'var(--arianna-danger, #cf222e)',
+                    borderColor: 'var(--arianna-danger, #cf222e)',
+                    color: '#fff',
+                }),
+                new Rule('.ar-m3p__params', {
+                    padding: '6px 12px 10px 28px',
+                    display: 'flex', flexDirection: 'column', gap: '4px',
+                    background: 'var(--arianna-bg-3, #f3f3f3)',
+                }),
+                new Rule('.ar-m3p__pfield', {
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                }),
+                new Rule('.ar-m3p__pfield span', {
+                    width: '70px',
+                    fontSize: '10px',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    textTransform: 'uppercase',
+                }),
+                new Rule('.ar-m3p__pfield input[type="text"], .ar-m3p__pfield input[type="number"]', {
+                    flex: '1',
+                    background: 'var(--arianna-bg, #fff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    color: 'var(--arianna-text, #1f2328)',
+                    padding: '2px 6px',
+                    font: '11px ui-monospace, monospace',
+                    borderRadius: '2px',
+                }),
+            ]
+        );
     }
 }
 
-function escapeHtml(s: string): string
-{
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    } as Record<string, string>)[c]!);
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Modifiers3DPalette', {
+        value: Modifiers3DPalette, writable: false, enumerable: false, configurable: false,
+    });
 }
+
+export default Modifiers3DPalette;

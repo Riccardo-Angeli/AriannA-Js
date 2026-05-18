@@ -45,6 +45,16 @@
  *   two.loop();
  */
 
+// ── Math interop ──────────────────────────────────────────────────────────────
+//
+// Two keeps its own Vec2D class with a MUTATING API for tight render-loop
+// performance. Math.ts provides Vector2 with an immutable default API plus
+// `*InPlace` mutating variants. The bridge methods below let callers convert
+// between the two representations.
+
+import { Vector2 as MathVector2 } from './Math.ts';
+export { MathVector2 };
+
 // ── Math ──────────────────────────────────────────────────────────────────────
 
 export class Vec2D
@@ -76,6 +86,11 @@ export class Vec2D
     static from(a: [number, number]): Vec2D { return new Vec2D(a[0], a[1]); }
     static add(a: Vec2D, b: Vec2D): Vec2D { return a.clone().add(b); }
     static sub(a: Vec2D, b: Vec2D): Vec2D { return a.clone().sub(b); }
+
+    /** Math interop: build a Two.Vec2D from a Math.Vector2. */
+    static fromMath(v: MathVector2): Vec2D { return new Vec2D(v.x, v.y); }
+    /** Math interop: produce a Math.Vector2 (immutable API) from this. */
+    toMath(): MathVector2 { return new MathVector2(this.x, this.y); }
 }
 
 /** 3×3 matrix for 2D transforms (column-major). */

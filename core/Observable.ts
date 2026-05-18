@@ -1,68 +1,101 @@
 /**
- * @module    Observable
+ * @module    core/Observable
  * @author    Riccardo Angeli
- * @version   1.2.0
+ * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  *
- * Modulo base AriannA — zero dipendenze, ESM native.
+ * # AriannA Reactive Core — Unified Engine
  *
- * ── FINE-GRAIN REACTIVE PRIMITIVES ───────────────────────────────────────────
- *   signal<T>(v)          → Signal<T> multi-subscriber
- *   signalMono<T>(v)      → SignalMono<T> slot singolo, zero Set (1:1 TextNode)
- *   sinkText(s, node)     → collega SignalMono a TextNode direttamente
- *   effect(fn)            → Effect isolato, restituisce cleanup () => void
- *   computed(fn)          → Signal derivato read-only
- *   batch(fn)             → raggruppa N set() in un flush
- *   untrack(fn)           → legge Signal senza registrare dipendenze
+ * Single reactive engine based on Proxy + WeakMap dependency graph.
+ * Replaces the legacy getter/setter recursion previously used here.
  *
- * ── TEMPLATE ENGINE (v12) — Vue/Solid style, zero JSX ────────────────────────
- *   new AriannATemplate(html)  → parse UNA VOLTA, N clone O(1) C++
- *   tpl.clone()                → Element clon dal fragment pre-parsato
- *   tpl.cloneAll()             → DocumentFragment per multi-root
- *   tpl.walk(el, ...paths)     → accesso O(1) ai nodi interni via path
+ *   ┌─────────────────────────────────────────────────────────────────────┐
+ *   │  reactive(obj)         → returns Proxy with track/trigger semantics  │
+ *   │  Observable<T>         → class wrapper, .Value = reactive proxy      │
+ *   │  State<T>              → extends Observable, snapshots + history     │
+ *   │  signal/effect/computed→ functional primitives, share the dep graph  │
+ *   │  deepWatch(obj, cb)    → opt-in subtree observer                     │
+ *   │  toRaw / isProxy       → utilities                                   │
+ *   └─────────────────────────────────────────────────────────────────────┘
  *
- * ── INSTANCE PUB/SUB ─────────────────────────────────────────────────────────
- *   new Observable(target?)
- *   obs.on / obs.off / obs.fire / obs.once
- *   obs.signal / obs.effect / obs.computed / obs.destroy
+ * # Hierarchy
  *
- * ── STATIC DOM BUS ────────────────────────────────────────────────────────────
- *   Observable.On / Off / Fire / Once / Trigger / All
+ *   Observable (base)
+ *     └─ State (extends Observable, adds snapshots/history)
+ *        └─ Context (decoupled, lives in Context.ts)
+ *           └─ Component (consumer, lives in Component.ts)
  *
- * @example
- *   // Template engine — parse 1 volta, clone 10k volte
- *   const tpl = new AriannATemplate(
- *     '<tr><td class="col-md-1"></td>' +
- *     '<td class="col-md-4"><a class="lbl"></a></td></tr>'
- *   );
- *   const tr  = tpl.clone() as HTMLTableRowElement;
- *   const lbl = tr.children[1].firstChild as Text;
+ * # Identity semantics
  *
- *   const $label = signalMono('ciao');
- *   sinkText($label, lbl);      // → lbl.nodeValue = 'ciao'
- *   $label.set('hello');        // → lbl.nodeValue = 'hello' diretto
+ *   effect(() => obs.Value.user)         reruns on user reassignment only
+ *   effect(() => obs.Value.user.name)    reruns on name change OR user replace
+ *
+ * No implicit deep bubbling. Use deepWatch() as explicit opt-in.
+ * See REACTIVE-SEMANTICS-SPEC.js for the full contract (16 tests).
+ *
+ * # API surface preserved from v1
+ *
+ *   - signal, signalMono, sinkText, sinkClass, effect, computed, batch, untrack, uuid
+ *   - Signal, SignalMono, ReadonlySignal, AriannAEvent types
+ *   - class Observable with .value (alias of .Value)
+ *   - class AriannATemplate (untouched)
+ *   - events 'change-before' / 'change-after' / '<key>-change-before' / '<key>-change-after'
  */
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Type definitions (preserved from v1)
+// ─────────────────────────────────────────────────────────────────────────────
 
-export interface AriannAEvent         { Type: string; [k: string]: unknown; }
-export interface ListenerOptions      { Passive?: boolean; Capture?: boolean; Once?: boolean; Signal?: AbortSignal; Phase?: 'bubble' | 'capture'; }
-export interface DomEventTypeDescriptor      { Name: string; Interface: abstract new (...a: never[]) => Event; }
-export interface DomEventInterfaceDescriptor { Name: string; Types: Record<string, DomEventTypeDescriptor>; }
+export interface AriannAEvent
+{
+    Type: string;
+    [k: string]: unknown;
+}
+
+export interface ListenerOptions
+{
+    Passive? : boolean;
+    Capture? : boolean;
+    Once?    : boolean;
+    Signal?  : AbortSignal;
+    Phase?   : 'bubble' | 'capture';
+}
+
+export interface DomEventTypeDescriptor
+{
+    Name      : string;
+    Interface : abstract new (...a: never[]) => Event;
+}
+
+export interface DomEventInterfaceDescriptor
+{
+    Name  : string;
+    Types : Record<string, DomEventTypeDescriptor>;
+}
 
 export interface ListenerRecord
 {
-    UUID        : string;
-    Type        : string;
-    Target      : EventTarget | object;
-    Function    : EventListenerOrEventListenerObject | ((e: AriannAEvent) => void);
-    Propagation : 'bubble' | 'capture' | undefined;
-    XML         : string;
+    Id      : string;
+    Type    : string;
+    Handler : EventListener;
+    Target  : EventTarget;
+    Options : ListenerOptions;
 }
 
-interface InstanceListener { readonly Id: string; Handler: (e: AriannAEvent) => void; Target: object; }
+export interface ChangeEvent extends AriannAEvent
+{
+    Target : object;
+    Path   : (string | symbol)[];
+    Key    : string | symbol;
+    Old    : unknown;
+    New    : unknown;
+    Kind   : 'set' | 'delete' | 'mutate';
+}
 
-// ── UUID ──────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  uuid — small RFC4122-like v4 generator
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function uuid(): string
 {
@@ -72,20 +105,423 @@ export function uuid(): string
     return `${b[1]}${b[2]}-${b[3]}-${b[4]}-${b[5]}-${b[6]}${b[7]}${b[8]}`;
 }
 
-// ── Fine-grain primitives ─────────────────────────────────────────────────────
 
-type EffectRunner = { run(): void; deps: Set<Set<EffectRunner>> };
-let _activeEffect: EffectRunner | null = null;
-let _batchDepth = 0;
-const _pendingEffects: EffectRunner[] = [];
+// ═════════════════════════════════════════════════════════════════════════════
+//  THE DEPENDENCY GRAPH — single source of truth for reactivity
+// ═════════════════════════════════════════════════════════════════════════════
 
-function _notify(subs: Set<EffectRunner>): void
+/**
+ * Effect: an object that re-runs when any of its tracked dependencies changes.
+ * Stored in Set<Effect> bins indexed by (target, key) in DEP_GRAPH.
+ */
+interface Effect
 {
-    if (_batchDepth > 0) { subs.forEach(e => { if (!_pendingEffects.includes(e)) _pendingEffects.push(e); }); return; }
-    [...subs].forEach(e => e.run());
+    run(): void;
+    deps: Set<Set<Effect>>;
+    cleanups: Array<() => void>;
+    active: boolean;
 }
 
-// ── Signal<T> — multi-subscriber ─────────────────────────────────────────────
+/**
+ * The currently executing effect — set during run(), used by track().
+ */
+let ACTIVE_EFFECT: Effect | null = null;
+
+/**
+ * Batching state — when > 0, triggers queue effects instead of running them.
+ */
+let BATCH_DEPTH = 0;
+const PENDING_EFFECTS = new Set<Effect>();
+
+/**
+ * The dependency graph: for each reactive target object, map property keys
+ * to the set of effects that depend on that (target, key) pair.
+ *
+ *   WeakMap< target → Map< key → Set<Effect> > >
+ *
+ * Using WeakMap on `target` allows the GC to reclaim entries when no other
+ * references to the target exist.
+ */
+const DEP_GRAPH: WeakMap<object, Map<string | symbol, Set<Effect>>> = new WeakMap();
+
+/**
+ * Special symbol for tracking iteration deps (Object.keys, for-of, etc.).
+ */
+const ITERATE_KEY = Symbol('iterate');
+
+/**
+ * Register: ACTIVE_EFFECT depends on (target, key).
+ * Called by Proxy get traps.
+ */
+function track(target: object, key: string | symbol): void
+{
+    if (!ACTIVE_EFFECT) return;
+    let m = DEP_GRAPH.get(target);
+    if (!m) DEP_GRAPH.set(target, m = new Map());
+    let s = m.get(key);
+    if (!s) m.set(key, s = new Set());
+    if (!s.has(ACTIVE_EFFECT)) {
+        s.add(ACTIVE_EFFECT);
+        ACTIVE_EFFECT.deps.add(s);
+    }
+}
+
+/**
+ * Trigger: re-run all effects that depend on (target, key).
+ * Called by Proxy set/deleteProperty traps and array mutators.
+ *
+ * When batching: queue effects, flush at batch end.
+ * Re-entrancy guard: an effect cannot re-trigger itself within the same call stack.
+ */
+function trigger(target: object, key: string | symbol): void
+{
+    const m = DEP_GRAPH.get(target);
+    if (!m) return;
+    const s = m.get(key);
+    if (!s || s.size === 0) return;
+
+    // Snapshot to allow safe iteration even if effects mutate the set
+    const toRun = [...s];
+
+    if (BATCH_DEPTH > 0) {
+        for (const e of toRun) PENDING_EFFECTS.add(e);
+        return;
+    }
+
+    for (const e of toRun) {
+        if (e === ACTIVE_EFFECT) continue;     // re-entrancy guard
+        if (e.active) e.run();
+    }
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  PROXY MACHINERY — reactive() factory
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Cache: raw object → its single Proxy.  Identity stability.
+ */
+const RAW_TO_PROXY: WeakMap<object, object> = new WeakMap();
+
+/**
+ * Cache: Proxy → its raw object.  toRaw() lookup.
+ */
+const PROXY_TO_RAW: WeakMap<object, object> = new WeakMap();
+
+/**
+ * Symbol slot used to detect "is this a proxy?" without triggering get traps.
+ */
+const PROXY_FLAG = Symbol.for('arianna.proxy');
+
+/**
+ * Array methods that mutate without changing length.
+ * Their proxy wrapper batches per-index triggers + a final length trigger.
+ */
+const ARRAY_NO_LENGTH_MUTATORS = new Set<string>(['sort', 'reverse', 'fill', 'copyWithin']);
+
+/**
+ * Array methods that mutate AND change length.
+ */
+const ARRAY_LENGTH_MUTATORS = new Set<string>(['push', 'pop', 'shift', 'unshift', 'splice']);
+
+/**
+ * All mutating array methods (union of the above).
+ */
+const ARRAY_MUTATORS = new Set<string>([...ARRAY_NO_LENGTH_MUTATORS, ...ARRAY_LENGTH_MUTATORS]);
+
+/**
+ * Array methods that READ many indices — they must register an ITERATE_KEY dep.
+ */
+const ARRAY_ITERATORS = new Set<string>([
+    'forEach', 'map', 'filter', 'reduce', 'reduceRight',
+    'find', 'findIndex', 'findLast', 'findLastIndex',
+    'every', 'some', 'includes', 'indexOf', 'lastIndexOf',
+    'join', 'concat', 'slice', 'flat', 'flatMap',
+    'entries', 'keys', 'values',
+]);
+
+/**
+ * Per-instance callback used to emit ChangeEvents on the owning Observable.
+ * Stored on the raw object via this WeakMap.  Nested objects inherit the
+ * root's callback when wrapped (see reactive()).
+ */
+const TARGET_EMIT: WeakMap<object, (e: ChangeEvent) => void> = new WeakMap();
+
+/**
+ * Determines if a value is wrappable.  Primitives and special builtins are not.
+ */
+function _isReactiveTarget(v: unknown): v is object
+{
+    if (v === null || typeof v !== 'object') return false;
+    if (v instanceof Date)     return false;
+    if (v instanceof RegExp)   return false;
+    if (v instanceof Promise)  return false;
+    if (v instanceof Node)     return false;   // DOM nodes never wrapped
+    if (v instanceof Error)    return false;
+    return true;
+}
+
+/**
+ * Emit a ChangeEvent on the Observable that owns this raw target (if any).
+ * Direct lookup: TARGET_EMIT is propagated to nested objects when they get
+ * wrapped (see reactive() below).
+ */
+function _emitChange(
+    target  : object,
+    path    : (string | symbol)[],
+    key     : string | symbol,
+    old     : unknown,
+    nw      : unknown,
+    kind    : 'set' | 'delete' | 'mutate',
+): void
+{
+    const emit = TARGET_EMIT.get(target);
+    if (!emit) return;
+
+    const ev: ChangeEvent = {
+        Type   : '',
+        Target : target,
+        Path   : path,
+        Key    : key,
+        Old    : old,
+        New    : nw,
+        Kind   : kind,
+    };
+    const k = String(key);
+    ev.Type = `${k}-change-before`;  emit(ev);
+    ev.Type = 'change-before';        emit(ev);
+    ev.Type = `${k}-change-after`;    emit(ev);
+    ev.Type = 'change-after';         emit(ev);
+}
+
+
+/**
+ * Common ProxyHandler builder.  Returns a handler tailored to whether the
+ * raw target is an Array, Map, Set, or plain object.
+ */
+function _buildHandler(
+    rawRoot : object,
+    path    : (string | symbol)[],
+): ProxyHandler<object>
+{
+    return {
+        get(target, key, receiver) {
+            // PROXY_FLAG probe — quick "is this a proxy?" check without triggering
+            if (key === PROXY_FLAG) return true;
+
+            // Array mutator methods get a special wrapper
+            if (Array.isArray(target) && typeof key === 'string' && ARRAY_MUTATORS.has(key)) {
+                return _arrayMutatorWrapper(target, key, path);
+            }
+
+            // Array iterator methods register an ITERATE_KEY dep
+            if (Array.isArray(target) && typeof key === 'string' && ARRAY_ITERATORS.has(key)) {
+                track(target, 'length');
+                track(target, ITERATE_KEY);
+                const fn = Reflect.get(target, key, receiver);
+                return typeof fn === 'function' ? fn.bind(receiver) : fn;
+            }
+
+            const result = Reflect.get(target, key, receiver);
+
+            // Skip tracking for symbol keys we don't care about (Symbol.iterator etc.)
+            // — but DO track string keys and numeric-string array indices.
+            if (typeof key === 'symbol' && key !== ITERATE_KEY) {
+                return result;
+            }
+
+            track(target, key);
+
+            // Recursively wrap nested objects on access (lazy)
+            if (_isReactiveTarget(result)) {
+                return reactive(result, [...path, key], rawRoot);
+            }
+            return result;
+        },
+
+        set(target, key, value, receiver) {
+            const old = Reflect.get(target, key, receiver);
+            // Unwrap value if it's a proxy — we never store proxies in raws
+            const rawValue = isProxy(value) ? toRaw(value as object) : value;
+
+            if (Object.is(old, rawValue)) return true;
+
+            const had = Array.isArray(target) ? (Number(key) < target.length) : Object.prototype.hasOwnProperty.call(target, key);
+            const lengthBefore = Array.isArray(target) ? target.length : -1;
+
+            const ok = Reflect.set(target, key, rawValue, receiver);
+            if (!ok) return false;
+
+            const lengthAfter = Array.isArray(target) ? target.length : -1;
+
+            // Trigger the specific key
+            trigger(target, key);
+
+            // If this is an array index assignment that extended length
+            if (Array.isArray(target) && lengthAfter !== lengthBefore) {
+                trigger(target, 'length');
+            }
+
+            // If we ADDED a new key on a plain object, iteration deps must re-run
+            if (!had && !Array.isArray(target)) {
+                trigger(target, ITERATE_KEY);
+            }
+
+            _emitChange(target, path, key, old, rawValue, 'set');
+            return true;
+        },
+
+        deleteProperty(target, key) {
+            const had = Object.prototype.hasOwnProperty.call(target, key);
+            const old = (target as Record<string | symbol, unknown>)[key];
+            const ok  = Reflect.deleteProperty(target, key);
+            if (!ok || !had) return ok;
+
+            trigger(target, key);
+            if (!Array.isArray(target)) trigger(target, ITERATE_KEY);
+
+            _emitChange(target, path, key, old, undefined, 'delete');
+            return true;
+        },
+
+        has(target, key) {
+            const ok = Reflect.has(target, key);
+            if (typeof key !== 'symbol' || key === ITERATE_KEY) track(target, key);
+            return ok;
+        },
+
+        ownKeys(target) {
+            track(target, ITERATE_KEY);
+            return Reflect.ownKeys(target);
+        },
+    };
+}
+
+
+/**
+ * Array mutator wrapper: when arr.push/pop/splice/sort/etc. is called,
+ * batch the triggers so effects re-run once per call.
+ */
+function _arrayMutatorWrapper(
+    target : unknown[],
+    method : string,
+    path   : (string | symbol)[],
+): (...args: unknown[]) => unknown
+{
+    return function (this: unknown, ...args: unknown[]) {
+        const lengthBefore = target.length;
+        const before = target.slice();
+        // Unwrap any proxy args before passing to native method
+        const rawArgs = args.map(a => isProxy(a) ? toRaw(a as object) : a);
+
+        let result: unknown;
+
+        BATCH_DEPTH++;
+        try {
+            const fn = (target as unknown as Record<string, (...a: unknown[]) => unknown>)[method];
+            result = fn.apply(target, rawArgs);
+
+            // Figure out which indices changed
+            const lengthAfter = target.length;
+            const len = Math.max(lengthBefore, lengthAfter);
+
+            for (let i = 0; i < len; i++) {
+                if (!Object.is(before[i], target[i])) {
+                    trigger(target, String(i));
+                }
+            }
+            if (lengthBefore !== lengthAfter && !ARRAY_NO_LENGTH_MUTATORS.has(method)) {
+                trigger(target, 'length');
+            }
+            trigger(target, ITERATE_KEY);
+
+            _emitChange(target, path, method, before, target.slice(), 'mutate');
+        } finally {
+            BATCH_DEPTH--;
+            if (BATCH_DEPTH === 0) _flushPending();
+        }
+
+        return result;
+    };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  reactive() — public factory
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Wrap `obj` in a reactive Proxy.  Returns the same proxy on subsequent calls
+ * with the same raw object (identity stability).
+ *
+ * Primitives, Date, RegExp, Promise, DOM nodes, and Errors are returned as-is.
+ *
+ * @example
+ *   const s = reactive({ a: 1 })
+ *   effect(() => console.log(s.a))   // logs 1
+ *   s.a = 2                           // logs 2
+ *
+ * @example
+ *   const arr = reactive(['a','b'])
+ *   effect(() => console.log(arr.length))  // logs 2
+ *   arr.push('c')                           // logs 3
+ */
+export function reactive<T extends object>(raw: T, path: (string | symbol)[] = [], inheritEmit?: object): T
+{
+    if (!_isReactiveTarget(raw)) return raw;
+    if (isProxy(raw)) return raw;  // already a proxy, return as-is
+
+    const cached = RAW_TO_PROXY.get(raw);
+    if (cached) return cached as T;
+
+    const handler = _buildHandler(raw, path);
+    const proxy   = new Proxy(raw, handler);
+
+    RAW_TO_PROXY.set(raw, proxy);
+    PROXY_TO_RAW.set(proxy, raw);
+
+    // Inherit the emit callback from the root (so deep mutations bubble events
+    // to the owning Observable, but NOT through the dep graph — only events).
+    if (inheritEmit) {
+        const rootEmit = TARGET_EMIT.get(inheritEmit);
+        if (rootEmit && !TARGET_EMIT.has(raw)) TARGET_EMIT.set(raw, rootEmit);
+    }
+
+    return proxy as T;
+}
+
+
+/**
+ * Returns the raw object backing a proxy.  Idempotent on non-proxies.
+ *
+ * @example
+ *   const raw = { a: 1 }
+ *   const obs = new Observable(raw)
+ *   assert(toRaw(obs.Value) === raw)
+ */
+export function toRaw<T>(value: T): T
+{
+    if (value === null || typeof value !== 'object') return value;
+    const raw = PROXY_TO_RAW.get(value as object);
+    return (raw ?? value) as T;
+}
+
+
+/**
+ * Boolean check: is this value a reactive proxy?
+ */
+export function isProxy(value: unknown): boolean
+{
+    if (value === null || typeof value !== 'object') return false;
+    try { return (value as Record<symbol, unknown>)[PROXY_FLAG] === true; }
+    catch { return false; }
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  signal / signalMono / effect / computed / batch / untrack
+// ═════════════════════════════════════════════════════════════════════════════
 
 export interface Signal<T>
 {
@@ -94,26 +530,57 @@ export interface Signal<T>
     peek(): T;
     readonly(): ReadonlySignal<T>;
 }
-export interface ReadonlySignal<T> { get(): T; peek(): T; }
-
-export function signal<T>(value: T): Signal<T>
+export interface ReadonlySignal<T>
 {
-    const subs = new Set<EffectRunner>();
-    return {
-        get(): T   { if (_activeEffect) subs.add(_activeEffect); return value; },
-        set(v: T)  { if (Object.is(v, value)) return; value = v; _notify(subs); },
-        peek(): T  { return value; },
-        readonly() { return { get: () => { if (_activeEffect) subs.add(_activeEffect); return value; }, peek: () => value }; },
-    };
+    get(): T;
+    peek(): T;
 }
 
-// ── SignalMono<T> — slot singolo 1:1 TextNode ─────────────────────────────────
+/**
+ * Atomic value cell.  Multiple effects can subscribe.
+ */
+export function signal<T>(value: T): Signal<T>
+{
+    const subs = new Set<Effect>();
+    const holder = {};   // weak target for trigger() — gives us per-signal keying
+
+    const wrapped = {
+        get(): T {
+            if (ACTIVE_EFFECT && !subs.has(ACTIVE_EFFECT)) {
+                subs.add(ACTIVE_EFFECT);
+                ACTIVE_EFFECT.deps.add(subs);
+            }
+            return value;
+        },
+        set(v: T): void {
+            if (Object.is(v, value)) return;
+            value = v;
+            // Trigger all subscribers
+            const toRun = [...subs];
+            if (BATCH_DEPTH > 0) {
+                for (const e of toRun) PENDING_EFFECTS.add(e);
+                return;
+            }
+            for (const e of toRun) {
+                if (e === ACTIVE_EFFECT) continue;
+                if (e.active) e.run();
+            }
+        },
+        peek(): T { return value; },
+        readonly(): ReadonlySignal<T> {
+            return {
+                get : () => wrapped.get(),
+                peek: () => value,
+            };
+        },
+    };
+    return wrapped;
+}
+
 
 /**
- * Signal ottimizzato per il pattern 1 Signal → 1 TextNode.
- * Zero Set, zero EffectRunner — solo una funzione slot.
- * Il compilatore v12 trasforma signalMono() in variabili scalari a build-time:
- *   let $label_v = v; let $label_sub = null;
+ * Single-slot signal optimised for 1:1 TextNode binding.
+ * Zero Set allocations.  Used by compiled templates.
  */
 export interface SignalMono<T>
 {
@@ -126,7 +593,7 @@ export interface SignalMono<T>
 export function signalMono<T>(value: T): SignalMono<T>
 {
     const s: SignalMono<T> = {
-        _sub: null,
+        _sub : null,
         get(): T  { return value; },
         set(v: T) { if (!Object.is(v, value)) { value = v; s._sub?.(); } },
         peek(): T { return value; },
@@ -134,9 +601,9 @@ export function signalMono<T>(value: T): SignalMono<T>
     return s;
 }
 
+
 /**
- * Sink statico — collega un SignalMono a un TextNode senza EffectRunner.
- * Forma "compilata": node.nodeValue = s.peek() + slot diretto.
+ * Bind a SignalMono to a TextNode — node.nodeValue is updated on signal change.
  */
 export function sinkText(s: SignalMono<string>, node: Text): void
 {
@@ -144,9 +611,9 @@ export function sinkText(s: SignalMono<string>, node: Text): void
     s._sub = () => { node.nodeValue = s.peek(); };
 }
 
+
 /**
- * Sink classe CSS — collega un getter booleano a classList.
- * Usato con _selFn slot per selection senza Effect.
+ * Bind a getter to a class toggle on an Element.  Returns an updater fn.
  */
 export function sinkClass(el: Element, cls: string, getter: () => boolean): () => void
 {
@@ -155,80 +622,195 @@ export function sinkClass(el: Element, cls: string, getter: () => boolean): () =
     return update;
 }
 
-// ── Effect ────────────────────────────────────────────────────────────────────
 
-export function effect(fn: () => void): () => void
+/**
+ * Run fn now and re-run whenever any of its tracked dependencies change.
+ * Returns a stop function that detaches the effect from all deps.
+ *
+ * The fn may receive an `onCleanup` argument — register a cleanup callback
+ * to run BEFORE the next re-run and on stop().
+ *
+ * @example
+ *   const stop = effect(onCleanup => {
+ *       const timer = setInterval(...)
+ *       onCleanup(() => clearInterval(timer))
+ *   })
+ */
+export function effect(fn: (onCleanup?: (cb: () => void) => void) => void): () => void
 {
-    const runner: EffectRunner = {
-        deps: new Set(),
+    const runner: Effect = {
+        active   : true,
+        deps     : new Set(),
+        cleanups : [],
         run() {
-            runner.deps.forEach(d => d.delete(runner)); runner.deps.clear();
-            const prev = _activeEffect; _activeEffect = runner;
-            try { fn(); } finally { _activeEffect = prev; }
+            if (!runner.active) return;
+            // Run pending cleanups from the previous run
+            for (const c of runner.cleanups) { try { c(); } catch (e) { console.warn('[effect cleanup]', e); } }
+            runner.cleanups.length = 0;
+
+            // Clear stale deps
+            for (const d of runner.deps) d.delete(runner);
+            runner.deps.clear();
+
+            const prev = ACTIVE_EFFECT;
+            ACTIVE_EFFECT = runner;
+            try {
+                fn(cb => runner.cleanups.push(cb));
+            } finally {
+                ACTIVE_EFFECT = prev;
+            }
         },
     };
     runner.run();
-    return () => { runner.deps.forEach(d => d.delete(runner)); runner.deps.clear(); };
+    return () => {
+        runner.active = false;
+        for (const c of runner.cleanups) { try { c(); } catch { /* ignore */ } }
+        runner.cleanups.length = 0;
+        for (const d of runner.deps) d.delete(runner);
+        runner.deps.clear();
+    };
 }
 
+
+/**
+ * Lazy + cached derived signal.  Recomputes when any read dep changes.
+ * Downstream effects only re-run when the computed VALUE changes (short-circuit).
+ *
+ * @example
+ *   const a = signal(1)
+ *   const dbl = computed(() => a.get() * 2)
+ *   effect(() => console.log(dbl.get()))   // 2
+ *   a.set(5)                                // 10
+ */
 export function computed<T>(fn: () => T): ReadonlySignal<T>
 {
     const s = signal<T>(undefined as T);
-    effect(() => s.set(fn()));
+    effect(() => {
+        const v = fn();
+        // s.set is a no-op when Object.is(old, new) — short-circuits downstream
+        s.set(v);
+    });
     return s.readonly();
 }
 
+
+/**
+ * Run fn.  All triggers inside fn are queued and flushed once at the end,
+ * so each unique effect re-runs at most once.
+ */
 export function batch(fn: () => void): void
 {
-    _batchDepth++;
-    try { fn(); } finally {
-        if (--_batchDepth === 0) {
-            const p = _pendingEffects.splice(0);
-            p.forEach(e => e.run());
-        }
+    BATCH_DEPTH++;
+    try { fn(); }
+    finally {
+        BATCH_DEPTH--;
+        if (BATCH_DEPTH === 0) _flushPending();
     }
 }
 
-export function untrack<T>(fn: () => T): T
+function _flushPending(): void
 {
-    const prev = _activeEffect; _activeEffect = null;
-    try { return fn(); } finally { _activeEffect = prev; }
+    if (PENDING_EFFECTS.size === 0) return;
+    const toRun = [...PENDING_EFFECTS];
+    PENDING_EFFECTS.clear();
+    for (const e of toRun) {
+        if (e === ACTIVE_EFFECT) continue;
+        if (e.active) e.run();
+    }
 }
 
-// ── AriannATemplate — HTMLTemplateElement engine ──────────────────────────────
 
 /**
- * AriannATemplate — Vue/Solid style template engine, zero JSX, zero runtime parser.
+ * Run fn without tracking reads as deps of the active effect.
  *
- * Architettura:
- *   1. new AriannATemplate(html) → browser parsa HTML UNA SOLA VOLTA in C++
- *   2. tpl.clone()               → cloneNode O(1) — puro C++, zero parser JS
- *   3. tpl.walk(el, [0,0])       → accesso O(1) ai nodi interni via path di indici
+ * @example
+ *   effect(() => {
+ *       const u = untrack(() => state.Value.user)   // no dep on user
+ *       console.log(state.Value.user.name)           // dep on user.name
+ *   })
+ */
+export function untrack<T>(fn: () => T): T
+{
+    const prev = ACTIVE_EFFECT;
+    ACTIVE_EFFECT = null;
+    try { return fn(); } finally { ACTIVE_EFFECT = prev; }
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  deepWatch — opt-in subtree observer
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Watch ALL mutations inside an object subtree.  Returns a stop function.
  *
- * Perché è più veloce di createElement + innerHTML per ogni riga:
- *   - innerHTML su ogni clone = N parse HTML separati
- *   - HTMLTemplateElement = 1 parse + N cloneNode C++ (~30% più veloce su 01/07/08)
+ * WARNING: expensive.  Use for persistence/logging/devtools, NOT rendering.
  *
- * Equivalente a:
- *   - Vue 3: `const _hoisted = createElementVNode(...)` + `cloneVNode`
- *   - Solid: `const _tmpl$ = template(...)` + `_tmpl$.cloneNode(true)`
- *   - AriannA: `const tpl = new AriannATemplate(...)` + `tpl.clone()`
+ * @param target  reactive proxy (or raw — will be wrapped)
+ * @param cb      called as (path, oldValue, newValue) on every mutation
+ *
+ * @example
+ *   const obs = new Observable({ user: { name: 'Anna', age: 30 } })
+ *   const stop = deepWatch(obs.Value.user, (path, old, neu) => {
+ *       console.log(path.join('.'), old, '→', neu)
+ *   })
+ *   obs.Value.user.name = 'Bea'   // logs: name Anna → Bea
+ *   stop()                         // detach
+ */
+export function deepWatch<T extends object>(
+    target : T,
+    cb     : (path: (string | symbol)[], oldVal: unknown, newVal: unknown) => void,
+): () => void
+{
+    const raw = toRaw(target) as object;
+    let active = true;
+
+    // Subscribe via the emit channel — every mutation emits change-after.
+    // We hook a temporary emit relay onto the raw's chain.
+    const existing = TARGET_EMIT.get(raw);
+    const relay = (e: ChangeEvent) => {
+        if (!active) return;
+        // Forward existing listeners
+        if (existing) existing(e);
+        // Only fire user cb once per mutation (use 'change-after' as the canonical pass)
+        if (e.Type === 'change-after') {
+            cb([...e.Path, e.Key], e.Old, e.New);
+        }
+    };
+    TARGET_EMIT.set(raw, relay);
+
+    return () => {
+        active = false;
+        if (existing) TARGET_EMIT.set(raw, existing);
+        else          TARGET_EMIT.delete(raw);
+    };
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  AriannATemplate — HTMLTemplateElement engine (preserved untouched)
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * AriannATemplate — clone-based template engine, zero JSX, zero runtime parser.
+ *
+ *   1. new AriannATemplate(html) → browser parses HTML once into <template>.content
+ *   2. tpl.clone()                → cloneNode O(1), C++ native, zero JS parsing
+ *   3. tpl.walk(el, [0,0])        → O(1) descend via childNodes[i] chain
+ *
+ * Equivalent to Vue's hoisted vnodes or Solid's compiled templates, but with
+ * an explicit walk API instead of compiler-generated refs.
  *
  * @example
  *   const tpl = new AriannATemplate(
- *     '<tr data-id="">' +
- *     '<td class="col-md-1"></td>' +
+ *     '<tr data-id=""><td class="col-md-1"></td>' +
  *     '<td class="col-md-4"><a class="lbl"></a></td>' +
  *     '<td class="col-md-6"></td></tr>'
  *   );
- *
- *   // Ogni riga — O(1) C++
  *   const tr       = tpl.clone() as HTMLTableRowElement;
  *   const idTxt    = tpl.walk(tr, [0, 0]) as Text;
  *   const labelTxt = tpl.walk(tr, [1, 0, 0]) as Text;
- *
- *   const $label = signalMono('ciao');
- *   sinkText($label, labelTxt as Text);
+ *   const $label = signalMono('hello'); sinkText($label, labelTxt);
  */
 export class AriannATemplate
 {
@@ -236,39 +818,23 @@ export class AriannATemplate
 
     constructor(html: string)
     {
-        this.#tpl          = document.createElement('template');
+        this.#tpl           = document.createElement('template');
         this.#tpl.innerHTML = html;
-        // Il browser compila il fragment in C++ al momento dell'assegnazione
-        // .content è già un DocumentFragment ottimizzato, pronto per cloneNode
     }
 
-    /**
-     * Clona il primo elemento del template — O(1) in C++.
-     * Zero HTML parsing. Zero allocazione JS oltre il nodo clonato.
-     */
+    /** Clone the first root element of the template — O(1) in C++. */
     clone(): Element
     {
         return this.#tpl.content.firstElementChild!.cloneNode(true) as Element;
     }
 
-    /**
-     * Clona l'intero content come DocumentFragment.
-     * Per template con più elementi root.
-     */
+    /** Clone the entire content as a DocumentFragment (multi-root templates). */
     cloneAll(): DocumentFragment
     {
         return this.#tpl.content.cloneNode(true) as DocumentFragment;
     }
 
-    /**
-     * Accesso O(1) a un nodo interno tramite path di indici childNodes.
-     * Evita querySelector — accesso diretto via childNodes[i] chain.
-     *
-     * @example
-     *   const tr    = tpl.clone();
-     *   const idTxt = tpl.walk(tr, [0, 0]) as Text;
-     *   // tr.childNodes[0].childNodes[0]
-     */
+    /** O(1) descent via childNodes index path.  Avoids querySelector. */
     walk(root: Node, path: number[]): Node
     {
         let n: Node = root;
@@ -276,628 +842,169 @@ export class AriannATemplate
         return n;
     }
 
-    /**
-     * Accesso O(1) a più nodi interni in una singola chiamata.
-     * Restituisce array di nodi nell'ordine dei path forniti.
-     *
-     * @example
-     *   const [idTxt, labelTxt] = tpl.walkAll(tr, [0,0], [1,0,0]);
-     */
+    /** Batch walk — descend to multiple nodes in one call. */
     walkAll(root: Node, ...paths: number[][]): Node[]
     {
         return paths.map(p => this.walk(root, p));
     }
-
-    /** Il DocumentFragment interno — read-only. */
-    get content(): DocumentFragment { return this.#tpl.content; }
 }
 
-// ── DOM event type registry ───────────────────────────────────────────────────
 
-/**
- * Safe global resolver.
- *
- * Some DOM event constructors are not exposed as bare identifiers in every
- * environment: e.g. Firefox desktop without a touch device throws
- * `ReferenceError: TouchEvent is not defined` when the bundle is parsed,
- * blocking the entire module from loading. Using `typeof` is the only
- * operator that does not raise on undeclared identifiers.
- *
- * The fallback is a named stub class so `desc.Interface.name` keeps producing
- * the original interface name (used to build `DOM_INTERFACES`), preserving
- * the lookup-by-name shape of the registry across all browsers.
- */
-function _safeEventCtor<T extends abstract new (...a: never[]) => Event>(
-    name: string,
-    resolver: () => T | undefined,
-): T
-{
-    try {
-        const ctor = resolver();
-        if (ctor) return ctor;
-    } catch { /* swallow ReferenceError on undeclared globals */ }
-    // Fallback stub: a class whose .name matches `name`. Never instantiated
-    // at runtime (the registry only reads .name), but kept structurally
-    // compatible with the descriptor type.
-    return ({ [name]: class extends Event {} }[name]) as unknown as T;
-}
+// ═════════════════════════════════════════════════════════════════════════════
+//  Observable<T> class — evented reactive wrapper
+// ═════════════════════════════════════════════════════════════════════════════
 
-const _TouchEvent = _safeEventCtor('TouchEvent', () =>
-    typeof TouchEvent !== 'undefined' ? TouchEvent : undefined);
-
-const DOM_TYPES: Readonly<Record<string, DomEventTypeDescriptor>> = Object.freeze(
-{
-    click:{Name:'click',Interface:MouseEvent}, dblclick:{Name:'dblclick',Interface:MouseEvent},
-    mouseenter:{Name:'mouseenter',Interface:MouseEvent}, mouseleave:{Name:'mouseleave',Interface:MouseEvent},
-    mousemove:{Name:'mousemove',Interface:MouseEvent}, mouseout:{Name:'mouseout',Interface:MouseEvent},
-    mouseover:{Name:'mouseover',Interface:MouseEvent}, mouseup:{Name:'mouseup',Interface:MouseEvent},
-    mousedown:{Name:'mousedown',Interface:MouseEvent}, contextmenu:{Name:'contextmenu',Interface:MouseEvent},
-    drag:{Name:'drag',Interface:DragEvent}, dragend:{Name:'dragend',Interface:DragEvent},
-    dragenter:{Name:'dragenter',Interface:DragEvent}, dragleave:{Name:'dragleave',Interface:DragEvent},
-    dragover:{Name:'dragover',Interface:DragEvent}, dragstart:{Name:'dragstart',Interface:DragEvent},
-    drop:{Name:'drop',Interface:DragEvent},
-    wheel:{Name:'wheel',Interface:WheelEvent},
-    keypress:{Name:'keypress',Interface:KeyboardEvent}, keydown:{Name:'keydown',Interface:KeyboardEvent},
-    keyup:{Name:'keyup',Interface:KeyboardEvent},
-    animationstart:{Name:'animationstart',Interface:AnimationEvent},
-    animationend:{Name:'animationend',Interface:AnimationEvent},
-    animationiteration:{Name:'animationiteration',Interface:AnimationEvent},
-    abort:{Name:'abort',Interface:UIEvent}, load:{Name:'load',Interface:UIEvent},
-    resize:{Name:'resize',Interface:UIEvent}, scroll:{Name:'scroll',Interface:UIEvent},
-    select:{Name:'select',Interface:UIEvent}, unload:{Name:'unload',Interface:UIEvent},
-    focusin:{Name:'focusin',Interface:FocusEvent}, focusout:{Name:'focusout',Interface:FocusEvent},
-    focus:{Name:'focus',Interface:FocusEvent}, blur:{Name:'blur',Interface:FocusEvent},
-    cut:{Name:'cut',Interface:ClipboardEvent}, copy:{Name:'copy',Interface:ClipboardEvent},
-    paste:{Name:'paste',Interface:ClipboardEvent},
-    compositionstart:{Name:'compositionstart',Interface:CompositionEvent},
-    compositionend:{Name:'compositionend',Interface:CompositionEvent},
-    change:{Name:'change',Interface:Event}, input:{Name:'input',Interface:Event},
-    submit:{Name:'submit',Interface:Event}, reset:{Name:'reset',Interface:Event},
-    DOMContentLoaded:{Name:'DOMContentLoaded',Interface:Event},
-    message:{Name:'message',Interface:Event}, online:{Name:'online',Interface:Event},
-    offline:{Name:'offline',Interface:Event}, popstate:{Name:'popstate',Interface:Event},
-    hashchange:{Name:'hashchange',Interface:Event}, beforeunload:{Name:'beforeunload',Interface:Event},
-    touchstart:{Name:'touchstart',Interface:_TouchEvent}, touchend:{Name:'touchend',Interface:_TouchEvent},
-    touchmove:{Name:'touchmove',Interface:_TouchEvent}, touchcancel:{Name:'touchcancel',Interface:_TouchEvent},
-    pointerdown:{Name:'pointerdown',Interface:PointerEvent}, pointerup:{Name:'pointerup',Interface:PointerEvent},
-    pointermove:{Name:'pointermove',Interface:PointerEvent}, pointercancel:{Name:'pointercancel',Interface:PointerEvent},
-    pointerenter:{Name:'pointerenter',Interface:PointerEvent}, pointerleave:{Name:'pointerleave',Interface:PointerEvent},
-    transitionstart:{Name:'transitionstart',Interface:TransitionEvent},
-    transitionend:{Name:'transitionend',Interface:TransitionEvent},
-    transitioncancel:{Name:'transitioncancel',Interface:TransitionEvent},
-});
-
-const DOM_INTERFACES: Record<string, DomEventInterfaceDescriptor> = {};
-for (const [name, desc] of Object.entries(DOM_TYPES)) {
-    const iname = desc.Interface.name;
-    if (!DOM_INTERFACES[iname]) DOM_INTERFACES[iname] = { Name: iname, Types: {} };
-    DOM_INTERFACES[iname].Types[name] = desc;
-}
-
-const _globalListeners = new Map<string, ListenerRecord>();
-
-function _toTargets(target: EventTarget | EventTarget[] | string): EventTarget[]
-{
-    if (typeof target === 'string') return typeof document !== 'undefined' ? Array.from(document.querySelectorAll(target)) : [];
-    return Array.isArray(target) ? target : [target];
-}
-function _toTypes(types: string): string[] { return types.split(/[\s,|]+/).filter(Boolean); }
-
-// ── Reactive deep wrapper ─────────────────────────────────────────────────────
-
-/**
- * Event detail for Observable reactive change events.
- *
- * The Observable instance fires:
- *   - 'change-before'           — cancelable, fired before the mutation
- *   - 'change-after'            — non-cancelable, fired after commit
- *   - '<key>-change-before'     — cancelable, scoped to the changing key
- *   - '<key>-change-after'      — scoped to the changed key
- *
- * For nested mutations the path[] reflects the full key chain from the root.
- *
- * @example
- *   const obs = new Observable(['apple', 'banana']);
- *   obs.on('change-after', e => console.log(e.Path, e.Old, '→', e.New));
- *   obs.value[0] = 'mango';   // → ['0'], 'apple', 'mango'
- */
-export interface ChangeEvent extends AriannAEvent
-{
-    Type   : string;
-    Target : object;          // the immediate parent that mutated
-    Key    : string | symbol; // property/index that changed
-    Path   : (string | symbol)[]; // full path from root
-    Old    : unknown;
-    New    : unknown;
-    Kind   : 'set' | 'delete' | 'mutate';
-}
-
-/**
- * Mutating method names that must trigger 'change' events when called on
- * a wrapped Array/Map/Set/WeakMap/WeakSet.
- */
-const _MUTATING_ARRAY = new Set([
-    'push', 'pop', 'shift', 'unshift',
-    'splice', 'sort', 'reverse', 'fill', 'copyWithin',
-]);
-const _MUTATING_MAP = new Set(['set', 'delete', 'clear']);
-const _MUTATING_SET = new Set(['add', 'delete', 'clear']);
-
-/**
- * Marker used to retrieve the underlying raw value from a Proxy.
- * @internal
- */
-const _RAW = Symbol('arianna.observable.raw');
-
-/**
- * Cache of raw → proxy so we never wrap the same object twice within a
- * single observable graph.
- * @internal
- */
-type _ProxyCache = WeakMap<object, object>;
-
-/**
- * Decides whether a value should be deep-wrapped in the reactive graph.
- * Frozen / sealed objects are passed through untouched.
- */
-function _isReactiveTarget(v: unknown): v is object
-{
-    if (v === null || typeof v !== 'object') return false;
-    if (Object.isFrozen(v) || Object.isSealed(v)) return false;
-    return true;
-}
-
-/**
- * Creates a reactive deep wrapper around `root`. All nested objects, arrays,
- * Maps and Sets become Proxies that emit changes through `emit`. Plain
- * objects use Object.defineProperty getters/setters so primitive writes
- * (`obj.name = 'x'`) are intercepted with no Proxy overhead per read.
- */
-function _makeReactive<T extends object>(
-    root  : T,
-    emit  : (path: (string | symbol)[], target: object, key: string | symbol,
-             oldValue: unknown, newValue: unknown,
-             kind: 'set' | 'delete' | 'mutate') => boolean,
-): T
-{
-    const cache: _ProxyCache = new WeakMap();
-
-    function wrap(value: unknown, path: (string | symbol)[]): unknown
-    {
-        if (!_isReactiveTarget(value)) return value;
-        const cached = cache.get(value);
-        if (cached) return cached;
-
-        // Map / WeakMap / Set / WeakSet — wrap method calls
-        if (value instanceof Map || value instanceof WeakMap
-            || value instanceof Set || value instanceof WeakSet)
-        {
-            const proxy = _wrapCollection(value, path, emit, wrap);
-            cache.set(value, proxy);
-            return proxy;
-        }
-
-        // Array — Proxy with set / deleteProperty traps
-        if (Array.isArray(value))
-        {
-            const proxy = _wrapArray(value, path, emit, wrap);
-            cache.set(value, proxy);
-            return proxy;
-        }
-
-        // Plain object — install getter/setter on every own enumerable key.
-        // Recurse into nested objects/arrays.
-        _installObjectTraps(value as Record<string, unknown>, path, emit, wrap);
-        cache.set(value, value);
-        return value;
-    }
-
-    return wrap(root, []) as T;
-}
-
-/**
- * Wraps an Array in a Proxy that intercepts index assignment, deletion,
- * and mutating method calls (push/pop/splice/sort/reverse/fill/copyWithin).
- */
-function _wrapArray(
-    arr   : unknown[],
-    path  : (string | symbol)[],
-    emit  : (path: (string | symbol)[], target: object, key: string | symbol,
-             oldValue: unknown, newValue: unknown,
-             kind: 'set' | 'delete' | 'mutate') => boolean,
-    wrap  : (v: unknown, path: (string | symbol)[]) => unknown,
-): unknown[]
-{
-    // Pre-wrap existing elements so they too become reactive when mutated.
-    for (let i = 0; i < arr.length; i++)
-    {
-        const w = wrap(arr[i], [...path, String(i)]);
-        if (w !== arr[i]) arr[i] = w;
-    }
-
-    return new Proxy(arr, {
-        get(target, key)
-        {
-            if (key === _RAW) return target;
-
-            const v = (target as unknown as Record<string | symbol, unknown>)[key];
-            if (typeof key === 'string' && _MUTATING_ARRAY.has(key) && typeof v === 'function')
-            {
-                return function(this: unknown, ...args: unknown[])
-                {
-                    const before = target.slice();
-                    const result = (v as (...a: unknown[]) => unknown).apply(target, args);
-                    emit([...path], target, key, before, target.slice(), 'mutate');
-                    // newly-inserted items must become reactive too
-                    for (let i = 0; i < target.length; i++)
-                    {
-                        const w = wrap(target[i], [...path, String(i)]);
-                        if (w !== target[i]) target[i] = w;
-                    }
-                    return result;
-                };
-            }
-            return v;
-        },
-
-        set(target, key, value)
-        {
-            if (key === 'length')
-            {
-                const old = target.length;
-                if (Object.is(old, value)) return true;
-                if (!emit([...path], target, key, old, value, 'set')) return false;
-                (target as unknown as { length: number }).length = value as number;
-                return true;
-            }
-
-            const old = (target as unknown as Record<string | symbol, unknown>)[key];
-            if (Object.is(old, value)) return true;
-
-            if (!emit([...path], target, key, old, value, 'set')) return false;
-
-            const wrapped = wrap(value, [...path, key]);
-            (target as unknown as Record<string | symbol, unknown>)[key] = wrapped;
-            return true;
-        },
-
-        deleteProperty(target, key)
-        {
-            if (!(key in target)) return true;
-            const old = (target as unknown as Record<string | symbol, unknown>)[key];
-            if (!emit([...path], target, key, old, undefined, 'delete')) return false;
-            delete (target as unknown as Record<string | symbol, unknown>)[key];
-            return true;
-        },
-    });
-}
-
-/**
- * Wraps a Map / WeakMap / Set / WeakSet so mutating methods emit events.
- * Preserves identity of read methods (get / has / forEach / iterators).
- */
-function _wrapCollection(
-    coll  : Map<unknown, unknown> | WeakMap<object, unknown> | Set<unknown> | WeakSet<object>,
-    path  : (string | symbol)[],
-    emit  : (path: (string | symbol)[], target: object, key: string | symbol,
-             oldValue: unknown, newValue: unknown,
-             kind: 'set' | 'delete' | 'mutate') => boolean,
-    wrap  : (v: unknown, path: (string | symbol)[]) => unknown,
-): typeof coll
-{
-    const isMap = coll instanceof Map || coll instanceof WeakMap;
-    const mutating = isMap ? _MUTATING_MAP : _MUTATING_SET;
-
-    return new Proxy(coll, {
-        get(target, key)
-        {
-            if (key === _RAW) return target;
-
-            const v = Reflect.get(target, key);
-            if (typeof v !== 'function') return v;
-
-            // Bind native methods to the unwrapped target so internal slots work.
-            if (typeof key === 'string' && mutating.has(key))
-            {
-                return function(this: unknown, ...args: unknown[])
-                {
-                    const before = isMap
-                        ? new Map(target instanceof Map ? target.entries() : [])
-                        : new Set(target instanceof Set ? target.values() : []);
-                    if (isMap && key === 'set' && args.length === 2)
-                    {
-                        args[1] = wrap(args[1], [...path, '<map-value>']);
-                    }
-                    else if (!isMap && key === 'add' && args.length === 1)
-                    {
-                        args[0] = wrap(args[0], [...path, '<set-value>']);
-                    }
-                    const result = (v as (...a: unknown[]) => unknown).apply(target, args);
-                    emit([...path], target, key, before, undefined, 'mutate');
-                    return result;
-                };
-            }
-            return v.bind(target);
-        },
-    });
-}
-
-/**
- * Installs getter/setter traps on every enumerable own property of an object.
- * Recursive: nested objects/arrays/collections become reactive too.
- */
-function _installObjectTraps(
-    obj   : Record<string, unknown>,
-    path  : (string | symbol)[],
-    emit  : (path: (string | symbol)[], target: object, key: string | symbol,
-             oldValue: unknown, newValue: unknown,
-             kind: 'set' | 'delete' | 'mutate') => boolean,
-    wrap  : (v: unknown, path: (string | symbol)[]) => unknown,
-): void
-{
-    for (const key of Object.keys(obj))
-    {
-        const desc = Object.getOwnPropertyDescriptor(obj, key);
-        if (!desc || !desc.configurable) continue;
-        if (desc.get || desc.set) continue;     // already a getter/setter — skip
-
-        let value = wrap(obj[key], [...path, key]);
-
-        Object.defineProperty(obj, key, {
-            enumerable  : true,
-            configurable: true,
-            get() { return value; },
-            set(next: unknown)
-            {
-                if (Object.is(value, next)) return;
-                const old = value;
-                if (!emit([...path], obj, key, old, next, 'set')) return;
-                value = wrap(next, [...path, key]);
-            },
-        });
-    }
-}
-
-// ── Observable class ──────────────────────────────────────────────────────────
-
-/**
- * Construct options for `new Observable(value, options)`.
- *
- * @example
- *   const obs = new Observable(['apple','banana'], { history: true });
- *   obs.on('change-after', e => console.log(e.Path, e.Old, '→', e.New));
- *   obs.value[0] = 'mango';   // → change-after { Path:['0'], Old:'apple', New:'mango' }
- *   obs.value.push('pear');   // → change-after Kind:'mutate'
- *   obs.undo();               // → 'mango' becomes 'apple'
- */
 export interface ObservableOptions
 {
-    /** When true, every change is recorded into a history stack for `undo()`. */
+    /** When true, mutations are recorded into a history stack for undo(). */
     history?: boolean;
-    /** Max history entries kept (default 100). Older entries are dropped. */
+    /** Maximum history entries kept (default 100). */
     historyLimit?: number;
 }
 
-export class Observable
+interface InstanceListener
 {
-    readonly #events : Map<string, Set<InstanceListener>> = new Map();
-    readonly #target : object;
-    readonly #effects: Array<() => void> = [];
-    readonly #opts   : ObservableOptions;
-    readonly #history: Array<{ path: (string|symbol)[]; target: object; key: string|symbol; old: unknown; nw: unknown; kind: string }> = [];
-    #reactive        : unknown;
+    Id      : string;
+    Handler : (e: ChangeEvent) => void;
+    Target  : object;
+    Once?   : boolean;
+}
 
-    /**
-     * Wraps `value` (or `this`) into a reactive observer.
-     *
-     * - Pass an object/array/Map/Set: it becomes deep-reactive. Read it via
-     *   `obs.value`. All assignments emit 'change-before' (cancelable) and
-     *   'change-after' on the instance, plus '<key>-change-before' /
-     *   '<key>-change-after' scoped events.
-     * - Pass nothing: behaves as the legacy event bus on `this`.
-     */
-    constructor(value?: object, options: ObservableOptions = {})
+/**
+ * Observable<T> — base reactive wrapper.  Adds event listener API on top of
+ * the dep graph.  The reactive Proxy is exposed via .Value (preferred) or
+ * .value (deprecated alias).
+ *
+ * Mutations through .Value trigger:
+ *   - effect() reruns via the dep graph
+ *   - 'change-before' / 'change-after' / '<key>-change-before' / '<key>-change-after' events
+ *
+ * Mutating the raw object directly does NOT trigger.
+ *
+ * @example
+ *   const obs = new Observable({ items: ['a', 'b'] })
+ *   obs.on('change-after', e => console.log(e.Path, e.Old, '→', e.New))
+ *   obs.Value.items.push('c')   // triggers and emits change-after
+ */
+export class Observable<T extends object = object>
+{
+    readonly #listeners : Map<string, Set<InstanceListener>> = new Map();
+    readonly #raw       : T;
+    readonly #proxy     : T;
+    readonly #opts      : ObservableOptions;
+    readonly #history   : Array<{ key: string | symbol; old: unknown; nw: unknown; ts: number }> = [];
+
+    constructor(source: T, options: ObservableOptions = {})
     {
+        if (source === undefined || source === null || typeof source !== 'object')
+            throw new TypeError('Observable requires an object source.');
+
         this.#opts = options;
-        if (value !== undefined && value !== null && typeof value === 'object')
-        {
-            this.#target = value;
-            this.#reactive = _makeReactive(value, (path, target, key, old, nw, kind) =>
-                this.#emit(path, target, key, old, nw, kind));
-        }
-        else
-        {
-            this.#target = this;
-            this.#reactive = undefined;
-        }
+        this.#raw  = source;
+
+        // Register the emit callback BEFORE wrapping, so nested children
+        // wrapped via reactive() can inherit it during their lazy access.
+        TARGET_EMIT.set(source, (e: ChangeEvent) => this.#dispatch(e));
+
+        this.#proxy = reactive(source);
     }
 
-    /**
-     * The reactive view of the wrapped value. Mutations through this
-     * proxy fire 'change-before' / 'change-after' on this Observable.
-     */
-    get value(): unknown { return this.#reactive ?? this.#target; }
+    /** The reactive Proxy.  All mutations through this trigger reactivity. */
+    get Value(): T { return this.#proxy; }
 
-    /**
-     * Reverts the most recent change recorded in the history stack.
-     * No-op if history is disabled or empty. Does not fire change events
-     * on undo (silent).
-     */
-    undo(): boolean
+    /** @deprecated  Use .Value instead.  Kept for backward compatibility. */
+    get value(): T { return this.#proxy; }
+
+    /** The raw, unwrapped object.  Mutations through this are INVISIBLE. */
+    get raw(): T { return this.#raw; }
+
+    /** Read-only history (only populated if options.history === true). */
+    get history(): ReadonlyArray<{ key: string | symbol; old: unknown; nw: unknown; ts: number }>
+    { return this.#history; }
+
+    /** Register an event listener.  Types space/comma/pipe separated. */
+    on(types: string, cb: (e: ChangeEvent) => void): this
     {
-        const entry = this.#history.pop();
-        if (!entry) return false;
-        const t = entry.target as unknown as Record<string | symbol, unknown>;
-        if (entry.kind === 'set' || entry.kind === 'mutate') t[entry.key] = entry.old;
-        else if (entry.kind === 'delete') t[entry.key] = entry.old;
-        return true;
-    }
-
-    /** Number of recorded entries in the history stack. */
-    get historyLength(): number { return this.#history.length; }
-
-    /**
-     * Internal: fired by the reactive Proxy/setter layer. Emits the
-     * 4-event pattern (change-before, <key>-change-before, change-after,
-     * <key>-change-after) and records to history if enabled.
-     * Returns false if any 'change-before' listener cancels the event.
-     */
-    #emit(
-        path  : (string | symbol)[],
-        target: object,
-        key   : string | symbol,
-        old   : unknown,
-        nw    : unknown,
-        kind  : 'set' | 'delete' | 'mutate',
-    ): boolean
-    {
-        const keyStr = typeof key === 'symbol' ? key.description ?? '' : String(key);
-        const evBefore: ChangeEvent = {
-            Type: 'change-before', Target: target, Key: key, Path: [...path, key],
-            Old: old, New: nw, Kind: kind,
-        };
-        let cancelled = false;
-
-        // 'change-before' (global)
-        for (const l of this.#events.get('change-before') ?? [])
-        {
-            const before = evBefore.New;
-            l.Handler.call(l.Target, evBefore);
-            // listener can cancel by setting Type = '__cancelled__' or by
-            // mutating the New field (override semantics)
-            if ((evBefore as unknown as { Cancelled?: boolean }).Cancelled) cancelled = true;
-            // listeners may rewrite New
-            if (evBefore.New !== before) { /* allowed */ }
-        }
-        // '<key>-change-before' (scoped)
-        if (keyStr) for (const l of this.#events.get(`${keyStr}-change-before`) ?? [])
-        {
-            const ev = { ...evBefore, Type: `${keyStr}-change-before` } as ChangeEvent;
-            l.Handler.call(l.Target, ev);
-            if ((ev as unknown as { Cancelled?: boolean }).Cancelled) cancelled = true;
-        }
-        if (cancelled) return false;
-
-        // record history (using the possibly-rewritten newValue)
-        if (this.#opts.history)
-        {
-            this.#history.push({ path, target, key, old, nw: evBefore.New, kind });
-            const limit = this.#opts.historyLimit ?? 100;
-            if (this.#history.length > limit) this.#history.shift();
-        }
-
-        // 'change-after' (global)
-        const evAfter: ChangeEvent = {
-            Type: 'change-after', Target: target, Key: key, Path: [...path, key],
-            Old: old, New: evBefore.New, Kind: kind,
-        };
-        for (const l of this.#events.get('change-after') ?? [])
-            l.Handler.call(l.Target, evAfter);
-        if (keyStr) for (const l of this.#events.get(`${keyStr}-change-after`) ?? [])
-            l.Handler.call(l.Target, { ...evAfter, Type: `${keyStr}-change-after` } as ChangeEvent);
-
-        return true;
-    }
-
-    // ── Instance Signal API ───────────────────────────────────────────────────
-
-    signal<T>(value: T): Signal<T>           { return signal(value); }
-    signalMono<T>(value: T): SignalMono<T>   { return signalMono(value); }
-
-    effect(fn: () => void): this
-    { this.#effects.push(effect(fn)); return this; }
-
-    computed<T>(fn: () => T): ReadonlySignal<T>
-    { const s = signal<T>(undefined as T); this.#effects.push(effect(() => s.set(fn()))); return s.readonly(); }
-
-    // ── Instance pub/sub ──────────────────────────────────────────────────────
-
-    on(types: string, cb: (e: AriannAEvent) => void): this
-    {
-        const ls: InstanceListener = { Id: uuid(), Handler: cb, Target: this.#target };
-        types.split(/(?!-)\W/g).filter(Boolean).forEach(t => {
-            const b = this.#events.get(t) ?? new Set<InstanceListener>();
-            b.add(ls); this.#events.set(t, b);
+        const ls: InstanceListener = { Id: uuid(), Handler: cb, Target: this };
+        types.split(/[\s,|]+/g).filter(Boolean).forEach(t => {
+            const b = this.#listeners.get(t) ?? new Set<InstanceListener>();
+            b.add(ls); this.#listeners.set(t, b);
         });
         return this;
     }
 
-    off(type: string, cb: (e: AriannAEvent) => void): this
-    { this.#events.get(type)?.forEach(l => l.Handler === cb && this.#events.get(type)!.delete(l)); return this; }
-
-    fire(event: AriannAEvent): this
-    { if (!event?.Type) return this; this.#events.get(event.Type)?.forEach(l => l.Handler.call(l.Target, event)); return this; }
-
-    once(event: AriannAEvent, cb: (e: AriannAEvent) => void): this
-    { const w = (e: AriannAEvent) => { cb(e); this.off(event.Type, w); }; return this.on(event.Type, w); }
-
-    all(event: AriannAEvent): this { return this.fire(event); }
-
-    destroy(): this
-    { this.#effects.forEach(s => s()); (this.#effects as Array<() => void>).length = 0; this.#events.clear(); return this; }
-
-    // ── Static DOM bus ────────────────────────────────────────────────────────
-
-    static On(target: EventTarget | EventTarget[] | string, types: string, handler: EventListenerOrEventListenerObject, opts?: ListenerOptions): string[]
+    /** Remove an event listener by callback ref. */
+    off(type: string, cb: (e: ChangeEvent) => void): this
     {
-        const ids: string[] = [];
-        const addOpts: AddEventListenerOptions = { passive: opts?.Passive, capture: opts?.Capture ?? opts?.Phase === 'capture', once: opts?.Once, signal: opts?.Signal };
-        for (const t of _toTargets(target)) for (const type of _toTypes(types)) {
-            const id = uuid();
-            t.addEventListener(type, handler, addOpts);
-            _globalListeners.set(id, { UUID: id, Type: type, Target: t, Function: handler, Propagation: addOpts.capture ? 'capture' : 'bubble', XML: '' });
-            ids.push(id);
-        }
-        return ids;
+        const bucket = this.#listeners.get(type);
+        if (bucket) for (const l of bucket) if (l.Handler === cb) bucket.delete(l);
+        return this;
     }
-
-    static Off(target: EventTarget | EventTarget[] | string, types: string, handler: EventListenerOrEventListenerObject, opts?: ListenerOptions): void
-    { for (const t of _toTargets(target)) for (const type of _toTypes(types)) t.removeEventListener(type, handler, { capture: opts?.Capture ?? opts?.Phase === 'capture' }); }
-
-    static Fire(target: EventTarget | EventTarget[] | string, type: string, init?: EventInit, detail?: CustomEventInit): void
-    { const ev = detail !== undefined ? new CustomEvent(type, { ...init, ...detail }) : new Event(type, init); _toTargets(target).forEach(t => t.dispatchEvent(ev)); }
-
-    static Once(target: EventTarget | EventTarget[] | string, types: string, handler: EventListenerOrEventListenerObject, opts?: ListenerOptions): string[]
-    { return Observable.On(target, types, handler, { ...opts, Once: true }); }
-
-    static Trigger(target: EventTarget | EventTarget[] | string, type: string): void { Observable.Fire(target, type); }
-    static All = Observable.On;
-
-    static get Listeners() { return _globalListeners; }
-    static GetListener(id: string): ListenerRecord | undefined { return _globalListeners.get(id); }
-    static GetListeners(target: EventTarget | object, type?: string): ListenerRecord[]
-    { return [..._globalListeners.values()].filter(r => r.Target === target && (type === undefined || r.Type === type)); }
-
-    static readonly Dom = { Types: DOM_TYPES, Interfaces: DOM_INTERFACES };
-    static GetInterface(eventType: string): string | undefined { return DOM_TYPES[eventType]?.Interface?.name; }
-    static GetTypes(interfaceName: string): string[] { return Object.keys(DOM_INTERFACES[interfaceName]?.Types ?? {}); }
-
-    // ── Static Signal + Template shorthands ───────────────────────────────────
-
-    static signal      = signal;
-    static signalMono  = signalMono;
-    static sinkText    = sinkText;
-    static sinkClass   = sinkClass;
-    static effect      = effect;
-    static computed    = computed;
-    static batch       = batch;
-    static untrack     = untrack;
 
     /**
-     * Crea un AriannATemplate — parse HTML una volta, clone O(1) N volte.
-     * @example
-     *   const tpl = Observable.template('<tr><td></td></tr>');
-     *   const tr  = tpl.clone();
+     * Manually fire an event.  Two signatures supported:
+     *
+     *   fire(type: string, detail?: Partial<ChangeEvent>)
+     *   fire(event: AriannAEvent)   // legacy: pass full event object with .Type
      */
-    static template(html: string): AriannATemplate { return new AriannATemplate(html); }
+    fire(typeOrEvent: string | AriannAEvent, detail: Partial<ChangeEvent> = {}): this
+    {
+        let ev: ChangeEvent;
+        if (typeof typeOrEvent === 'string') {
+            ev = {
+                Type   : typeOrEvent,
+                Target : this.#raw,
+                Path   : detail.Path ?? [],
+                Key    : detail.Key  ?? '',
+                Old    : detail.Old  ?? undefined,
+                New    : detail.New  ?? undefined,
+                Kind   : detail.Kind ?? 'set',
+            };
+        } else {
+            // Legacy single-arg call: take type from object, copy rest
+            const e = typeOrEvent as Record<string, unknown>;
+            ev = {
+                Type   : String(e.Type ?? ''),
+                Target : (e.Target as object) ?? this.#raw,
+                Path   : (e.Path as (string|symbol)[]) ?? [],
+                Key    : (e.Key as string | symbol) ?? '',
+                Old    : e.Old,
+                New    : e.New,
+                Kind   : (e.Kind as 'set'|'delete'|'mutate') ?? 'set',
+                ...e,   // copy any extra fields (Sheet, Detail, etc.)
+            };
+        }
+        this.#dispatch(ev);
+        return this;
+    }
+
+    #dispatch(e: ChangeEvent): void
+    {
+        const bucket = this.#listeners.get(e.Type);
+        if (!bucket) return;
+        for (const l of [...bucket]) {
+            try { l.Handler.call(l.Target, e); }
+            catch (err) { console.warn('[Observable listener]', err); }
+            if (l.Once) bucket.delete(l);
+        }
+        // History recording (only on canonical 'change-after')
+        if (this.#opts.history && e.Type === 'change-after') {
+            this.#history.push({ key: e.Key, old: e.Old, nw: e.New, ts: Date.now() });
+            const limit = this.#opts.historyLimit ?? 100;
+            if (this.#history.length > limit) this.#history.splice(0, this.#history.length - limit);
+        }
+    }
 }
 
-if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Observable')) {
-    try {
-        Object.defineProperty(window, 'Observable', { enumerable: true, configurable: false, writable: false, value: Observable });
-    } catch {
-        // Already registered by another bundle — silent skip.
-    }
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Module side-effects + default export
+// ═════════════════════════════════════════════════════════════════════════════
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Observable', {
+        enumerable: true, configurable: false, writable: false, value: Observable,
+    });
 }
 
 export default Observable;

@@ -280,7 +280,7 @@ async function cmdServe(port = 3000) {
 
   const server = createServer(async (req, res) => {
     let path = req.url.split('?')[0];
-    if (path === '/') path = '/index.html';
+    if (path === '/') path = '/playground.html';
     const abs = join(root, path);
     const ext = path.slice(path.lastIndexOf('.'));
     try {
@@ -325,9 +325,9 @@ async function cmdBuild(minify = false) {
 async function cmdBench() {
   hdr('AriannA Benchmark');
   info('Opening js-framework-benchmark harness...');
-  if (existsSync('arianna-release/benchmark/index.html')) {
-    spawn('open', ['arianna-release/benchmark/index.html'], { detached: true });
-    ok('Opened arianna-release/benchmark/index.html');
+  if (existsSync('arianna-release/benchmark/playground.html')) {
+    spawn('open', ['arianna-release/benchmark/playground.html'], { detached: true });
+    ok('Opened arianna-release/benchmark/playground.html');
   } else {
     warn('Benchmark files not found. Run from the arianna repo root.');
   }

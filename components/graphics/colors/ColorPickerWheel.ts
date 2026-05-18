@@ -1,291 +1,188 @@
 /**
- * @module    components/graphics/2D/ColorPickerWheel
+ * @module    components/graphics/colors/ColorPickerWheel
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Illustrator-style colour wheel: outer ring picks Hue (HSV/HSL),
- * inner square picks Saturation × Value. Wheel is rendered as an SVG
- * conic gradient using Canvas → data URL fallback for browsers without
- * `conic-gradient` SVG support.
+ * ColorPickerWheel — HSL hue-ring picker. SVG-rendered ring of 360° wedges
+ * with a white indicator dot. Click-drag around the ring to set the hue.
  *
- *           ╭────────────╮
- *         ╱   ┌──────┐    ╲
- *        │   │ S × V │     │   ← inner square (saturation horizontal,
- *        │   │       │     │     value vertical)
- *         ╲   └──────┘    ╱
- *           ╰────────────╯
- *                 ↑ outer ring = hue
+ * @example HTML
+ *   <arianna-color-picker-wheel value="#ff00aa" size="200"></arianna-color-picker-wheel>
  *
- * Side panel exposes editable values for every supported colour space:
- *   RGB, HEX, HSL, HSV, CMYK, OKLCH, CIELUV, plus the 24-bit Cube index.
- *
- * @example
- *   import { ColorPickerWheel } from 'ariannajs/components/graphics/2D';
- *
- *   const cp = new ColorPickerWheel('#wheel', { color: '#e40c88', alpha: true });
- *   cp.on('change', e => brush.setColor(e.hex));
+ * Events: arianna:change  detail: { hex, hue, hslString }
+ * Attrs:  value, size
  */
 
-import { Control, type CtrlOptions } from '../../core/Control.ts';
-import {
-    type RGB, parseHex, rgbToHex,
-    rgbToHsl, hslToRgb, rgbToHsv, hsvToRgb,
-    rgbToCmyk, rgbToCieluv, rgbToOklch, rgbToCube,
-} from '../../../additionals/Colors.ts';
+import { Component } from '../../../core/Component.ts';
+import { html }      from '../../../core/Template.ts';
+import { signal }    from '../../../core/Observable.ts';
+import type { Signal } from '../../../core/Observable.ts';
+import { Sheet } from '../../../core/Sheet.ts';
+import { Rule }      from '../../../core/Rule.ts';
+import { parseHex, rgbToHsl, hslToRgb, rgbToHex } from './ColorPicker.ts';
 
-// ── Options ────────────────────────────────────────────────────────────────
-
-export interface ColorPickerWheelOptions extends CtrlOptions
-{
-    /** Initial colour (hex). Default '#e40c88'. */
-    color?  : string;
-    /** Show alpha slider. Default false. */
-    alpha?  : boolean;
-    /** Wheel diameter in px. Default 240. */
-    size?   : number;
-    /** Show the readout panel. Default true. */
-    readout?: boolean;
+export interface ColorPickerWheelOptions {
+    value? : string;
+    size?  : number;
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
-
-export class ColorPickerWheel extends Control<ColorPickerWheelOptions>
+export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HTMLElement, {}, {
+    attrs : ['value', 'size'],
+    shadow: false,
+})
 {
-    private _h = 0; private _s = 100; private _v = 100; private _a = 1;
+    hue$: Signal<number> = signal<number>(0);
 
-    private _wheel!: HTMLCanvasElement;
-    private _sv!   : HTMLCanvasElement;
-    private _huePin!: HTMLElement;
-    private _svPin! : HTMLElement;
-    private _readout?: HTMLElement;
-
-    constructor(container: string | HTMLElement | null, opts: ColorPickerWheelOptions = {})
+    build(_opts: ColorPickerWheelOptions = {})
     {
-        super(container, 'div', {
-            color: '#e40c88', alpha: false, size: 240, readout: true, ...opts,
-        });
-        this.el.className = `ar-cpw${opts.class ? ' ' + opts.class : ''}`;
-        this._injectStyles();
-        this._build();
-        this.setColor(this._get<string>('color', '#e40c88'));
+        const sizeAttr = this.attrSignal('size');
+
+        this.dim = () => parseInt(sizeAttr.get() ?? '200', 10) || 200;
+        this.viewBox = () => `0 0 ${this.dim()} ${this.dim()}`;
+        this.dimStr  = () => String(this.dim());
+
+        this.wedges = (): Array<{ d: string; fill: string }> => {
+            const d = this.dim();
+            const cx = d / 2, cy = d / 2;
+            const rOuter = d / 2 - 4;
+            const rInner = rOuter - 20;
+            const out: Array<{ d: string; fill: string }> = [];
+            for (let h = 0; h < 360; h += 2) {
+                const a0 = (h - 1) * Math.PI / 180;
+                const a1 = (h + 1) * Math.PI / 180;
+                const x0o = cx + rOuter * Math.cos(a0), y0o = cy + rOuter * Math.sin(a0);
+                const x1o = cx + rOuter * Math.cos(a1), y1o = cy + rOuter * Math.sin(a1);
+                const x1i = cx + rInner * Math.cos(a1), y1i = cy + rInner * Math.sin(a1);
+                const x0i = cx + rInner * Math.cos(a0), y0i = cy + rInner * Math.sin(a0);
+                out.push({
+                    d: `M${x0o},${y0o} A${rOuter},${rOuter} 0 0,1 ${x1o},${y1o} L${x1i},${y1i} A${rInner},${rInner} 0 0,0 ${x0i},${y0i} Z`,
+                    fill: `hsl(${h}, 100%, 50%)`,
+                });
+            }
+            return out;
+        };
+        this.dotCx = () => {
+            const d = this.dim();
+            const cx = d / 2;
+            const rOuter = d / 2 - 4;
+            const rInner = rOuter - 20;
+            const r = (rInner + rOuter) / 2;
+            return String(cx + r * Math.cos(this.hue$.get() * Math.PI / 180));
+        };
+        this.dotCy = () => {
+            const d = this.dim();
+            const cy = d / 2;
+            const rOuter = d / 2 - 4;
+            const rInner = rOuter - 20;
+            const r = (rInner + rOuter) / 2;
+            return String(cy + r * Math.sin(this.hue$.get() * Math.PI / 180));
+        };
+
+        this.onPointer = (e: Event) => {
+            const me = e as PointerEvent;
+            if (me.type === 'pointerdown') {
+                (me.currentTarget as SVGElement).setPointerCapture?.(me.pointerId);
+            } else if (!(me.buttons & 1)) return;
+            const rect = (me.currentTarget as SVGElement).getBoundingClientRect();
+            const d = this.dim();
+            const x = me.clientX - rect.left - d / 2;
+            const y = me.clientY - rect.top  - d / 2;
+            const hue = ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+            this.hue$.set(hue);
+            this.#emit();
+        };
+
+        this.template = html`
+            <svg :viewBox="this.viewBox()"
+                 :width="this.dimStr()"
+                 :height="this.dimStr()"
+                 @pointerdown="this.onPointer"
+                 @pointermove="this.onPointer"
+                 xmlns="http://www.w3.org/2000/svg">
+                <path a-for="w in this.wedges()" :d="w.d" :fill="w.fill"></path>
+                <circle :cx="this.dotCx()" :cy="this.dotCy()"
+                        r="6" fill="none" stroke="#fff" stroke-width="2"></circle>
+            </svg>
+        `;
+
+        this.Sheet = ColorPickerWheel.DefaultSheet();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
+    // ── Public API ───────────────────────────────────────────────────────────
 
-    /** Set the active colour from any hex / RGB-ish input. */
-    setColor(hex: string): this
-    {
-        const rgb = parseHex(hex);
-        if (!rgb) return this;
-        const hsv = rgbToHsv(rgb);
-        this._h = hsv.h; this._s = hsv.s; this._v = hsv.v;
-        if (rgb.a !== undefined) this._a = rgb.a;
-        this._refresh();
+    setValue(v: string): this {
+        const p = parseHex(v);
+        if (p) {
+            this.hue$.set(rgbToHsl(p.r, p.g, p.b).h);
+        } else {
+            // Try hsl(...) form
+            const m = /hsl\(\s*(\d+(?:\.\d+)?)/.exec(v);
+            if (m) this.hue$.set(parseFloat(m[1]!));
+        }
         return this;
     }
 
-    /** Current colour in every supported space. */
-    getColor()
-    {
-        const rgb = hsvToRgb({ h: this._h, s: this._s, v: this._v, a: this._a });
-        return {
-            rgb,
-            hex   : rgbToHex(rgb),
-            hsl   : rgbToHsl(rgb),
-            hsv   : { h: this._h, s: this._s, v: this._v, a: this._a },
-            cmyk  : rgbToCmyk(rgb),
-            cieluv: rgbToCieluv(rgb),
-            oklch : rgbToOklch(rgb),
-            cube  : rgbToCube(rgb),
-        };
+    getValue(): string {
+        const rgb = hslToRgb(this.hue$.get(), 100, 50);
+        return rgbToHex(rgb.r, rgb.g, rgb.b);
     }
 
-    // ── Build / render ─────────────────────────────────────────────────────
-
-    protected _build(): void
-    {
-        const size = this._get<number>('size', 240);
-        this.el.innerHTML = `
-<div class="ar-cpw__wheel-wrap" style="width:${size}px;height:${size}px">
-  <canvas class="ar-cpw__wheel" data-r="wheel" width="${size}" height="${size}"></canvas>
-  <canvas class="ar-cpw__sv"    data-r="sv"    width="${Math.round(size * 0.55)}" height="${Math.round(size * 0.55)}"></canvas>
-  <div class="ar-cpw__hue-pin" data-r="hue-pin"></div>
-  <div class="ar-cpw__sv-pin"  data-r="sv-pin"></div>
-</div>
-${this._get<boolean>('readout', true) ? `<div class="ar-cpw__readout" data-r="readout"></div>` : ''}`;
-
-        this._wheel  = this.el.querySelector<HTMLCanvasElement>('[data-r="wheel"]')!;
-        this._sv     = this.el.querySelector<HTMLCanvasElement>('[data-r="sv"]')!;
-        this._huePin = this.el.querySelector<HTMLElement>('[data-r="hue-pin"]')!;
-        this._svPin  = this.el.querySelector<HTMLElement>('[data-r="sv-pin"]')!;
-        this._readout = this.el.querySelector<HTMLElement>('[data-r="readout"]') ?? undefined;
-
-        this._drawWheel();
-        this._wireHue();
-        this._wireSv();
+    #emit(): void {
+        const h = this.hue$.get();
+        const rgb = hslToRgb(h, 100, 50);
+        const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+        this.dispatchEvent(new CustomEvent('arianna:change', {
+            bubbles: true,
+            detail: { hex, hue: h, hslString: `hsl(${h.toFixed(0)}, 100%, 50%)` },
+        }));
     }
 
-    private _drawWheel(): void
-    {
-        const ctx = this._wheel.getContext('2d');
-        if (!ctx) return;
-        const size = this._wheel.width;
-        const cx = size / 2, cy = size / 2;
-        const ro = size / 2;
-        const ri = size / 2 - Math.max(18, size * 0.14);
-
-        // Hue ring via per-pixel sweep (works without conic-gradient)
-        const img = ctx.createImageData(size, size);
-        for (let y = 0; y < size; y++)
-        {
-            for (let x = 0; x < size; x++)
-            {
-                const dx = x - cx, dy = y - cy;
-                const d = Math.sqrt(dx * dx + dy * dy);
-                if (d > ro || d < ri) continue;
-                const ang = Math.atan2(dy, dx) * 180 / Math.PI;
-                const hue = ((ang + 90) + 360) % 360;
-                const rgb = hsvToRgb({ h: hue, s: 100, v: 100 });
-                const i = (y * size + x) * 4;
-                img.data[i]   = rgb.r;
-                img.data[i+1] = rgb.g;
-                img.data[i+2] = rgb.b;
-                img.data[i+3] = 255;
-            }
-        }
-        ctx.putImageData(img, 0, 0);
-
-        // Position SV square inside the ring
-        const svSize = this._sv.width;
-        const half = svSize / 2;
-        this._sv.style.left = `${cx - half}px`;
-        this._sv.style.top  = `${cy - half}px`;
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount() {
+        const v = this.getAttribute('value');
+        if (v) this.setValue(v);
     }
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
 
-    private _drawSv(): void
+    private dim       : () => number = () => 200;
+    private viewBox   : () => string = () => '0 0 200 200';
+    private dimStr    : () => string = () => '200';
+    private wedges    : () => Array<{ d: string; fill: string }> = () => [];
+    private dotCx     : () => string = () => '0';
+    private dotCy     : () => string = () => '0';
+    private onPointer : (e: Event) => void = () => {};
+
+    static DefaultSheet(): Sheet
     {
-        const ctx = this._sv.getContext('2d');
-        if (!ctx) return;
-        const w = this._sv.width, h = this._sv.height;
-        // s on x (0→100), v on y (100→0 going down)
-        const img = ctx.createImageData(w, h);
-        for (let y = 0; y < h; y++)
-        {
-            for (let x = 0; x < w; x++)
-            {
-                const s = (x / (w - 1)) * 100;
-                const v = (1 - y / (h - 1)) * 100;
-                const rgb = hsvToRgb({ h: this._h, s, v });
-                const i = (y * w + x) * 4;
-                img.data[i]   = rgb.r;
-                img.data[i+1] = rgb.g;
-                img.data[i+2] = rgb.b;
-                img.data[i+3] = 255;
-            }
-        }
-        ctx.putImageData(img, 0, 0);
-    }
-
-    private _wireHue(): void
-    {
-        const handle = (e: PointerEvent) => {
-            const rect = this._wheel.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-            const ang = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
-            this._h = ((ang + 90) + 360) % 360;
-            this._refresh();
-        };
-        this._wheel.addEventListener('pointerdown', e => {
-            this._wheel.setPointerCapture?.(e.pointerId);
-            handle(e);
-        });
-        this._wheel.addEventListener('pointermove', e => {
-            if (e.buttons) handle(e);
-        });
-    }
-
-    private _wireSv(): void
-    {
-        const handle = (e: PointerEvent) => {
-            const rect = this._sv.getBoundingClientRect();
-            const x = (e.clientX - rect.left) / rect.width;
-            const y = (e.clientY - rect.top)  / rect.height;
-            this._s = Math.max(0, Math.min(100, x * 100));
-            this._v = Math.max(0, Math.min(100, (1 - y) * 100));
-            this._refresh();
-        };
-        this._sv.addEventListener('pointerdown', e => {
-            this._sv.setPointerCapture?.(e.pointerId);
-            handle(e);
-        });
-        this._sv.addEventListener('pointermove', e => {
-            if (e.buttons) handle(e);
-        });
-    }
-
-    private _refresh(): void
-    {
-        // SV repaint (changes when hue changes)
-        this._drawSv();
-
-        const size = this._wheel.width;
-        const cx = size / 2, cy = size / 2;
-        const ringRadius = size / 2 - Math.max(9, size * 0.07);
-        const ang = (this._h - 90) * Math.PI / 180;
-        const hx = cx + Math.cos(ang) * ringRadius;
-        const hy = cy + Math.sin(ang) * ringRadius;
-        this._huePin.style.left = `${hx}px`;
-        this._huePin.style.top  = `${hy}px`;
-
-        const svRect = this._sv.getBoundingClientRect();
-        const wheelRect = this._wheel.getBoundingClientRect();
-        const offX = svRect.left - wheelRect.left;
-        const offY = svRect.top  - wheelRect.top;
-        const sx = offX + (this._s / 100) * this._sv.width;
-        const sy = offY + (1 - this._v / 100) * this._sv.height;
-        this._svPin.style.left = `${sx}px`;
-        this._svPin.style.top  = `${sy}px`;
-
-        // Pin colour for contrast
-        const rgb = hsvToRgb({ h: this._h, s: this._s, v: this._v });
-        this._svPin.style.background = rgbToHex(rgb);
-
-        if (this._readout) this._renderReadout();
-        this._emit('change', this.getColor());
-    }
-
-    private _renderReadout(): void
-    {
-        if (!this._readout) return;
-        const c = this.getColor();
-        this._readout.innerHTML = `
-<div class="ar-cpw__row"><span>HEX</span><code>${c.hex}</code></div>
-<div class="ar-cpw__row"><span>RGB</span><code>${c.rgb.r}, ${c.rgb.g}, ${c.rgb.b}</code></div>
-<div class="ar-cpw__row"><span>HSL</span><code>${c.hsl.h.toFixed(0)}°, ${c.hsl.s.toFixed(0)}%, ${c.hsl.l.toFixed(0)}%</code></div>
-<div class="ar-cpw__row"><span>HSV</span><code>${c.hsv.h.toFixed(0)}°, ${c.hsv.s.toFixed(0)}%, ${c.hsv.v.toFixed(0)}%</code></div>
-<div class="ar-cpw__row"><span>CMYK</span><code>${c.cmyk.c.toFixed(0)}, ${c.cmyk.m.toFixed(0)}, ${c.cmyk.y.toFixed(0)}, ${c.cmyk.k.toFixed(0)}</code></div>
-<div class="ar-cpw__row"><span>OKLCH</span><code>${(c.oklch.L*100).toFixed(1)}% ${c.oklch.C.toFixed(3)} ${c.oklch.h.toFixed(0)}°</code></div>
-<div class="ar-cpw__row"><span>CIELUV</span><code>${c.cieluv.L.toFixed(1)} ${c.cieluv.C.toFixed(1)} ${c.cieluv.h.toFixed(0)}°</code></div>
-<div class="ar-cpw__row"><span>Cube</span><code>${c.cube}</code></div>`;
-    }
-
-    private _injectStyles(): void
-    {
-        if (document.getElementById('ar-cpw-styles')) return;
-        const s = document.createElement('style');
-        s.id = 'ar-cpw-styles';
-        s.textContent = `
-.ar-cpw { display:inline-flex; gap:14px; padding:14px; background:#1e1e1e; border:1px solid #333; border-radius:8px; color:#d4d4d4; font:12px -apple-system,system-ui,sans-serif; }
-.ar-cpw__wheel-wrap { position:relative; flex:none; }
-.ar-cpw__wheel { display:block; cursor:crosshair; border-radius:50%; }
-.ar-cpw__sv    { position:absolute; cursor:crosshair; }
-.ar-cpw__hue-pin, .ar-cpw__sv-pin { position:absolute; width:12px; height:12px; margin:-6px 0 0 -6px; border:2px solid #fff; border-radius:50%; pointer-events:none; box-shadow:0 0 0 1px rgba(0,0,0,0.6); }
-.ar-cpw__readout { display:flex; flex-direction:column; gap:4px; min-width:220px; }
-.ar-cpw__row { display:flex; gap:8px; padding:4px 8px; background:#0d0d0d; border-radius:3px; align-items:center; }
-.ar-cpw__row span { width:50px; font:10px sans-serif; color:#888; text-transform:uppercase; }
-.ar-cpw__row code { font:11px ui-monospace,monospace; color:#d4d4d4; flex:1; }
-`;
-        document.head.appendChild(s);
+        return new Sheet(
+[
+                new Rule(':root', {
+                    background  : 'var(--arianna-bg, #fff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 10px)',
+                    display     : 'inline-block',
+                    padding     : '10px',
+                    boxShadow   : '0 4px 12px rgba(0,0,0,0.06)',
+                }),
+                new Rule(':root svg', {
+                    display: 'block',
+                    cursor : 'crosshair',
+                    touchAction: 'none',
+                }),
+            ]
+        );
     }
 }
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'ColorPickerWheel', {
+        value: ColorPickerWheel, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default ColorPickerWheel;

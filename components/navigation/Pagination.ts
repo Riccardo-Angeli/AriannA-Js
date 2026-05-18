@@ -1,46 +1,205 @@
 /**
+ * @module    components/navigation/Pagination
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2024 All Rights Reserved
+ * @copyright Riccardo Angeli 2012-2026
+ * @license   MIT / Commercial (dual license)
+ *
+ * Pagination — page navigation control with ellipsis truncation for long
+ * page ranges.
+ *
+ * @example JS
+ *   const p = new Pagination();
+ *   p.total    = 250;
+ *   p.pageSize = 10;
+ *   p.page     = 4;
+ *   p.addEventListener('arianna:change', e => loadPage(e.detail.page));
+ *
+ * @example HTML
+ *   <arianna-pagination total="250" page-size="10" page="1" siblings="1"></arianna-pagination>
+ *
+ * Events:
+ *   - arianna:change   detail: { page, totalPages }
+ *
+ * Slots:  (none)
+ * Attrs:  total, page-size, page, siblings
  */
 
-import { Control } from '../core/Control.ts';
-export interface PaginationOptions { total?: number; pageSize?: number; page?: number; siblings?: number; class?: string; }
-export class Pagination extends Control<PaginationOptions> {
-  private _page = 1;
-  constructor(container: string | HTMLElement | null = null, opts: PaginationOptions = {}) {
-    super(container, 'nav', { total: 0, pageSize: 10, page: 1, siblings: 1, ...opts });
-    this._page = opts.page ?? 1;
-    this.el.className = `ar-pagination${opts.class?' '+opts.class:''}`;
-    this.el.setAttribute('aria-label', 'Pagination');
-  }
-  set total(v: number)    { this._set('total' as never, v as never); }
-  set pageSize(v: number) { this._set('pageSize' as never, v as never); }
-  set page(v: number)     { this._page = v; this._build(); }
-  get page()              { return this._page; }
-  get totalPages()        { return Math.ceil((this._get('total', 0) as number) / (this._get('pageSize', 10) as number)); }
-  private _go(p: number) {
-    const tp = this.totalPages;
-    if (p < 1 || p > tp) return;
-    this._page = p; this._build();
-    this._emit('change', { page: p, totalPages: tp });
-  }
-  private _btn(label: string, page: number, disabled: boolean, active = false): HTMLButtonElement {
-    const b = this._el('button', `ar-pagination__btn${active?' ar-pagination__btn--active':''}`, this.el) as HTMLButtonElement;
-    b.textContent = label; b.disabled = disabled;
-    b.addEventListener('click', () => this._go(page));
-    return b;
-  }
-  protected _build() {
-    this.el.innerHTML = '';
-    const tp  = this.totalPages; if (tp <= 1) return;
-    const sib = this._get('siblings', 1) as number;
-    this._btn('‹', this._page - 1, this._page <= 1);
-    const start = Math.max(1, this._page - sib);
-    const end   = Math.min(tp, this._page + sib);
-    if (start > 1) { this._btn('1', 1, false); if (start > 2) { const d = this._el('span', 'ar-pagination__dots', this.el); d.textContent = '…'; } }
-    for (let p = start; p <= end; p++) this._btn(String(p), p, false, p === this._page);
-    if (end < tp) { if (end < tp - 1) { const d = this._el('span', 'ar-pagination__dots', this.el); d.textContent = '…'; } this._btn(String(tp), tp, false); }
-    this._btn('›', this._page + 1, this._page >= tp);
-  }
+import { Component } from '../../core/Component.ts';
+import { html }      from '../../core/Template.ts';
+import { Sheet } from '../../core/Sheet.ts';
+import { Rule }      from '../../core/Rule.ts';
+
+export interface PaginationOptions {
+    total?    : number;
+    pageSize? : number;
+    page?     : number;
+    siblings? : number;
 }
-export const PaginationCSS = `.ar-pagination{display:flex;align-items:center;gap:4px}.ar-pagination__btn{background:var(--ar-bg3);border:1px solid var(--ar-border);border-radius:var(--ar-radius);color:var(--ar-text);cursor:pointer;font:inherit;font-size:.82rem;min-width:32px;padding:4px 8px;transition:border-color var(--ar-transition)}.ar-pagination__btn:hover:not(:disabled){border-color:var(--ar-primary)}.ar-pagination__btn--active{background:var(--ar-primary);border-color:var(--ar-primary);color:var(--ar-primary-text)}.ar-pagination__btn:disabled{opacity:.4;cursor:not-allowed}.ar-pagination__dots{color:var(--ar-muted);padding:0 4px}`;
+
+interface PagEntry {
+    type    : 'btn' | 'dots';
+    label   : string;
+    page?   : number;
+    active? : boolean;
+    disabled?: boolean;
+}
+
+export class Pagination extends Component('arianna-pagination', HTMLElement, {}, {
+    attrs : ['total', 'page-size', 'page', 'siblings'],
+    shadow: false,
+})
+{
+    build(_opts: PaginationOptions = {})
+    {
+        this.setAttribute('role', 'navigation');
+        this.setAttribute('aria-label', 'Pagination');
+
+        const total    = this.attrSignal('total');
+        const pageSize = this.attrSignal('page-size');
+        const page     = this.attrSignal('page');
+        const siblings = this.attrSignal('siblings');
+
+        const totalPages = (): number => Math.ceil(
+            (parseInt(total.get() ?? '0', 10) || 0) /
+            (parseInt(pageSize.get() ?? '10', 10) || 10),
+        );
+        const currentPage = (): number => Math.max(1, parseInt(page.get() ?? '1', 10) || 1);
+        const sibs       = (): number => parseInt(siblings.get() ?? '1', 10) || 1;
+
+        this.hasPages = () => totalPages() > 1;
+        this.entries  = () => {
+            const tp = totalPages();
+            const cur = currentPage();
+            const sib = sibs();
+            const out: PagEntry[] = [];
+
+            // Previous
+            out.push({ type: 'btn', label: '‹', page: cur - 1, disabled: cur <= 1 });
+
+            const start = Math.max(1, cur - sib);
+            const end   = Math.min(tp, cur + sib);
+
+            if (start > 1) {
+                out.push({ type: 'btn', label: '1', page: 1 });
+                if (start > 2) out.push({ type: 'dots', label: '…' });
+            }
+            for (let p = start; p <= end; p++) {
+                out.push({ type: 'btn', label: String(p), page: p, active: p === cur });
+            }
+            if (end < tp) {
+                if (end < tp - 1) out.push({ type: 'dots', label: '…' });
+                out.push({ type: 'btn', label: String(tp), page: tp });
+            }
+
+            // Next
+            out.push({ type: 'btn', label: '›', page: cur + 1, disabled: cur >= tp });
+            return out;
+        };
+
+        this.isBtn  = (e: PagEntry) => e.type === 'btn';
+        this.isDots = (e: PagEntry) => e.type === 'dots';
+
+        this.btnClass = (e: PagEntry) =>
+            'ar-pagination__btn' + (e.active ? ' ar-pagination__btn--active' : '');
+
+        this.onGo = (target: number) => {
+            const tp = totalPages();
+            if (target < 1 || target > tp) return;
+            this.setAttribute('page', String(target));
+            this.dispatchEvent(new CustomEvent('arianna:change', {
+                bubbles: true, detail: { page: target, totalPages: tp },
+            }));
+        };
+
+        this.template = html`
+            <div a-if="this.hasPages()" class="ar-pagination__row">
+                <button a-for="e in this.entries()"
+                        a-if="this.isBtn(e)"
+                        :class="this.btnClass(e)"
+                        :disabled="e.disabled"
+                        @click="(_) => this.onGo(e.page)">{{ e.label }}</button>
+                <span a-for="e in this.entries()"
+                      a-if="this.isDots(e)"
+                      class="ar-pagination__dots">{{ e.label }}</span>
+            </div>
+        `;
+
+        this.Sheet = Pagination.DefaultSheet();
+    }
+
+    get totalPages(): number {
+        const t = parseInt(this.getAttribute('total') ?? '0', 10) || 0;
+        const ps = parseInt(this.getAttribute('page-size') ?? '10', 10) || 10;
+        return Math.ceil(t / ps);
+    }
+
+    onCreated()       {}
+    onBeforeMount()   {}
+    onMount()         {}
+    onBeforeUpdate()  {}
+    onUpdate()        {}
+    onBeforeUnmount() {}
+    onUnmount()       {}
+
+    get total(): number  { return parseInt(this.getAttribute('total') ?? '0', 10); }
+    set total(v: number) { this.setAttribute('total', String(v)); }
+
+    get pageSize(): number  { return parseInt(this.getAttribute('page-size') ?? '10', 10); }
+    set pageSize(v: number) { this.setAttribute('page-size', String(v)); }
+
+    get page(): number  { return parseInt(this.getAttribute('page') ?? '1', 10); }
+    set page(v: number) { this.setAttribute('page', String(v)); }
+
+    get siblings(): number  { return parseInt(this.getAttribute('siblings') ?? '1', 10); }
+    set siblings(v: number) { this.setAttribute('siblings', String(v)); }
+
+    private hasPages: () => boolean = () => false;
+    private entries : () => PagEntry[] = () => [];
+    private isBtn   : (e: PagEntry) => boolean = () => false;
+    private isDots  : (e: PagEntry) => boolean = () => false;
+    private btnClass: (e: PagEntry) => string = () => '';
+    private onGo    : (n: number) => void = () => {};
+
+    static DefaultSheet(): Sheet
+    {
+        return new Sheet(
+[
+                new Rule(':root', { display: 'block' }),
+                new Rule('.ar-pagination__row', { display: 'flex', alignItems: 'center', gap: '4px' }),
+                new Rule('.ar-pagination__btn', {
+                    background  : 'var(--arianna-bg, #ffffff)',
+                    border      : '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    color       : 'var(--arianna-text, #1f2328)',
+                    cursor      : 'pointer',
+                    font        : 'inherit',
+                    fontSize    : '0.82rem',
+                    minWidth    : '32px',
+                    padding     : '4px 8px',
+                    transition  : 'border-color 0.18s ease',
+                }),
+                new Rule('.ar-pagination__btn:hover:not(:disabled)', {
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                }),
+                new Rule('.ar-pagination__btn--active', {
+                    background : 'var(--arianna-primary, #1f6feb)',
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                    color      : '#ffffff',
+                }),
+                new Rule('.ar-pagination__btn:disabled', { opacity: '0.4', cursor: 'not-allowed' }),
+                new Rule('.ar-pagination__dots', {
+                    color  : 'var(--arianna-muted, #8b949e)',
+                    padding: '0 4px',
+                }),
+            ]
+        );
+    }
+}
+
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'Pagination', {
+        value: Pagination, writable: false, enumerable: false, configurable: false,
+    });
+}
+
+export default Pagination;
