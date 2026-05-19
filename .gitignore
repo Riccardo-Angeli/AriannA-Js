@@ -1,19 +1,27 @@
-# ── macOS ────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# AriannA JS — .gitignore
+# ─────────────────────────────────────────────────────────────────────────────
+# Philosophy:
+#   • Sources are .ts files only — every .js / .d.ts is generated.
+#   • Builds (release/dist, release/types) are produced by `npm run build`.
+#   • Personal / strategic docs stay local (e.g. 3D_ENTERPRISE_ROADMAP.md).
+#   • Documentation under documentation/ IS committed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── OS noise ─────────────────────────────────────────────────────────────────
 .DS_Store
 **/.DS_Store
 .AppleDouble
 .LSOverride
-
-# ── Windows ──────────────────────────────────────────────────────────────────
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-
-# ── Linux / Unix (editor backups) ────────────────────────────────────────────
 *~
 .directory
 .Trash-*
+
 
 # ── IDE / Editor ─────────────────────────────────────────────────────────────
 .idea/
@@ -25,6 +33,7 @@ $RECYCLE.BIN/
 *.sublime-project
 *.sublime-workspace
 
+
 # ── Node / npm ───────────────────────────────────────────────────────────────
 node_modules/
 npm-debug.log*
@@ -34,25 +43,60 @@ yarn-error.log*
 .yarn-integrity
 .pnp.*
 
-# ── Build outputs ────────────────────────────────────────────────────────────
-dist/
-build/
-out/
+
+# ── TypeScript build state ───────────────────────────────────────────────────
 *.tsbuildinfo
+tsconfig.tsbuildinfo
 .cache/
 .parcel-cache/
 
-# Compiled JS output (generated from .ts sources).
-# Whitelist real .js sources (Vite configs, dist bundles) below.
+
+# ── Generated JS (transpiled from .ts) ───────────────────────────────────────
+# Every .ts in sources produces a .js next to it during tsc compile.
+# These are artefacts — not source.
 additionals/*.js
 components/*.js
 components/**/*.js
 core/*.js
+core/**/*.js
 config/*.js
+cli/*.js
+cli/**/*.js
 
-# Keep these — they are real .js sources or final bundles
+
+# ── Generated .d.ts declarations ─────────────────────────────────────────────
+# Produced by `tsc --declaration`. Real types come from the .ts sources.
+types/
+additionals/*.d.ts
+components/**/*.d.ts
+core/**/*.d.ts
+config/*.d.ts
+
+
+# ── Release artefacts ────────────────────────────────────────────────────────
+# DECISION: commit pre-built bundles to release/dist/ so users can load via
+# unpkg.com / jsdelivr without running the build. Everything else under
+# release/ is ignored (types, intermediate builds, benchmarks output).
+release/**
+!release/dist/
 !release/dist/*.js
+!release/dist/*.js.map
+!release/benchmarks/
 !release/benchmarks/**/*.js
+
+
+# ── Other build outputs ──────────────────────────────────────────────────────
+dist/
+build/
+out/
+
+
+# ── Tauri build artefacts (for example projects) ─────────────────────────────
+target/
+**/src-tauri/target/
+**/src-tauri/gen/
+**/src-tauri/Cargo.lock
+
 
 # ── Environment / secrets ────────────────────────────────────────────────────
 .env
@@ -61,10 +105,32 @@ config/*.js
 *.pem
 *.key
 
+
 # ── Logs ─────────────────────────────────────────────────────────────────────
 logs/
 *.log
 
-# ── Project-specific ─────────────────────────────────────────────────────────
+
+# ── Personal / strategic documents (kept local, not pushed) ──────────────────
+# These contain business roadmaps, internal evaluations, or scratch notes that
+# should not be public. Move them out of repo entirely when convenient.
+3D_ENTERPRISE_ROADMAP.md
 PROJECT_STRUCTURE.txt
 REPO_STRUCTURE.md
+documentation/internal/
+documentation/private/
+**/*.local.md
+**/*.local.ts
+
+
+# ── Devtools (development utilities, not part of distribution) ───────────────
+# Comment out the next two lines if you DO want devtools committed.
+devtools/
+devtools/tests/
+
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.tgz
+/documentation/COMPONENT_CONVENTIONS.md
