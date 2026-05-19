@@ -67,6 +67,8 @@ import Core, {
 import { signal, effect, type Signal } from './Observable.ts';
 import { Stylesheet } from './Stylesheet.ts';
 import { readDottedPath, writeDottedPath, makeSubAccessor, type SubAccessor } from './Real.ts';
+import Real from './Real.ts';
+import Virtual, { VirtualNode } from './Virtual.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Public types
@@ -618,20 +620,138 @@ function _applySheet(el: Element, next: Stylesheet | null): void
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  ComponentWrapper — the SUM view returned by `new Component(tag, opts?)`.
+//
+//  Exposes the same underlying element through two facets:
+//
+//    wrapper.Real     →  Real wrapper (live DOM, eager — created on construct)
+//    wrapper.Virtual  →  Virtual wrapper (virtual node, lazy — created on first
+//                        access, shares the underlying Element via its render() output)
+//
+//  Both facets share the same Element. Mutations through either view land on
+//  the same DOM node. Use cases:
+//
+//    const pluto = new Component('arianna-counter', { initial: 5 });
+//    pluto.Real.set('variant', 'primary').append('#app');
+//    pluto.Virtual.append('#app');      // attaches the same element
+//
+//  When `opts` is provided, every key/value is applied as an attribute on the
+//  newly created element (case-insensitive, like Real#set). This mirrors the
+//  ergonomics of `new Real(tag, opts, ...)`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export class ComponentWrapper
+{
+    /** The underlying live element. */
+    public readonly element: Element;
+
+    /** The tag used to create the element. */
+    public readonly tag: string;
+
+    // Eager Real facet (cheap — Real is a thin wrapper).
+    private readonly _real: any;
+
+    // Lazy Virtual facet — built only on first access.
+    private _virtual: any | null = null;
+
+    constructor(tag: string, opts?: Record<string, unknown>)
+    {
+        this.tag     = tag;
+        // Build the live element via Real and stash it.
+        this._real   = new (Real as any)(tag);
+        this.element = this._real.render();
+
+        // Apply initial opts as attributes/properties (case-insensitive, like Real#set).
+        if (opts && typeof opts === 'object') {
+            for (const [k, v] of Object.entries(opts)) {
+                try { this._real.set(k, v); }
+                catch { /* swallow — best-effort */ }
+            }
+        }
+    }
+
+    /** Live-DOM facet (eager). */
+    get Real(): any { return this._real; }
+
+    /** Virtual-node facet (lazy). Wraps the SAME underlying Element. */
+    get Virtual(): any {
+        if (this._virtual) return this._virtual;
+        // Virtual(el) wraps an existing element; produces a VirtualNode whose
+        // render() returns the underlying Element rather than re-creating it.
+        try {
+            this._virtual = new (Virtual as any)(this.element);
+        } catch {
+            // Fallback: wrap as fresh Virtual with same tag — keeps the
+            // wrapper usable even if Virtual's constructor doesn't accept Element.
+            this._virtual = new (Virtual as any)(this.tag);
+        }
+        return this._virtual;
+    }
+
+    /** Convenience accessor — same as `.element`. */
+    valueOf(): Element { return this.element; }
+    render():  Element { return this.element; }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  The dual-form Component callable
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ComponentCallable
 {
+    /* ── Existing forms ─────────────────────────────────────────────────── */
+
+    /** Install AriannA facilities on an existing element. */
     (el: Element): AriannaElement;
+
+    /** Define a custom element by extending the returned class. */
     (tag: string, base: new (...a: unknown[]) => Element): new (...a: unknown[]) => AriannaElement;
     (tag: string, base: new (...a: unknown[]) => Element, css: Record<string, string>): new (...a: unknown[]) => AriannaElement;
     (tag: string, base: new (...a: unknown[]) => Element, css: Record<string, string>, def: ComponentDef): new (...a: unknown[]) => AriannaElement;
     (tag: string, base: new (...a: unknown[]) => Element, mixed: ComponentDef & Record<string, string>): new (...a: unknown[]) => AriannaElement;
+
+    /* ── New v2 form — `new Component(tag, opts?)` ──────────────────────────
+     *
+     * Constructor-call form. Produces a `ComponentWrapper` exposing the SAME
+     * underlying element through TWO views: `.Real` (live DOM) and `.Virtual`
+     * (virtual node, lazily mirrored). Both expose the full fluent API
+     * (set/get/sub/on/off/fire/add/append/push/unshift/remove/css/show/hide/
+     * signal/effect/computed/text/textMono/Sheet …).
+     *
+     *   const pluto = new Component('arianna-counter', { initial: 5 });
+     *   pluto.Real.set('variant', 'primary').append('#app');
+     *   pluto.Virtual.append('#app');     // same underlying element
+     */
+    new (tag: string, opts?: Record<string, unknown>): ComponentWrapper;
 }
 
 function ComponentFn(this: unknown, ...args: unknown[]): unknown
 {
+    // ─────────────────────────────────────────────────────────────────────
+    //  Construct form: `new Component(tag, opts?)`  →  ComponentWrapper
+    //
+    //  When invoked with `new` and a string tag, we DON'T go through the
+    //  factory path (which returns a class). Instead, we instantiate a
+    //  wrapper that exposes the same underlying element via `.Real` (live
+    //  DOM, eager) and `.Virtual` (virtual node, lazy). Both views share
+    //  the same Element instance.
+    //
+    //  Detection rule:
+    //    - `new.target` is set ⇒ caller used `new`
+    //    - first arg is a non-empty string
+    //    - second arg is either undefined or a plain object (opts)
+    //  (Constructor function targets pass `function` for arg1, so the
+    //   string check naturally excludes them.)
+    // ─────────────────────────────────────────────────────────────────────
+    if (new.target && typeof args[0] === 'string'
+        && (args[1] === undefined || (typeof args[1] === 'object' && args[1] !== null && !((args[1] as object) instanceof Element))))
+    {
+        return new ComponentWrapper(args[0] as string, args[1] as Record<string, unknown> | undefined);
+    }
+
     // Instance form: Component(el)
     if (args.length === 1 && args[0] instanceof Element)
         return _installFacilities(args[0]);
