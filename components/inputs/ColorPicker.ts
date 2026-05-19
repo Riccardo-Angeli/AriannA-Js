@@ -23,7 +23,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface ColorPickerOptions {
@@ -35,7 +35,6 @@ export interface ColorPickerOptions {
 
 export class ColorPicker extends Component('arianna-color-picker', HTMLElement, {}, {
     attrs : ['label', 'value', 'disabled'],
-    shadow: false,
 })
 {
     presets$: Signal<string[]> = signal<string[]>([]);
@@ -97,7 +96,7 @@ export class ColorPicker extends Component('arianna-color-picker', HTMLElement, 
             </div>
         `;
 
-        this.Sheet = ColorPicker.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ColorPicker.DefaultSheet();
     }
 
     set presets(v: string[]) { this.presets$.set(v ?? []); }
@@ -130,11 +129,11 @@ export class ColorPicker extends Component('arianna-color-picker', HTMLElement, 
     private onChange    : (e: Event) => void = () => {};
     private onPresetClick: (c: string) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'flex', flexDirection: 'column', gap: '6px' }),
+                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '6px' }),
                 new Rule('.ar-colorpicker__label', {
                     color     : 'var(--arianna-muted, #6e6b62)',
                     fontSize  : '0.78rem',

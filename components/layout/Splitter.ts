@@ -33,7 +33,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface SplitterOptions {
@@ -45,7 +45,6 @@ export interface SplitterOptions {
 
 export class Splitter extends Component('arianna-splitter', HTMLElement, {}, {
     attrs : ['direction', 'ratio', 'min-a', 'min-b'],
-    shadow: false,
 })
 {
     build(_opts: SplitterOptions = {})
@@ -103,7 +102,7 @@ export class Splitter extends Component('arianna-splitter', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Splitter.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Splitter.DefaultSheet();
     }
 
     onCreated()       {}
@@ -130,19 +129,27 @@ export class Splitter extends Component('arianna-splitter', HTMLElement, {}, {
     private paneBStyle  : () => Record<string, string> = () => ({});
     private onHandleDown: (e: MouseEvent) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display : 'flex',
                     width   : '100%',
                     height  : '100%',
                     overflow: 'hidden',
                 }),
-                new Rule(':root[direction="vertical"]',     { flexDirection: 'column' }),
-                new Rule(':root:not([direction])',          { flexDirection: 'row' }),
-                new Rule('.ar-splitter__pane', { overflow: 'auto' }),
+                new Rule(':host([direction="vertical"])',     { flexDirection: 'column' }),
+                new Rule(':host(:not([direction]))',          { flexDirection: 'row' }),
+                new Rule('.ar-splitter__pane', {
+                    overflow   : 'auto',
+                    flexShrink : '0',
+                    flexGrow   : '0',
+                    minWidth   : '0',
+                    minHeight  : '0',
+                    boxSizing  : 'border-box',
+                    position   : 'relative',
+                }),
                 new Rule('.ar-splitter__handle', {
                     background : 'var(--arianna-border, #d8d8d8)',
                     flexShrink : '0',
@@ -151,9 +158,9 @@ export class Splitter extends Component('arianna-splitter', HTMLElement, {}, {
                 new Rule('.ar-splitter__handle:hover, .ar-splitter__handle:active', {
                     background: 'var(--arianna-primary, #1f6feb)',
                 }),
-                new Rule(':root[direction="horizontal"] .ar-splitter__handle',  { cursor: 'col-resize', width: '4px' }),
-                new Rule(':root:not([direction]) .ar-splitter__handle',         { cursor: 'col-resize', width: '4px' }),
-                new Rule(':root[direction="vertical"] .ar-splitter__handle',    { cursor: 'row-resize', height: '4px' }),
+                new Rule(':host([direction="horizontal"]) .ar-splitter__handle',  { cursor: 'col-resize', width: '4px' }),
+                new Rule(':host(:not([direction])) .ar-splitter__handle',         { cursor: 'col-resize', width: '4px' }),
+                new Rule(':host([direction="vertical"]) .ar-splitter__handle',    { cursor: 'row-resize', height: '4px' }),
             ]
         );
     }

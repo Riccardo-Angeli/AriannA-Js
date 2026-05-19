@@ -20,6 +20,7 @@
  */
 
 import { Component } from '../../../core/Component.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
@@ -49,7 +50,6 @@ const DEFAULT_POINTS = (): ShapeStop[] => [
 
 export class ShapeGradientEditor extends Component('arianna-shape-gradient-editor', HTMLElement, {}, {
     attrs : ['width', 'height'],
-    shadow: false,
 })
 {
     points$  : Signal<ShapeStop[]> = signal<ShapeStop[]>(DEFAULT_POINTS());
@@ -196,7 +196,7 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
             </div>
         `;
 
-        this.Sheet = LinearGradientEditor.SharedSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = LinearGradientEditor.SharedSheet();
     }
 
     /** Paint the freeform mesh into the canvas using inverse-distance weighting. */

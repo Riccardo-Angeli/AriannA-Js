@@ -28,7 +28,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface StepperOptions {
@@ -50,7 +50,6 @@ interface StepEntry {
 
 export class Stepper extends Component('arianna-stepper', HTMLElement, {}, {
     attrs : ['variant', 'current'],
-    shadow: false,
 })
 {
     steps$    : Signal<string[]> = signal<string[]>([]);
@@ -90,7 +89,7 @@ export class Stepper extends Component('arianna-stepper', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Stepper.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Stepper.DefaultSheet();
     }
 
     set steps(v: string[]) { this.steps$.set(v ?? []); }
@@ -147,14 +146,14 @@ export class Stepper extends Component('arianna-stepper', HTMLElement, {}, {
 
     private entries: () => StepEntry[] = () => [];
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'flex', alignItems: 'flex-start' }),
-                new Rule(':root[variant="vertical"]', { flexDirection: 'column' }),
-                new Rule(':root:not([variant])',      { flexDirection: 'row' }),
-                new Rule(':root[variant="horizontal"]', { flexDirection: 'row' }),
+                new Rule(':host', { display: 'flex', alignItems: 'flex-start' }),
+                new Rule(':host([variant="vertical"])', { flexDirection: 'column' }),
+                new Rule(':host(:not([variant]))',      { flexDirection: 'row' }),
+                new Rule(':host([variant="horizontal"])', { flexDirection: 'row' }),
                 new Rule('.ar-stepper__step', {
                     alignItems   : 'center',
                     display      : 'flex',
@@ -208,7 +207,7 @@ export class Stepper extends Component('arianna-stepper', HTMLElement, {}, {
                     background: 'var(--arianna-border, #d8d8d8)',
                     zIndex    : '-1',
                 }),
-                new Rule(':root[variant="vertical"] .ar-stepper__step:not(:last-child)::after', {
+                new Rule(':host([variant="vertical"]) .ar-stepper__step:not(:last-child)::after', {
                     display: 'none',
                 }),
                 new Rule('.ar-stepper__step--done:not(:last-child)::after', {

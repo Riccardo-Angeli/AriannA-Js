@@ -44,7 +44,6 @@ export class GoogleMap extends (Component('arianna-google-map', HTMLElement, {},
         'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
         'aspect-ratio', 'api-key', 'mode',
     ],
-    shadow: false,
 }) as unknown as typeof MapEmbed)
 {
     getProvider(): MapProvider { return 'google'; }

@@ -31,7 +31,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface MenuItem {
@@ -50,7 +50,6 @@ export interface MenuOptions {
 
 export class Menu extends Component('arianna-menu', HTMLElement, {}, {
     attrs : [],
-    shadow: false,
 })
 {
     items$: Signal<MenuItem[]> = signal<MenuItem[]>([]);
@@ -96,7 +95,7 @@ export class Menu extends Component('arianna-menu', HTMLElement, {}, {
             </button>
         `;
 
-        this.Sheet = Menu.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Menu.DefaultSheet();
     }
 
     set items(v: MenuItem[]) { this.items$.set(v ?? []); }
@@ -158,11 +157,11 @@ export class Menu extends Component('arianna-menu', HTMLElement, {}, {
     private itemClass  : (item: MenuItem) => string = () => '';
     private onItemClick: (item: MenuItem, e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #ffffff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 8px)',

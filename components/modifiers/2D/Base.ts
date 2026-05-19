@@ -92,7 +92,6 @@ export function resolveTargets(input: string | HTMLElement | HTMLElement[] | { r
  */
 export class Modifier2D extends Component('arianna-modifier-2d', HTMLElement, {}, {
     attrs : ['enabled'],
-    shadow: false,
 })
 {
     /** Currently attached cleanup callbacks. Run on unmount. */

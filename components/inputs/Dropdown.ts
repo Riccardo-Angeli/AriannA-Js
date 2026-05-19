@@ -18,7 +18,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface DropdownOption {
@@ -39,7 +39,6 @@ export interface DropdownOptions {
 
 export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
     attrs : ['placeholder', 'searchable', 'clearable', 'disabled', 'value'],
-    shadow: false,
 })
 {
     options$: Signal<DropdownOption[]> = signal<DropdownOption[]>([]);
@@ -145,7 +144,7 @@ export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Dropdown.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Dropdown.DefaultSheet();
     }
 
     set options(v: DropdownOption[]) { this.options$.set(v ?? []); }
@@ -195,11 +194,11 @@ export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
     private onFilter       : (e: Event) => void = () => {};
     private onOptionClick  : (o: DropdownOption, e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display : 'inline-block',
                     position: 'relative',
                     width   : '100%',

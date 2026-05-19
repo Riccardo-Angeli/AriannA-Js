@@ -46,7 +46,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal, effect } from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export type VideoProvider = 'native' | 'youtube' | 'twitch' | 'vimeo';
@@ -144,7 +144,6 @@ function formatTime(seconds: number): string {
 export class VideoPlayer extends Component('arianna-video-player', HTMLElement, {}, {
     attrs : ['source', 'src', 'poster', 'loop', 'volume', 'autoplay',
              'show-controls', 'aspect-ratio', 'twitch-parent'],
-    shadow: false,
 })
 {
     provider$: Signal<VideoProvider> = signal<VideoProvider>('native');
@@ -244,7 +243,7 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
             </div>
         `;
 
-        this.Sheet = VideoPlayer.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = VideoPlayer.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -426,11 +425,11 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
     private onVolInput  : (e: Event) => void = () => {};
     private onFullscreen: (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display: 'block', position: 'relative',
                     fontFamily: '-apple-system, system-ui, sans-serif',
                     fontSize: '12px',

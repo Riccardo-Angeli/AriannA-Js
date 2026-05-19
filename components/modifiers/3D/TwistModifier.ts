@@ -54,7 +54,6 @@ export class TwistModifier extends Modifier3D {
 
 export class TwistModifierElement extends (Component('arianna-twist', HTMLElement, {}, {
     attrs : ['for', 'angle', 'axis', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const angle = parseFloat(this.getAttribute('angle') ?? '0') || 0;

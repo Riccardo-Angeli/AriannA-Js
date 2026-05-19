@@ -15,7 +15,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface SwitchOptions {
@@ -27,7 +27,6 @@ export interface SwitchOptions {
 
 export class Switch extends Component('arianna-switch', HTMLElement, {}, {
     attrs : ['label', 'label-position', 'checked', 'disabled'],
-    shadow: false,
 })
 {
     build(_opts: SwitchOptions = {})
@@ -64,7 +63,7 @@ export class Switch extends Component('arianna-switch', HTMLElement, {}, {
             </label>
         `;
 
-        this.Sheet = Switch.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Switch.DefaultSheet();
     }
 
     onCreated()       {}
@@ -92,11 +91,11 @@ export class Switch extends Component('arianna-switch', HTMLElement, {}, {
     private isDisabled: () => boolean = () => false;
     private onChange  : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block' }),
+                new Rule(':host', { display: 'inline-block' }),
                 new Rule('.ar-switch__row', {
                     alignItems: 'center',
                     cursor    : 'pointer',

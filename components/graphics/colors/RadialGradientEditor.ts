@@ -16,6 +16,7 @@
  */
 
 import { Component } from '../../../core/Component.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { html }      from '../../../core/Template.ts';
 import { LinearGradientEditor } from './LinearGradientEditor.ts';
 import {
@@ -38,7 +39,6 @@ export interface RadialGradientEditorOptions {
 
 export class RadialGradientEditor extends Component('arianna-radial-gradient-editor', HTMLElement, {}, {
     attrs : ['shape', 'size', 'cx', 'cy', 'interp'],
-    shadow: false,
 })
 {
     state = makeStopState();
@@ -235,7 +235,7 @@ export class RadialGradientEditor extends Component('arianna-radial-gradient-edi
             </div>
         `;
 
-        this.Sheet = LinearGradientEditor.SharedSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = LinearGradientEditor.SharedSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────

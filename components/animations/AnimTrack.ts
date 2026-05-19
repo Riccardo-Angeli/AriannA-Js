@@ -27,7 +27,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 import type { Keyframe } from './Keyframe.ts';
 
@@ -44,7 +44,6 @@ export interface AnimTrackOptions {
 
 export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, {
     attrs : ['name', 'channel', 'group', 'muted', 'locked', 'hidden'],
-    shadow: false,
     bus   : 'arianna-keyframe-editor',
 })
 {
@@ -65,7 +64,7 @@ export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, 
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const el = self.render();
         if (el.querySelector('.at-head')) return;
@@ -158,17 +157,17 @@ export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, 
         return (self._children ?? []) as Keyframe[];
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 borderBottom: '1px solid var(--ar-border, #2a2a2a)',
                 display     : 'grid',
                 gridTemplateColumns: 'var(--track-head-width, 160px) 1fr',
                 height      : 'var(--track-height, 22px)',
                 position    : 'relative',
             }),
-            new Rule(':root[hidden]', { opacity: '0.35' }),
-            new Rule(':root .at-head', {
+            new Rule(':host([hidden])', { opacity: '0.35' }),
+            new Rule(':host .at-head', {
                 alignItems   : 'center',
                 background   : 'var(--ar-bg2, #161616)',
                 borderRight  : '1px solid var(--ar-border, #2a2a2a)',
@@ -177,7 +176,7 @@ export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, 
                 paddingLeft  : '6px',
                 paddingRight : '4px',
             }),
-            new Rule(':root .at-group-dot', {
+            new Rule(':host .at-group-dot', {
                 background  : 'var(--ar-muted, #888)',
                 borderRadius: '50%',
                 display     : 'inline-block',
@@ -185,10 +184,10 @@ export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, 
                 height      : '8px',
                 width       : '8px',
             }),
-            new Rule(":root[data-group='position'] .at-group-dot", { background: 'var(--arianna-curve-position, #4dd0e1)' }),
-            new Rule(":root[data-group='rotation'] .at-group-dot", { background: 'var(--arianna-curve-rotation, #ff9800)' }),
-            new Rule(":root[data-group='scale']    .at-group-dot", { background: 'var(--arianna-curve-scale,    #7eb8f7)' }),
-            new Rule(':root .at-name', {
+            new Rule(":host([data-group='position']) .at-group-dot", { background: 'var(--arianna-curve-position, #4dd0e1)' }),
+            new Rule(":host([data-group='rotation']) .at-group-dot", { background: 'var(--arianna-curve-rotation, #ff9800)' }),
+            new Rule(":host([data-group='scale'])    .at-group-dot", { background: 'var(--arianna-curve-scale,    #7eb8f7)' }),
+            new Rule(':host .at-name', {
                 color     : 'var(--ar-text, #e0e0e0)',
                 flex      : '1',
                 fontSize  : '0.74rem',
@@ -196,7 +195,7 @@ export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, 
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
             }),
-            new Rule(':root .at-icon', {
+            new Rule(':host .at-icon', {
                 background  : 'transparent',
                 border      : '0',
                 color       : 'var(--ar-muted, #888)',
@@ -206,15 +205,15 @@ export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, 
                 lineHeight  : '1',
                 padding     : '0 2px',
             }),
-            new Rule(':root .at-icon.active', { color: 'var(--ar-warning, #ff9800)' }),
-            new Rule(':root .at-icon:hover',  { color: 'var(--ar-text, #e0e0e0)' }),
-            new Rule(':root .at-lane', {
+            new Rule(':host .at-icon.active', { color: 'var(--ar-warning, #ff9800)' }),
+            new Rule(':host .at-icon:hover',  { color: 'var(--ar-text, #e0e0e0)' }),
+            new Rule(':host .at-lane', {
                 background      : 'transparent',
                 backgroundImage : 'linear-gradient(to right, var(--ar-border, #2a2a2a) 1px, transparent 1px)',
                 backgroundSize  : 'var(--frame-step-px, 70px) 100%',
                 position        : 'relative',
             }),
-            new Rule(':root[muted] .at-lane', { opacity: '0.4' }),
+            new Rule(':host([muted]) .at-lane', { opacity: '0.4' }),
         ]);
     }
 }

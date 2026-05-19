@@ -24,7 +24,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -42,7 +42,6 @@ interface CurveSample {
 
 export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, {}, {
     attrs : ['width', 'height'],
-    shadow: false,
 })
 {
     readonly samples$: Signal<CurveSample[]> = signal<CurveSample[]>([]);
@@ -63,7 +62,7 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
         const self = this as unknown as {
             render(): HTMLElement;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('svg')) return;
@@ -243,23 +242,23 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
         }
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #0d0d0d)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
                 display     : 'inline-block',
                 padding     : '8px',
             }),
-            new Rule(':root .ce-svg', { display: 'block' }),
-            new Rule(':root .ce-grid', { stroke: 'var(--ar-border, #2a2a2a)', strokeWidth: '1', strokeDasharray: '2 3' }),
-            new Rule(':root .ce-curve', { strokeWidth: '1.5', fill: 'none' }),
-            new Rule(':root .ce-key', { stroke: '#fff', strokeWidth: '1' }),
-            new Rule(':root .ce-key-selected', { stroke: 'var(--ar-warning, #ff9800)', strokeWidth: '2' }),
-            new Rule(':root .ce-handle-line', { strokeWidth: '1', strokeDasharray: '2 2', opacity: '0.6' }),
-            new Rule(':root .ce-handle', { stroke: '#fff', strokeWidth: '1', cursor: 'grab' }),
-            new Rule(':root .ce-playhead', { stroke: 'var(--ar-danger, #f44336)', strokeWidth: '1.5' }),
+            new Rule(':host .ce-svg', { display: 'block' }),
+            new Rule(':host .ce-grid', { stroke: 'var(--ar-border, #2a2a2a)', strokeWidth: '1', strokeDasharray: '2 3' }),
+            new Rule(':host .ce-curve', { strokeWidth: '1.5', fill: 'none' }),
+            new Rule(':host .ce-key', { stroke: '#fff', strokeWidth: '1' }),
+            new Rule(':host .ce-key-selected', { stroke: 'var(--ar-warning, #ff9800)', strokeWidth: '2' }),
+            new Rule(':host .ce-handle-line', { strokeWidth: '1', strokeDasharray: '2 2', opacity: '0.6' }),
+            new Rule(':host .ce-handle', { stroke: '#fff', strokeWidth: '1', cursor: 'grab' }),
+            new Rule(':host .ce-playhead', { stroke: 'var(--ar-danger, #f44336)', strokeWidth: '1.5' }),
         ]);
     }
 }

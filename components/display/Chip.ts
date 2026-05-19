@@ -27,7 +27,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface ChipOptions {
@@ -41,7 +41,6 @@ export interface ChipOptions {
 
 export class Chip extends Component('arianna-chip', HTMLElement, {}, {
     attrs : ['variant', 'size', 'deletable', 'label', 'icon', 'avatar'],
-    shadow: false,
 })
 {
     build(_opts: ChipOptions = {})
@@ -73,7 +72,7 @@ export class Chip extends Component('arianna-chip', HTMLElement, {}, {
             <button class="ar-chip__delete" a-if="this.isDeletable()" @click="this.onDelete" aria-label="Remove">✕</button>
         `;
 
-        this.Sheet = Chip.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Chip.DefaultSheet();
     }
 
     onCreated()       {}
@@ -111,11 +110,11 @@ export class Chip extends Component('arianna-chip', HTMLElement, {}, {
     private labelText  : () => string  = () => '';
     private onDelete   : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     alignItems  : 'center',
                     borderRadius: '16px',
                     display     : 'inline-flex',
@@ -126,15 +125,15 @@ export class Chip extends Component('arianna-chip', HTMLElement, {}, {
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     color       : 'var(--arianna-text, #1f2328)',
                 }),
-                new Rule(':root[variant="primary"]', { background: 'rgba(31,111,235,0.15)',  border: '1px solid var(--arianna-primary, #1f6feb)', color: 'var(--arianna-primary, #1f6feb)' }),
-                new Rule(':root[variant="success"]', { background: 'rgba(46,160,67,0.15)',   border: '1px solid var(--arianna-success, #2ea043)', color: 'var(--arianna-success, #2ea043)' }),
-                new Rule(':root[variant="warning"]', { background: 'rgba(210,153,34,0.15)',  border: '1px solid var(--arianna-warning, #d29922)', color: 'var(--arianna-warning, #d29922)' }),
-                new Rule(':root[variant="danger"]',  { background: 'rgba(207,34,46,0.15)',   border: '1px solid var(--arianna-danger, #cf222e)',  color: 'var(--arianna-danger, #cf222e)' }),
-                new Rule(':root[variant="info"]',    { background: 'rgba(77,208,225,0.15)',  border: '1px solid var(--arianna-info, #4dd0e1)',    color: 'var(--arianna-info, #4dd0e1)' }),
-                new Rule(':root[size="sm"]', { fontSize: '0.72rem', padding: '2px 8px' }),
-                new Rule(':root[size="md"]', { fontSize: '0.78rem', padding: '3px 10px' }),
-                new Rule(':root[size="lg"]', { fontSize: '0.85rem', padding: '5px 14px' }),
-                new Rule(':root:not([size])', { fontSize: '0.78rem', padding: '3px 10px' }),
+                new Rule(':host([variant="primary"])', { background: 'rgba(31,111,235,0.15)',  border: '1px solid var(--arianna-primary, #1f6feb)', color: 'var(--arianna-primary, #1f6feb)' }),
+                new Rule(':host([variant="success"])', { background: 'rgba(46,160,67,0.15)',   border: '1px solid var(--arianna-success, #2ea043)', color: 'var(--arianna-success, #2ea043)' }),
+                new Rule(':host([variant="warning"])', { background: 'rgba(210,153,34,0.15)',  border: '1px solid var(--arianna-warning, #d29922)', color: 'var(--arianna-warning, #d29922)' }),
+                new Rule(':host([variant="danger"])',  { background: 'rgba(207,34,46,0.15)',   border: '1px solid var(--arianna-danger, #cf222e)',  color: 'var(--arianna-danger, #cf222e)' }),
+                new Rule(':host([variant="info"])',    { background: 'rgba(77,208,225,0.15)',  border: '1px solid var(--arianna-info, #4dd0e1)',    color: 'var(--arianna-info, #4dd0e1)' }),
+                new Rule(':host([size="sm"])', { fontSize: '0.72rem', padding: '2px 8px' }),
+                new Rule(':host([size="md"])', { fontSize: '0.78rem', padding: '3px 10px' }),
+                new Rule(':host([size="lg"])', { fontSize: '0.85rem', padding: '5px 14px' }),
+                new Rule(':host(:not([size]))', { fontSize: '0.78rem', padding: '3px 10px' }),
                 new Rule('.ar-chip__avatar', {
                     alignItems   : 'center',
                     background   : 'currentColor',

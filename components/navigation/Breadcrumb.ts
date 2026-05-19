@@ -29,7 +29,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface BreadcrumbItem {
@@ -45,7 +45,6 @@ export interface BreadcrumbOptions {
 
 export class Breadcrumb extends Component('arianna-breadcrumb', HTMLElement, {}, {
     attrs : ['separator'],
-    shadow: false,
 })
 {
     items$: Signal<BreadcrumbItem[]> = signal<BreadcrumbItem[]>([]);
@@ -84,7 +83,7 @@ export class Breadcrumb extends Component('arianna-breadcrumb', HTMLElement, {},
             </ol>
         `;
 
-        this.Sheet = Breadcrumb.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Breadcrumb.DefaultSheet();
     }
 
     set items(v: BreadcrumbItem[]) { this.items$.set(v ?? []); }
@@ -104,11 +103,11 @@ export class Breadcrumb extends Component('arianna-breadcrumb', HTMLElement, {},
     private notLast    : (i: number) => boolean = () => false;
     private onItemClick: (i: BreadcrumbItem, e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'block' }),
+                new Rule(':host', { display: 'block' }),
                 new Rule('.ar-breadcrumb__list', {
                     display : 'flex',
                     flexWrap: 'wrap',

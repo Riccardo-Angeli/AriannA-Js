@@ -51,7 +51,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface SidebarItem {
@@ -103,7 +103,6 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
         'collapsed', 'collapsible', 'resizable', 'searchable', 'show-toggle',
         'persist', 'storage-key', 'active', 'aria-label',
     ],
-    shadow: false,
 })
 {
     sections$ : Signal<SidebarSection[]> = signal<SidebarSection[]>([]);
@@ -295,7 +294,7 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
                              allow-cross="false"></arianna-resizer>
         `;
 
-        this.Sheet = Sidebar.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Sidebar.DefaultSheet();
     }
 
     // ── Programmatic API (mirrors legacy) ────────────────────────────────────
@@ -409,11 +408,11 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
     private flatSections : () => FlatSection[] = () => [];
     private hasMatches   : () => boolean = () => false;
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background    : 'var(--arianna-bg, #ffffff)',
                     borderStyle   : 'solid',
                     borderColor   : 'var(--arianna-border, #d8d8d8)',
@@ -428,16 +427,16 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
                     position      : 'relative',
                     transition    : 'width 0.18s ease',
                 }),
-                new Rule(':root[orientation="left"], :root:not([orientation])', { borderRightWidth: '1px' }),
-                new Rule(':root[orientation="right"]', { borderLeftWidth: '1px' }),
+                new Rule(':host([orientation="left"]), :host(:not([orientation]))', { borderRightWidth: '1px' }),
+                new Rule(':host([orientation="right"])', { borderLeftWidth: '1px' }),
 
                 // Collapsed state — hide labels, badges, search, section content
-                new Rule(':root[collapsed] .ar-sidebar__search-wrap',  { display: 'none' }),
-                new Rule(':root[collapsed] .ar-sidebar__item-label',   { display: 'none' }),
-                new Rule(':root[collapsed] .ar-sidebar__item-badge',   { display: 'none' }),
-                new Rule(':root[collapsed] .ar-sidebar__sec-label',    { display: 'none' }),
-                new Rule(':root[collapsed] .ar-sidebar__sec-arrow',    { display: 'none' }),
-                new Rule(':root[collapsed] .ar-sidebar__item', { justifyContent: 'center', padding: '8px 4px' }),
+                new Rule(':host([collapsed]) .ar-sidebar__search-wrap',  { display: 'none' }),
+                new Rule(':host([collapsed]) .ar-sidebar__item-label',   { display: 'none' }),
+                new Rule(':host([collapsed]) .ar-sidebar__item-badge',   { display: 'none' }),
+                new Rule(':host([collapsed]) .ar-sidebar__sec-label',    { display: 'none' }),
+                new Rule(':host([collapsed]) .ar-sidebar__sec-arrow',    { display: 'none' }),
+                new Rule(':host([collapsed]) .ar-sidebar__item', { justifyContent: 'center', padding: '8px 4px' }),
 
                 // Header / footer
                 new Rule('.ar-sidebar__header', {
@@ -467,7 +466,7 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
                     transition: 'color 0.14s ease',
                     width     : '100%',
                 }),
-                new Rule(':root[orientation="right"] .ar-sidebar__toggle', { textAlign: 'left' }),
+                new Rule(':host([orientation="right"]) .ar-sidebar__toggle', { textAlign: 'left' }),
                 new Rule('.ar-sidebar__toggle:hover', { color: 'var(--arianna-text, #1f2328)' }),
 
                 // Search

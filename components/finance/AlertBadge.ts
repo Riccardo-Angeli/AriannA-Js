@@ -15,7 +15,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export type AlertLevel = 'neutral' | 'info' | 'warning' | 'danger';
@@ -28,7 +28,6 @@ export interface AlertBadgeOptions {
 
 export class AlertBadge extends Component('arianna-alert-badge', HTMLElement, {}, {
     attrs : ['text', 'sublabel', 'level'],
-    shadow: false,
 })
 {
     build(_opts: AlertBadgeOptions = {})
@@ -45,7 +44,7 @@ export class AlertBadge extends Component('arianna-alert-badge', HTMLElement, {}
             <span class="ar-alert__sub" a-if="this.hasSub()">{{ this.subVal() }}</span>
         `;
 
-        this.Sheet = AlertBadge.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = AlertBadge.DefaultSheet();
     }
 
     onCreated()       {}
@@ -66,11 +65,11 @@ export class AlertBadge extends Component('arianna-alert-badge', HTMLElement, {}
     private subVal : () => string  = () => '';
     private hasSub : () => boolean = () => false;
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     alignItems   : 'center',
                     background   : 'var(--arianna-bg-3, #f3f3f3)',
                     borderRadius : '4px',
@@ -79,42 +78,42 @@ export class AlertBadge extends Component('arianna-alert-badge', HTMLElement, {}
                     gap          : '6px',
                     padding      : '4px 10px',
                 }),
-                new Rule(':root .ar-alert__main', {
+                new Rule(':host .ar-alert__main', {
                     color     : 'var(--arianna-muted, #6e6b62)',
                     fontSize  : '13px',
                     fontWeight: '600',
                 }),
-                new Rule(':root .ar-alert__sub', {
+                new Rule(':host .ar-alert__sub', {
                     color   : 'var(--arianna-muted, #6e6b62)',
                     fontSize: '11px',
                 }),
 
                 // ── Level palettes ──────────────────────────────────────────
-                new Rule(':root[level="neutral"]', {
+                new Rule(':host([level="neutral"])', {
                     background: 'var(--arianna-bg-3, #f3f3f3)',
                 }),
-                new Rule(':root[level="neutral"] .ar-alert__main', {
+                new Rule(':host([level="neutral"]) .ar-alert__main', {
                     color: 'var(--arianna-muted, #6e6b62)',
                 }),
 
-                new Rule(':root[level="info"]', {
+                new Rule(':host([level="info"])', {
                     background: 'rgba(31,111,235,0.10)',
                 }),
-                new Rule(':root[level="info"] .ar-alert__main', {
+                new Rule(':host([level="info"]) .ar-alert__main', {
                     color: 'var(--arianna-primary, #1f6feb)',
                 }),
 
-                new Rule(':root[level="warning"]', {
+                new Rule(':host([level="warning"])', {
                     background: 'rgba(245,166,35,0.15)',
                 }),
-                new Rule(':root[level="warning"] .ar-alert__main', {
+                new Rule(':host([level="warning"]) .ar-alert__main', {
                     color: 'var(--arianna-warning, #f5a623)',
                 }),
 
-                new Rule(':root[level="danger"]', {
+                new Rule(':host([level="danger"])', {
                     background: 'rgba(207,34,46,0.12)',
                 }),
-                new Rule(':root[level="danger"] .ar-alert__main', {
+                new Rule(':host([level="danger"]) .ar-alert__main', {
                     color: 'var(--arianna-danger, #cf222e)',
                 }),
             ]

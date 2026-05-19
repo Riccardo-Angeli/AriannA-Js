@@ -1011,7 +1011,7 @@ export class Rule
     //
     //  v2 equivalent:
     //
-    //    Rule.Sheet = new Sheet();                // master sheet (auto-Blob+<link>)
+    //    Rule.Sheet = new Stylesheet();                // master sheet (auto-Blob+<link>)
     //    Rule.css('.a', { color: 'red' });        // → master.Rules.add
     //    Rule.css('.b', { color: 'blue' });       // → master.Rules.add
     //

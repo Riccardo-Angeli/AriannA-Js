@@ -38,7 +38,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface ListItem {
@@ -60,7 +60,6 @@ export interface ListOptions {
 
 export class List extends Component('arianna-list', HTMLElement, {}, {
     attrs : ['selectable', 'multiselect', 'dense', 'divided'],
-    shadow: false,
 })
 {
     /** Reactive items list. */
@@ -118,7 +117,7 @@ export class List extends Component('arianna-list', HTMLElement, {}, {
             </ul>
         `;
 
-        this.Sheet = List.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = List.DefaultSheet();
     }
 
     /** Replace the items list. */
@@ -156,17 +155,17 @@ export class List extends Component('arianna-list', HTMLElement, {}, {
     private itemRole    : () => string = () => 'listitem';
     private itemClick   : (i: ListItem) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'block' }),
+                new Rule(':host', { display: 'block' }),
                 new Rule('.ar-list__container', {
                     listStyle: 'none',
                     margin   : '0',
                     padding  : '0',
                 }),
-                new Rule(':root[divided] .ar-list__item:not(:last-child)', {
+                new Rule(':host([divided]) .ar-list__item:not(:last-child)', {
                     borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
                 }),
                 new Rule('.ar-list__item', {
@@ -176,7 +175,7 @@ export class List extends Component('arianna-list', HTMLElement, {}, {
                     padding   : '10px 12px',
                     transition: 'background 0.18s ease',
                 }),
-                new Rule(':root[dense] .ar-list__item', { padding: '6px 12px' }),
+                new Rule(':host([dense]) .ar-list__item', { padding: '6px 12px' }),
                 new Rule('.ar-list__item:hover:not(.ar-list__item--disabled)', {
                     background: 'var(--arianna-bg-3, #f3f3f3)',
                 }),

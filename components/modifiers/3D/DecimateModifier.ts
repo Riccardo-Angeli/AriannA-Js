@@ -45,7 +45,6 @@ export class DecimateModifier extends Modifier3D {
 
 export class DecimateModifierElement extends (Component('arianna-decimate', HTMLElement, {}, {
     attrs : ['for', 'ratio', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const ratio = parseFloat(this.getAttribute('ratio') ?? '0.5') || 0.5;

@@ -24,7 +24,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export interface TransportBarOptions {
@@ -46,7 +46,6 @@ function fmtTime(s: number): string {
 
 export class TransportBar extends Component('arianna-transport-bar', HTMLElement, {}, {
     attrs : ['duration', 'current', 'playing', 'volume', 'show-volume', 'show-stop', 'show-skip'],
-    shadow: false,
 })
 {
     readonly playing$ : Signal<boolean> = signal(false);
@@ -76,7 +75,7 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.children.length) return;   // already built (markup-driven)
@@ -209,9 +208,9 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
     setPlaying(p: boolean): this    { this.playing$.set(p); return this; }
     setVolume(v: number): this      { this.volume$.set(Math.max(0, Math.min(1, v))); return this; }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 alignItems   : 'center',
                 background   : 'var(--ar-bg2, #161616)',
                 border       : '1px solid var(--ar-border, #2a2a2a)',
@@ -222,7 +221,7 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
                 gap          : '6px',
                 padding      : '6px 10px',
             }),
-            new Rule(':root .tb-btn', {
+            new Rule(':host .tb-btn', {
                 background  : 'var(--ar-bg3, #1e1e1e)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
@@ -233,11 +232,11 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
                 padding     : '4px 8px',
                 transition  : 'background var(--ar-transition, 0.14s)',
             }),
-            new Rule(':root .tb-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
-            new Rule(':root .tb-play', { minWidth: '40px' }),
-            new Rule(':root .tb-seek', { flex: '1 1 160px', minWidth: '120px', accentColor: 'var(--ar-primary, #7eb8f7)' }),
-            new Rule(':root .tb-volume', { width: '90px', accentColor: 'var(--ar-primary, #7eb8f7)' }),
-            new Rule(':root .tb-time', {
+            new Rule(':host .tb-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
+            new Rule(':host .tb-play', { minWidth: '40px' }),
+            new Rule(':host .tb-seek', { flex: '1 1 160px', minWidth: '120px', accentColor: 'var(--ar-primary, #7eb8f7)' }),
+            new Rule(':host .tb-volume', { width: '90px', accentColor: 'var(--ar-primary, #7eb8f7)' }),
+            new Rule(':host .tb-time', {
                 color     : 'var(--ar-muted, #888)',
                 fontSize  : '0.78rem',
                 fontVariantNumeric: 'tabular-nums',

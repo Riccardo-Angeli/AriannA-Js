@@ -22,7 +22,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface NexiOptions {
@@ -34,7 +34,6 @@ export interface NexiOptions {
 
 export class Nexi extends Component('arianna-nexi', HTMLElement, {}, {
     attrs : ['redirect-url', 'amount', 'currency', 'target'],
-    shadow: false,
 })
 {
     build(_opts: NexiOptions = {} as NexiOptions)
@@ -57,7 +56,7 @@ export class Nexi extends Component('arianna-nexi', HTMLElement, {}, {
             </button>
         `;
 
-        this.Sheet = Nexi.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Nexi.DefaultSheet();
     }
 
     async pay(): Promise<void> {
@@ -87,11 +86,11 @@ export class Nexi extends Component('arianna-nexi', HTMLElement, {}, {
     private btnLabel: () => string = () => 'Pay with Nexi';
     private onClick : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block' }),
+                new Rule(':host', { display: 'inline-block' }),
                 new Rule('.ar-nexi__btn', {
                     display: 'inline-flex',
                     alignItems: 'center',

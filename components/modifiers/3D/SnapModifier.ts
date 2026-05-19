@@ -40,7 +40,6 @@ export class SnapModifier extends Modifier3D {
 
 export class SnapModifierElement extends (Component('arianna-snap', HTMLElement, {}, {
     attrs : ['for', 'pos-grid', 'rot-grid-deg', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const posGrid    = parseFloat(this.getAttribute('pos-grid')     ?? '0.5') || 0.5;

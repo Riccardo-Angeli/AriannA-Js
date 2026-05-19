@@ -34,7 +34,7 @@
 
 import { AudioComponent, type AudioComponentOptions } from './AudioComponent.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export interface AudioEditorOptions extends AudioComponentOptions {
@@ -76,7 +76,7 @@ export class AudioEditor extends AudioComponent {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.ae-wrap')) return;
@@ -385,9 +385,9 @@ export class AudioEditor extends AudioComponent {
         }
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #0d0d0d)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -396,16 +396,16 @@ export class AudioEditor extends AudioComponent {
                 font        : 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
                 padding     : '8px',
             }),
-            new Rule(':root .ae-wrap', {
+            new Rule(':host .ae-wrap', {
                 display      : 'flex',
                 flexDirection: 'column',
                 gap          : '6px',
             }),
-            new Rule(':root .ae-toolbar', {
+            new Rule(':host .ae-toolbar', {
                 display: 'flex',
                 gap    : '4px',
             }),
-            new Rule(':root .ae-btn', {
+            new Rule(':host .ae-btn', {
                 background  : 'var(--ar-bg3, #1e1e1e)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
@@ -416,15 +416,15 @@ export class AudioEditor extends AudioComponent {
                 padding     : '4px 10px',
                 transition  : 'all var(--ar-transition, 0.14s)',
             }),
-            new Rule(':root .ae-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
-            new Rule(':root .ae-canvas', {
+            new Rule(':host .ae-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
+            new Rule(':host .ae-canvas', {
                 background  : 'var(--ar-bg, #0d0d0d)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
                 cursor      : 'crosshair',
                 display     : 'block',
             }),
-            new Rule(':root .ae-status', {
+            new Rule(':host .ae-status', {
                 color    : 'var(--ar-muted, #888)',
                 fontSize : '0.72rem',
             }),

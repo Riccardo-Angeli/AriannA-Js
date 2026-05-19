@@ -34,7 +34,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export type SnackbarPosition = 'top-left' | 'top-center' | 'top-right'
@@ -87,7 +87,6 @@ function applyContainerPosition(el: HTMLElement, pos: string): void
 
 export class Snackbar extends Component('arianna-snackbar', HTMLElement, {}, {
     attrs : ['message', 'variant', 'duration', 'position', 'action'],
-    shadow: false,
 })
 {
     #timer: number = 0;
@@ -117,7 +116,7 @@ export class Snackbar extends Component('arianna-snackbar', HTMLElement, {}, {
             <button class="ar-snackbar__close" @click="this.onCloseClick" aria-label="Close">✕</button>
         `;
 
-        this.Sheet = Snackbar.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Snackbar.DefaultSheet();
     }
 
     show(): this
@@ -190,11 +189,11 @@ export class Snackbar extends Component('arianna-snackbar', HTMLElement, {}, {
     private onActionClick: () => void = () => {};
     private onCloseClick : () => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     alignItems   : 'center',
                     borderRadius : 'var(--arianna-radius, 6px)',
                     boxShadow    : '0 6px 20px rgba(0,0,0,0.18)',
@@ -210,11 +209,11 @@ export class Snackbar extends Component('arianna-snackbar', HTMLElement, {}, {
                     border       : '1px solid var(--arianna-border, #d8d8d8)',
                     color        : 'var(--arianna-text, #1f2328)',
                 }),
-                new Rule(':root.ar-snackbar--on', { opacity: '1', transform: 'none' }),
-                new Rule(':root[variant="success"]', { background: 'var(--arianna-success, #2ea043)', color: '#fff' }),
-                new Rule(':root[variant="warning"]', { background: 'var(--arianna-warning, #d29922)', color: '#000' }),
-                new Rule(':root[variant="danger"]',  { background: 'var(--arianna-danger,  #cf222e)', color: '#fff' }),
-                new Rule(':root[variant="info"]',    { background: 'var(--arianna-info,    #4dd0e1)', color: '#000' }),
+                new Rule(':host.ar-snackbar--on', { opacity: '1', transform: 'none' }),
+                new Rule(':host([variant="success"])', { background: 'var(--arianna-success, #2ea043)', color: '#fff' }),
+                new Rule(':host([variant="warning"])', { background: 'var(--arianna-warning, #d29922)', color: '#000' }),
+                new Rule(':host([variant="danger"])',  { background: 'var(--arianna-danger,  #cf222e)', color: '#fff' }),
+                new Rule(':host([variant="info"])',    { background: 'var(--arianna-info,    #4dd0e1)', color: '#000' }),
                 new Rule('.ar-snackbar__msg',    { flex: '1', fontSize: '0.82rem' }),
                 new Rule('.ar-snackbar__action', { background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', font: 'inherit', fontSize: '0.78rem', fontWeight: '600', textDecoration: 'underline' }),
                 new Rule('.ar-snackbar__close',  { background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '0.8rem', opacity: '0.7', padding: '0' }),

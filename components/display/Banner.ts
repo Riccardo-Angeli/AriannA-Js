@@ -29,7 +29,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface BannerOptions {
@@ -42,7 +42,6 @@ export interface BannerOptions {
 
 export class Banner extends Component('arianna-banner', HTMLElement, {}, {
     attrs : ['variant', 'dismissible', 'icon', 'message', 'action'],
-    shadow: false,
 })
 {
     build(_opts: BannerOptions = {})
@@ -77,7 +76,7 @@ export class Banner extends Component('arianna-banner', HTMLElement, {}, {
             <button class="ar-banner__close"  a-if="this.isDismissible()" @click="this.onDismiss" aria-label="Dismiss">✕</button>
         `;
 
-        this.Sheet = Banner.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Banner.DefaultSheet();
     }
 
     /** Programmatic dismiss (mirrors the user clicking the close button). */
@@ -116,11 +115,11 @@ export class Banner extends Component('arianna-banner', HTMLElement, {}, {
     private onAction     : () => void    = () => {};
     private onDismiss    : () => void    = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     alignItems: 'center',
                     display   : 'flex',
                     gap       : '10px',
@@ -130,10 +129,10 @@ export class Banner extends Component('arianna-banner', HTMLElement, {}, {
                     background    : 'var(--arianna-bg-3, #f3f3f3)',
                     borderBottom  : '1px solid var(--arianna-border, #d8d8d8)',
                 }),
-                new Rule(':root[variant="info"]',    { background: 'rgba(77,208,225,0.12)',  borderBottom: '1px solid var(--arianna-info, #4dd0e1)' }),
-                new Rule(':root[variant="success"]', { background: 'rgba(46,160,67,0.12)',   borderBottom: '1px solid var(--arianna-success, #2ea043)' }),
-                new Rule(':root[variant="warning"]', { background: 'rgba(210,153,34,0.12)',  borderBottom: '1px solid var(--arianna-warning, #d29922)' }),
-                new Rule(':root[variant="danger"]',  { background: 'rgba(207,34,46,0.12)',   borderBottom: '1px solid var(--arianna-danger, #cf222e)' }),
+                new Rule(':host([variant="info"])',    { background: 'rgba(77,208,225,0.12)',  borderBottom: '1px solid var(--arianna-info, #4dd0e1)' }),
+                new Rule(':host([variant="success"])', { background: 'rgba(46,160,67,0.12)',   borderBottom: '1px solid var(--arianna-success, #2ea043)' }),
+                new Rule(':host([variant="warning"])', { background: 'rgba(210,153,34,0.12)',  borderBottom: '1px solid var(--arianna-warning, #d29922)' }),
+                new Rule(':host([variant="danger"])',  { background: 'rgba(207,34,46,0.12)',   borderBottom: '1px solid var(--arianna-danger, #cf222e)' }),
                 new Rule('.ar-banner__msg',    { flex: '1' }),
                 new Rule('.ar-banner__icon',   { flexShrink: '0' }),
                 new Rule('.ar-banner__action', {

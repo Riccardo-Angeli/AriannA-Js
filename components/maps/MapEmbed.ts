@@ -44,7 +44,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface LatLng { lat: number; lng: number; }
@@ -73,7 +73,6 @@ export function _mapEmbedBase(tag: string) {
             'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
             'aspect-ratio', 'api-key', 'mapkit-token',
         ],
-        shadow: false,
     });
 }
 
@@ -125,7 +124,7 @@ export abstract class MapEmbed extends _mapEmbedBase('arianna-map-embed')
             </div>
         `;
 
-        this.Sheet = MapEmbed.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = MapEmbed.DefaultSheet();
     }
 
     // ── Subclass contract ────────────────────────────────────────────────────
@@ -206,11 +205,11 @@ export abstract class MapEmbed extends _mapEmbedBase('arianna-map-embed')
     protected iframeSrc     : () => string = () => 'about:blank';
     protected openHref      : () => string = () => '#';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg-3, #f3f3f3)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 8px)',

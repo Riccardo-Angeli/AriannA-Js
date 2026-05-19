@@ -17,7 +17,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface DatePickerOptions {
@@ -33,7 +33,6 @@ export interface DatePickerOptions {
 
 export class DatePicker extends Component('arianna-date-picker', HTMLElement, {}, {
     attrs : ['label', 'value', 'placeholder', 'min', 'max', 'locale', 'first-day', 'disabled'],
-    shadow: false,
 })
 {
     open$: Signal<boolean> = signal<boolean>(false);
@@ -109,7 +108,7 @@ export class DatePicker extends Component('arianna-date-picker', HTMLElement, {}
             </div>
         `;
 
-        this.Sheet = DatePicker.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = DatePicker.DefaultSheet();
     }
 
     onCreated()       {}
@@ -145,11 +144,11 @@ export class DatePicker extends Component('arianna-date-picker', HTMLElement, {}
     private onInputChange  : (e: Event) => void = () => {};
     private onCalendarSelect: (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display : 'inline-block',
                     position: 'relative',
                     width   : '100%',

@@ -37,7 +37,6 @@ export interface RotatorOptions {
 
 export class Rotator extends (Component('arianna-rotator', HTMLElement, {}, {
     attrs : ['handle-offset', 'handle-color', 'handle-size', 'snap', 'disabled'],
-    shadow: false,
 }) as typeof Modifier2D)
 {
     #angle = 0;

@@ -45,7 +45,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 const BEAT_PX_DEFAULT = 20;     // px per beat at zoom = 1
@@ -62,7 +62,6 @@ export interface AudioPartOptions {
 
 export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, {
     attrs : ['start', 'length', 'label', 'color', 'selected'],
-    shadow: false,
 })
 {
     readonly start$ : Signal<number> = signal(0);
@@ -87,7 +86,7 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const el = self.render();
         if (el.querySelector('.ap-label')) return;
@@ -165,9 +164,9 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
         return isFinite(v) && v > 0 ? v : BEAT_PX_DEFAULT;
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-primary, #7eb8f7)',
                 border      : '1px solid rgba(0,0,0,0.3)',
                 borderRadius: '3px',
@@ -183,14 +182,14 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
                 userSelect  : 'none',
                 whiteSpace  : 'nowrap',
             }),
-            new Rule(':root[selected]', {
+            new Rule(':host([selected])', {
                 boxShadow: '0 0 0 2px var(--ar-warning, #ff9800)',
                 zIndex   : '2',
             }),
-            new Rule(':root .ap-label', {
+            new Rule(':host .ap-label', {
                 pointerEvents : 'none',
             }),
-            new Rule(':root .ap-grip', {
+            new Rule(':host .ap-grip', {
                 bottom    : '0',
                 cursor    : 'ew-resize',
                 position  : 'absolute',
@@ -213,7 +212,6 @@ export interface AudioTrackOptions {
 
 export class AudioTrack extends Component('arianna-audio-track', HTMLElement, {}, {
     attrs : ['name', 'muted', 'soloed', 'color'],
-    shadow: false,
     bus   : 'arianna-audio-track-editor',
 })
 {
@@ -232,7 +230,7 @@ export class AudioTrack extends Component('arianna-audio-track', HTMLElement, {}
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const el = self.render();
         if (el.querySelector('.at-head')) return;
@@ -292,15 +290,15 @@ export class AudioTrack extends Component('arianna-audio-track', HTMLElement, {}
         return this;
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 borderBottom: '1px solid var(--ar-border, #2a2a2a)',
                 display     : 'grid',
                 gridTemplateColumns: '160px 1fr',
                 height      : '56px',
             }),
-            new Rule(':root .at-head', {
+            new Rule(':host .at-head', {
                 alignItems   : 'center',
                 background   : 'var(--ar-bg2, #161616)',
                 borderRight  : '1px solid var(--ar-border, #2a2a2a)',
@@ -308,7 +306,7 @@ export class AudioTrack extends Component('arianna-audio-track', HTMLElement, {}
                 gap          : '4px',
                 padding      : '0 8px',
             }),
-            new Rule(':root .at-name', {
+            new Rule(':host .at-name', {
                 color    : 'var(--ar-text, #e0e0e0)',
                 flex     : '1',
                 fontSize : '0.78rem',
@@ -316,7 +314,7 @@ export class AudioTrack extends Component('arianna-audio-track', HTMLElement, {}
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
             }),
-            new Rule(':root .at-btn', {
+            new Rule(':host .at-btn', {
                 background  : 'var(--ar-bg3, #1e1e1e)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
@@ -327,10 +325,10 @@ export class AudioTrack extends Component('arianna-audio-track', HTMLElement, {}
                 minWidth    : '24px',
                 padding     : '2px 6px',
             }),
-            new Rule(':root .at-mute.active', { background: 'var(--ar-danger, #f44336)', color: '#fff' }),
-            new Rule(':root .at-solo.active', { background: 'var(--ar-warning, #ff9800)', color: '#fff' }),
-            new Rule(':root[muted] .at-lane', { opacity: '0.4' }),
-            new Rule(':root .at-lane', {
+            new Rule(':host .at-mute.active', { background: 'var(--ar-danger, #f44336)', color: '#fff' }),
+            new Rule(':host .at-solo.active', { background: 'var(--ar-warning, #ff9800)', color: '#fff' }),
+            new Rule(':host([muted]) .at-lane', { opacity: '0.4' }),
+            new Rule(':host .at-lane', {
                 background: 'var(--ar-bg, #0d0d0d)',
                 position  : 'relative',
             }),
@@ -348,7 +346,6 @@ export interface AudioTrackEditorOptions {
 
 export class AudioTrackEditor extends Component('arianna-audio-track-editor', HTMLElement, {}, {
     attrs : ['bars', 'beats-per-bar', 'beat-px'],
-    shadow: false,
 })
 {
     readonly playhead$: Signal<number> = signal(0);    // in beats
@@ -371,7 +368,7 @@ export class AudioTrackEditor extends Component('arianna-audio-track-editor', HT
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.ate-ruler')) return;
@@ -433,9 +430,9 @@ export class AudioTrackEditor extends Component('arianna-audio-track-editor', HT
         return self._children;
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #0d0d0d)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -446,7 +443,7 @@ export class AudioTrackEditor extends Component('arianna-audio-track-editor', HT
                 position    : 'relative',
                 userSelect  : 'none',
             }),
-            new Rule(':root .ate-ruler', {
+            new Rule(':host .ate-ruler', {
                 background : 'var(--ar-bg2, #161616)',
                 borderBottom: '1px solid var(--ar-border, #2a2a2a)',
                 display    : 'grid',
@@ -454,25 +451,25 @@ export class AudioTrackEditor extends Component('arianna-audio-track-editor', HT
                 height     : '24px',
                 overflow   : 'hidden',
             }),
-            new Rule(':root .ate-corner', {
+            new Rule(':host .ate-corner', {
                 background : 'var(--ar-bg2, #161616)',
                 borderRight: '1px solid var(--ar-border, #2a2a2a)',
             }),
-            new Rule(':root .ate-ruler-inner', {
+            new Rule(':host .ate-ruler-inner', {
                 position: 'relative',
             }),
-            new Rule(':root .ate-tick', {
+            new Rule(':host .ate-tick', {
                 color    : 'var(--ar-muted, #888)',
                 fontSize : '0.66rem',
                 position : 'absolute',
                 top      : '4px',
             }),
-            new Rule(':root .ate-body', {
+            new Rule(':host .ate-body', {
                 display : 'block',
                 maxHeight: '380px',
                 overflow: 'auto',
             }),
-            new Rule(':root .ate-playhead', {
+            new Rule(':host .ate-playhead', {
                 background    : 'var(--ar-danger, #f44336)',
                 bottom        : '0',
                 pointerEvents : 'none',

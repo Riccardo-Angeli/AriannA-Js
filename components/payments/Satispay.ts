@@ -26,7 +26,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface SatispayOptions {
@@ -40,7 +40,6 @@ const SATISPAY_LOGO = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/sv
 
 export class Satispay extends Component('arianna-satispay', HTMLElement, {}, {
     attrs : ['redirect-url', 'amount', 'currency', 'target'],
-    shadow: false,
 })
 {
     build(_opts: SatispayOptions = {} as SatispayOptions)
@@ -63,7 +62,7 @@ export class Satispay extends Component('arianna-satispay', HTMLElement, {}, {
             </button>
         `;
 
-        this.Sheet = Satispay.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Satispay.DefaultSheet();
     }
 
     async pay(): Promise<void> {
@@ -93,11 +92,11 @@ export class Satispay extends Component('arianna-satispay', HTMLElement, {}, {
     private btnLabel: () => string = () => 'Pay with Satispay';
     private onClick : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block' }),
+                new Rule(':host', { display: 'inline-block' }),
                 new Rule('.ar-satispay__btn', {
                     display: 'inline-flex',
                     alignItems: 'center',

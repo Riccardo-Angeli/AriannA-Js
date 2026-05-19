@@ -26,7 +26,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface TooltipOptions {
@@ -37,7 +37,6 @@ export interface TooltipOptions {
 
 export class Tooltip extends Component('arianna-tooltip', HTMLElement, {}, {
     attrs : ['text', 'position', 'delay'],
-    shadow: false,
 })
 {
     #tipEl: HTMLElement | null = null;
@@ -80,7 +79,7 @@ export class Tooltip extends Component('arianna-tooltip', HTMLElement, {}, {
 
         this.template = html`<slot></slot>`;
 
-        this.Sheet = Tooltip.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Tooltip.DefaultSheet();
     }
 
     #place(): void
@@ -136,11 +135,11 @@ export class Tooltip extends Component('arianna-tooltip', HTMLElement, {}, {
     get delay(): number  { return parseInt(this.getAttribute('delay') ?? '180', 10); }
     set delay(v: number) { this.setAttribute('delay', String(v)); }
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'contents' }),
+                new Rule(':host', { display: 'contents' }),
                 new Rule('.ar-tooltip', {
                     background  : 'var(--arianna-bg-3, #1f2328)',
                     border      : '1px solid var(--arianna-border, #30363d)',

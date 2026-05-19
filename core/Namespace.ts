@@ -1073,35 +1073,86 @@ export class Namespace
             }
         }
 
-        // Step 7: auto-render `this.template`
+        // Step 7: render `this.template` via shadow DOM (default closed)
         //
         // The Component(...) convention is for build() to assign
         //     this.template = html`<div>...</div>`
-        // which yields a Template (v2 reactive template) instance. The
-        // framework provides a complete .mount(host, scope) method that
-        // handles slot replacement, attribute / event / text bindings, and
-        // disposer tracking — but nothing in v2 was calling it, so every
-        // component that used `this.template` rendered as an empty element.
+        // which yields a Template (v3 reactive template) instance.
         //
-        // We call mount() now, passing the host element itself as the scope
-        // root so that `:style="this.foo()"` and `@click="this.bar"`
-        // resolve to the host's methods/properties.
+        // Shadow DOM is closed by default. Components can opt-in to open
+        // shadow via `def.shadow: 'open'` (useful for libraries that need
+        // external CSS to reach in). Components that explicitly disable
+        // shadow via `def.shadow: false` render into the light DOM and
+        // forfeit slot semantics — they should not use <slot> in that case.
+        //
+        // The `template.attach(host, instance, signals)` call:
+        //   - clones the parsed <template> content
+        //   - applies all bindings (`:attr`, `@event`, `a-if`, etc.) with
+        //     `this = instance` for expression evaluation
+        //   - inserts into the shadow root (or host directly if light DOM)
+        //   - relies on native `<slot>` projection — zero custom slot code
         const hostWithTpl = node as unknown as {
-            template?: { mount?: (host: Element, scope: unknown) => unknown };
+            template?: {
+                attach?: (host: ParentNode, instance: object, signals?: Record<string, unknown>) => unknown;
+                // Legacy v2 API — supported as fallback
+                mount?:  (host: Element,    scope: unknown) => unknown;
+            };
             __templateRendered?: boolean;
+            __attrSignals?: Record<string, unknown>;
+            shadowRoot?: ShadowRoot | null;
+            attachShadow?: (init: ShadowRootInit) => ShadowRoot;
         };
-        if (hostWithTpl.template &&
-            typeof hostWithTpl.template.mount === 'function' &&
-            !hostWithTpl.__templateRendered)
+
+        if (hostWithTpl.template && !hostWithTpl.__templateRendered)
         {
             hostWithTpl.__templateRendered = true;
+
+            // Retrieve def from the constructor (set by Component factory).
+            // After descriptor repoint, ctor is the user class (e.g. _Splitter);
+            // __ariannaDef is inherited via static prototype chain from Bound.
+            const ctorWithDef = ctor as unknown as { __ariannaDef?: Record<string, unknown> };
+            const def = ctorWithDef.__ariannaDef ?? {};
+
+            // Determine shadow mode. Default: closed.
+            const defShadow = def.shadow;
+            let shadowMode: 'open' | 'closed' | false;
+            if (defShadow === false)        shadowMode = false;
+            else if (defShadow === 'open')  shadowMode = 'open';
+            else if (defShadow === 'closed' || defShadow === undefined || defShadow === true) shadowMode = 'closed';
+            else shadowMode = 'closed';
+
+            // Find or create the render target.
+            let renderTarget: ParentNode = node;
+            if (shadowMode !== false) {
+                if (!hostWithTpl.shadowRoot) {
+                    try {
+                        const sr = (node as unknown as { attachShadow: (init: ShadowRootInit) => ShadowRoot })
+                            .attachShadow({ mode: shadowMode });
+                        renderTarget = sr;
+                    } catch (e) {
+                        // attachShadow can fail for elements that don't support it
+                        // (e.g. <img>, customized built-ins on certain interfaces).
+                        // Fall back to light DOM.
+                        console.warn(`[arianna] attachShadow failed for <${desc.Tags[0]}>, falling back to light DOM:`, e);
+                        renderTarget = node;
+                    }
+                } else {
+                    renderTarget = hostWithTpl.shadowRoot;
+                }
+            }
+
+            const signals = hostWithTpl.__attrSignals ?? {};
+
             try {
-                // Pass the host both as the mount target and the scope —
-                // `:style="this.paneAStyle()"` then resolves `this` to the
-                // component instance.
-                hostWithTpl.template.mount(node, node);
+                if (typeof hostWithTpl.template.attach === 'function') {
+                    // v3 API
+                    hostWithTpl.template.attach(renderTarget, node, signals);
+                } else if (typeof hostWithTpl.template.mount === 'function') {
+                    // v2 legacy fallback
+                    hostWithTpl.template.mount(renderTarget as Element, node);
+                }
             } catch (e) {
-                console.warn(`[arianna] template.mount() failed for <${desc.Tags[0]}>:`, e);
+                console.warn(`[arianna] template render failed for <${desc.Tags[0]}>:`, e);
             }
         }
     }

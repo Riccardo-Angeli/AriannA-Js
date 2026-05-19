@@ -22,7 +22,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface DividerOptions {
@@ -33,7 +33,6 @@ export interface DividerOptions {
 
 export class Divider extends Component('arianna-divider', HTMLElement, {}, {
     attrs : ['orientation', 'variant', 'label'],
-    shadow: false,
 })
 {
     build(_opts: DividerOptions = {})
@@ -50,7 +49,7 @@ export class Divider extends Component('arianna-divider', HTMLElement, {}, {
             <span class="ar-divider__line"  a-if="this.hasLabel()"></span>
         `;
 
-        this.Sheet = Divider.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Divider.DefaultSheet();
     }
 
     onCreated()       {}
@@ -73,18 +72,18 @@ export class Divider extends Component('arianna-divider', HTMLElement, {}, {
     private hasLabel : () => boolean = () => false;
     private labelText: () => string  = () => '';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display    : 'flex',
                     alignItems : 'center',
                     gap        : '10px',
                 }),
-                new Rule(':root[orientation="horizontal"]', { width: '100%' }),
-                new Rule(':root:not([orientation])',         { width: '100%' }),
-                new Rule(':root[orientation="vertical"]', {
+                new Rule(':host([orientation="horizontal"])', { width: '100%' }),
+                new Rule(':host(:not([orientation]))',         { width: '100%' }),
+                new Rule(':host([orientation="vertical"])', {
                     alignSelf    : 'stretch',
                     flexDirection: 'column',
                     width        : 'auto',
@@ -93,13 +92,13 @@ export class Divider extends Component('arianna-divider', HTMLElement, {}, {
                     borderTop: '1px solid var(--arianna-border, #d8d8d8)',
                     flex     : '1',
                 }),
-                new Rule(':root[orientation="vertical"] .ar-divider__line', {
+                new Rule(':host([orientation="vertical"]) .ar-divider__line', {
                     borderTop : 'none',
                     borderLeft: '1px solid var(--arianna-border, #d8d8d8)',
                     flex      : '1',
                 }),
-                new Rule(':root[variant="dashed"] .ar-divider__line', { borderStyle: 'dashed' }),
-                new Rule(':root[variant="dotted"] .ar-divider__line', { borderStyle: 'dotted' }),
+                new Rule(':host([variant="dashed"]) .ar-divider__line', { borderStyle: 'dashed' }),
+                new Rule(':host([variant="dotted"]) .ar-divider__line', { borderStyle: 'dotted' }),
                 new Rule('.ar-divider__label', {
                     color     : 'var(--arianna-muted, #8b949e)',
                     fontSize  : '0.78rem',

@@ -32,7 +32,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 
 export interface Vec2 { x: number; y: number; }
@@ -54,7 +54,6 @@ interface ViewportState { panX: number; panY: number; zoom: number; }
 
 export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
     attrs : ['width', 'height', 'pan-x', 'pan-y', 'zoom', 'zoom-min', 'zoom-max', 'grid-size', 'show-rulers', 'show-grid'],
-    shadow: false,
 })
 {
     viewport$: Signal<ViewportState> = signal<ViewportState>({ panX: 0, panY: 0, zoom: 1 });
@@ -169,7 +168,7 @@ export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Canvas2D.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Canvas2D.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -280,11 +279,11 @@ export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
     private onPointerMove: (e: Event) => void = () => {};
     private onPointerUp  : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'block', position: 'relative' }),
+                new Rule(':host', { display: 'block', position: 'relative' }),
                 new Rule('.ar-canvas2d__host', {
                     position: 'relative',
                     overflow: 'hidden',

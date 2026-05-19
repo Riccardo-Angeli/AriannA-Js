@@ -23,7 +23,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 
 export interface PaletteTool {
@@ -55,7 +55,6 @@ export interface ToolsPaletteOptions {
 
 export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement, {}, {
     attrs : ['active-tool', 'layout', 'show-shortcuts'],
-    shadow: false,
 })
 {
     tools$: Signal<PaletteTool[]> = signal<PaletteTool[]>(BUILTIN.slice());
@@ -97,7 +96,7 @@ export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement
             </div>
         `;
 
-        this.Sheet = ToolsPalette.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ToolsPalette.DefaultSheet();
     }
 
     setTool(id: string): this {
@@ -126,11 +125,11 @@ export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement
     private buttons      : () => Array<{ id: string; icon: string; title: string; behaviour: string; cls: string }> = () => [];
     private onBtnClick   : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block' }),
+                new Rule(':host', { display: 'inline-block' }),
                 new Rule('.ar-tp', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',

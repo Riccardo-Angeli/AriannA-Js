@@ -66,7 +66,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -243,7 +243,6 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
         'page-size', 'selectable', 'searchable', 'sticky-header',
         'column-toggle', 'column-resize', 'worker', 'worker-threshold',
     ],
-    shadow: false,
 })
 {
     // ── Reactive state ──────────────────────────────────────────────────────
@@ -593,7 +592,7 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Table.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Table.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -1016,11 +1015,11 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
     private onResizeStart   : (col: TableColumn, e: Event) => void = () => {};
     private onExportCsv     : () => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display      : 'flex',
                     flexDirection: 'column',
                     width        : '100%',
@@ -1117,7 +1116,7 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
                     borderCollapse: 'collapse',
                     tableLayout   : 'fixed',
                 }),
-                new Rule(':root[sticky-header] .ar-table__thead', {
+                new Rule(':host([sticky-header]) .ar-table__thead', {
                     position: 'sticky',
                     top     : '0',
                     zIndex  : '1',

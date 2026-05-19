@@ -48,7 +48,6 @@ export class FadeModifier extends Modifier3D {
 
 export class FadeModifierElement extends (Component('arianna-fade', HTMLElement, {}, {
     attrs : ['for', 'near', 'far', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const near = parseFloat(this.getAttribute('near') ?? '10') || 10;

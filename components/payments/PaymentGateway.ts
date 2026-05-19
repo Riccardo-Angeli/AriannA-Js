@@ -56,7 +56,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 import { ApplePay }   from './ApplePay.ts';
@@ -112,7 +112,6 @@ const METHOD_META: Array<{ id: PaymentMethodId; label: string; icon: string }> =
 
 export class PaymentGateway extends Component('arianna-payment-gateway', HTMLElement, {}, {
     attrs : ['amount', 'currency', 'title'],
-    shadow: false,
 })
 {
     methods$ : Signal<PaymentGatewayMethodConfig> = signal<PaymentGatewayMethodConfig>({});
@@ -168,7 +167,7 @@ export class PaymentGateway extends Component('arianna-payment-gateway', HTMLEle
             </div>
         `;
 
-        this.Sheet = PaymentGateway.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = PaymentGateway.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -337,11 +336,11 @@ export class PaymentGateway extends Component('arianna-payment-gateway', HTMLEle
     private methodList : () => Array<{ id: PaymentMethodId; label: string; icon: string; cls: string; selected: boolean }> = () => [];
     private onRowClick : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display: 'block',
                     fontFamily: '-apple-system, system-ui, sans-serif',
                     fontSize: '13px',

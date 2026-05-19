@@ -26,7 +26,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 import { _fmt, _fmtK } from './helpers.ts';
 
@@ -47,7 +47,6 @@ interface Row {
 
 export class OrderBook extends Component('arianna-order-book', HTMLElement, {}, {
     attrs : ['depth'],
-    shadow: false,
 })
 {
     bids$: Signal<Level[]> = signal<Level[]>([]);
@@ -121,7 +120,7 @@ export class OrderBook extends Component('arianna-order-book', HTMLElement, {}, 
             </table>
         `;
 
-        this.Sheet = OrderBook.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = OrderBook.DefaultSheet();
     }
 
     setData(bids: Level[], asks: Level[]): this {
@@ -152,11 +151,11 @@ export class OrderBook extends Component('arianna-order-book', HTMLElement, {}, 
     private midText   : () => string = () => '—';
     private spreadText: () => string = () => '—';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',

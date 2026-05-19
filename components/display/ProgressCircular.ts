@@ -23,7 +23,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface ProgressCircularOptions {
@@ -37,7 +37,6 @@ export interface ProgressCircularOptions {
 
 export class ProgressCircular extends Component('arianna-progress-circular', HTMLElement, {}, {
     attrs : ['size', 'stroke-width', 'value', 'variant', 'show-value', 'indeterminate'],
-    shadow: false,
 })
 {
     build(_opts: ProgressCircularOptions = {})
@@ -95,7 +94,7 @@ export class ProgressCircular extends Component('arianna-progress-circular', HTM
             <div class="ar-progress-circ__label" a-if="this.hasShowVal()" :style="this.labelStyle()">{{ this.valueLabel() }}</div>
         `;
 
-        this.Sheet = ProgressCircular.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ProgressCircular.DefaultSheet();
     }
 
     onCreated()       {}
@@ -138,11 +137,11 @@ export class ProgressCircular extends Component('arianna-progress-circular', HTM
     private valueLabel : () => string = () => '0%';
     private labelStyle : () => Record<string, string> = () => ({});
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display       : 'inline-flex',
                     flexDirection : 'column',
                     alignItems    : 'center',

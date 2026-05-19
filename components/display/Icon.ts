@@ -24,7 +24,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface IconOptions {
@@ -35,7 +35,6 @@ export interface IconOptions {
 
 export class Icon extends Component('arianna-icon', HTMLElement, {}, {
     attrs : ['src', 'size', 'color'],
-    shadow: false,
 })
 {
     build(_opts: IconOptions = {})
@@ -77,7 +76,7 @@ export class Icon extends Component('arianna-icon', HTMLElement, {}, {
             <slot a-if="this.isSlotted()"></slot>
         `;
 
-        this.Sheet = Icon.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Icon.DefaultSheet();
     }
 
     onCreated()       {}
@@ -103,18 +102,18 @@ export class Icon extends Component('arianna-icon', HTMLElement, {}, {
     private svgHtml  : () => string  = () => '';
     private textGlyph: () => string  = () => '';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     alignItems    : 'center',
                     display       : 'inline-flex',
                     flexShrink    : '0',
                     justifyContent: 'center',
                     lineHeight    : '1',
                 }),
-                new Rule(':root svg', {
+                new Rule(':host svg', {
                     height: '1em',
                     width : '1em',
                 }),

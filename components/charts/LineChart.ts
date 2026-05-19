@@ -20,7 +20,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export type LinePoint = [number, number];   // [x, y]
@@ -44,7 +44,6 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, {
     attrs : ['width', 'height', 'area', 'smooth', 'show-grid', 'show-dots'],
-    shadow: false,
 })
 {
     readonly series$: Signal<LineSeries[]> = signal<LineSeries[]>([]);
@@ -67,7 +66,7 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
         const self = this as unknown as {
             render(): HTMLElement;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('svg')) return;
@@ -219,9 +218,9 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
         return palette[i % palette.length] ?? '#7eb8f7';
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #fff)',
                 border      : '1px solid var(--ar-border, #e0e0e0)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -230,12 +229,12 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
                 font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
                 padding     : '8px',
             }),
-            new Rule(':root .lc-svg', { display: 'block' }),
-            new Rule(':root .lc-grid', { stroke: 'var(--ar-border, #e0e0e0)', strokeWidth: '1' }),
-            new Rule(':root .lc-tick', { fill: 'var(--ar-muted, #888)', fontSize: '11px' }),
-            new Rule(':root .lc-line', { strokeWidth: '2', fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' }),
-            new Rule(':root .lc-area', { opacity: '0.15' }),
-            new Rule(':root .lc-dot',  { cursor: 'pointer' }),
+            new Rule(':host .lc-svg', { display: 'block' }),
+            new Rule(':host .lc-grid', { stroke: 'var(--ar-border, #e0e0e0)', strokeWidth: '1' }),
+            new Rule(':host .lc-tick', { fill: 'var(--ar-muted, #888)', fontSize: '11px' }),
+            new Rule(':host .lc-line', { strokeWidth: '2', fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+            new Rule(':host .lc-area', { opacity: '0.15' }),
+            new Rule(':host .lc-dot',  { cursor: 'pointer' }),
         ]);
     }
 }

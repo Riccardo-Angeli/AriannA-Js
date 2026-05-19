@@ -17,7 +17,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface ButtonOptions {
@@ -31,7 +31,6 @@ export interface ButtonOptions {
 
 export class Button extends Component('arianna-button', HTMLElement, {}, {
     attrs : ['variant', 'size', 'disabled', 'icon', 'icon-right', 'label'],
-    shadow: false,
 })
 {
     build(_opts: ButtonOptions = {})
@@ -62,7 +61,7 @@ export class Button extends Component('arianna-button', HTMLElement, {}, {
             <span class="ar-btn__icon ar-btn__icon--right" a-if="this.hasIconR()">{{ this.iconRText() }}</span>
         `;
 
-        this.Sheet = Button.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Button.DefaultSheet();
     }
 
     onCreated()       {}
@@ -96,11 +95,11 @@ export class Button extends Component('arianna-button', HTMLElement, {}, {
     private labelText: () => string = () => '';
     private onClick  : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     alignItems    : 'center',
                     borderRadius  : 'var(--arianna-radius, 6px)',
                     cursor        : 'pointer',
@@ -115,16 +114,16 @@ export class Button extends Component('arianna-button', HTMLElement, {}, {
                     border        : '1px solid var(--arianna-border, #d8d8d8)',
                     color         : 'var(--arianna-text, #1f2328)',
                 }),
-                new Rule(':root[variant="primary"]', { background: 'var(--arianna-primary, #1f6feb)', border: '1px solid var(--arianna-primary, #1f6feb)', color: '#fff' }),
-                new Rule(':root[variant="danger"]',  { background: 'var(--arianna-danger, #cf222e)',  border: '1px solid var(--arianna-danger, #cf222e)',  color: '#fff' }),
-                new Rule(':root[variant="ghost"]',   { background: 'transparent', border: '1px solid transparent', color: 'var(--arianna-text, #1f2328)' }),
-                new Rule(':root[variant="link"]',    { background: 'transparent', border: 'none', color: 'var(--arianna-primary, #1f6feb)', paddingLeft: '0', paddingRight: '0' }),
-                new Rule(':root[size="sm"]',           { fontSize: '0.75rem', padding: '3px 10px' }),
-                new Rule(':root[size="md"]',           { fontSize: '0.82rem', padding: '5px 14px' }),
-                new Rule(':root[size="lg"]',           { fontSize: '0.90rem', padding: '8px 20px' }),
-                new Rule(':root:not([size])',           { fontSize: '0.82rem', padding: '5px 14px' }),
-                new Rule(':root:hover:not([disabled])', { filter: 'brightness(1.05)' }),
-                new Rule(':root[disabled]',             { cursor: 'not-allowed', opacity: '0.45' }),
+                new Rule(':host([variant="primary"])', { background: 'var(--arianna-primary, #1f6feb)', border: '1px solid var(--arianna-primary, #1f6feb)', color: '#fff' }),
+                new Rule(':host([variant="danger"])',  { background: 'var(--arianna-danger, #cf222e)',  border: '1px solid var(--arianna-danger, #cf222e)',  color: '#fff' }),
+                new Rule(':host([variant="ghost"])',   { background: 'transparent', border: '1px solid transparent', color: 'var(--arianna-text, #1f2328)' }),
+                new Rule(':host([variant="link"])',    { background: 'transparent', border: 'none', color: 'var(--arianna-primary, #1f6feb)', paddingLeft: '0', paddingRight: '0' }),
+                new Rule(':host([size="sm"])',           { fontSize: '0.75rem', padding: '3px 10px' }),
+                new Rule(':host([size="md"])',           { fontSize: '0.82rem', padding: '5px 14px' }),
+                new Rule(':host([size="lg"])',           { fontSize: '0.90rem', padding: '8px 20px' }),
+                new Rule(':host(:not([size]))',           { fontSize: '0.82rem', padding: '5px 14px' }),
+                new Rule(':host:hover:not([disabled])', { filter: 'brightness(1.05)' }),
+                new Rule(':host([disabled])',             { cursor: 'not-allowed', opacity: '0.45' }),
             ]
         );
     }

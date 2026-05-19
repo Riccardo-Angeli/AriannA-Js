@@ -23,7 +23,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface ProgressBarOptions {
@@ -37,7 +37,6 @@ export interface ProgressBarOptions {
 
 export class ProgressBar extends Component('arianna-progress-bar', HTMLElement, {}, {
     attrs : ['label', 'value', 'height', 'variant', 'show-value', 'indeterminate'],
-    shadow: false,
 })
 {
     build(_opts: ProgressBarOptions = {})
@@ -87,7 +86,7 @@ export class ProgressBar extends Component('arianna-progress-bar', HTMLElement, 
             </div>
         `;
 
-        this.Sheet = ProgressBar.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ProgressBar.DefaultSheet();
     }
 
     onCreated()       {}
@@ -127,11 +126,11 @@ export class ProgressBar extends Component('arianna-progress-bar', HTMLElement, 
     private barClassName : () => string = () => '';
     private ariaValue    : () => string = () => '0';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'flex', flexDirection: 'column', gap: '4px' }),
+                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '4px' }),
                 new Rule('.ar-progress__header', { display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }),
                 new Rule('.ar-progress__label',  { color: 'var(--arianna-muted, #8b949e)' }),
                 new Rule('.ar-progress__value',  { fontWeight: '500' }),

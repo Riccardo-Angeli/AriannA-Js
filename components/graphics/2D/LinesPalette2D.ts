@@ -27,7 +27,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 
 export interface LineTool {
@@ -66,7 +66,6 @@ export interface LinesPalette2DOptions {
 
 export class LinesPalette2D extends Component('arianna-lines-palette-2d', HTMLElement, {}, {
     attrs : ['active-tool', 'layout', 'show-shortcuts', 'disable-hotkeys'],
-    shadow: false,
 })
 {
     tools$ : Signal<LineTool[]> = signal<LineTool[]>(BUILTIN.slice());
@@ -144,7 +143,7 @@ export class LinesPalette2D extends Component('arianna-lines-palette-2d', HTMLEl
             </div>
         `;
 
-        this.Sheet = LinesPalette2D.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = LinesPalette2D.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -196,11 +195,11 @@ export class LinesPalette2D extends Component('arianna-lines-palette-2d', HTMLEl
     private to3dTools     : () => Array<{ id: string; label: string; icon: string; title: string; cls: string; behaviour: string }> = () => [];
     private onBtnClick    : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block', fontFamily: '-apple-system, system-ui, sans-serif' }),
+                new Rule(':host', { display: 'inline-block', fontFamily: '-apple-system, system-ui, sans-serif' }),
                 new Rule('.ar-lp2d', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',

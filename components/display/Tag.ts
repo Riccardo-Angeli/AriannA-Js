@@ -27,7 +27,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface TagOptions {
@@ -37,7 +37,6 @@ export interface TagOptions {
 
 export class Tag extends Component('arianna-tag', HTMLElement, {}, {
     attrs : ['removable'],
-    shadow: false,
 })
 {
     items$: Signal<string[]> = signal<string[]>([]);
@@ -61,7 +60,7 @@ export class Tag extends Component('arianna-tag', HTMLElement, {}, {
             </span>
         `;
 
-        this.Sheet = Tag.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Tag.DefaultSheet();
     }
 
     set items(v: string[]) { this.items$.set(v ?? []); }
@@ -87,11 +86,11 @@ export class Tag extends Component('arianna-tag', HTMLElement, {}, {
     private isRemovable: () => boolean  = () => false;
     private onRemove   : (item: string) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'flex', flexWrap: 'wrap', gap: '6px' }),
+                new Rule(':host', { display: 'flex', flexWrap: 'wrap', gap: '6px' }),
                 new Rule('.ar-tag', {
                     alignItems  : 'center',
                     background  : 'var(--arianna-bg-3, #f3f3f3)',

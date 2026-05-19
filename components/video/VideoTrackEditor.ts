@@ -46,7 +46,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface VideoClip {
@@ -79,7 +79,6 @@ function formatTime(seconds: number): string {
 
 export class VideoTrackEditor extends Component('arianna-video-track-editor', HTMLElement, {}, {
     attrs : ['duration', 'time', 'tracks', 'pixels-per-second', 'snap-ms'],
-    shadow: false,
 })
 {
     clips$    : Signal<VideoClip[]> = signal<VideoClip[]>([]);
@@ -284,7 +283,7 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
             </div>
         `;
 
-        this.Sheet = VideoTrackEditor.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = VideoTrackEditor.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -425,11 +424,11 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
     private onDeleteSelected: (e: Event) => void = () => {};
     private onSplitAtPlayhead: (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display: 'block',
                     fontFamily: '-apple-system, system-ui, sans-serif',
                     fontSize: '12px',

@@ -26,7 +26,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface PaginationOptions {
@@ -46,7 +46,6 @@ interface PagEntry {
 
 export class Pagination extends Component('arianna-pagination', HTMLElement, {}, {
     attrs : ['total', 'page-size', 'page', 'siblings'],
-    shadow: false,
 })
 {
     build(_opts: PaginationOptions = {})
@@ -124,7 +123,7 @@ export class Pagination extends Component('arianna-pagination', HTMLElement, {},
             </div>
         `;
 
-        this.Sheet = Pagination.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Pagination.DefaultSheet();
     }
 
     get totalPages(): number {
@@ -160,11 +159,11 @@ export class Pagination extends Component('arianna-pagination', HTMLElement, {},
     private btnClass: (e: PagEntry) => string = () => '';
     private onGo    : (n: number) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'block' }),
+                new Rule(':host', { display: 'block' }),
                 new Rule('.ar-pagination__row', { display: 'flex', alignItems: 'center', gap: '4px' }),
                 new Rule('.ar-pagination__btn', {
                     background  : 'var(--arianna-bg, #ffffff)',

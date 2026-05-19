@@ -30,7 +30,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 
 export type MaterialKind =
@@ -79,7 +79,6 @@ const DEFAULTS: Record<MaterialKind, MaterialDef> = {
 
 export class MaterialsPalette extends Component('arianna-materials-palette', HTMLElement, {}, {
     attrs : ['kind'],
-    shadow: false,
 })
 {
     material$: Signal<MaterialDef> = signal<MaterialDef>(DEFAULTS.standard);
@@ -191,7 +190,7 @@ export class MaterialsPalette extends Component('arianna-materials-palette', HTM
             </div>
         `;
 
-        this.Sheet = MaterialsPalette.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = MaterialsPalette.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -257,11 +256,11 @@ export class MaterialsPalette extends Component('arianna-materials-palette', HTM
     private onKindClick    : (e: Event) => void = () => {};
     private onParam        : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',

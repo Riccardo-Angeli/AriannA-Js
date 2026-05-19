@@ -24,7 +24,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface ChipOptions {
@@ -43,7 +43,6 @@ interface ChipView {
 
 export class Chip extends Component('arianna-chip', HTMLElement, {}, {
     attrs : ['multiple', 'removable', 'disabled'],
-    shadow: false,
 })
 {
     options$ : Signal<string[]>     = signal<string[]>([]);
@@ -104,7 +103,7 @@ export class Chip extends Component('arianna-chip', HTMLElement, {}, {
             </button>
         `;
 
-        this.Sheet = Chip.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Chip.DefaultSheet();
     }
 
     set options(v: string[]) { this.options$.set(v ?? []); }
@@ -128,11 +127,11 @@ export class Chip extends Component('arianna-chip', HTMLElement, {}, {
     private onRemoveClick  : (label: string, e: Event) => void = () => {};
     private shouldShowRemove: (c: ChipView) => boolean = () => false;
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'flex', flexWrap: 'wrap', gap: '6px' }),
+                new Rule(':host', { display: 'flex', flexWrap: 'wrap', gap: '6px' }),
                 new Rule('.ar-chip', {
                     alignItems  : 'center',
                     background  : 'var(--arianna-bg, #ffffff)',

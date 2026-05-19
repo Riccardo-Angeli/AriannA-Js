@@ -26,7 +26,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 
 export interface Vec2 { x: number; y: number; }
@@ -53,7 +53,6 @@ interface BezierState { anchors: Anchor[]; closed: boolean; }
 
 export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement, {}, {
     attrs : ['width', 'height', 'mode', 'closed'],
-    shadow: false,
 })
 {
     state$: Signal<BezierState> = signal<BezierState>({ anchors: [], closed: false });
@@ -261,7 +260,7 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
             </svg>
         `;
 
-        this.Sheet = BezierEditor.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = BezierEditor.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -400,11 +399,11 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
     private onHandlePointerMove: (e: Event) => void = () => {};
     private onHandlePointerUp  : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display: 'inline-block',
                     background: 'var(--arianna-bg, #fff)',
                     border: '1px solid var(--arianna-border, #d8d8d8)',

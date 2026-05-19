@@ -74,7 +74,6 @@ export class LODModifier extends Modifier3D {
  */
 export class LODModifierElement extends (Component('arianna-lod', HTMLElement, {}, {
     attrs : ['for', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         // TODO second-pass: read <arianna-lod-level> children and resolve their

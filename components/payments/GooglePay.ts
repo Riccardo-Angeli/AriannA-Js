@@ -33,7 +33,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export type GooglePayEnvironment = 'TEST' | 'PRODUCTION';
@@ -64,7 +64,6 @@ export class GooglePay extends Component('arianna-google-pay', HTMLElement, {}, 
         'gateway', 'gateway-merchant-id', 'environment',
         'button-color', 'button-type', 'supported-networks', 'supported-auth-methods',
     ],
-    shadow: false,
 })
 {
     available$: Signal<boolean> = signal<boolean>(false);
@@ -110,7 +109,7 @@ export class GooglePay extends Component('arianna-google-pay', HTMLElement, {}, 
             </div>
         `;
 
-        this.Sheet = GooglePay.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = GooglePay.DefaultSheet();
     }
 
     async pay(): Promise<void> {
@@ -223,11 +222,11 @@ export class GooglePay extends Component('arianna-google-pay', HTMLElement, {}, 
     private btnLabel: () => string  = () => 'Pay with';
     private onClick : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block' }),
+                new Rule(':host', { display: 'inline-block' }),
                 new Rule('.ar-gpay__btn', {
                     display: 'inline-flex',
                     alignItems: 'center',

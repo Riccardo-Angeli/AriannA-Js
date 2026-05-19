@@ -15,7 +15,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface TextFieldOptions {
@@ -29,7 +29,6 @@ export interface TextFieldOptions {
 
 export class TextField extends Component('arianna-text-field', HTMLElement, {}, {
     attrs : ['value', 'placeholder', 'type', 'disabled', 'readonly', 'size'],
-    shadow: false,
 })
 {
     build(_opts: TextFieldOptions = {})
@@ -69,7 +68,7 @@ export class TextField extends Component('arianna-text-field', HTMLElement, {}, 
                    @change="this.onChange"/>
         `;
 
-        this.Sheet = TextField.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = TextField.DefaultSheet();
     }
 
     /** Focus the underlying input. */
@@ -103,11 +102,11 @@ export class TextField extends Component('arianna-text-field', HTMLElement, {}, 
     private onInput       : (e: Event) => void = () => {};
     private onChange      : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display : 'inline-block',
                     width   : '100%',
                     maxWidth: '320px',
@@ -129,8 +128,8 @@ export class TextField extends Component('arianna-text-field', HTMLElement, {}, 
                     borderColor: 'var(--arianna-primary, #1f6feb)',
                     boxShadow  : '0 0 0 2px rgba(31,111,235,0.18)',
                 }),
-                new Rule(':root[size="sm"] .ar-textfield__input', { fontSize: '0.75rem', padding: '4px 8px' }),
-                new Rule(':root[size="lg"] .ar-textfield__input', { fontSize: '0.95rem', padding: '8px 12px' }),
+                new Rule(':host([size="sm"]) .ar-textfield__input', { fontSize: '0.75rem', padding: '4px 8px' }),
+                new Rule(':host([size="lg"]) .ar-textfield__input', { fontSize: '0.95rem', padding: '8px 12px' }),
                 new Rule('.ar-textfield__input:disabled', { cursor: 'not-allowed', opacity: '0.55' }),
             ]
         );

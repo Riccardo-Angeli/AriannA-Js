@@ -67,7 +67,6 @@ export class SubdivisionModifier extends Modifier3D {
 
 export class SubdivisionModifierElement extends (Component('arianna-subdivision', HTMLElement, {}, {
     attrs : ['for', 'iterations', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const iterations = parseInt(this.getAttribute('iterations') ?? '1', 10) || 1;

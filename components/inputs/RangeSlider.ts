@@ -15,7 +15,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface RangeSliderOptions {
@@ -30,7 +30,6 @@ export interface RangeSliderOptions {
 
 export class RangeSlider extends Component('arianna-range-slider', HTMLElement, {}, {
     attrs : ['label', 'min', 'max', 'step', 'value', 'show-value', 'disabled'],
-    shadow: false,
 })
 {
     build(_opts: RangeSliderOptions = {})
@@ -78,7 +77,7 @@ export class RangeSlider extends Component('arianna-range-slider', HTMLElement, 
             </div>
         `;
 
-        this.Sheet = RangeSlider.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = RangeSlider.DefaultSheet();
     }
 
     onCreated()       {}
@@ -110,11 +109,11 @@ export class RangeSlider extends Component('arianna-range-slider', HTMLElement, 
     private onInput   : (e: Event) => void = () => {};
     private onChange  : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'flex', flexDirection: 'column', gap: '4px' }),
+                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '4px' }),
                 new Rule('.ar-slider__label', {
                     color   : 'var(--arianna-muted, #6e6b62)',
                     fontSize: '0.78rem',

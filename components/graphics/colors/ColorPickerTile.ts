@@ -24,7 +24,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 import { parseHex, rgbToHex } from './ColorPicker.ts';
 
@@ -73,7 +73,6 @@ interface TileState { selected: string; recent: string[]; }
 
 export class ColorPickerTile extends Component('arianna-color-picker-tile', HTMLElement, {}, {
     attrs : ['palette', 'color', 'show-recent', 'recent-max', 'show-input', 'columns', 'tile-size'],
-    shadow: false,
 })
 {
     state$: Signal<TileState> = signal<TileState>({ selected: '#000000', recent: [] });
@@ -153,7 +152,7 @@ export class ColorPickerTile extends Component('arianna-color-picker-tile', HTML
             </div>
         `;
 
-        this.Sheet = ColorPickerTile.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ColorPickerTile.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -223,11 +222,11 @@ export class ColorPickerTile extends Component('arianna-color-picker-tile', HTML
     private onInputChange: (e: Event) => void = () => {};
     private onPickerInput: (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 8px)',

@@ -31,7 +31,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface NavRailItem {
@@ -49,7 +49,6 @@ export interface NavRailOptions {
 
 export class NavRail extends Component('arianna-nav-rail', HTMLElement, {}, {
     attrs : ['collapsed', 'active'],
-    shadow: false,
 })
 {
     items$: Signal<NavRailItem[]> = signal<NavRailItem[]>([]);
@@ -92,7 +91,7 @@ export class NavRail extends Component('arianna-nav-rail', HTMLElement, {}, {
             </button>
         `;
 
-        this.Sheet = NavRail.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = NavRail.DefaultSheet();
     }
 
     set items(v: NavRailItem[]) { this.items$.set(v ?? []); }
@@ -121,11 +120,11 @@ export class NavRail extends Component('arianna-nav-rail', HTMLElement, {}, {
     private onToggle   : () => void = () => {};
     private onItemClick: (item: NavRailItem) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display      : 'flex',
                     flexDirection: 'column',
                     gap          : '2px',
@@ -133,7 +132,7 @@ export class NavRail extends Component('arianna-nav-rail', HTMLElement, {}, {
                     width        : '220px',
                     transition   : 'width 0.18s ease',
                 }),
-                new Rule(':root[collapsed]', { width: '56px' }),
+                new Rule(':host([collapsed])', { width: '56px' }),
                 new Rule('.ar-navrail__toggle', {
                     background: 'none',
                     border    : 'none',
@@ -177,8 +176,8 @@ export class NavRail extends Component('arianna-nav-rail', HTMLElement, {}, {
                     textAlign : 'center',
                 }),
                 new Rule('.ar-navrail__label', { flex: '1' }),
-                new Rule(':root[collapsed] .ar-navrail__label', { display: 'none' }),
-                new Rule(':root[collapsed] .ar-navrail__badge', { display: 'none' }),
+                new Rule(':host([collapsed]) .ar-navrail__label', { display: 'none' }),
+                new Rule(':host([collapsed]) .ar-navrail__badge', { display: 'none' }),
                 new Rule('.ar-navrail__badge', {
                     background  : 'var(--arianna-danger, #cf222e)',
                     borderRadius: '8px',

@@ -28,7 +28,7 @@
 import { AudioComponent, type AudioComponentOptions } from './AudioComponent.ts';
 import { TransportBar } from './TransportBar.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export interface AudioPlayerOptions extends AudioComponentOptions {
@@ -68,7 +68,7 @@ export class AudioPlayer extends AudioComponent {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.ap-wrap')) return;
@@ -224,9 +224,9 @@ export class AudioPlayer extends AudioComponent {
     get currentTime(): number { return this.#audio?.currentTime ?? 0; }
     get isPlaying(): boolean  { return this.#audio ? !this.#audio.paused : false; }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #0d0d0d)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -234,12 +234,12 @@ export class AudioPlayer extends AudioComponent {
                 display     : 'inline-block',
                 padding     : '8px',
             }),
-            new Rule(':root .ap-wrap', {
+            new Rule(':host .ap-wrap', {
                 display      : 'flex',
                 flexDirection: 'column',
                 gap          : '6px',
             }),
-            new Rule(':root .ap-label', {
+            new Rule(':host .ap-label', {
                 color    : 'var(--ar-muted, #888)',
                 fontSize : '0.8rem',
                 padding  : '0 4px',

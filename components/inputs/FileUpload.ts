@@ -20,7 +20,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface FileUploadOptions {
@@ -38,7 +38,6 @@ interface FileView {
 
 export class FileUpload extends Component('arianna-file-upload', HTMLElement, {}, {
     attrs : ['accept', 'multiple', 'label', 'hint', 'disabled'],
-    shadow: false,
 })
 {
     files$    : Signal<File[]>  = signal<File[]>([]);
@@ -101,7 +100,7 @@ export class FileUpload extends Component('arianna-file-upload', HTMLElement, {}
             </ul>
         `;
 
-        this.Sheet = FileUpload.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = FileUpload.DefaultSheet();
     }
 
     /** Programmatically clear the file selection. */
@@ -140,11 +139,11 @@ export class FileUpload extends Component('arianna-file-upload', HTMLElement, {}
     private onDragLeave : () => void = () => {};
     private onDrop      : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'flex', flexDirection: 'column', gap: '8px' }),
+                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '8px' }),
                 new Rule('.ar-fileupload__zone', {
                     alignItems  : 'center',
                     border      : '2px dashed var(--arianna-border, #d8d8d8)',

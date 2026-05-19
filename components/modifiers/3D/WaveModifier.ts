@@ -67,7 +67,6 @@ export class WaveModifier extends Modifier3D {
 
 export class WaveModifierElement extends (Component('arianna-wave', HTMLElement, {}, {
     attrs : ['for', 'amplitude', 'frequency', 'axis', 'direction', 'animate', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const amplitude = parseFloat(this.getAttribute('amplitude') ?? '0.2') || 0.2;

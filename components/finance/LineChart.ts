@@ -26,7 +26,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 import { _svg, _fmt, _esc } from './helpers.ts';
 
@@ -53,7 +53,6 @@ const PALETTE = [
 
 export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, {
     attrs : ['width', 'height'],
-    shadow: false,
 })
 {
     series$: Signal<LineChartSeries[]> = signal<LineChartSeries[]>([]);
@@ -127,7 +126,7 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
         };
 
         this.template = html`<div class="ar-linechart" a-html="this.svgHtml()"></div>`;
-        this.Sheet = LineChart.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = LineChart.DefaultSheet();
     }
 
     set series(v: LineChartSeries[]) { this.series$.set(v ?? []); }
@@ -143,18 +142,18 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
 
     private svgHtml: () => string = () => '';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',
                     display     : 'inline-block',
                     padding     : '4px',
                 }),
-                new Rule(':root svg', { display: 'block' }),
+                new Rule(':host svg', { display: 'block' }),
             ]
         );
     }

@@ -15,7 +15,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface CheckboxOptions {
@@ -27,7 +27,6 @@ export interface CheckboxOptions {
 
 export class Checkbox extends Component('arianna-checkbox', HTMLElement, {}, {
     attrs : ['label', 'checked', 'indeterminate', 'disabled'],
-    shadow: false,
 })
 {
     build(_opts: CheckboxOptions = {})
@@ -70,7 +69,7 @@ export class Checkbox extends Component('arianna-checkbox', HTMLElement, {}, {
             </label>
         `;
 
-        this.Sheet = Checkbox.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Checkbox.DefaultSheet();
     }
 
     onCreated()       {}
@@ -100,11 +99,11 @@ export class Checkbox extends Component('arianna-checkbox', HTMLElement, {}, {
     private isIndet   : () => boolean = () => false;
     private onChange  : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block' }),
+                new Rule(':host', { display: 'inline-block' }),
                 new Rule('.ar-checkbox__row', {
                     alignItems: 'center',
                     cursor    : 'pointer',

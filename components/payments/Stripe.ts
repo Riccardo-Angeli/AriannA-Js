@@ -35,7 +35,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface StripeOptions {
@@ -66,7 +66,6 @@ function loadStripeSDK(): Promise<unknown> {
 
 export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
     attrs : ['publishable-key', 'client-secret', 'return-url', 'locale', 'appearance-theme'],
-    shadow: false,
 })
 {
     ready$: Signal<boolean> = signal<boolean>(false);
@@ -94,7 +93,7 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Stripe.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Stripe.DefaultSheet();
     }
 
     async pay(): Promise<void> {
@@ -179,11 +178,11 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
     private payLabel   : () => string = () => 'Pay';
     private onPay      : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display: 'block',
                     width: '100%', maxWidth: '420px',
                     fontFamily: '-apple-system, system-ui, sans-serif',

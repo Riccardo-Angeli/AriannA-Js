@@ -27,7 +27,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 import { _fmt, _fmtK, _esc } from './helpers.ts';
 
@@ -51,7 +51,6 @@ interface BodyRow    { cells: BodyCell[]; }
 
 export class Screener extends Component('arianna-screener', HTMLElement, {}, {
     attrs : [],
-    shadow: false,
 })
 {
     rows$    : Signal<ScreenerRow[]>           = signal<ScreenerRow[]>([]);
@@ -86,7 +85,7 @@ export class Screener extends Component('arianna-screener', HTMLElement, {}, {
             </table>
         `;
 
-        this.Sheet = Screener.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Screener.DefaultSheet();
     }
 
     set rows(v: ScreenerRow[]) { this.rows$.set(v ?? []); }
@@ -128,11 +127,11 @@ export class Screener extends Component('arianna-screener', HTMLElement, {}, {
     private headerCells: () => HeaderCell[] = () => [];
     private bodyRows   : () => BodyRow[] = () => [];
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',

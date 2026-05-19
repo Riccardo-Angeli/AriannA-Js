@@ -30,7 +30,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface PayPalOptions {
@@ -65,7 +65,6 @@ function loadPayPalSDK(clientId: string, currency: string, intent: string): Prom
 
 export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
     attrs : ['client-id', 'amount', 'currency', 'intent', 'redirect-url', 'button-style', 'button-color', 'button-shape'],
-    shadow: false,
 })
 {
     sdkLoaded$: Signal<boolean> = signal<boolean>(false);
@@ -97,7 +96,7 @@ export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = PayPal.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = PayPal.DefaultSheet();
     }
 
     async pay(): Promise<void> {
@@ -196,11 +195,11 @@ export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
     private fallbackLabel  : () => string = () => 'Loading PayPal…';
     private onFallback     : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block', minWidth: '200px' }),
+                new Rule(':host', { display: 'inline-block', minWidth: '200px' }),
                 new Rule('.ar-pp__mount', { display: 'block' }),
                 new Rule('.ar-pp__fallback', {
                     display: 'inline-flex',

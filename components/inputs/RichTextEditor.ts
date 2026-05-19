@@ -58,7 +58,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -163,7 +163,6 @@ function htmlToMarkdown(html: string): string {
 
 export class RichTextEditor extends Component('arianna-richtext-editor', HTMLElement, {}, {
     attrs : ['placeholder', 'min-height', 'max-height', 'spellcheck', 'markdown', 'value'],
-    shadow: false,
 })
 {
     readonly html$    : Signal<string>  = signal('');
@@ -201,7 +200,7 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.rte-wrap')) return;
@@ -396,9 +395,9 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
         }
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #fff)',
                 border      : '1px solid var(--ar-border, #e0e0e0)',
                 borderRadius: 'var(--ar-radius, 6px)',
@@ -407,11 +406,11 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
                 font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
                 overflow    : 'hidden',
             }),
-            new Rule(':root .rte-wrap', {
+            new Rule(':host .rte-wrap', {
                 display      : 'flex',
                 flexDirection: 'column',
             }),
-            new Rule(':root .rte-toolbar', {
+            new Rule(':host .rte-toolbar', {
                 alignItems  : 'center',
                 background  : 'var(--ar-bg2, #f5f5f5)',
                 borderBottom: '1px solid var(--ar-border, #e0e0e0)',
@@ -420,7 +419,7 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
                 gap         : '2px',
                 padding     : '6px 8px',
             }),
-            new Rule(':root .rte-btn', {
+            new Rule(':host .rte-btn', {
                 background  : 'var(--ar-bg, #fff)',
                 border      : '1px solid var(--ar-border, #e0e0e0)',
                 borderRadius: 'var(--ar-radius-sm, 4px)',
@@ -432,9 +431,9 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
                 padding     : '3px 7px',
                 transition  : 'background var(--ar-transition, 0.14s)',
             }),
-            new Rule(':root .rte-btn:hover', { background: 'var(--ar-bg3, #eee)' }),
-            new Rule(':root .rte-btn:active', { background: 'var(--ar-bg4, #ddd)' }),
-            new Rule(':root .rte-sep', {
+            new Rule(':host .rte-btn:hover', { background: 'var(--ar-bg3, #eee)' }),
+            new Rule(':host .rte-btn:active', { background: 'var(--ar-bg4, #ddd)' }),
+            new Rule(':host .rte-sep', {
                 alignSelf : 'center',
                 background: 'var(--ar-border, #e0e0e0)',
                 display   : 'inline-block',
@@ -442,7 +441,7 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
                 margin    : '0 4px',
                 width     : '1px',
             }),
-            new Rule(':root .rte-body', {
+            new Rule(':host .rte-body', {
                 background : 'var(--ar-bg, #fff)',
                 color      : 'var(--ar-text, #111)',
                 fontSize   : '0.88rem',
@@ -451,7 +450,7 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
                 padding    : '14px 16px',
                 position   : 'relative',
             }),
-            new Rule(':root .rte-body:empty::before', {
+            new Rule(':host .rte-body:empty::before', {
                 color         : 'var(--ar-muted, #aaa)',
                 content       : 'attr(data-placeholder)',
                 pointerEvents : 'none',

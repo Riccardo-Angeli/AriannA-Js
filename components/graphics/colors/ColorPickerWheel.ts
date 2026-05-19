@@ -18,7 +18,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 import { parseHex, rgbToHsl, hslToRgb, rgbToHex } from './ColorPicker.ts';
 
@@ -29,7 +29,6 @@ export interface ColorPickerWheelOptions {
 
 export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HTMLElement, {}, {
     attrs : ['value', 'size'],
-    shadow: false,
 })
 {
     hue$: Signal<number> = signal<number>(0);
@@ -106,7 +105,7 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
             </svg>
         `;
 
-        this.Sheet = ColorPickerWheel.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ColorPickerWheel.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -157,11 +156,11 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
     private dotCy     : () => string = () => '0';
     private onPointer : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 10px)',
@@ -169,7 +168,7 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
                     padding     : '10px',
                     boxShadow   : '0 4px 12px rgba(0,0,0,0.06)',
                 }),
-                new Rule(':root svg', {
+                new Rule(':host svg', {
                     display: 'block',
                     cursor : 'crosshair',
                     touchAction: 'none',

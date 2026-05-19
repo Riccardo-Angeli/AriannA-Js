@@ -40,7 +40,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export type ApplePayNetwork =
@@ -75,7 +75,6 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
         'supported-networks', 'merchant-capabilities',
         'force-show', 'button-style', 'button-type',
     ],
-    shadow: false,
 })
 {
     available$: Signal<boolean> = signal<boolean>(false);
@@ -122,7 +121,7 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = ApplePay.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ApplePay.DefaultSheet();
     }
 
     /** Programmatically open the Apple Pay sheet. */
@@ -200,11 +199,11 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
     private visible : () => boolean = () => false;
     private onClick : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block' }),
+                new Rule(':host', { display: 'inline-block' }),
                 new Rule('.ar-applepay__btn', {
                     display: 'inline-flex',
                     alignItems: 'center',

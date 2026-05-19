@@ -38,7 +38,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 import { AnimTrack, type ChannelGroup } from './AnimTrack.ts';
 
@@ -67,7 +67,6 @@ const STD_CHANNELS: Array<{ name: string; channel: string; group: ChannelGroup }
 
 export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLElement, {}, {
     attrs : ['frame-start', 'frame-end', 'current', 'frame-px', 'frame-step', 'track-height', 'auto-channels', 'playing'],
-    shadow: false,
 })
 {
     readonly current$: Signal<number> = signal(0);
@@ -99,7 +98,7 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.kfe-toolbar')) return;
@@ -299,9 +298,9 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
 
     onUnmount() { this.pause(); }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 '--arianna-curve-position' : '#4dd0e1',
                 '--arianna-curve-rotation' : '#ff9800',
                 '--arianna-curve-scale'    : '#7eb8f7',
@@ -315,7 +314,7 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
                 position    : 'relative',
                 userSelect  : 'none',
             }),
-            new Rule(':root .kfe-toolbar', {
+            new Rule(':host .kfe-toolbar', {
                 alignItems   : 'center',
                 background   : 'var(--ar-bg2, #161616)',
                 borderBottom : '1px solid var(--ar-border, #2a2a2a)',
@@ -323,7 +322,7 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
                 gap          : '6px',
                 padding      : '4px 6px',
             }),
-            new Rule(':root .kfe-btn', {
+            new Rule(':host .kfe-btn', {
                 background  : 'var(--ar-bg3, #1e1e1e)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
@@ -334,8 +333,8 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
                 minWidth    : '28px',
                 padding     : '3px 6px',
             }),
-            new Rule(':root .kfe-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
-            new Rule(':root .kfe-frame-input', {
+            new Rule(':host .kfe-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
+            new Rule(':host .kfe-frame-input', {
                 background  : 'var(--ar-bg, #0d0d0d)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
@@ -345,11 +344,11 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
                 padding     : '3px 6px',
                 width       : '64px',
             }),
-            new Rule(':root .kfe-frame-lbl', {
+            new Rule(':host .kfe-frame-lbl', {
                 color    : 'var(--ar-muted, #888)',
                 fontSize : '0.72rem',
             }),
-            new Rule(':root .kfe-ruler', {
+            new Rule(':host .kfe-ruler', {
                 background : 'var(--ar-bg2, #161616)',
                 borderBottom: '1px solid var(--ar-border, #2a2a2a)',
                 display    : 'grid',
@@ -357,23 +356,23 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
                 height     : '22px',
                 overflow   : 'hidden',
             }),
-            new Rule(':root .kfe-ruler-corner', {
+            new Rule(':host .kfe-ruler-corner', {
                 background : 'var(--ar-bg2, #161616)',
                 borderRight: '1px solid var(--ar-border, #2a2a2a)',
             }),
-            new Rule(':root .kfe-ruler-inner', { position: 'relative' }),
-            new Rule(':root .kfe-tick', {
+            new Rule(':host .kfe-ruler-inner', { position: 'relative' }),
+            new Rule(':host .kfe-tick', {
                 color    : 'var(--ar-muted, #888)',
                 fontSize : '0.66rem',
                 position : 'absolute',
                 top      : '4px',
             }),
-            new Rule(':root .kfe-body', {
+            new Rule(':host .kfe-body', {
                 display : 'block',
                 maxHeight: '420px',
                 overflow: 'auto',
             }),
-            new Rule(':root .kfe-playhead', {
+            new Rule(':host .kfe-playhead', {
                 background    : 'var(--ar-danger, #f44336)',
                 bottom        : '0',
                 pointerEvents : 'none',

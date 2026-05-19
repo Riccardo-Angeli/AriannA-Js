@@ -27,7 +27,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 import { _svg }      from './helpers.ts';
 
@@ -43,7 +43,6 @@ export interface CandlestickChartOptions {
 
 export class CandlestickChart extends Component('arianna-candlestick-chart', HTMLElement, {}, {
     attrs : ['width', 'height', 'bull', 'bear'],
-    shadow: false,
 })
 {
     data$: Signal<CandleBar[]> = signal<CandleBar[]>([]);
@@ -98,7 +97,7 @@ export class CandlestickChart extends Component('arianna-candlestick-chart', HTM
         };
 
         this.template = html`<div class="ar-candles" a-html="this.svgHtml()"></div>`;
-        this.Sheet = CandlestickChart.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = CandlestickChart.DefaultSheet();
     }
 
     set data(rows: CandleBar[]) { this.data$.set(rows ?? []); }
@@ -120,11 +119,11 @@ export class CandlestickChart extends Component('arianna-candlestick-chart', HTM
 
     private svgHtml: () => string = () => '';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',
@@ -132,7 +131,7 @@ export class CandlestickChart extends Component('arianna-candlestick-chart', HTM
                     overflow    : 'hidden',
                     padding     : '4px',
                 }),
-                new Rule(':root svg', { display: 'block' }),
+                new Rule(':host svg', { display: 'block' }),
             ]
         );
     }

@@ -105,7 +105,6 @@ export class ArrayModifier extends Modifier3D {
 
 export class ArrayModifierElement extends (Component('arianna-array', HTMLElement, {}, {
     attrs : ['for', 'count', 'type', 'offset-x', 'offset-y', 'offset-z', 'radius', 'axis', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D | null {
         const vp = this.viewport;

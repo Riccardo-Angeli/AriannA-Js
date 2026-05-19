@@ -36,7 +36,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 
 export type PaneId = 'top' | 'front' | 'side' | 'perspective';
@@ -82,7 +82,6 @@ const PANE_INFO: Array<{ id: PaneId; label: string }> = [
 
 export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLElement, {}, {
     attrs : ['width', 'height', 'show-axes', 'show-labels', 'active-pane', 'maximized-pane'],
-    shadow: false,
 })
 {
     cameras$: Signal<Record<PaneId, Camera>> = signal<Record<PaneId, Camera>>(
@@ -193,7 +192,7 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
             </div>
         `;
 
-        this.Sheet = CameraViewer3D.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = CameraViewer3D.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -262,11 +261,11 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
     private onPaneWheel      : (e: Event) => void = () => {};
     private onPanePointerMove: (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'block' }),
+                new Rule(':host', { display: 'block' }),
                 new Rule('.ar-cv3d__host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',

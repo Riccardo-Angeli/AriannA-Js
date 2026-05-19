@@ -23,7 +23,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface RadioOption {
@@ -41,7 +41,6 @@ export interface RadioOptions {
 
 export class Radio extends Component('arianna-radio', HTMLElement, {}, {
     attrs : ['label', 'direction', 'value'],
-    shadow: false,
 })
 {
     options$: Signal<RadioOption[]> = signal<RadioOption[]>([]);
@@ -90,7 +89,7 @@ export class Radio extends Component('arianna-radio', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Radio.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Radio.DefaultSheet();
     }
 
     set options(v: RadioOption[]) { this.options$.set(v ?? []); }
@@ -122,11 +121,11 @@ export class Radio extends Component('arianna-radio', HTMLElement, {}, {
     private groupName : () => string = () => '';
     private onChange  : (o: RadioOption, e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'block' }),
+                new Rule(':host', { display: 'block' }),
                 new Rule('.ar-radio-group__label', {
                     color     : 'var(--arianna-muted, #6e6b62)',
                     fontSize  : '0.78rem',

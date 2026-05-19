@@ -44,7 +44,6 @@ export class BillboardModifier extends Modifier3D {
 
 export class BillboardModifierElement extends (Component('arianna-billboard', HTMLElement, {}, {
     attrs : ['for', 'lock-x', 'lock-y', 'lock-z', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         return new BillboardModifier(mesh, {

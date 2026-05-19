@@ -52,7 +52,6 @@ export class BevelModifier extends Modifier3D {
 
 export class BevelModifierElement extends (Component('arianna-bevel', HTMLElement, {}, {
     attrs : ['for', 'amount', 'segments', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const amount   = parseFloat(this.getAttribute('amount')   ?? '0.05') || 0.05;

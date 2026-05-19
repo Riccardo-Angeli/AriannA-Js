@@ -83,7 +83,6 @@ export class DragModifier extends Modifier3D {
 
 export class DragModifierElement extends (Component('arianna-drag', HTMLElement, {}, {
     attrs : ['for', 'plane', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D | null {
         const vp = this.viewport;

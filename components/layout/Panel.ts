@@ -29,7 +29,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface PanelOptions {
@@ -40,7 +40,6 @@ export interface PanelOptions {
 
 export class Panel extends Component('arianna-panel', HTMLElement, {}, {
     attrs : ['title', 'collapsible', 'collapsed'],
-    shadow: false,
 })
 {
     build(_opts: PanelOptions = {})
@@ -76,7 +75,7 @@ export class Panel extends Component('arianna-panel', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Panel.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Panel.DefaultSheet();
     }
 
     /** Programmatically toggle collapse state. */
@@ -107,11 +106,11 @@ export class Panel extends Component('arianna-panel', HTMLElement, {}, {
     private toggleIcon   : () => string  = () => '▾';
     private onToggle     : () => void    = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #ffffff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',

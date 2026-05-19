@@ -34,7 +34,6 @@ export interface ReflectorOptions {
 
 export class Reflector extends (Component('arianna-reflector', HTMLElement, {}, {
     attrs : ['axis', 'handle-color', 'animate', 'disabled'],
-    shadow: false,
 }) as typeof Modifier2D)
 {
     #state = { x: false, y: false };

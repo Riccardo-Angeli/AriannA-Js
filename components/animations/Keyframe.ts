@@ -25,7 +25,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export type KeyframeInterpolation = 'constant' | 'linear' | 'bezier';
@@ -41,7 +41,6 @@ export interface KeyframeOptions {
 
 export class Keyframe extends Component('arianna-keyframe', HTMLElement, {}, {
     attrs : ['frame', 'value', 'interpolation', 'selected', 'hot'],
-    shadow: false,
     bus   : 'arianna-anim-track',
 })
 {
@@ -70,7 +69,7 @@ export class Keyframe extends Component('arianna-keyframe', HTMLElement, {}, {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const el = self.render();
         if (el.querySelector('.kf-diamond')) return;
@@ -115,9 +114,9 @@ export class Keyframe extends Component('arianna-keyframe', HTMLElement, {}, {
     setFrame(f: number): this { this.frame$.set(f); return this; }
     setValue(v: number): this { this.value$.set(v); return this; }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 bottom        : '0',
                 display       : 'inline-block',
                 pointerEvents : 'auto',
@@ -126,7 +125,7 @@ export class Keyframe extends Component('arianna-keyframe', HTMLElement, {}, {
                 transform     : 'translateX(-50%)',
                 width         : '14px',
             }),
-            new Rule(':root .kf-diamond', {
+            new Rule(':host .kf-diamond', {
                 background  : 'var(--ar-bg3, #1e1e1e)',
                 border      : '1px solid var(--ar-text, #e0e0e0)',
                 cursor      : 'pointer',
@@ -139,11 +138,11 @@ export class Keyframe extends Component('arianna-keyframe', HTMLElement, {}, {
                 transition  : 'background .12s, border-color .12s',
                 width       : '10px',
             }),
-            new Rule(':root[hot] .kf-diamond', {
+            new Rule(':host([hot]) .kf-diamond', {
                 background  : 'var(--ar-warning, #ff9800)',
                 borderColor : '#fff',
             }),
-            new Rule(':root[selected] .kf-diamond', {
+            new Rule(':host([selected]) .kf-diamond', {
                 outline       : '2px solid var(--ar-primary, #7eb8f7)',
                 outlineOffset : '1px',
             }),

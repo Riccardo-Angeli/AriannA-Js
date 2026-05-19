@@ -90,7 +90,6 @@ export interface AudioComponentOptions {
  */
 export abstract class AudioComponent extends Component('arianna-audio-base', HTMLElement, {}, {
     attrs : [],
-    shadow: false,
 })
 {
     /** Static accessor for the shared AudioContext. */

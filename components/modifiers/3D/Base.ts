@@ -186,7 +186,6 @@ export abstract class Modifier3D {
  */
 export class Modifier3DElement extends Component('arianna-modifier-3d', HTMLElement, {}, {
     attrs : ['for', 'enabled'],
-    shadow: false,
 })
 {
     protected viewport: Viewport3DLike | null = null;

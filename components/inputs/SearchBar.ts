@@ -15,7 +15,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface SearchBarOptions {
@@ -26,7 +26,6 @@ export interface SearchBarOptions {
 
 export class SearchBar extends Component('arianna-search-bar', HTMLElement, {}, {
     attrs : ['placeholder', 'debounce', 'value'],
-    shadow: false,
 })
 {
     #timer = 0;
@@ -73,7 +72,7 @@ export class SearchBar extends Component('arianna-search-bar', HTMLElement, {}, 
                     aria-label="Clear">✕</button>
         `;
 
-        this.Sheet = SearchBar.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = SearchBar.DefaultSheet();
     }
 
     /** Programmatically clear the search. */
@@ -105,11 +104,11 @@ export class SearchBar extends Component('arianna-search-bar', HTMLElement, {}, 
     private onInput       : (e: Event) => void = () => {};
     private onClear       : () => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     alignItems  : 'center',
                     background  : 'var(--arianna-bg, #ffffff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
@@ -122,7 +121,7 @@ export class SearchBar extends Component('arianna-search-bar', HTMLElement, {}, 
                     maxWidth    : '320px',
                     boxSizing   : 'border-box',
                 }),
-                new Rule(':root:focus-within', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
+                new Rule(':host:focus-within', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
                 new Rule('.ar-searchbar__icon', { color: 'var(--arianna-muted, #6e6b62)', flexShrink: '0' }),
                 new Rule('.ar-searchbar__input', {
                     background: 'none',

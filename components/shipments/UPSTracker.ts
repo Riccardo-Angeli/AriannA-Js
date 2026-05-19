@@ -37,7 +37,6 @@ export interface UPSTrackerOptions {
 
 export class UPSTracker extends Component('arianna-ups-tracker', HTMLElement, {}, {
     attrs : ['tracking-number', 'locale'],
-    shadow: false,
 })
 {
     #inner: Tracker | null = null;

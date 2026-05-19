@@ -44,7 +44,6 @@ export interface MoverOptions {
 
 export class Mover extends (Component('arianna-mover', HTMLElement, {}, {
     attrs : ['handle-selector', 'axis', 'bounds', 'disabled'],
-    shadow: false,
 }) as typeof Modifier2D)
 {
     protected applyTo(target: HTMLElement): void

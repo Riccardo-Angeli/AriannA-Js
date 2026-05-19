@@ -62,7 +62,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export type TrackingEventKind =
@@ -145,7 +145,6 @@ function formatDate(ts: number, locale: string): string {
 
 export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
     attrs : ['tracking-number', 'carrier', 'locale'],
-    shadow: false,
 })
 {
     events$  : Signal<TrackingEvent[]> = signal<TrackingEvent[]>([]);
@@ -239,7 +238,7 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Tracker.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Tracker.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -294,11 +293,11 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
     private eventList      : () => Array<{ icon: string; label: string; raw: string; location: string; date: string; cls: string }> = () => [];
     private onPortalClick  : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display: 'block',
                     fontFamily: '-apple-system, system-ui, sans-serif',
                     fontSize: '13px',

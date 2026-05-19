@@ -17,7 +17,7 @@
  *   • <arianna-resizer handles="n,s,e,w,ne,nw,se,sw">
  *
  * @example JS
- *   const w = new Window();
+ *   const w = new WindowComponent();
  *   w.title  = 'My App';
  *   w.style  = 'macos';
  *   w.x = 100; w.y = 100; w.width = 480; w.height = 320;
@@ -51,7 +51,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export type WindowStyle = 'macos' | 'windows';
@@ -79,13 +79,12 @@ export interface WindowOptions {
 // Global z-index counter so a focused window always sits on top of its peers.
 let WIN_Z = 100;
 
-export class Window extends Component('arianna-window', HTMLElement, {}, {
+export class WindowComponent extends Component('arianna-window', HTMLElement, {}, {
     attrs : [
         'variant', 'title', 'x', 'y', 'width', 'height',
         'min-width', 'min-height', 'resizable', 'chrome',
         'focused', 'maximized', 'minimized',
     ],
-    shadow: false,
 })
 {
     #prevRect: { x: number; y: number; w: number; h: number } | null = null;
@@ -187,7 +186,7 @@ export class Window extends Component('arianna-window', HTMLElement, {}, {
                              allow-cross="false"></arianna-resizer>
         `;
 
-        this.Sheet = Window.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = WindowComponent.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -316,11 +315,11 @@ export class Window extends Component('arianna-window', HTMLElement, {}, {
     private onMinClick  : () => void = () => {};
     private onMaxClick  : () => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display      : 'flex',
                     flexDirection: 'column',
                     background   : 'var(--arianna-bg, #ffffff)',
@@ -333,10 +332,10 @@ export class Window extends Component('arianna-window', HTMLElement, {}, {
                     fontFamily   : '-apple-system, system-ui, sans-serif',
                     boxSizing    : 'border-box',
                 }),
-                new Rule(':root[variant="macos"]',   { borderRadius: '10px' }),
-                new Rule(':root[variant="windows"]', { borderRadius: '0' }),
-                new Rule(':root[focused]', { boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }),
-                new Rule(':root[maximized]', {
+                new Rule(':host([variant="macos"])',   { borderRadius: '10px' }),
+                new Rule(':host([variant="windows"])', { borderRadius: '0' }),
+                new Rule(':host([focused])', { boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }),
+                new Rule(':host([maximized])', {
                     borderRadius: '0', border: 'none',
                 }),
 
@@ -353,7 +352,7 @@ export class Window extends Component('arianna-window', HTMLElement, {}, {
                     cursor    : 'move',
                     userSelect: 'none',
                 }),
-                new Rule(':root[variant="macos"] .ar-window__titlebar', {
+                new Rule(':host([variant="macos"]) .ar-window__titlebar', {
                     justifyContent: 'center',
                 }),
                 new Rule('.ar-window__title', {
@@ -366,7 +365,7 @@ export class Window extends Component('arianna-window', HTMLElement, {}, {
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                 }),
-                new Rule(':root[variant="windows"] .ar-window__title', {
+                new Rule(':host([variant="windows"]) .ar-window__title', {
                     textAlign: 'left',
                     paddingLeft: '4px',
                 }),
@@ -439,9 +438,12 @@ export class Window extends Component('arianna-window', HTMLElement, {}, {
 }
 
 if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Window', {
-        value: Window, writable: false, enumerable: false, configurable: false,
+    Object.defineProperty(window, 'WindowComponent', { value: WindowComponent, writable: false, enumerable: false, configurable: false,
     });
 }
 
-export default Window;
+export default WindowComponent;
+// Note: we deliberately do NOT add `export { WindowComponent as Window }`.
+// TypeScript declaration emit treats that as a redeclaration of the global
+// `Window` interface from lib.dom — the resulting .d.ts then fails to
+// compile. Consumers should import `WindowComponent` directly.

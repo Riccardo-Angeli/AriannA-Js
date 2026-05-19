@@ -15,7 +15,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface RatingOptions {
@@ -36,7 +36,6 @@ interface Star {
 
 export class Rating extends Component('arianna-rating', HTMLElement, {}, {
     attrs : ['max', 'value', 'readonly', 'disabled', 'icon', 'empty-icon'],
-    shadow: false,
 })
 {
     build(_opts: RatingOptions = {})
@@ -84,7 +83,7 @@ export class Rating extends Component('arianna-rating', HTMLElement, {}, {
                     @click="(e) => this.onStarClick(s)">{{ s.icon }}</button>
         `;
 
-        this.Sheet = Rating.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Rating.DefaultSheet();
     }
 
     onCreated()       {}
@@ -110,11 +109,11 @@ export class Rating extends Component('arianna-rating', HTMLElement, {}, {
     private stars       : () => Star[] = () => [];
     private onStarClick : (s: Star) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-flex', gap: '2px' }),
+                new Rule(':host', { display: 'inline-flex', gap: '2px' }),
                 new Rule('.ar-rating__star', {
                     background: 'none',
                     border    : 'none',

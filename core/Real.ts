@@ -2,7 +2,7 @@ import Core, { type TypeDescriptor } from './Core.ts';
 import { VirtualNode } from './Virtual.ts';
 import { signal, signalMono, sinkText, effect, computed, batch, untrack, AriannATemplate, type Signal, type SignalMono, type ReadonlySignal } from './Observable.ts';
 import Rule from './Rule.ts';
-import { Sheet } from './Sheet.ts';
+import { Stylesheet } from './Stylesheet.ts';
 
 export type { Signal, SignalMono, ReadonlySignal };
 
@@ -101,10 +101,10 @@ function _preset(mode: ShadowMode, o: ShadowOptions): string {
     }
 }
 function _layerCSS(l: ShadowLayer): string { return `${l.inset ? 'inset ' : ''}${l.x ?? 0}px ${l.y ?? 4}px ${l.blur ?? 8}px ${l.spread ?? 0}px ${l.color ?? 'rgba(0,0,0,0.25)'}`; }
-function _shadowCSS(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Sheet = 'drop', opts: ShadowOptions = {}): string {
+function _shadowCSS(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop', opts: ShadowOptions = {}): string {
     if (state === 'close') return 'none';
     if (mode instanceof Rule)  { const v = mode.Properties['boxShadow'] ?? mode.Properties['box-shadow']; return v ?? _preset('drop', opts); }
-    if (mode instanceof Sheet) { for (const r of mode.Rules) { const v = r.Properties['boxShadow'] ?? r.Properties['box-shadow']; if (v) return v; } return _preset('drop', opts); }
+    if (mode instanceof Stylesheet) { for (const r of mode.Rules) { const v = r.Properties['boxShadow'] ?? r.Properties['box-shadow']; if (v) return v; } return _preset('drop', opts); }
     if (Array.isArray(mode)) return mode.map(_layerCSS).join(', ');
     return _preset(mode, opts);
 }
@@ -126,7 +126,7 @@ function toNodes(items: NodeInput[]): Node[] {
 }
 export class Real {
     #el: Element; #mode: boolean; #descriptor: TypeDescriptor | false; #value: unknown; #effects: Array<() => void> = [];
-    #sheet: Sheet | null = null; #styleNode: HTMLStyleElement | null = null; #instanceId: string = ''; #sheetSync: (() => void) | null = null;
+    #sheet: Stylesheet | null = null; #styleNode: HTMLStyleElement | null = null; #instanceId: string = ''; #sheetSync: (() => void) | null = null;
     static readonly Instances: Real[] = [];
     static get Namespaces() { return Core.Namespaces; }
     constructor(arg0: RealTarget, arg1?: Record<string, unknown> | (new (...a: unknown[]) => Element), arg2?: new (...a: unknown[]) => Element) {
@@ -195,7 +195,7 @@ export class Real {
     hide(): this { (this.#el as HTMLElement).style.display = 'none'; return this; }
     contains(...nodes: (Node | Real | string)[]): boolean { for (const n of nodes) { const el = typeof n === 'string' ? this.#el.querySelector(n) : n instanceof Real ? n.render() : n; if (!el || !this.#el.contains(el)) return false; } return true; }
     child(path: number[]): Node { let n: Node = this.#el; for (const i of path) n = n.childNodes[i]!; return n; }
-    shadow(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Sheet = 'drop', opts: ShadowOptions = {}): this { (this.#el as HTMLElement).style.boxShadow = _shadowCSS(state, mode, opts); return this; }
+    shadow(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop', opts: ShadowOptions = {}): this { (this.#el as HTMLElement).style.boxShadow = _shadowCSS(state, mode, opts); return this; }
     signal<T>(value: T): Signal<T>         { return signal(value); }
     signalMono<T>(value: T): SignalMono<T> { return signalMono(value); }
     effect(fn: () => void): this { this.#effects.push(effect(fn)); return this; }
@@ -225,11 +225,11 @@ export class Real {
      * Sheet (the Sheet itself is preserved — only this Real disconnects).
      *
      *   const button = new Real('div').set('class','Fancy').append(stage);
-     *   button.Sheet = new Sheet(new Rule(':root', { background: 'yellow' }));
+     *   button.Sheet = new Stylesheet(new Rule(':root', { background: 'yellow' }));
      *   button.Sheet.Rules.add(new Rule(':root:hover', { transform: 'scale(1.05)' }));
      */
-    get Sheet(): Sheet | null { return this.#sheet; }
-    set Sheet(next: Sheet | null)
+    get Sheet(): Stylesheet | null { return this.#sheet; }
+    set Sheet(next: Stylesheet | null)
     {
         // Detach previous
         if (this.#sheet && this.#sheetSync)

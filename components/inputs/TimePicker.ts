@@ -16,7 +16,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface TimePickerOptions {
@@ -30,7 +30,6 @@ export interface TimePickerOptions {
 
 export class TimePicker extends Component('arianna-time-picker', HTMLElement, {}, {
     attrs : ['label', 'value', 'seconds', 'min', 'max', 'disabled'],
-    shadow: false,
 })
 {
     build(_opts: TimePickerOptions = {})
@@ -69,7 +68,7 @@ export class TimePicker extends Component('arianna-time-picker', HTMLElement, {}
             </div>
         `;
 
-        this.Sheet = TimePicker.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = TimePicker.DefaultSheet();
     }
 
     onCreated()       {}
@@ -95,11 +94,11 @@ export class TimePicker extends Component('arianna-time-picker', HTMLElement, {}
     private isDisabled : () => boolean = () => false;
     private onChange   : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'flex', flexDirection: 'column', gap: '4px' }),
+                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '4px' }),
                 new Rule('.ar-timepicker__label', {
                     color     : 'var(--arianna-muted, #6e6b62)',
                     fontSize  : '0.78rem',

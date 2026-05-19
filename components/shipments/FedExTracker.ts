@@ -37,7 +37,6 @@ export interface FedExTrackerOptions {
 
 export class FedExTracker extends Component('arianna-fedex-tracker', HTMLElement, {}, {
     attrs : ['tracking-number', 'locale'],
-    shadow: false,
 })
 {
     #inner: Tracker | null = null;

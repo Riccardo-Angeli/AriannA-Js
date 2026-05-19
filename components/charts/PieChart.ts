@@ -23,7 +23,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export interface PieDatum {
@@ -66,7 +66,6 @@ function arcPath(cx: number, cy: number, rOuter: number, rInner: number, a0: num
 
 export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
     attrs : ['size', 'donut', 'show-legend', 'show-labels', 'start-angle'],
-    shadow: false,
 })
 {
     readonly data$: Signal<PieDatum[]> = signal<PieDatum[]>([]);
@@ -89,7 +88,7 @@ export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
         const self = this as unknown as {
             render(): HTMLElement;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.pc-wrap')) return;
@@ -196,9 +195,9 @@ export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
         return palette[i % palette.length] ?? '#7eb8f7';
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #fff)',
                 border      : '1px solid var(--ar-border, #e0e0e0)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -207,38 +206,38 @@ export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
                 font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
                 padding     : '12px',
             }),
-            new Rule(':root .pc-wrap', {
+            new Rule(':host .pc-wrap', {
                 alignItems: 'center',
                 display   : 'flex',
                 gap       : '16px',
             }),
-            new Rule(':root .pc-svg', { display: 'block' }),
-            new Rule(':root .pc-slice', {
+            new Rule(':host .pc-svg', { display: 'block' }),
+            new Rule(':host .pc-slice', {
                 cursor    : 'pointer',
                 stroke    : 'var(--ar-bg, #fff)',
                 strokeWidth: '2',
                 transition: 'opacity 0.15s',
             }),
-            new Rule(':root .pc-slice:hover', { opacity: '0.85' }),
-            new Rule(':root .pc-label', {
+            new Rule(':host .pc-slice:hover', { opacity: '0.85' }),
+            new Rule(':host .pc-label', {
                 fill       : '#fff',
                 fontSize   : '11px',
                 fontWeight : '700',
                 pointerEvents: 'none',
                 textShadow : '0 1px 2px rgba(0,0,0,0.5)',
             }),
-            new Rule(':root .pc-legend', {
+            new Rule(':host .pc-legend', {
                 display      : 'flex',
                 flexDirection: 'column',
                 gap          : '4px',
             }),
-            new Rule(':root .pc-legend-item', {
+            new Rule(':host .pc-legend-item', {
                 alignItems: 'center',
                 display   : 'flex',
                 fontSize  : '0.78rem',
                 gap       : '6px',
             }),
-            new Rule(':root .pc-legend-sw', {
+            new Rule(':host .pc-legend-sw', {
                 borderRadius: '2px',
                 display     : 'inline-block',
                 height      : '12px',

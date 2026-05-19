@@ -36,7 +36,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export type DockStyle = 'macos' | 'windows';
@@ -78,7 +78,6 @@ function classifyIcon(icon: string): RenderedIcon
 
 export class Dock extends Component('arianna-dock', HTMLElement, {}, {
     attrs : ['variant', 'magnify', 'position', 'start-label'],
-    shadow: false,
 })
 {
     items$ : Signal<DockItem[]> = signal<DockItem[]>([]);
@@ -230,7 +229,7 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Dock.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Dock.DefaultSheet();
     }
 
     set items(v: DockItem[]) { this.items$.set(v ?? []); }
@@ -357,11 +356,11 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
     private clockTime     : () => string = () => '';
     private clockDate     : () => string = () => '';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     position  : 'relative',
                     display   : 'flex',
                     alignItems: 'center',
@@ -369,7 +368,7 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
                     font      : '13px -apple-system, system-ui, sans-serif',
                     boxSizing : 'border-box',
                 }),
-                new Rule(':root[variant="macos"]', {
+                new Rule(':host([variant="macos"])', {
                     background           : 'rgba(28, 28, 30, 0.6)',
                     backdropFilter       : 'blur(20px)',
                     'WebkitBackdropFilter': 'blur(20px)',
@@ -378,7 +377,7 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
                     padding              : '0',
                     height               : '78px',
                 }),
-                new Rule(':root[variant="windows"]', {
+                new Rule(':host([variant="windows"])', {
                     background           : 'rgba(32, 32, 36, 0.92)',
                     backdropFilter       : 'blur(40px)',
                     'WebkitBackdropFilter': 'blur(40px)',
@@ -413,87 +412,87 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
                 }),
 
                 // macOS sizes
-                new Rule(':root[variant="macos"] .ar-dock__item', { width: '56px', height: '62px' }),
-                new Rule(':root[variant="macos"] .ar-dock__icon', {
+                new Rule(':host([variant="macos"]) .ar-dock__item', { width: '56px', height: '62px' }),
+                new Rule(':host([variant="macos"]) .ar-dock__icon', {
                     width       : '48px', height: '48px', borderRadius: '11px',
                     overflow    : 'hidden', boxShadow: '0 4px 10px rgba(0,0,0,0.4)',
                     background  : 'linear-gradient(135deg, #2a2a2c 0%, #1c1c1e 100%)',
                     display     : 'flex', alignItems: 'center', justifyContent: 'center',
                 }),
-                new Rule(':root[variant="macos"] .ar-dock__icon .ar-dock__emoji, :root[variant="macos"] .ar-dock__icon--emoji', {
+                new Rule(':host([variant="macos"]) .ar-dock__icon .ar-dock__emoji, :host([variant="macos"]) .ar-dock__icon--emoji', {
                     fontSize: '36px',
                 }),
-                new Rule(':root[variant="macos"] .ar-dock__sep', {
+                new Rule(':host([variant="macos"]) .ar-dock__sep', {
                     width   : '1px',
                     height  : '48px',
                     background: 'rgba(255,255,255,0.18)',
                     margin  : '0 4px',
                     alignSelf: 'center',
                 }),
-                new Rule(':root[variant="macos"] .ar-dock__dot', {
+                new Rule(':host([variant="macos"]) .ar-dock__dot', {
                     bottom: '0', background: '#d4d4d4',
                 }),
 
                 // Windows sizes
-                new Rule(':root[variant="windows"] .ar-dock__start', {
+                new Rule(':host([variant="windows"]) .ar-dock__start', {
                     display    : 'flex', alignItems: 'center', gap: '6px',
                     background : 'transparent', border: '0',
                     color      : '#d4d4d4', height: '40px', padding: '0 12px',
                     borderRadius: '6px', cursor: 'pointer',
                     transition : 'background 0.12s ease',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__start:hover', {
+                new Rule(':host([variant="windows"]) .ar-dock__start:hover', {
                     background: 'rgba(255,255,255,0.08)',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__start-icon', {
+                new Rule(':host([variant="windows"]) .ar-dock__start-icon', {
                     display     : 'flex', alignItems: 'center', justifyContent: 'center',
                     color       : '#60a5fa',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__start-label', {
+                new Rule(':host([variant="windows"]) .ar-dock__start-label', {
                     font: '13px sans-serif',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__item', {
+                new Rule(':host([variant="windows"]) .ar-dock__item', {
                     width      : '40px', height: '40px',
                     flexDirection: 'column', justifyContent: 'center',
                     borderRadius: '6px',
                     transition : 'background 0.12s ease',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__item:hover', {
+                new Rule(':host([variant="windows"]) .ar-dock__item:hover', {
                     background: 'rgba(255,255,255,0.08)',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__item--active', {
+                new Rule(':host([variant="windows"]) .ar-dock__item--active', {
                     background: 'rgba(255,255,255,0.12)',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__icon', { width: '22px', height: '22px' }),
-                new Rule(':root[variant="windows"] .ar-dock__emoji, :root[variant="windows"] .ar-dock__icon--emoji', {
+                new Rule(':host([variant="windows"]) .ar-dock__icon', { width: '22px', height: '22px' }),
+                new Rule(':host([variant="windows"]) .ar-dock__emoji, :host([variant="windows"]) .ar-dock__icon--emoji', {
                     fontSize: '20px',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__dot', {
+                new Rule(':host([variant="windows"]) .ar-dock__dot', {
                     bottom: '2px', height: '3px', width: '16px',
                     borderRadius: '2px', background: '#60a5fa',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__item--running.ar-dock__item--active .ar-dock__dot', {
+                new Rule(':host([variant="windows"]) .ar-dock__item--running.ar-dock__item--active .ar-dock__dot', {
                     width: '24px',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__tray', {
+                new Rule(':host([variant="windows"]) .ar-dock__tray', {
                     display: 'flex', alignItems: 'center', gap: '4px',
                     padding: '0 8px 0 4px', height: '48px',
                     borderLeft: '1px solid rgba(255,255,255,0.04)',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__item--tray', {
+                new Rule(':host([variant="windows"]) .ar-dock__item--tray', {
                     width: '28px', height: '28px',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__item--tray .ar-dock__icon', {
+                new Rule(':host([variant="windows"]) .ar-dock__item--tray .ar-dock__icon', {
                     width: '18px', height: '18px',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__item--tray .ar-dock__emoji', { fontSize: '16px' }),
-                new Rule(':root[variant="windows"] .ar-dock__clock', {
+                new Rule(':host([variant="windows"]) .ar-dock__item--tray .ar-dock__emoji', { fontSize: '16px' }),
+                new Rule(':host([variant="windows"]) .ar-dock__clock', {
                     display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
                     padding: '0 8px', font: '11px sans-serif',
                     color  : '#d4d4d4', lineHeight: '1.2', cursor: 'default',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__time', { fontWeight: '500' }),
-                new Rule(':root[variant="windows"] .ar-dock__date', { fontSize: '10px', opacity: '0.85' }),
+                new Rule(':host([variant="windows"]) .ar-dock__time', { fontWeight: '500' }),
+                new Rule(':host([variant="windows"]) .ar-dock__date', { fontSize: '10px', opacity: '0.85' }),
 
                 // Shared item internals
                 new Rule('.ar-dock__icon', {
@@ -516,7 +515,7 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
                     opacity     : '0',
                     transition  : 'opacity 0.12s ease',
                 }),
-                new Rule(':root[variant="windows"] .ar-dock__tooltip', { display: 'none' }),
+                new Rule(':host([variant="windows"]) .ar-dock__tooltip', { display: 'none' }),
                 new Rule('.ar-dock__item:hover .ar-dock__tooltip', { opacity: '1' }),
                 new Rule('.ar-dock__badge', {
                     position    : 'absolute',

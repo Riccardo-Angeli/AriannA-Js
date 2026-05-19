@@ -29,7 +29,7 @@ export { default as Real }       from './Real.ts';
 export { default as Virtual }    from './Virtual.ts';
 export { default as Component }  from './Component.ts';    // canonical
 export { default as Directive }  from './Directive.ts';
-export { default as Sheet }      from './Sheet.ts';
+export { default as Stylesheet } from './Stylesheet.ts';
 export { default as Context }    from './Context.ts';
 export { default as Namespace }  from './Namespace.ts';
 
@@ -82,6 +82,6 @@ export type {
 } from './Component.ts';
 export type { ComponentMeta, CustomDirectiveHooks }                from './Directive.ts';
 export type { CSSProperties, RuleDefinition, RuleEvent }           from './Rule.ts';
-export type { SheetInput, SheetObjectDef, SheetRule }              from './Sheet.ts';
+export type { SheetInput, SheetObjectDef, SheetRule }              from './Stylesheet.ts';
 export type { ContextEvent }                                       from './Context.ts';
 export type { WorkerTask }                                         from './Workers.ts';

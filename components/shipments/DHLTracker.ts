@@ -43,7 +43,6 @@ export interface DHLTrackerOptions {
 
 export class DHLTracker extends Component('arianna-dhl-tracker', HTMLElement, {}, {
     attrs : ['tracking-number', 'locale'],
-    shadow: false,
 })
 {
     #inner: Tracker | null = null;

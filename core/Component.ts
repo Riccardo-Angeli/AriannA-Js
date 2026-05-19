@@ -65,7 +65,7 @@ import Core, {
     Namespaces,
 } from './Core.ts';
 import { signal, effect, type Signal } from './Observable.ts';
-import { Sheet } from './Sheet.ts';
+import { Stylesheet } from './Stylesheet.ts';
 import { readDottedPath, writeDottedPath, makeSubAccessor, type SubAccessor } from './Real.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -114,8 +114,8 @@ export interface AriannaElement extends HTMLElement
     /** Resolve the rendered host element (light DOM or shadow root). */
     render(): HTMLElement;
 
-    /** Current Sheet for this component. Assigning replaces it. */
-    Sheet: Sheet | null;
+    /** Current Stylesheet for this component. Assigning replaces it. */
+    Sheet: Stylesheet | null;
 
     /** Reactive template (Vue-style DSL via core/Template.ts). */
     template: unknown;
@@ -181,7 +181,7 @@ function _installFacilities(el: Element): Element
     const stash = el as Element & {
         __effects?     : Array<() => void>;
         __attrSignals? : Record<string, Signal<string | null>>;
-        __sheet?       : Sheet | null;
+        __sheet?       : Stylesheet | null;
         __styleNode?   : HTMLStyleElement | null;
         __instanceId?  : string;
         __isMounted?   : boolean;
@@ -308,11 +308,25 @@ function _installFacilities(el: Element): Element
             return this;
         }},
 
-        // ── Sheet ──────────────────────────────────────────────────────────
+        // ── fire(type, init?) — dispatch a CustomEvent on this element ───
+        // Convenience helper used pervasively by components to emit DOM
+        // events (e.g. CodeEditor's `change` on input, Splitter's
+        // `arianna:resize` on drag). Declared on AriannaElement; installed
+        // here so every upgraded element has it.
+        fire: { configurable: true, writable: false, value(this: Element, type: string, init?: CustomEventInit) {
+            this.dispatchEvent(new CustomEvent(type, init));
+            return this;
+        }},
+
+        // ── Sheet — assignment of a Stylesheet instance triggers scoping
+        //         and inserts a <style> tag in the document head (light DOM)
+        //         or the host's shadowRoot. Property NAME is 'Sheet' (not
+        //         'Stylesheet'): the class is `Stylesheet`, the instance
+        //         field is `.Sheet`. Every component writes `this.Sheet = ...`
         Sheet: {
             configurable: true,
-            get(this: Element): Sheet | null { return stash.__sheet ?? null; },
-            set(this: Element, next: Sheet | null) { _applySheet(this, next); },
+            get(this: Element): Stylesheet | null { return stash.__sheet ?? null; },
+            set(this: Element, next: Stylesheet | null) { _applySheet(this, next); },
         },
         Css: {
             configurable: true,
@@ -490,12 +504,54 @@ function _wireAttrs(el: Element, attrs: string[]): void
     }
 }
 
-// ── Sheet application (auto-scope :root/&, shadow-aware) ─────────────────────
+// ── Stylesheet application (auto-scope :root/&, shadow-aware) ─────────────────────
 
-function _applySheet(el: Element, next: Sheet | null): void
+/**
+ * Rewrite every occurrence of `:host(<balanced>)` in a CSS selector string
+ * to `<replace><balanced>`, scanning parens manually so nested forms like
+ * `:host(:not([direction]))` are handled correctly. Used to scope component
+ * stylesheets when there's no shadow DOM.
+ */
+function rewriteHostWithArgs(src: string, replace: string): string
+{
+    let out = '';
+    let i = 0;
+    while (i < src.length) {
+        const idx = src.indexOf(':host(', i);
+        if (idx < 0) { out += src.slice(i); break; }
+
+        // Append everything up to :host
+        out += src.slice(i, idx);
+
+        // Find the matching close paren for :host(...)
+        let depth = 0;
+        let j = idx + ':host'.length; // points at '('
+        for (; j < src.length; j++) {
+            const ch = src[j];
+            if (ch === '(') depth++;
+            else if (ch === ')') {
+                depth--;
+                if (depth === 0) break;
+            }
+        }
+        if (depth !== 0) {
+            // Unbalanced — bail out, emit rest verbatim
+            out += src.slice(idx);
+            break;
+        }
+        // Inner contents (between the parens)
+        const inner = src.slice(idx + ':host('.length, j);
+        out += replace + inner;
+        i = j + 1; // past the ')'
+    }
+    return out;
+}
+
+
+function _applySheet(el: Element, next: Stylesheet | null): void
 {
     const stash = el as Element & {
-        __sheet?     : Sheet | null;
+        __sheet?     : Stylesheet | null;
         __styleNode? : HTMLStyleElement | null;
         __instanceId?: string;
     };
@@ -513,7 +569,27 @@ function _applySheet(el: Element, next: Sheet | null): void
 
     let css = '';
     for (const r of next.Rules) {
-        const scoped = r.Text.replace(/(^|,\s*|\s)(:root|&)(?![\w-])/g, (_m, pre: string) => pre + replace);
+        // Rewrite host selectors:
+        //   :root and &  — legacy v1/v2 conventions
+        //   :host        — shadow-DOM standard (post-migration default in v3)
+        //   :host(X)     — host with attribute/pseudo X (rewrite the wrapper
+        //                  away in light DOM; keep as-is in shadow DOM)
+        let scoped = r.Text;
+        if (useShadow) {
+            // In shadow DOM, :root/& should become :host. :host stays.
+            scoped = scoped.replace(/(^|,\s*|\s)(:root|&)(?![\w-])/g, (_m, pre: string) => pre + ':host');
+        } else {
+            // In light DOM, every host-selector form becomes the tag selector.
+            //   :host([direction="vertical"])  →  arianna-splitter[direction="vertical"]
+            //   :host(:not([direction]))       →  arianna-splitter:not([direction])
+            //   :host                           →  arianna-splitter
+            //   :root / &                       →  arianna-splitter
+            //
+            // We rewrite :host(...) with a balanced-paren scan because the
+            // inner expression itself may contain parens (e.g. :not(...)).
+            scoped = rewriteHostWithArgs(scoped, replace);
+            scoped = scoped.replace(/(^|,\s*|\s)(:root|:host|&)(?![\w-])/g, (_m, pre: string) => pre + replace);
+        }
         css += scoped + '\n';
     }
 
@@ -548,10 +624,10 @@ function _applySheet(el: Element, next: Sheet | null): void
 interface ComponentCallable
 {
     (el: Element): AriannaElement;
-    (tag: string, base: new (...a: never[]) => Element): new (...a: never[]) => AriannaElement;
-    (tag: string, base: new (...a: never[]) => Element, css: Record<string, string>): new (...a: never[]) => AriannaElement;
-    (tag: string, base: new (...a: never[]) => Element, css: Record<string, string>, def: ComponentDef): new (...a: never[]) => AriannaElement;
-    (tag: string, base: new (...a: never[]) => Element, mixed: ComponentDef & Record<string, string>): new (...a: never[]) => AriannaElement;
+    (tag: string, base: new (...a: unknown[]) => Element): new (...a: unknown[]) => AriannaElement;
+    (tag: string, base: new (...a: unknown[]) => Element, css: Record<string, string>): new (...a: unknown[]) => AriannaElement;
+    (tag: string, base: new (...a: unknown[]) => Element, css: Record<string, string>, def: ComponentDef): new (...a: unknown[]) => AriannaElement;
+    (tag: string, base: new (...a: unknown[]) => Element, mixed: ComponentDef & Record<string, string>): new (...a: unknown[]) => AriannaElement;
 }
 
 function ComponentFn(this: unknown, ...args: unknown[]): unknown
@@ -629,7 +705,7 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
         base as unknown as new (...a: unknown[]) => Element,
         css,
     );
-    return Bound as unknown as new (...a: never[]) => Element;
+    return Bound as unknown as new (...a: unknown[]) => Element;
 }
 
 Object.defineProperty(ComponentFn, 'name', { value: 'Component' });

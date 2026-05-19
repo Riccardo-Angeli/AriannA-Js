@@ -44,7 +44,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface TreeNode {
@@ -106,7 +106,6 @@ export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
         'indent', 'row-height', 'draggable', 'keyboard',
         'expand-on-select', 'searchable',
     ],
-    shadow: false,
 })
 {
     roots$  : Signal<NodeState[]>      = signal<NodeState[]>([]);
@@ -293,7 +292,7 @@ export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
             </ul>
         `;
 
-        this.Sheet = TreeView.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = TreeView.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -454,11 +453,11 @@ export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
     private onDragOver    : (e: Event) => void = () => {};
     private onDrop        : (r: FlatRow, e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background : 'transparent',
                     color      : 'var(--arianna-text, #1f2328)',
                     display    : 'block',

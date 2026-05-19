@@ -21,7 +21,7 @@
 
 import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 import {
     type GradientStop, type RGBA,
@@ -40,7 +40,6 @@ export interface LinearGradientEditorOptions {
 
 export class LinearGradientEditor extends Component('arianna-linear-gradient-editor', HTMLElement, {}, {
     attrs : ['angle', 'interp'],
-    shadow: false,
 })
 {
     state = makeStopState();
@@ -204,7 +203,7 @@ export class LinearGradientEditor extends Component('arianna-linear-gradient-edi
             </div>
         `;
 
-        this.Sheet = LinearGradientEditor.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = LinearGradientEditor.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -274,14 +273,14 @@ export class LinearGradientEditor extends Component('arianna-linear-gradient-edi
     private onSelAlphaChange: (e: Event) => void = () => {};
     private onRemove        : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet { return LinearGradientEditor.SharedSheet(); }
+    static DefaultSheet(): Stylesheet { return LinearGradientEditor.SharedSheet(); }
 
     /** Shared between Linear / Radial / Shape editors. */
-    static SharedSheet(): Sheet
+    static SharedSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 8px)',

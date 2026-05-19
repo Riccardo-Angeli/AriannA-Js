@@ -31,7 +31,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface DrawerOptions {
@@ -44,7 +44,6 @@ export interface DrawerOptions {
 
 export class Drawer extends Component('arianna-drawer', HTMLElement, {}, {
     attrs : ['side', 'width', 'height', 'open', 'close-on-backdrop'],
-    shadow: false,
 })
 {
     build(_opts: DrawerOptions = {})
@@ -76,7 +75,7 @@ export class Drawer extends Component('arianna-drawer', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Drawer.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Drawer.DefaultSheet();
     }
 
     open(): this
@@ -123,17 +122,17 @@ export class Drawer extends Component('arianna-drawer', HTMLElement, {}, {
     private panelStyle: () => Record<string, string> = () => ({});
     private onBackdrop: () => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     position: 'fixed',
                     inset   : '0',
                     zIndex  : '900',
                     display : 'none',
                 }),
-                new Rule(':root[open]', { display: 'block' }),
+                new Rule(':host([open])', { display: 'block' }),
                 new Rule('.ar-drawer__backdrop', {
                     position  : 'absolute',
                     inset     : '0',
@@ -141,7 +140,7 @@ export class Drawer extends Component('arianna-drawer', HTMLElement, {}, {
                     opacity   : '0',
                     transition: 'opacity 0.25s',
                 }),
-                new Rule(':root.ar-drawer--open .ar-drawer__backdrop', { opacity: '1' }),
+                new Rule(':host.ar-drawer--open .ar-drawer__backdrop', { opacity: '1' }),
                 new Rule('.ar-drawer__panel', {
                     position  : 'absolute',
                     background: 'var(--arianna-bg, #ffffff)',
@@ -150,12 +149,12 @@ export class Drawer extends Component('arianna-drawer', HTMLElement, {}, {
                     overflowY : 'auto',
                     transition: 'transform 0.25s ease',
                 }),
-                new Rule(':root[side="left"] .ar-drawer__panel',                { left: '0', top: '0', bottom: '0',  transform: 'translateX(-100%)' }),
-                new Rule(':root[side="right"] .ar-drawer__panel',               { right: '0', top: '0', bottom: '0', transform: 'translateX(100%)' }),
-                new Rule(':root[side="top"] .ar-drawer__panel',                 { top: '0', left: '0', right: '0',   transform: 'translateY(-100%)' }),
-                new Rule(':root[side="bottom"] .ar-drawer__panel',              { bottom: '0', left: '0', right: '0', transform: 'translateY(100%)' }),
-                new Rule(':root:not([side]) .ar-drawer__panel',                 { left: '0', top: '0', bottom: '0',  transform: 'translateX(-100%)' }),
-                new Rule(':root.ar-drawer--open .ar-drawer__panel',             { transform: 'none' }),
+                new Rule(':host([side="left"]) .ar-drawer__panel',                { left: '0', top: '0', bottom: '0',  transform: 'translateX(-100%)' }),
+                new Rule(':host([side="right"]) .ar-drawer__panel',               { right: '0', top: '0', bottom: '0', transform: 'translateX(100%)' }),
+                new Rule(':host([side="top"]) .ar-drawer__panel',                 { top: '0', left: '0', right: '0',   transform: 'translateY(-100%)' }),
+                new Rule(':host([side="bottom"]) .ar-drawer__panel',              { bottom: '0', left: '0', right: '0', transform: 'translateY(100%)' }),
+                new Rule(':host(:not([side])) .ar-drawer__panel',                 { left: '0', top: '0', bottom: '0',  transform: 'translateX(-100%)' }),
+                new Rule(':host.ar-drawer--open .ar-drawer__panel',             { transform: 'none' }),
             ]
         );
     }

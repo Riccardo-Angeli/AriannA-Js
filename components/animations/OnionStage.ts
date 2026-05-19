@@ -26,7 +26,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export type SnapshotProvider = (frame: number) => HTMLElement | SVGElement | null;
@@ -41,7 +41,6 @@ export interface OnionStageOptions {
 
 export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}, {
     attrs : ['before', 'after', 'step', 'width', 'height'],
-    shadow: false,
 })
 {
     readonly frame$: Signal<number> = signal(0);
@@ -64,7 +63,7 @@ export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}
         const self = this as unknown as {
             render(): HTMLElement;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.os-host')) return;
@@ -157,9 +156,9 @@ export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}
         return wrap;
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg2, #161616)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -167,19 +166,19 @@ export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}
                 overflow    : 'hidden',
                 position    : 'relative',
             }),
-            new Rule(':root .os-host', {
+            new Rule(':host .os-host', {
                 height  : '100%',
                 position: 'relative',
                 width   : '100%',
             }),
-            new Rule(':root .os-host > *', {
+            new Rule(':host .os-host > *', {
                 inset      : '0',
                 pointerEvents: 'none',
                 position   : 'absolute',
             }),
-            new Rule(':root .os-ghost-past',   { filter: 'grayscale(0.35) sepia(0.1) hue-rotate(190deg)', mixBlendMode: 'screen' }),
-            new Rule(':root .os-ghost-future', { filter: 'grayscale(0.35) sepia(0.4) hue-rotate(330deg)', mixBlendMode: 'screen' }),
-            new Rule(':root .os-live', { pointerEvents: 'auto', opacity: '1' }),
+            new Rule(':host .os-ghost-past',   { filter: 'grayscale(0.35) sepia(0.1) hue-rotate(190deg)', mixBlendMode: 'screen' }),
+            new Rule(':host .os-ghost-future', { filter: 'grayscale(0.35) sepia(0.4) hue-rotate(330deg)', mixBlendMode: 'screen' }),
+            new Rule(':host .os-live', { pointerEvents: 'auto', opacity: '1' }),
         ]);
     }
 }

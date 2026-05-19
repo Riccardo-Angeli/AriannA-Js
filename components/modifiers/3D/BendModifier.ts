@@ -54,7 +54,6 @@ export class BendModifier extends Modifier3D {
 
 export class BendModifierElement extends (Component('arianna-bend', HTMLElement, {}, {
     attrs : ['for', 'angle', 'axis', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const angle = parseFloat(this.getAttribute('angle') ?? '0') || 0;

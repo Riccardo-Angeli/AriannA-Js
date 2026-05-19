@@ -43,6 +43,7 @@
  */
 
 import { MapEmbed, type MapProvider } from './MapEmbed.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 
@@ -119,7 +120,6 @@ export class MapLibreMap extends (Component('arianna-maplibre-map', HTMLElement,
         'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
         'aspect-ratio', 'style-url', 'bearing', 'pitch',
     ],
-    shadow: false,
 }) as unknown as typeof MapEmbed)
 {
     #instance: MapLibreInstance | null = null;
@@ -163,7 +163,7 @@ export class MapLibreMap extends (Component('arianna-maplibre-map', HTMLElement,
             </div>
         `;
 
-        this.Sheet = MapEmbed.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = MapEmbed.DefaultSheet();
     }
 
     onMount() { this.#initMapLibre(); }

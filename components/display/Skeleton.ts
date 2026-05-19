@@ -25,7 +25,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface SkeletonOptions {
@@ -38,7 +38,6 @@ export interface SkeletonOptions {
 
 export class Skeleton extends Component('arianna-skeleton', HTMLElement, {}, {
     attrs : ['variant', 'lines', 'avatar', 'width', 'height'],
-    shadow: false,
 })
 {
     build(_opts: SkeletonOptions = {})
@@ -94,7 +93,7 @@ export class Skeleton extends Component('arianna-skeleton', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Skeleton.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Skeleton.DefaultSheet();
     }
 
     onCreated()       {}
@@ -127,11 +126,11 @@ export class Skeleton extends Component('arianna-skeleton', HTMLElement, {}, {
     private circleStyle: () => Record<string, string> = () => ({});
     private rectStyle  : () => Record<string, string> = () => ({});
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'flex', flexDirection: 'column', gap: '8px' }),
+                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '8px' }),
                 new Rule('.ar-skeleton__row',   { display: 'flex', alignItems: 'center', gap: '12px' }),
                 new Rule('.ar-skeleton__lines', { flex: '1', display: 'flex', flexDirection: 'column', gap: '6px' }),
                 new Rule('.ar-skeleton__line, .ar-skeleton__rect, .ar-skeleton__circle', {

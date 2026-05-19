@@ -40,7 +40,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 import { DHLTracker }   from './DHLTracker.ts';
@@ -78,7 +78,6 @@ export interface TrackingMultiOptions {
 
 export class TrackingMulti extends Component('arianna-tracking-multi', HTMLElement, {}, {
     attrs : ['tracking-number', 'carrier', 'show-input', 'locale'],
-    shadow: false,
 })
 {
     candidates$: Signal<CarrierId[]> = signal<CarrierId[]>([]);
@@ -151,7 +150,7 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
             </div>
         `;
 
-        this.Sheet = TrackingMulti.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = TrackingMulti.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -269,11 +268,11 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
     private onKeyDown      : (e: Event) => void = () => {};
     private onCandidatePick: (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display: 'block',
                     fontFamily: '-apple-system, system-ui, sans-serif',
                     fontSize: '13px',

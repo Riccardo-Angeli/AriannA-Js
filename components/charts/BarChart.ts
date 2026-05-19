@@ -23,7 +23,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export interface BarDatum {
@@ -46,7 +46,6 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
     attrs : ['width', 'height', 'bar-color', 'show-values', 'show-grid', 'y-min', 'y-max'],
-    shadow: false,
 })
 {
     readonly data$: Signal<BarDatum[]> = signal<BarDatum[]>([]);
@@ -70,7 +69,7 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
         const self = this as unknown as {
             render(): HTMLElement;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('svg')) return;
@@ -205,9 +204,9 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
         }
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #fff)',
                 border      : '1px solid var(--ar-border, #e0e0e0)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -216,14 +215,14 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
                 font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
                 padding     : '8px',
             }),
-            new Rule(':root .bc-svg', { display: 'block' }),
-            new Rule(':root .bc-grid', { stroke: 'var(--ar-border, #e0e0e0)', strokeWidth: '1' }),
-            new Rule(':root .bc-zero', { stroke: 'var(--ar-text, #1a1a1a)', strokeWidth: '1' }),
-            new Rule(':root .bc-tick', { fill: 'var(--ar-muted, #888)', fontSize: '11px' }),
-            new Rule(':root .bc-label', { fill: 'var(--ar-text, #1a1a1a)', fontSize: '12px' }),
-            new Rule(':root .bc-val', { fill: 'var(--ar-text, #1a1a1a)', fontSize: '11px', fontWeight: '600' }),
-            new Rule(':root .bc-bar', { cursor: 'pointer', transition: 'opacity 0.15s' }),
-            new Rule(':root .bc-bar:hover', { opacity: '0.8' }),
+            new Rule(':host .bc-svg', { display: 'block' }),
+            new Rule(':host .bc-grid', { stroke: 'var(--ar-border, #e0e0e0)', strokeWidth: '1' }),
+            new Rule(':host .bc-zero', { stroke: 'var(--ar-text, #1a1a1a)', strokeWidth: '1' }),
+            new Rule(':host .bc-tick', { fill: 'var(--ar-muted, #888)', fontSize: '11px' }),
+            new Rule(':host .bc-label', { fill: 'var(--ar-text, #1a1a1a)', fontSize: '12px' }),
+            new Rule(':host .bc-val', { fill: 'var(--ar-text, #1a1a1a)', fontSize: '11px', fontWeight: '600' }),
+            new Rule(':host .bc-bar', { cursor: 'pointer', transition: 'opacity 0.15s' }),
+            new Rule(':host .bc-bar:hover', { opacity: '0.8' }),
         ]);
     }
 }

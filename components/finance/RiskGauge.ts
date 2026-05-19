@@ -22,7 +22,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 import { _fmt, _esc } from './helpers.ts';
 
@@ -36,7 +36,6 @@ export interface RiskGaugeOptions {
 
 export class RiskGauge extends Component('arianna-risk-gauge', HTMLElement, {}, {
     attrs : ['value', 'min', 'max', 'label', 'size'],
-    shadow: false,
 })
 {
     build(_opts: RiskGaugeOptions = {})
@@ -84,7 +83,7 @@ export class RiskGauge extends Component('arianna-risk-gauge', HTMLElement, {}, 
         };
 
         this.template = html`<div class="ar-gauge" a-html="this.svgHtml()"></div>`;
-        this.Sheet = RiskGauge.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = RiskGauge.DefaultSheet();
     }
 
     /** Convenience: set min and max together. */
@@ -110,18 +109,18 @@ export class RiskGauge extends Component('arianna-risk-gauge', HTMLElement, {}, 
 
     private svgHtml: () => string = () => '';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',
                     display     : 'inline-block',
                     padding     : '8px',
                 }),
-                new Rule(':root svg', { display: 'block' }),
+                new Rule(':host svg', { display: 'block' }),
             ]
         );
     }

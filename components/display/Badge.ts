@@ -22,7 +22,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface BadgeOptions {
@@ -33,7 +33,6 @@ export interface BadgeOptions {
 
 export class Badge extends Component('arianna-badge', HTMLElement, {}, {
     attrs : ['variant', 'dot', 'label'],
-    shadow: false,
 })
 {
     build(_opts: BadgeOptions = {})
@@ -51,7 +50,7 @@ export class Badge extends Component('arianna-badge', HTMLElement, {}, {
             <slot a-if="this.hasSlotted()"></slot>
         `;
 
-        this.Sheet = Badge.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Badge.DefaultSheet();
     }
 
     onCreated()       {}
@@ -76,11 +75,11 @@ export class Badge extends Component('arianna-badge', HTMLElement, {}, {
     private hasLabel  : () => boolean = () => false;
     private hasSlotted: () => boolean = () => false;
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     alignItems  : 'center',
                     borderRadius: '10px',
                     display     : 'inline-flex',
@@ -91,12 +90,12 @@ export class Badge extends Component('arianna-badge', HTMLElement, {}, {
                     background  : 'var(--arianna-bg-3, #f3f3f3)',
                     color       : 'var(--arianna-text, #1f2328)',
                 }),
-                new Rule(':root[variant="primary"]', { background: 'var(--arianna-primary, #1f6feb)',           color: '#fff' }),
-                new Rule(':root[variant="success"]', { background: 'var(--arianna-success, #2ea043)',           color: '#fff' }),
-                new Rule(':root[variant="warning"]', { background: 'var(--arianna-warning, #d29922)',           color: '#000' }),
-                new Rule(':root[variant="danger"]',  { background: 'var(--arianna-danger, #cf222e)',            color: '#fff' }),
-                new Rule(':root[variant="info"]',    { background: 'var(--arianna-info, #4dd0e1)',              color: '#000' }),
-                new Rule(':root[dot]', {
+                new Rule(':host([variant="primary"])', { background: 'var(--arianna-primary, #1f6feb)',           color: '#fff' }),
+                new Rule(':host([variant="success"])', { background: 'var(--arianna-success, #2ea043)',           color: '#fff' }),
+                new Rule(':host([variant="warning"])', { background: 'var(--arianna-warning, #d29922)',           color: '#000' }),
+                new Rule(':host([variant="danger"])',  { background: 'var(--arianna-danger, #cf222e)',            color: '#fff' }),
+                new Rule(':host([variant="info"])',    { background: 'var(--arianna-info, #4dd0e1)',              color: '#000' }),
+                new Rule(':host([dot])', {
                     borderRadius: '50%',
                     height      : '8px',
                     minWidth    : '8px',

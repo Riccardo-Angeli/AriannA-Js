@@ -37,6 +37,7 @@
  */
 
 import { MapEmbed, type MapProvider } from './MapEmbed.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 
@@ -45,7 +46,6 @@ export class AzureMap extends (Component('arianna-azure-map', HTMLElement, {}, {
         'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
         'aspect-ratio', 'api-key', 'style', 'tileset',
     ],
-    shadow: false,
 }) as unknown as typeof MapEmbed)
 {
     getProvider(): MapProvider { return 'azure'; }
@@ -145,7 +145,7 @@ export class AzureMap extends (Component('arianna-azure-map', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = MapEmbed.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = MapEmbed.DefaultSheet();
     }
 
     // Template helpers added by AzureMap

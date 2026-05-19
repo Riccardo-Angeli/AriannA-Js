@@ -85,7 +85,6 @@ export class Rounder extends (Component('arianna-rounder', HTMLElement, {}, {
         'r', 'radius', 'top-left', 'top-right', 'bottom-left', 'bottom-right',
         'max', 'handle-color', 'corners', 'disabled',
     ],
-    shadow: false,
 }) as typeof Modifier2D)
 {
     #state: CornerState = { 'top-left': 0, 'top-right': 0, 'bottom-left': 0, 'bottom-right': 0 };

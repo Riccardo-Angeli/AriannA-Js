@@ -32,7 +32,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export type AliPayMode = 'redirect' | 'qr-code';
@@ -50,7 +50,6 @@ const ALIPAY_LOGO = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
 
 export class AliPay extends Component('arianna-alipay', HTMLElement, {}, {
     attrs : ['mode', 'redirect-url', 'qr-url', 'amount', 'currency', 'target'],
-    shadow: false,
 })
 {
     build(_opts: AliPayOptions = {} as AliPayOptions)
@@ -95,7 +94,7 @@ export class AliPay extends Component('arianna-alipay', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = AliPay.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = AliPay.DefaultSheet();
     }
 
     async pay(): Promise<void> {
@@ -127,11 +126,11 @@ export class AliPay extends Component('arianna-alipay', HTMLElement, {}, {
     private qrImgSrc: () => string = () => '';
     private onClick : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block' }),
+                new Rule(':host', { display: 'inline-block' }),
                 new Rule('.ar-alipay__btn', {
                     display: 'inline-flex',
                     alignItems: 'center',

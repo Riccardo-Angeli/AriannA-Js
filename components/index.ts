@@ -46,15 +46,19 @@ export * from './animations/index.ts';
 export * from './audio/index.ts';
 export * from './charts/index.ts';              // canonical LineChart
 export * from './composite/index.ts';
-export * from './data/index.ts';
 export * from './display/index.ts';             // canonical Chip
-export * from './layout/index.ts';
+export * from './layout/index.ts';              // canonical Table (also exposed via data/Table re-export)
 export * from './maps/index.ts';
 export * from './modifiers/index.ts';
 export * from './navigation/index.ts';
 export * from './payments/index.ts';
 export * from './shipments/index.ts';
 export * from './video/index.ts';
+
+// data — Table is already exported by layout/ (canonical source); we only
+// re-export what's unique to data here.
+export { TreeView } from './data/TreeView.ts';
+export type { TreeNode, TreeViewOptions } from './data/TreeView.ts';
 
 // ── finance — alias LineChart, re-export everything else ───────────────────
 export {

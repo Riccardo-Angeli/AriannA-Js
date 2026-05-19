@@ -34,7 +34,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export interface PianoNote {
@@ -65,7 +65,6 @@ function isBlackKey(p: number): boolean {
 
 export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, {
     attrs : ['beats', 'pitch-min', 'pitch-max', 'cell-width', 'cell-height', 'snap'],
-    shadow: false,
 })
 {
     readonly notes$: Signal<PianoNote[]> = signal<PianoNote[]>([]);
@@ -97,7 +96,7 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.pr-wrap')) return;
@@ -317,9 +316,9 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
         return this;
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #0d0d0d)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -329,13 +328,13 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
                 padding     : '8px',
                 userSelect  : 'none',
             }),
-            new Rule(':root .pr-wrap', {
+            new Rule(':host .pr-wrap', {
                 display      : 'flex',
                 flexDirection: 'column',
                 gap          : '6px',
             }),
-            new Rule(':root .pr-toolbar', { display: 'flex', gap: '4px' }),
-            new Rule(':root .pr-btn', {
+            new Rule(':host .pr-toolbar', { display: 'flex', gap: '4px' }),
+            new Rule(':host .pr-btn', {
                 background  : 'var(--ar-bg3, #1e1e1e)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
@@ -346,13 +345,13 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
                 minWidth    : '32px',
                 padding     : '4px 10px',
             }),
-            new Rule(':root .pr-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
-            new Rule(':root .pr-body', {
+            new Rule(':host .pr-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
+            new Rule(':host .pr-body', {
                 display    : 'flex',
                 maxHeight  : '320px',
                 overflow   : 'auto',
             }),
-            new Rule(':root .pr-keyboard', {
+            new Rule(':host .pr-keyboard', {
                 background : 'var(--ar-bg2, #161616)',
                 borderRight: '1px solid var(--ar-border, #2a2a2a)',
                 display    : 'flex',
@@ -361,7 +360,7 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
                 left       : '0',
                 zIndex     : '2',
             }),
-            new Rule(':root .pr-key', {
+            new Rule(':host .pr-key', {
                 alignItems : 'center',
                 borderBottom: '1px solid var(--ar-border, #2a2a2a)',
                 color      : 'var(--ar-muted, #888)',
@@ -370,25 +369,25 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
                 paddingLeft: '6px',
                 width      : '48px',
             }),
-            new Rule(':root .pr-key-white', { background: 'var(--ar-bg3, #1e1e1e)' }),
-            new Rule(':root .pr-key-black', { background: 'var(--ar-bg, #0d0d0d)' }),
-            new Rule(':root .pr-grid', {
+            new Rule(':host .pr-key-white', { background: 'var(--ar-bg3, #1e1e1e)' }),
+            new Rule(':host .pr-key-black', { background: 'var(--ar-bg, #0d0d0d)' }),
+            new Rule(':host .pr-grid', {
                 position: 'relative',
                 cursor  : 'crosshair',
             }),
-            new Rule(':root .pr-row-tint', {
+            new Rule(':host .pr-row-tint', {
                 background    : 'rgba(255,255,255,0.02)',
                 pointerEvents : 'none',
                 position      : 'absolute',
             }),
-            new Rule(':root .pr-note', {
+            new Rule(':host .pr-note', {
                 background  : 'var(--ar-primary, #7eb8f7)',
                 border      : '1px solid rgba(0,0,0,0.4)',
                 borderRadius: '2px',
                 cursor      : 'move',
                 position    : 'absolute',
             }),
-            new Rule(':root .pr-note-grip', {
+            new Rule(':host .pr-note-grip', {
                 cursor   : 'ew-resize',
                 height   : '100%',
                 position : 'absolute',
@@ -396,7 +395,7 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
                 top      : '0',
                 width    : '4px',
             }),
-            new Rule(':root .pr-playhead', {
+            new Rule(':host .pr-playhead', {
                 background    : 'var(--ar-danger, #f44336)',
                 bottom        : '0',
                 pointerEvents : 'none',

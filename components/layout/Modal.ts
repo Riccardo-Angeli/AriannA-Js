@@ -32,7 +32,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface ModalOptions {
@@ -44,7 +44,6 @@ export interface ModalOptions {
 
 export class Modal extends Component('arianna-modal', HTMLElement, {}, {
     attrs : ['title', 'open', 'size', 'dismissable'],
-    shadow: false,
 })
 {
     build(_opts: ModalOptions = {})
@@ -67,7 +66,7 @@ export class Modal extends Component('arianna-modal', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Modal.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Modal.DefaultSheet();
     }
 
     open(): this
@@ -107,17 +106,17 @@ export class Modal extends Component('arianna-modal', HTMLElement, {}, {
     private titleText   : () => string  = () => '';
     private onBackdrop  : () => void    = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display : 'none',
                     position: 'fixed',
                     inset   : '0',
                     zIndex  : '1000',
                 }),
-                new Rule(':root[open]', { display: 'block' }),
+                new Rule(':host([open])', { display: 'block' }),
                 new Rule('.ar-modal__backdrop', {
                     background: 'rgba(0,0,0,0.45)',
                     position  : 'absolute',
@@ -137,10 +136,10 @@ export class Modal extends Component('arianna-modal', HTMLElement, {}, {
                     transform   : 'translate(-50%, -50%)',
                     width       : '420px',
                 }),
-                new Rule(':root[size="sm"] .ar-modal__dialog', { width: '320px' }),
-                new Rule(':root[size="md"] .ar-modal__dialog', { width: '420px' }),
-                new Rule(':root[size="lg"] .ar-modal__dialog', { width: '640px' }),
-                new Rule(':root[size="xl"] .ar-modal__dialog', { width: '880px' }),
+                new Rule(':host([size="sm"]) .ar-modal__dialog', { width: '320px' }),
+                new Rule(':host([size="md"]) .ar-modal__dialog', { width: '420px' }),
+                new Rule(':host([size="lg"]) .ar-modal__dialog', { width: '640px' }),
+                new Rule(':host([size="xl"]) .ar-modal__dialog', { width: '880px' }),
                 new Rule('.ar-modal__header', {
                     borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
                     fontWeight  : '600',

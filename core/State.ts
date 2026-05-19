@@ -51,26 +51,10 @@ export interface StateEvent extends AriannAEvent
 //  State<T> class
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface StateOptions
-{
-    /**
-     * Track every mutation in `.History` (older→newer).
-     * - true        : track all mutations (default, kept for back-compat)
-     * - false       : skip history entirely (lower memory for large objects)
-     * - { max:N }   : track at most N most recent entries (circular)
-     *
-     * For large objects or hot mutation paths, switching to `false` or
-     * `{ max: 100 }` removes hidden cost.
-     */
-    history? : boolean | { max: number };
-}
-
 export class State<T extends object = object> extends Observable<T>
 {
     readonly #states   : Map<string, Partial<T>> = new Map();
     readonly #history2 : Array<{ key: string | symbol; old: unknown; new: unknown; ts: number }> = [];
-    readonly #historyEnabled: boolean;
-    readonly #historyMax: number;
 
     // ── Static fine-grain API (re-exported from Observable) ───────────────────
     static signal     = signal;
@@ -81,35 +65,14 @@ export class State<T extends object = object> extends Observable<T>
     static batch      = batch;
     static untrack    = untrack;
 
-    constructor(source: T, opts: StateOptions = {})
+    constructor(source: T)
     {
         super(source, { history: false });   // we manage our own history
+        this.#history2.push({ key: '__init__', old: undefined, new: source, ts: Date.now() });
 
-        const histOpt = opts.history ?? true;
-        if (histOpt === false) {
-            this.#historyEnabled = false;
-            this.#historyMax     = 0;
-        } else if (histOpt === true) {
-            this.#historyEnabled = true;
-            this.#historyMax     = Number.POSITIVE_INFINITY;
-        } else {
-            this.#historyEnabled = true;
-            this.#historyMax     = Math.max(1, histOpt.max);
-        }
-
-        if (this.#historyEnabled) {
-            this.#history2.push({ key: '__init__', old: undefined, new: source, ts: Date.now() });
-        }
-
-        // Wire 'change-after' to populate history + emit legacy StateEvents.
-        // Events are always emitted; only history list write is opt-out.
+        // Wire 'change-after' to populate our history + emit legacy StateEvents
         super.on('change-after', (e: ChangeEvent) => {
-            if (this.#historyEnabled) {
-                this.#history2.push({ key: e.Key, old: e.Old, new: e.New, ts: Date.now() });
-                if (this.#history2.length > this.#historyMax) {
-                    this.#history2.splice(0, this.#history2.length - this.#historyMax);
-                }
-            }
+            this.#history2.push({ key: e.Key, old: e.Old, new: e.New, ts: Date.now() });
             this.#emitStateEvents(e);
         });
     }

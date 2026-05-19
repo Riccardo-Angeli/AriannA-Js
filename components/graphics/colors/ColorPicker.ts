@@ -24,7 +24,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 
 export interface RGB { r: number; g: number; b: number; }
@@ -43,7 +43,6 @@ interface PickerState { h: number; s: number; l: number; a: number; }
 
 export class ColorPicker extends Component('arianna-color-picker-pro', HTMLElement, {}, {
     attrs : ['color', 'alpha', 'show-hex', 'show-rgb', 'show-hsl'],
-    shadow: false,
 })
 {
     state$: Signal<PickerState> = signal<PickerState>({ h: 325, s: 90, l: 47, a: 1 });
@@ -171,7 +170,7 @@ export class ColorPicker extends Component('arianna-color-picker-pro', HTMLEleme
             </div>
         `;
 
-        this.Sheet = ColorPicker.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ColorPicker.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -262,11 +261,11 @@ export class ColorPicker extends Component('arianna-color-picker-pro', HTMLEleme
     private onHslChange : (e: Event) => void = () => {};
     private onAlphaInput: (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',

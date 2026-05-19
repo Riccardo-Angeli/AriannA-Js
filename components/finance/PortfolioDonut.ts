@@ -27,7 +27,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 import { _fmt, _esc } from './helpers.ts';
 
@@ -55,7 +55,6 @@ const PALETTE = [
 
 export class PortfolioDonut extends Component('arianna-portfolio-donut', HTMLElement, {}, {
     attrs : ['size'],
-    shadow: false,
 })
 {
     segments$: Signal<DonutSegment[]> = signal<DonutSegment[]>([]);
@@ -111,7 +110,7 @@ export class PortfolioDonut extends Component('arianna-portfolio-donut', HTMLEle
         };
 
         this.template = html`<div class="ar-donut" a-html="this.svgHtml()"></div>`;
-        this.Sheet = PortfolioDonut.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = PortfolioDonut.DefaultSheet();
     }
 
     set segments(v: DonutSegment[]) { this.segments$.set(v ?? []); }
@@ -130,18 +129,18 @@ export class PortfolioDonut extends Component('arianna-portfolio-donut', HTMLEle
 
     private svgHtml: () => string = () => '';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',
                     display     : 'inline-block',
                     padding     : '8px',
                 }),
-                new Rule(':root svg', { display: 'block' }),
+                new Rule(':host svg', { display: 'block' }),
             ]
         );
     }

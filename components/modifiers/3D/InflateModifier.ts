@@ -39,7 +39,6 @@ export class InflateModifier extends Modifier3D {
 
 export class InflateModifierElement extends (Component('arianna-inflate', HTMLElement, {}, {
     attrs : ['for', 'amount', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const amount = parseFloat(this.getAttribute('amount') ?? '0.1') || 0.1;

@@ -58,7 +58,6 @@ export class SmoothModifier extends Modifier3D {
 
 export class SmoothModifierElement extends (Component('arianna-smooth', HTMLElement, {}, {
     attrs : ['for', 'iterations', 'factor', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const iterations = parseInt  (this.getAttribute('iterations') ?? '3',   10) || 3;

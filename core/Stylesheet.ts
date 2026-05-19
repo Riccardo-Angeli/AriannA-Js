@@ -6,25 +6,25 @@
  * Sheet — manages a CSSStyleSheet with a clean, observable API.
  *
  * Constructor overloads:
- *   new Sheet()                  — empty sheet, auto-creates <style>
- *   new Sheet(sheetInstance)     — clone from another Sheet
- *   new Sheet(cssStyleSheet)     — wrap existing CSSStyleSheet
- *   new Sheet(cssRuleList)       — from CSSRuleList
- *   new Sheet(htmlLinkElement)   — link to external stylesheet
- *   new Sheet(rulesArray)        — from Array<CSSRule | Rule>
- *   new Sheet(cssString)         — parse CSS text
- *   new Sheet(objectSyntax)      — object literal rule definitions
- *   new Sheet(url: string)       — fetch + parse an existing stylesheet URL
+ *   new Stylesheet()                  — empty sheet, auto-creates <style>
+ *   new Stylesheet(sheetInstance)     — clone from another Sheet
+ *   new Stylesheet(cssStyleSheet)     — wrap existing CSSStyleSheet
+ *   new Stylesheet(cssRuleList)       — from CSSRuleList
+ *   new Stylesheet(htmlLinkElement)   — link to external stylesheet
+ *   new Stylesheet(rulesArray)        — from Array<CSSRule | Rule>
+ *   new Stylesheet(cssString)         — parse CSS text
+ *   new Stylesheet(objectSyntax)      — object literal rule definitions
+ *   new Stylesheet(url: string)       — fetch + parse an existing stylesheet URL
  *                                  (mirrors Golem: SheetES5("http://..."))
  *
  * Static API:
- *   Sheet.Sheets      → all Sheet instances
- *   Sheet.Links       → all <link> elements
- *   Sheet.Paths       → all href strings
- *   Sheet.ToString(s) → serialize source to CSS string
- *   Sheet.Parse(text) → CSSStyleSheet from text
- *   Sheet.ToArray(t)  → CSSRule[] from text
- *   Sheet.Less(text)  → parse Less/Stylus-style text to CSS string
+ *   Stylesheet.Sheets      → all Sheet instances
+ *   Stylesheet.Links       → all <link> elements
+ *   Stylesheet.Paths       → all href strings
+ *   Stylesheet.ToString(s) → serialize source to CSS string
+ *   Stylesheet.Parse(text) → CSSStyleSheet from text
+ *   Stylesheet.ToArray(t)  → CSSRule[] from text
+ *   Stylesheet.Less(text)  → parse Less/Stylus-style text to CSS string
  *                        (mirrors Golem: SheetES5.Less(text))
  *
  * Instance API:
@@ -49,21 +49,21 @@
  *   .clear()
  *
  * @example
- *   const sheet = new Sheet('.my-btn { background: dodgerblue; color: white }');
+ *   const sheet = new Stylesheet('.my-btn { background: dodgerblue; color: white }');
  *   sheet.add('.my-btn:hover { background: crimson }');
  *   sheet.set('.my-btn', { color: 'yellow' });
  *   sheet.on('Sheet-Changed', e => console.log(e));
  *
  * @example
  *   // Golem SheetES5 pattern — fetch existing stylesheet
- *   const sheet2 = new Sheet('http://localhost:8080/styles/golem');
+ *   const sheet2 = new Stylesheet('http://localhost:8080/styles/golem');
  *   sheet2.on('Sheet-Loaded', () => {
  *     console.log(sheet2.Get('@keyframes spin').Selector);
  *   });
  *
  * @example
  *   // Less/Stylus parser
- *   const css = Sheet.Less(`
+ *   const css = Stylesheet.Less(`
  *     .box
  *       background: red
  *       .inner
@@ -78,7 +78,7 @@ import type { RuleDefinition, CSSProperties } from './Rule.ts';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type SheetInput =
-    | Sheet
+    | Stylesheet
     | CSSStyleSheet
     | CSSRuleList
     | HTMLLinkElement
@@ -105,20 +105,20 @@ export type SheetInput =
  */
 export interface RulesView extends ReadonlyArray<Rule>
 {
-    add(...rules: (SheetRule | SheetRule[])[]): Sheet;
-    Add(...rules: (SheetRule | SheetRule[])[]): Sheet;
-    insert(rules: SheetRule | SheetRule[], index: number): Sheet;
-    Insert(rules: SheetRule | SheetRule[], index: number): Sheet;
-    unshift(...rules: (SheetRule | SheetRule[])[]): Sheet;
-    remove(...rules: (SheetRule | number)[]): Sheet;
-    shift(n?: number): Sheet;
-    pop(n?: number): Sheet;
-    clear(): Sheet;
+    add(...rules: (SheetRule | SheetRule[])[]): Stylesheet;
+    Add(...rules: (SheetRule | SheetRule[])[]): Stylesheet;
+    insert(rules: SheetRule | SheetRule[], index: number): Stylesheet;
+    Insert(rules: SheetRule | SheetRule[], index: number): Stylesheet;
+    unshift(...rules: (SheetRule | SheetRule[])[]): Stylesheet;
+    remove(...rules: (SheetRule | number)[]): Stylesheet;
+    shift(n?: number): Stylesheet;
+    pop(n?: number): Stylesheet;
+    clear(): Stylesheet;
     contains(...rules: SheetRule[]): boolean;
     get(...rules: SheetRule[]): Rule | Rule[] | undefined;
     Get(...rules: SheetRule[]): Rule | Rule[] | undefined;
     getIndex(rule: SheetRule): number;
-    set(rule: SheetRule, value: CSSProperties | string): Sheet;
+    set(rule: SheetRule, value: CSSProperties | string): Stylesheet;
 }
 
 export interface SheetObjectDef
@@ -145,7 +145,7 @@ function toCamel(s: string): string
 // Historical note: prior versions of this file embedded a minimal indentation-
 // based parser inline. The full Less.js-flavoured parser now lives in
 // `additionals/Less.ts` as a sibling of Sass / Scss / Stylus. We import it
-// here as a thin wrapper so that `Sheet.Less(text)` and `SheetES5.Less(text)`
+// here as a thin wrapper so that `Stylesheet.Less(text)` and `SheetES5.Less(text)`
 // keep working unchanged. The intentionally-minimal indented dialect that the
 // old internal parser implemented is also handled by additionals/Less.ts
 // thanks to its mixed brace/indent input handling.
@@ -154,7 +154,7 @@ import { parseLess } from '../additionals/Less.ts';
 
 // ── Sheet class ───────────────────────────────────────────────────────────────
 
-export class Sheet
+export class Stylesheet
 {
 
     // ── Private fields ─────────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ export class Sheet
                     this.#parseText(input);
                 }
             } else if (typeof input === 'object') {
-                if (input instanceof Sheet)
+                if (input instanceof Stylesheet)
                 {
                     this.#sheet = input.Sheet;
                     this.#rules = input.#rules.map(r => r.clone());
@@ -348,8 +348,11 @@ export class Sheet
         if (!this.#sheet) return;
         while (this.#sheet.cssRules.length)
             this.#sheet.deleteRule(0);
-        this.#rules.forEach((r, i) => {
-            try { this.#sheet!.insertRule(r.Text, i); }
+        // Use LIVE cssRules.length, not forEach i. Browser-rejected rules
+        // (e.g. ::-moz-selection on Chrome) don't advance the index, so
+        // using `i` causes IndexSizeError cascade.
+        this.#rules.forEach((r) => {
+            try { this.#sheet!.insertRule(r.Text, this.#sheet!.cssRules.length); }
             catch (e) { console.warn(`Sheet: could not insert rule "${r.Selector}":`, e); }
         });
     }
@@ -362,9 +365,9 @@ export class Sheet
 
     // ── Static API ───────────────────────────────────────────────────────────────
 
-    static get Sheets(): Sheet[]
+    static get Sheets(): Stylesheet[]
     {
-        return Array.from(document.styleSheets).map(s => new Sheet(s));
+        return Array.from(document.styleSheets).map(s => new Stylesheet(s));
     }
 
     static get Links(): HTMLLinkElement[]
@@ -374,7 +377,7 @@ export class Sheet
 
     static get Paths(): string[]
     {
-        return Sheet.Links.map(l => l.href).filter(Boolean);
+        return Stylesheet.Links.map(l => l.href).filter(Boolean);
     }
 
     static ToString(source: SheetInput | Rule[]): string
@@ -382,7 +385,7 @@ export class Sheet
         if (typeof source === 'string') return source;
         if (Array.isArray(source))
             return source.map(r => r instanceof Rule ? r.Text : (r as CSSRule).cssText).join('\n');
-        if (source instanceof Sheet)
+        if (source instanceof Stylesheet)
             return source.#rules.map(r => r.Text).join('\n');
         if (source instanceof CSSStyleSheet)
             return Array.from(source.cssRules).map(r => r.cssText).join('\n');
@@ -401,7 +404,7 @@ export class Sheet
 
     static ToArray(text: string): CSSRule[]
     {
-        const s = Sheet.Parse(text);
+        const s = Stylesheet.Parse(text);
         return s ? Array.from(s.cssRules) : [];
     }
 
@@ -413,7 +416,7 @@ export class Sheet
      * variable substitution, single-line comments (//).
      *
      * @example
-     *   Sheet.Less(`
+     *   Stylesheet.Less(`
      *     @primary: dodgerblue
      *     .box
      *       background: @primary
@@ -625,7 +628,7 @@ export class Sheet
         {
             this.#rules = input.map(r => r instanceof Rule ? r : new Rule(r as CSSRule));
         } else if (typeof input === 'object' && input !== null) {
-            if (input instanceof Sheet)
+            if (input instanceof Stylesheet)
                 this.#rules = input.#rules.map(r => r.clone());
             else
                 this.#parseObject(input as SheetObjectDef);
@@ -799,7 +802,7 @@ if (typeof window !== 'undefined')
 {
     // Sheet
     Object.defineProperty(window, 'Sheet', {
-        enumerable: true, configurable: false, writable: false, value: Sheet,
+        enumerable: true, configurable: false, writable: false, value: Stylesheet,
     });
 
     /**
@@ -813,11 +816,11 @@ if (typeof window !== 'undefined')
      *   sheet2.Get('@keyframes Settete').Selector;
      *   SheetES5.Less(lessText);
      */
-    function SheetES5(url?: string): Sheet
+    function SheetES5(url?: string): Stylesheet
     {
-        return url ? new Sheet(url) : new Sheet();
+        return url ? new Stylesheet(url) : new Stylesheet();
     }
-    SheetES5.Less = (text: string): string => Sheet.Less(text);
+    SheetES5.Less = (text: string): string => Stylesheet.Less(text);
 
     if (!('SheetES5' in window))
         Object.defineProperty(window, 'SheetES5', {
@@ -825,4 +828,4 @@ if (typeof window !== 'undefined')
         });
 }
 
-export default Sheet;
+export default Stylesheet;

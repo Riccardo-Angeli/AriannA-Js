@@ -76,7 +76,6 @@ export class Resizer extends (Component('arianna-resizer', HTMLElement, {}, {
         'handles', 'min-width', 'min-height', 'max-width', 'max-height',
         'handle-size', 'handle-color', 'allow-cross', 'disabled',
     ],
-    shadow: false,
 }) as typeof Modifier2D)
 {
     protected applyTo(target: HTMLElement): void

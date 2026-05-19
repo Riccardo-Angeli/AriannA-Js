@@ -1,7 +1,7 @@
 import Core, { type TypeDescriptor } from './Core.ts';
 import { signal, signalMono, sinkText, effect, computed, batch, untrack, AriannATemplate, type Signal, type SignalMono, type ReadonlySignal } from './Observable.ts';
 import Rule from './Rule.ts';
-import { Sheet } from './Sheet.ts';
+import { Stylesheet } from './Stylesheet.ts';
 import { readDottedPath, writeDottedPath, makeSubAccessor, type SubAccessor } from './Real.ts';
 export type { SubAccessor };
 export type { Signal, SignalMono, ReadonlySignal };
@@ -27,16 +27,16 @@ function _preset(mode: ShadowMode, o: ShadowOptions): string {
     }
 }
 function _layerCSS(l: ShadowLayer): string { return `${l.inset ? 'inset ' : ''}${l.x ?? 0}px ${l.y ?? 4}px ${l.blur ?? 8}px ${l.spread ?? 0}px ${l.color ?? 'rgba(0,0,0,0.25)'}`; }
-function _shadowCSS(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Sheet = 'drop', opts: ShadowOptions = {}): string {
+function _shadowCSS(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop', opts: ShadowOptions = {}): string {
     if (state === 'close') return 'none';
     if (mode instanceof Rule)  { const v = mode.Properties['boxShadow'] ?? mode.Properties['box-shadow']; return v ?? _preset('drop', opts); }
-    if (mode instanceof Sheet) { for (const r of mode.Rules) { const v = r.Properties['boxShadow'] ?? r.Properties['box-shadow']; if (v) return v; } return _preset('drop', opts); }
+    if (mode instanceof Stylesheet) { for (const r of mode.Rules) { const v = r.Properties['boxShadow'] ?? r.Properties['box-shadow']; if (v) return v; } return _preset('drop', opts); }
     if (Array.isArray(mode)) return mode.map(_layerCSS).join(', ');
     return _preset(mode, opts);
 }
 interface QueuedListener { type: string; cb: EventListener; opts?: AddEventListenerOptions | boolean; }
 type Getter<T> = () => T;
-interface PendingSink { type: 'text' | 'textMono' | 'attr' | 'cls' | 'prop' | 'style' | 'bind' | 'shadow'; getter: Getter<unknown>; setter?: (v: string) => void; name?: string; mono?: SignalMono<string>; node?: Text; shadowMode?: ShadowMode | ShadowLayer[]; shadowModeRule?: Rule | Sheet; shadowOpts?: ShadowOptions; }
+interface PendingSink { type: 'text' | 'textMono' | 'attr' | 'cls' | 'prop' | 'style' | 'bind' | 'shadow'; getter: Getter<unknown>; setter?: (v: string) => void; name?: string; mono?: SignalMono<string>; node?: Text; shadowMode?: ShadowMode | ShadowLayer[]; shadowModeRule?: Rule | Stylesheet; shadowOpts?: ShadowOptions; }
 let _counter = 0; const _nodes: Record<string, VirtualNode> = {};
 function uid(): string { return `vn-${++_counter}-${Math.random().toString(36).slice(2,6)}`; }
 function normalizeChild(c: VChild): VirtualNode { if (c instanceof VirtualNode) return c; const n = new VirtualNode('span'); n.set('textContent', c == null ? '' : String(c)); return n; }
@@ -44,7 +44,7 @@ export class VirtualNode {
     #id: string; #tag: string; #attrs: VAttrs; #children: VirtualNode[]; #text: string;
     #dom: Element | null = null; #parent: VirtualNode | null = null; #mounted = false;
     #domQueue: QueuedListener[] = []; #effects: Array<() => void> = []; #sinks: PendingSink[] = [];
-    #sheet: Sheet | null = null; #styleNode: HTMLStyleElement | null = null; #instanceId: string = ''; #sheetSync: (() => void) | null = null;
+    #sheet: Stylesheet | null = null; #styleNode: HTMLStyleElement | null = null; #instanceId: string = ''; #sheetSync: (() => void) | null = null;
     static readonly Instances: VirtualNode[] = [];
     constructor(def: VNodeDef | string | AriannATemplate, attrs?: VAttrs, ...children: VChild[]) {
         if (def instanceof AriannATemplate) { const el = def.clone(); this.#tag = el.tagName.toLowerCase(); this.#attrs = {}; this.#children = []; this.#text = ''; this.#id = uid(); _nodes[this.#id] = this; VirtualNode.Instances.push(this); this.#dom = el; return; }
@@ -84,7 +84,7 @@ export class VirtualNode {
                 case 'bind': { const rec = this.#dom as unknown as Record<string, unknown>; this.#effects.push(effect(() => { rec['value'] = (sink.getter as Getter<string>)(); })); if (sink.setter) this.#dom!.addEventListener('input', e => sink.setter!((e.target as HTMLInputElement).value)); break; }
                 case 'shadow': {
                     const mode = sink.shadowModeRule ?? sink.shadowMode ?? 'drop';
-                    (this.#dom as HTMLElement).style.boxShadow = _shadowCSS('open', mode as ShadowMode | ShadowLayer[] | Rule | Sheet, sink.shadowOpts ?? {});
+                    (this.#dom as HTMLElement).style.boxShadow = _shadowCSS('open', mode as ShadowMode | ShadowLayer[] | Rule | Stylesheet, sink.shadowOpts ?? {});
                     break;
                 }
             }
@@ -148,10 +148,10 @@ export class VirtualNode {
     show(): this { this.css('display', ''); return this; }
     hide(): this { this.css('display', 'none'); return this; }
     child(path: number[]): Node { let n: Node = this.render(); for (const i of path) n = n.childNodes[i]!; return n; }
-    shadow(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Sheet = 'drop', opts: ShadowOptions = {}): this {
+    shadow(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop', opts: ShadowOptions = {}): this {
         if (this.#dom) (this.#dom as HTMLElement).style.boxShadow = _shadowCSS(state, mode, opts);
         else if (state === 'close') this.#sinks.push({ type: 'shadow', getter: () => null, shadowOpts: {} });
-        else if (mode instanceof Rule || mode instanceof Sheet) this.#sinks.push({ type: 'shadow', getter: () => null, shadowModeRule: mode, shadowOpts: opts });
+        else if (mode instanceof Rule || mode instanceof Stylesheet) this.#sinks.push({ type: 'shadow', getter: () => null, shadowModeRule: mode, shadowOpts: opts });
         else this.#sinks.push({ type: 'shadow', getter: () => null, shadowMode: mode as ShadowMode | ShadowLayer[], shadowOpts: opts });
         return this;
     }
@@ -182,11 +182,11 @@ export class VirtualNode {
      * `Sheet.Rules.add/remove/...` mutations re-flush automatically.
      *
      *   const v = new VirtualNode('div', { class: 'Fancy' });
-     *   v.Sheet = new Sheet(new Rule(':root', { background: 'yellow' }));
+     *   v.Sheet = new Stylesheet(new Rule(':root', { background: 'yellow' }));
      *   v.append(stage);
      */
-    get Sheet(): Sheet | null { return this.#sheet; }
-    set Sheet(next: Sheet | null)
+    get Sheet(): Stylesheet | null { return this.#sheet; }
+    set Sheet(next: Stylesheet | null)
     {
         if (this.#sheet && this.#sheetSync)
             this.#sheet.off('Sheet-Changed', this.#sheetSync);

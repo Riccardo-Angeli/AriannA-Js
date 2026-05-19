@@ -28,7 +28,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 
 export type ModifierKind =
@@ -86,7 +86,6 @@ const newModId = () => `M${++modCounter}`;
 
 export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette', HTMLElement, {}, {
     attrs : [],
-    shadow: false,
 })
 {
     stack$   : Signal<ModifierEntry[]> = signal<ModifierEntry[]>([]);
@@ -220,7 +219,7 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
         // bind missing entry in handler bag — keep compat with template
         this.onAddClick;
 
-        this.Sheet = Modifiers3DPalette.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Modifiers3DPalette.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -306,11 +305,11 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
     private onMoveDown    : (e: Event) => void = () => {};
     private onParamChange : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',

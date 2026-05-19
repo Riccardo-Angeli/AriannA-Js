@@ -40,7 +40,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export interface PortSpec {
@@ -108,7 +108,6 @@ const PORT_HEIGHT = 18;
 
 export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}, {
     attrs : [],
-    shadow: false,
 })
 {
     readonly schemas$: Signal<NodeSchema[]>    = signal<NodeSchema[]>([]);
@@ -134,7 +133,7 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.ne-wrap')) return;
@@ -537,9 +536,9 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
 
     #nextId(prefix: string): string { return `${prefix}-${++this.#idCounter}-${Date.now().toString(36)}`; }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #0d0d0d)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -550,18 +549,18 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
                 overflow    : 'hidden',
                 position    : 'relative',
             }),
-            new Rule(':root .ne-wrap', {
+            new Rule(':host .ne-wrap', {
                 display: 'grid',
                 gridTemplateColumns: '180px 1fr',
                 height: '100%',
             }),
-            new Rule(':root .ne-palette', {
+            new Rule(':host .ne-palette', {
                 background  : 'var(--ar-bg2, #161616)',
                 borderRight : '1px solid var(--ar-border, #2a2a2a)',
                 overflow    : 'auto',
                 padding     : '6px',
             }),
-            new Rule(':root .ne-pal-cat', {
+            new Rule(':host .ne-pal-cat', {
                 color       : 'var(--ar-muted, #888)',
                 fontSize    : '0.66rem',
                 letterSpacing: '0.1em',
@@ -569,7 +568,7 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
                 marginTop   : '8px',
                 textTransform: 'uppercase',
             }),
-            new Rule(':root .ne-pal-item', {
+            new Rule(':host .ne-pal-item', {
                 alignItems  : 'center',
                 background  : 'var(--ar-bg3, #1e1e1e)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
@@ -582,7 +581,7 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
                 marginBottom: '4px',
                 padding     : '5px 6px',
             }),
-            new Rule(':root .ne-pal-icon', {
+            new Rule(':host .ne-pal-icon', {
                 alignItems: 'center',
                 background: 'var(--ar-muted, #888)',
                 borderRadius: '2px',
@@ -593,13 +592,13 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
                 justifyContent: 'center',
                 width     : '18px',
             }),
-            new Rule(':root .ne-canvas', {
+            new Rule(':host .ne-canvas', {
                 background : `radial-gradient(circle, var(--ar-border, #2a2a2a) 1px, transparent 1px)`,
                 backgroundSize: '20px 20px',
                 overflow   : 'auto',
                 position   : 'relative',
             }),
-            new Rule(':root .ne-svg', {
+            new Rule(':host .ne-svg', {
                 height   : '100%',
                 left     : '0',
                 pointerEvents: 'none',
@@ -607,7 +606,7 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
                 top      : '0',
                 width    : '100%',
             }),
-            new Rule(':root .ne-node', {
+            new Rule(':host .ne-node', {
                 background  : 'var(--ar-bg2, #161616)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -616,7 +615,7 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
                 minWidth    : NODE_WIDTH + 'px',
                 position    : 'absolute',
             }),
-            new Rule(':root .ne-node-hdr', {
+            new Rule(':host .ne-node-hdr', {
                 alignItems: 'center',
                 background: 'var(--ar-primary, #7eb8f7)',
                 color     : '#000',
@@ -626,13 +625,13 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
                 padding   : '4px 8px',
                 userSelect: 'none',
             }),
-            new Rule(':root .ne-node-icon', { fontSize: '0.85rem' }),
-            new Rule(':root .ne-node-name', {
+            new Rule(':host .ne-node-icon', { fontSize: '0.85rem' }),
+            new Rule(':host .ne-node-name', {
                 flex      : '1',
                 fontSize  : '0.78rem',
                 fontWeight: '600',
             }),
-            new Rule(':root .ne-node-close', {
+            new Rule(':host .ne-node-close', {
                 background  : 'transparent',
                 border      : '0',
                 borderRadius: '2px',
@@ -643,23 +642,23 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
                 lineHeight  : '1',
                 padding     : '0 4px',
             }),
-            new Rule(':root .ne-node-close:hover', { background: 'rgba(0,0,0,0.15)' }),
-            new Rule(':root .ne-node-body', { padding: '6px' }),
-            new Rule(':root .ne-node-ports', {
+            new Rule(':host .ne-node-close:hover', { background: 'rgba(0,0,0,0.15)' }),
+            new Rule(':host .ne-node-body', { padding: '6px' }),
+            new Rule(':host .ne-node-ports', {
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
             }),
-            new Rule(':root .ne-node-col', { display: 'flex', flexDirection: 'column', gap: '2px' }),
-            new Rule(':root .ne-node-col-out', { alignItems: 'flex-end' }),
-            new Rule(':root .ne-port-row', {
+            new Rule(':host .ne-node-col', { display: 'flex', flexDirection: 'column', gap: '2px' }),
+            new Rule(':host .ne-node-col-out', { alignItems: 'flex-end' }),
+            new Rule(':host .ne-port-row', {
                 alignItems: 'center',
                 display   : 'flex',
                 fontSize  : '0.72rem',
                 gap       : '4px',
                 height    : PORT_HEIGHT + 'px',
             }),
-            new Rule(':root .ne-port-out', { justifyContent: 'flex-end' }),
-            new Rule(':root .ne-port-dot', {
+            new Rule(':host .ne-port-out', { justifyContent: 'flex-end' }),
+            new Rule(':host .ne-port-dot', {
                 background  : 'var(--ar-bg3, #1e1e1e)',
                 border      : '2px solid var(--ar-primary, #7eb8f7)',
                 borderRadius: '50%',
@@ -668,11 +667,11 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
                 height      : '10px',
                 width       : '10px',
             }),
-            new Rule(':root .ne-port-label', { color: 'var(--ar-muted, #aaa)' }),
-            new Rule(':root .ne-node-params', { display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }),
-            new Rule(':root .ne-param-row', { display: 'flex', flexDirection: 'column', gap: '2px' }),
-            new Rule(':root .ne-param-label', { color: 'var(--ar-muted, #888)', fontSize: '0.65rem' }),
-            new Rule(':root .ne-param-input', {
+            new Rule(':host .ne-port-label', { color: 'var(--ar-muted, #aaa)' }),
+            new Rule(':host .ne-node-params', { display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }),
+            new Rule(':host .ne-param-row', { display: 'flex', flexDirection: 'column', gap: '2px' }),
+            new Rule(':host .ne-param-label', { color: 'var(--ar-muted, #888)', fontSize: '0.65rem' }),
+            new Rule(':host .ne-param-input', {
                 background  : 'var(--ar-bg3, #1e1e1e)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
@@ -681,15 +680,15 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
                 fontSize    : '0.72rem',
                 padding     : '2px 4px',
             }),
-            new Rule(':root .ne-wire', {
+            new Rule(':host .ne-wire', {
                 fill        : 'none',
                 pointerEvents: 'stroke',
                 strokeWidth : '2',
             }),
-            new Rule(':root .ne-wire-connected-ok',    { stroke: 'var(--ar-success, #4caf50)' }),
-            new Rule(':root .ne-wire-connected-warn',  { stroke: 'var(--ar-warning, #ff9800)' }),
-            new Rule(':root .ne-wire-connected-error', { stroke: 'var(--ar-danger,  #f44336)' }),
-            new Rule(':root .ne-wire-dragging', {
+            new Rule(':host .ne-wire-connected-ok',    { stroke: 'var(--ar-success, #4caf50)' }),
+            new Rule(':host .ne-wire-connected-warn',  { stroke: 'var(--ar-warning, #ff9800)' }),
+            new Rule(':host .ne-wire-connected-error', { stroke: 'var(--ar-danger,  #f44336)' }),
+            new Rule(':host .ne-wire-dragging', {
                 stroke         : 'var(--ar-primary, #7eb8f7)',
                 strokeDasharray: '4 3',
             }),

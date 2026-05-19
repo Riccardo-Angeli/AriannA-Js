@@ -46,7 +46,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface TabsOptions { active?: number; }
@@ -58,7 +58,6 @@ export interface TabOptions  { label?: string; disabled?: boolean; active?: bool
 
 export class Tab extends Component('arianna-tab', HTMLElement, {}, {
     attrs : ['label', 'disabled', 'active'],
-    shadow: false,
     bus   : 'arianna-tabs',
 })
 {
@@ -80,7 +79,7 @@ export class Tab extends Component('arianna-tab', HTMLElement, {}, {
             <span a-if="!this.hasLabel()" @click="this.onClick"><slot></slot></span>
         `;
 
-        this.Sheet = Tab.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Tab.DefaultSheet();
     }
 
     onCreated()       {}
@@ -104,11 +103,11 @@ export class Tab extends Component('arianna-tab', HTMLElement, {}, {
     private hasLabel : () => boolean = () => false;
     private onClick  : () => void    = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     cursor      : 'pointer',
                     display     : 'inline-block',
                     padding     : '8px 14px',
@@ -118,13 +117,13 @@ export class Tab extends Component('arianna-tab', HTMLElement, {}, {
                     userSelect  : 'none',
                     fontSize    : '0.85rem',
                 }),
-                new Rule(':root:hover', { color: 'var(--arianna-primary, #1f6feb)' }),
-                new Rule(':root[active]', {
+                new Rule(':host:hover', { color: 'var(--arianna-primary, #1f6feb)' }),
+                new Rule(':host([active])', {
                     borderBottomColor: 'var(--arianna-primary, #1f6feb)',
                     color            : 'var(--arianna-primary, #1f6feb)',
                     fontWeight       : '600',
                 }),
-                new Rule(':root[disabled]', { cursor: 'not-allowed', opacity: '0.45' }),
+                new Rule(':host([disabled])', { cursor: 'not-allowed', opacity: '0.45' }),
             ]
         );
     }
@@ -136,7 +135,6 @@ export class Tab extends Component('arianna-tab', HTMLElement, {}, {
 
 export class Tabs extends Component('arianna-tabs', HTMLElement, {}, {
     attrs : ['active'],
-    shadow: false,
 })
 {
     build(_opts: TabsOptions = {})
@@ -165,7 +163,7 @@ export class Tabs extends Component('arianna-tabs', HTMLElement, {}, {
         // Initial sync (deferred so children mount first)
         setTimeout(() => this.#syncChildren(), 0);
 
-        this.Sheet = Tabs.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Tabs.DefaultSheet();
     }
 
     /** Propagate the parent's `active` index down to children's `[active]` attr. */
@@ -195,11 +193,11 @@ export class Tabs extends Component('arianna-tabs', HTMLElement, {}, {
     get active(): number  { return parseInt(this.getAttribute('active') ?? '0', 10); }
     set active(v: number) { this.setAttribute('active', String(v)); this.#syncChildren(); }
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'block' }),
+                new Rule(':host', { display: 'block' }),
                 new Rule('.ar-tabs__header', {
                     borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
                     display     : 'flex',

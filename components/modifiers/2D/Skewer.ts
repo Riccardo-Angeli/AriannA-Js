@@ -33,7 +33,6 @@ export interface SkewerOptions {
 
 export class Skewer extends (Component('arianna-skewer', HTMLElement, {}, {
     attrs : ['axis', 'max-angle', 'handle-color', 'disabled'],
-    shadow: false,
 }) as typeof Modifier2D)
 {
     #skew: [number, number] = [0, 0];

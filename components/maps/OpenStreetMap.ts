@@ -26,7 +26,6 @@ export class OpenStreetMap extends (Component('arianna-osm-map', HTMLElement, {}
         'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
         'aspect-ratio', 'layer',
     ],
-    shadow: false,
 }) as unknown as typeof MapEmbed)
 {
     getProvider(): MapProvider { return 'osm'; }

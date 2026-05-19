@@ -63,7 +63,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export type AccordionIconStyle = 'chevron' | 'plus' | 'arrow' | 'none';
@@ -97,7 +97,6 @@ interface PanelView {
 
 export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
     attrs : ['multiple', 'animated', 'icon', 'borderless', 'resizable', 'min-width', 'max-width'],
-    shadow: false,
 })
 {
     items$    : Signal<AccordionItem[]>     = signal<AccordionItem[]>([]);
@@ -172,7 +171,7 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
                              allow-cross="false"></arianna-resizer>
         `;
 
-        this.Sheet = Accordion.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Accordion.DefaultSheet();
     }
 
     // ── Public API (preserves legacy fluent surface) ─────────────────────────
@@ -431,11 +430,11 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
     private iconHtml      : (isOpen: boolean) => string = () => '';
     private onHeaderClick : (item: AccordionItem) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     display      : 'flex',
                     flexDirection: 'column',
                     width        : '100%',
@@ -449,7 +448,7 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
                     marginBottom: '4px',
                     background  : 'var(--arianna-bg, #ffffff)',
                 }),
-                new Rule(':root[borderless] .ar-accordion__panel', { border: 'none', borderRadius: '0' }),
+                new Rule(':host([borderless]) .ar-accordion__panel', { border: 'none', borderRadius: '0' }),
                 new Rule('.ar-accordion__header', {
                     alignItems   : 'center',
                     background   : 'var(--arianna-bg-3, #f3f3f3)',

@@ -27,7 +27,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface AvatarOptions {
@@ -41,7 +41,6 @@ export interface AvatarOptions {
 
 export class Avatar extends Component('arianna-avatar', HTMLElement, {}, {
     attrs : ['src', 'name', 'icon', 'size', 'shape', 'status'],
-    shadow: false,
 })
 {
     build(_opts: AvatarOptions = {})
@@ -86,7 +85,7 @@ export class Avatar extends Component('arianna-avatar', HTMLElement, {}, {
             <span a-if="this.hasStatus()" :class="this._statusCls()"></span>
         `;
 
-        this.Sheet = Avatar.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Avatar.DefaultSheet();
     }
 
     // Lifecycle hooks (full Vue-like surface per CONVENTIONS Q4)
@@ -127,11 +126,11 @@ export class Avatar extends Component('arianna-avatar', HTMLElement, {}, {
     private _icon    : () => string = () => '';
     private _statusCls: () => string = () => '';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     alignItems    : 'center',
                     background    : 'var(--arianna-bg-3, #e5e5e5)',
                     display       : 'inline-flex',
@@ -142,10 +141,10 @@ export class Avatar extends Component('arianna-avatar', HTMLElement, {}, {
                     position      : 'relative',
                     color         : 'var(--arianna-text, #1f2328)',
                 }),
-                new Rule(':root[shape="circle"]',  { borderRadius: '50%' }),
-                new Rule(':root[shape="square"]',  { borderRadius: '0' }),
-                new Rule(':root[shape="rounded"]', { borderRadius: 'var(--arianna-radius, 6px)' }),
-                new Rule(':root:not([shape])',     { borderRadius: '50%' }),
+                new Rule(':host([shape="circle"])',  { borderRadius: '50%' }),
+                new Rule(':host([shape="square"])',  { borderRadius: '0' }),
+                new Rule(':host([shape="rounded"])', { borderRadius: 'var(--arianna-radius, 6px)' }),
+                new Rule(':host(:not([shape]))',     { borderRadius: '50%' }),
                 new Rule('.ar-avatar__img', {
                     height    : '100%',
                     objectFit : 'cover',

@@ -40,7 +40,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export interface ChatUser {
@@ -86,7 +86,6 @@ function fmtTime(ts: number): string {
 
 export class Chat extends Component('arianna-chat', HTMLElement, {}, {
     attrs : [],
-    shadow: false,
 })
 {
     readonly conversations$ : Signal<ChatConversation[]> = signal<ChatConversation[]>([]);
@@ -111,7 +110,7 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.ch-wrap')) return;
@@ -444,9 +443,9 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         return this;
     }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg, #fff)',
                 border      : '1px solid var(--ar-border, #d0d0d0)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -456,13 +455,13 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 height      : '520px',
                 overflow    : 'hidden',
             }),
-            new Rule(':root .ch-wrap', { display: 'grid', gridTemplateColumns: '260px 1fr', height: '100%' }),
-            new Rule(':root .ch-sidebar', {
+            new Rule(':host .ch-wrap', { display: 'grid', gridTemplateColumns: '260px 1fr', height: '100%' }),
+            new Rule(':host .ch-sidebar', {
                 background : 'var(--ar-bg2, #f5f5f5)',
                 borderRight: '1px solid var(--ar-border, #d0d0d0)',
                 overflow   : 'auto',
             }),
-            new Rule(':root .ch-conv-item', {
+            new Rule(':host .ch-conv-item', {
                 alignItems  : 'center',
                 borderBottom: '1px solid var(--ar-border, #e0e0e0)',
                 cursor      : 'pointer',
@@ -471,9 +470,9 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 gridTemplateColumns: '40px 1fr auto',
                 padding     : '8px 10px',
             }),
-            new Rule(':root .ch-conv-item:hover', { background: 'var(--ar-bg3, #eee)' }),
-            new Rule(':root .ch-conv-item.active', { background: 'var(--ar-bg4, #e0e0e0)' }),
-            new Rule(':root .ch-avatar', {
+            new Rule(':host .ch-conv-item:hover', { background: 'var(--ar-bg3, #eee)' }),
+            new Rule(':host .ch-conv-item.active', { background: 'var(--ar-bg4, #e0e0e0)' }),
+            new Rule(':host .ch-avatar', {
                 alignItems     : 'center',
                 background     : 'var(--ar-primary, #1565c0)',
                 backgroundPosition: 'center',
@@ -486,24 +485,24 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 justifyContent : 'center',
                 width          : '40px',
             }),
-            new Rule(':root .ch-avatar-sm', { height: '32px', width: '32px', fontSize: '0.78rem' }),
-            new Rule(':root .ch-conv-meta', { overflow: 'hidden' }),
-            new Rule(':root .ch-conv-name', { fontWeight: '600', fontSize: '0.86rem' }),
-            new Rule(':root .ch-conv-last', {
+            new Rule(':host .ch-avatar-sm', { height: '32px', width: '32px', fontSize: '0.78rem' }),
+            new Rule(':host .ch-conv-meta', { overflow: 'hidden' }),
+            new Rule(':host .ch-conv-name', { fontWeight: '600', fontSize: '0.86rem' }),
+            new Rule(':host .ch-conv-last', {
                 color    : 'var(--ar-muted, #666)',
                 fontSize : '0.78rem',
                 overflow : 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
             }),
-            new Rule(':root .ch-conv-right', {
+            new Rule(':host .ch-conv-right', {
                 alignItems: 'flex-end',
                 display   : 'flex',
                 flexDirection: 'column',
                 gap       : '4px',
             }),
-            new Rule(':root .ch-conv-time', { color: 'var(--ar-muted, #888)', fontSize: '0.7rem' }),
-            new Rule(':root .ch-badge', {
+            new Rule(':host .ch-conv-time', { color: 'var(--ar-muted, #888)', fontSize: '0.7rem' }),
+            new Rule(':host .ch-badge', {
                 background: 'var(--ar-primary, #1565c0)',
                 borderRadius: '10px',
                 color: '#fff',
@@ -513,8 +512,8 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 padding: '1px 6px',
                 textAlign: 'center',
             }),
-            new Rule(':root .ch-right', { display: 'grid', gridTemplateRows: 'auto 1fr auto auto', height: '100%' }),
-            new Rule(':root .ch-header', {
+            new Rule(':host .ch-right', { display: 'grid', gridTemplateRows: 'auto 1fr auto auto', height: '100%' }),
+            new Rule(':host .ch-header', {
                 alignItems: 'center',
                 background: 'var(--ar-bg2, #f5f5f5)',
                 borderBottom: '1px solid var(--ar-border, #d0d0d0)',
@@ -522,9 +521,9 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 gap: '10px',
                 padding: '8px 14px',
             }),
-            new Rule(':root .ch-header-name', { flex: '1', fontSize: '0.92rem', fontWeight: '600' }),
-            new Rule(':root .ch-header-presence', { color: 'var(--ar-success, #2e7d32)', fontSize: '0.72rem' }),
-            new Rule(':root .ch-thread', {
+            new Rule(':host .ch-header-name', { flex: '1', fontSize: '0.92rem', fontWeight: '600' }),
+            new Rule(':host .ch-header-presence', { color: 'var(--ar-success, #2e7d32)', fontSize: '0.72rem' }),
+            new Rule(':host .ch-thread', {
                 background: 'var(--ar-bg, #fff)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -532,18 +531,18 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 overflow: 'auto',
                 padding: '12px',
             }),
-            new Rule(':root .ch-msg', {
+            new Rule(':host .ch-msg', {
                 background: 'var(--ar-bg3, #eee)',
                 borderRadius: '8px',
                 maxWidth: '70%',
                 padding: '6px 10px',
                 position: 'relative',
             }),
-            new Rule(':root .ch-msg.grouped', { marginTop: '-2px' }),
-            new Rule(':root .ch-theirs', { alignSelf: 'flex-start' }),
-            new Rule(':root .ch-mine',   { alignSelf: 'flex-end', background: 'var(--ar-primary, #1565c0)', color: '#fff' }),
-            new Rule(':root .ch-text',   { fontSize: '0.86rem', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }),
-            new Rule(':root .ch-quote',  {
+            new Rule(':host .ch-msg.grouped', { marginTop: '-2px' }),
+            new Rule(':host .ch-theirs', { alignSelf: 'flex-start' }),
+            new Rule(':host .ch-mine',   { alignSelf: 'flex-end', background: 'var(--ar-primary, #1565c0)', color: '#fff' }),
+            new Rule(':host .ch-text',   { fontSize: '0.86rem', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }),
+            new Rule(':host .ch-quote',  {
                 borderLeft: '3px solid var(--ar-muted, #888)',
                 color: 'var(--ar-muted, #666)',
                 fontSize: '0.74rem',
@@ -551,19 +550,19 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 opacity: '0.85',
                 padding: '2px 6px',
             }),
-            new Rule(':root .ch-image',  { borderRadius: '4px', maxWidth: '100%' }),
-            new Rule(':root .ch-file',   { color: 'inherit', textDecoration: 'underline', fontSize: '0.82rem' }),
-            new Rule(':root .ch-msg-footer', {
+            new Rule(':host .ch-image',  { borderRadius: '4px', maxWidth: '100%' }),
+            new Rule(':host .ch-file',   { color: 'inherit', textDecoration: 'underline', fontSize: '0.82rem' }),
+            new Rule(':host .ch-msg-footer', {
                 alignItems: 'center',
                 display: 'flex',
                 gap: '4px',
                 justifyContent: 'flex-end',
                 marginTop: '2px',
             }),
-            new Rule(':root .ch-msg-time', { fontSize: '0.66rem', opacity: '0.7' }),
-            new Rule(':root .ch-tick',     { fontSize: '0.7rem' }),
-            new Rule(':root .ch-tick-read', { color: '#4dd0e1' }),
-            new Rule(':root .ch-sys', {
+            new Rule(':host .ch-msg-time', { fontSize: '0.66rem', opacity: '0.7' }),
+            new Rule(':host .ch-tick',     { fontSize: '0.7rem' }),
+            new Rule(':host .ch-tick-read', { color: '#4dd0e1' }),
+            new Rule(':host .ch-sys', {
                 alignSelf: 'center',
                 background: 'var(--ar-bg3, #eee)',
                 borderRadius: '10px',
@@ -571,12 +570,12 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 fontSize: '0.72rem',
                 padding: '3px 10px',
             }),
-            new Rule(':root .ch-typing', {
+            new Rule(':host .ch-typing', {
                 alignSelf: 'flex-start',
                 color: 'var(--ar-muted, #888)',
                 fontSize: '0.86rem',
             }),
-            new Rule(':root .ch-reply-bar', {
+            new Rule(':host .ch-reply-bar', {
                 alignItems: 'center',
                 background: 'var(--ar-bg2, #f5f5f5)',
                 borderTop: '1px solid var(--ar-border, #d0d0d0)',
@@ -584,7 +583,7 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 gap: '6px',
                 padding: '4px 10px',
             }),
-            new Rule(':root .ch-reply-quote', {
+            new Rule(':host .ch-reply-quote', {
                 color: 'var(--ar-muted, #666)',
                 flex: '1',
                 fontSize: '0.78rem',
@@ -592,14 +591,14 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
             }),
-            new Rule(':root .ch-reply-close', {
+            new Rule(':host .ch-reply-close', {
                 background: 'transparent',
                 border: '0',
                 color: 'var(--ar-muted, #666)',
                 cursor: 'pointer',
                 fontSize: '1rem',
             }),
-            new Rule(':root .ch-composer', {
+            new Rule(':host .ch-composer', {
                 alignItems: 'flex-end',
                 background: 'var(--ar-bg2, #f5f5f5)',
                 borderTop: '1px solid var(--ar-border, #d0d0d0)',
@@ -607,14 +606,14 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 gap: '6px',
                 padding: '8px 10px',
             }),
-            new Rule(':root .ch-icon-btn', {
+            new Rule(':host .ch-icon-btn', {
                 background: 'transparent',
                 border: '0',
                 cursor: 'pointer',
                 fontSize: '1.1rem',
                 padding: '4px',
             }),
-            new Rule(':root .ch-input', {
+            new Rule(':host .ch-input', {
                 background: 'var(--ar-bg, #fff)',
                 border: '1px solid var(--ar-border, #d0d0d0)',
                 borderRadius: '8px',
@@ -627,7 +626,7 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 padding: '6px 10px',
                 resize: 'none',
             }),
-            new Rule(':root .ch-send', {
+            new Rule(':host .ch-send', {
                 background: 'var(--ar-primary, #1565c0)',
                 border: '0',
                 borderRadius: '6px',

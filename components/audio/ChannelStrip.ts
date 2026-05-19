@@ -30,7 +30,7 @@
 import { AudioComponent, type AudioComponentOptions } from './AudioComponent.ts';
 import { Component } from '../../core/Component.ts';
 import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule } from '../../core/Rule.ts';
 
 export interface ChannelStripOptions extends AudioComponentOptions {
@@ -78,7 +78,7 @@ export class ChannelStrip extends AudioComponent {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             attrSignal(name: string): Signal<string | null> | undefined;
-            Sheet: Sheet | null;
+            Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.cs-wrap')) return;
@@ -267,9 +267,9 @@ export class ChannelStrip extends AudioComponent {
     get muted(): boolean { return this.muted$.get(); }
     get soloed(): boolean { return this.soloed$.get(); }
 
-    static DefaultSheet(): Sheet {
-        return new Sheet([
-            new Rule(':root', {
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
                 background  : 'var(--ar-bg2, #161616)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
@@ -279,21 +279,21 @@ export class ChannelStrip extends AudioComponent {
                 padding     : '10px',
                 width       : '120px',
             }),
-            new Rule(':root .cs-wrap', {
+            new Rule(':host .cs-wrap', {
                 alignItems   : 'stretch',
                 display      : 'flex',
                 flexDirection: 'column',
                 gap          : '8px',
                 height       : '320px',
             }),
-            new Rule(':root .cs-label', {
+            new Rule(':host .cs-label', {
                 fontWeight    : '600',
                 overflow      : 'hidden',
                 textAlign     : 'center',
                 textOverflow  : 'ellipsis',
                 whiteSpace    : 'nowrap',
             }),
-            new Rule(':root .cs-meter', {
+            new Rule(':host .cs-meter', {
                 background  : 'var(--ar-bg, #0d0d0d)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
@@ -302,39 +302,39 @@ export class ChannelStrip extends AudioComponent {
                 height      : '60px',
                 padding     : '2px',
             }),
-            new Rule(':root .cs-meter-bar', {
+            new Rule(':host .cs-meter-bar', {
                 alignSelf      : 'flex-end',
                 background     : 'linear-gradient(to top, #4caf50 0%, #ffeb3b 70%, #f44336 100%)',
                 flex           : '1',
                 height         : '0%',
                 transition     : 'height 0.06s linear',
             }),
-            new Rule(':root .cs-fader-wrap, :root .cs-pan-wrap', {
+            new Rule(':host .cs-fader-wrap, :host .cs-pan-wrap', {
                 alignItems    : 'center',
                 display       : 'flex',
                 flexDirection : 'column',
                 gap           : '4px',
             }),
-            new Rule(':root .cs-fader-label', {
+            new Rule(':host .cs-fader-label', {
                 color    : 'var(--ar-muted, #888)',
                 fontSize : '0.65rem',
                 letterSpacing: '0.05em',
             }),
-            new Rule(':root .cs-gain, :root .cs-pan', {
+            new Rule(':host .cs-gain, :host .cs-pan', {
                 accentColor: 'var(--ar-primary, #7eb8f7)',
                 width      : '100%',
             }),
-            new Rule(':root .cs-fader-val', {
+            new Rule(':host .cs-fader-val', {
                 color    : 'var(--ar-text, #e0e0e0)',
                 fontSize : '0.7rem',
                 fontVariantNumeric: 'tabular-nums',
             }),
-            new Rule(':root .cs-btns', {
+            new Rule(':host .cs-btns', {
                 display: 'flex',
                 gap    : '4px',
                 justifyContent: 'center',
             }),
-            new Rule(':root .cs-btn', {
+            new Rule(':host .cs-btn', {
                 background  : 'var(--ar-bg3, #1e1e1e)',
                 border      : '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
@@ -345,11 +345,11 @@ export class ChannelStrip extends AudioComponent {
                 padding     : '4px 10px',
                 transition  : 'all var(--ar-transition, 0.14s)',
             }),
-            new Rule(':root .cs-mute.active', {
+            new Rule(':host .cs-mute.active', {
                 background: 'var(--ar-danger, #f44336)',
                 color     : '#fff',
             }),
-            new Rule(':root .cs-solo.active', {
+            new Rule(':host .cs-solo.active', {
                 background: 'var(--ar-warning, #ff9800)',
                 color     : '#fff',
             }),

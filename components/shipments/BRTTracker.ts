@@ -37,7 +37,6 @@ export interface BRTTrackerOptions {
 
 export class BRTTracker extends Component('arianna-brt-tracker', HTMLElement, {}, {
     attrs : ['tracking-number', 'locale'],
-    shadow: false,
 })
 {
     #inner: Tracker | null = null;

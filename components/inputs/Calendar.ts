@@ -30,7 +30,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface CalendarOptions {
@@ -99,7 +99,6 @@ function getISOWeek(d: Date): number
 
 export class Calendar extends Component('arianna-calendar', HTMLElement, {}, {
     attrs : ['value', 'min', 'max', 'locale', 'first-day', 'show-week-numbers', 'disabled'],
-    shadow: false,
 })
 {
     /** Currently displayed month/year (not necessarily the selected date). */
@@ -232,7 +231,7 @@ export class Calendar extends Component('arianna-calendar', HTMLElement, {}, {
             </div>
         `;
 
-        this.Sheet = Calendar.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Calendar.DefaultSheet();
     }
 
     onCreated()       {}
@@ -283,11 +282,11 @@ export class Calendar extends Component('arianna-calendar', HTMLElement, {}, {
     private onToday      : () => void = () => {};
     private onDayClick   : (d: DayCell) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #ffffff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',
@@ -333,7 +332,7 @@ export class Calendar extends Component('arianna-calendar', HTMLElement, {}, {
                     gap                 : '2px',
                     marginBottom        : '2px',
                 }),
-                new Rule(':root[show-week-numbers] .ar-cal__weekdays, :root[show-week-numbers] .ar-cal__row', {
+                new Rule(':host([show-week-numbers]) .ar-cal__weekdays, :host([show-week-numbers]) .ar-cal__row', {
                     gridTemplateColumns : '28px repeat(7, 1fr)',
                 }),
                 new Rule('.ar-cal__wkday', {

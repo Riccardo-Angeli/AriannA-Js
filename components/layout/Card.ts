@@ -36,7 +36,7 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 
 export interface CardOptions {
@@ -47,7 +47,6 @@ export interface CardOptions {
 
 export class Card extends Component('arianna-card', HTMLElement, {}, {
     attrs : ['title', 'elevation', 'interactive'],
-    shadow: false,
 })
 {
     build(_opts: CardOptions = {})
@@ -71,7 +70,7 @@ export class Card extends Component('arianna-card', HTMLElement, {}, {
             <footer class="ar-card__footer"><slot name="footer"></slot></footer>
         `;
 
-        this.Sheet = Card.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Card.DefaultSheet();
     }
 
     onCreated()       {}
@@ -96,11 +95,11 @@ export class Card extends Component('arianna-card', HTMLElement, {}, {
     private isInteractive: () => boolean = () => false;
     private onCardClick  : () => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #ffffff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 8px)',
@@ -109,11 +108,11 @@ export class Card extends Component('arianna-card', HTMLElement, {}, {
                     overflow    : 'hidden',
                     padding     : '0',
                 }),
-                new Rule(':root[elevation="1"]', { boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }),
-                new Rule(':root[elevation="2"]', { boxShadow: '0 2px 6px rgba(0,0,0,0.10)' }),
-                new Rule(':root[elevation="3"]', { boxShadow: '0 6px 18px rgba(0,0,0,0.14)' }),
-                new Rule(':root[interactive]',       { cursor: 'pointer', transition: 'transform 0.15s' }),
-                new Rule(':root[interactive]:hover', { transform: 'translateY(-1px)' }),
+                new Rule(':host([elevation="1"])', { boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }),
+                new Rule(':host([elevation="2"])', { boxShadow: '0 2px 6px rgba(0,0,0,0.10)' }),
+                new Rule(':host([elevation="3"])', { boxShadow: '0 6px 18px rgba(0,0,0,0.14)' }),
+                new Rule(':host([interactive])',       { cursor: 'pointer', transition: 'transform 0.15s' }),
+                new Rule(':host([interactive]):hover', { transform: 'translateY(-1px)' }),
                 new Rule('.ar-card__header', {
                     borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
                     fontWeight  : '600',

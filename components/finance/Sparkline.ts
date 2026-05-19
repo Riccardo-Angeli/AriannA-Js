@@ -22,7 +22,7 @@ import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 import { signal }    from '../../core/Observable.ts';
 import type { Signal } from '../../core/Observable.ts';
-import { Sheet } from '../../core/Sheet.ts';
+import { Stylesheet } from '../../core/Stylesheet.ts';
 import { Rule }      from '../../core/Rule.ts';
 import { _svg }      from './helpers.ts';
 
@@ -35,7 +35,6 @@ export interface SparklineOptions {
 
 export class Sparkline extends Component('arianna-sparkline', HTMLElement, {}, {
     attrs : ['width', 'height', 'color'],
-    shadow: false,
 })
 {
     data$: Signal<number[]> = signal<number[]>([]);
@@ -78,7 +77,7 @@ export class Sparkline extends Component('arianna-sparkline', HTMLElement, {}, {
         };
 
         this.template = html`<span class="ar-sparkline" a-html="this.svgHtml()"></span>`;
-        this.Sheet = Sparkline.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Sparkline.DefaultSheet();
     }
 
     set data(v: number[]) { this.data$.set(v ?? []); }
@@ -94,11 +93,11 @@ export class Sparkline extends Component('arianna-sparkline', HTMLElement, {}, {
 
     private svgHtml: () => string = () => '';
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', { display: 'inline-block', lineHeight: '0' }),
+                new Rule(':host', { display: 'inline-block', lineHeight: '0' }),
                 new Rule('.ar-sparkline svg', { display: 'inline-block', verticalAlign: 'middle' }),
             ]
         );

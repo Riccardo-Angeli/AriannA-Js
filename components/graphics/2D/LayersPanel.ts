@@ -34,7 +34,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 
 export interface Layer {
@@ -63,7 +63,6 @@ const newLayerId = () => `L${++layerCounter}`;
 
 export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, {}, {
     attrs : [],
-    shadow: false,
 })
 {
     layers$  : Signal<Layer[]> = signal<Layer[]>([
@@ -165,7 +164,7 @@ export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, 
             </div>
         `;
 
-        this.Sheet = LayersPanel.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = LayersPanel.DefaultSheet();
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -309,11 +308,11 @@ export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, 
     private onMoveUp     : (e: Event) => void = () => {};
     private onMoveDown   : (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',

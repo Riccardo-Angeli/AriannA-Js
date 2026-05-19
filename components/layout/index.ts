@@ -29,7 +29,7 @@ export { Splitter }  from './Splitter.ts';
 export { Tabs, Tab } from './Tabs.ts';
 export { Accordion } from './Accordion.ts';
 export { Dock }      from './Dock.ts';
-export { Window }    from './Window.ts';
+export { WindowComponent } from './Window.ts';
 export { Table }     from './Table.ts';
 
 export type { CardOptions }                 from './Card.ts';

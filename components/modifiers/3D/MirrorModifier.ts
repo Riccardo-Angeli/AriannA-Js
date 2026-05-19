@@ -70,7 +70,6 @@ export class MirrorModifier extends Modifier3D {
 
 export class MirrorModifierElement extends (Component('arianna-mirror', HTMLElement, {}, {
     attrs : ['for', 'axis', 'merge', 'threshold', 'enabled'],
-    shadow: false,
 }) as typeof Modifier3DElement) {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const axis      = ((this.getAttribute('axis') ?? 'x') as MirrorAxis);

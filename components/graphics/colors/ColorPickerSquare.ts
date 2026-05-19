@@ -23,7 +23,7 @@ import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
 import { signal }    from '../../../core/Observable.ts';
 import type { Signal } from '../../../core/Observable.ts';
-import { Sheet } from '../../../core/Sheet.ts';
+import { Stylesheet } from '../../../core/Stylesheet.ts';
 import { Rule }      from '../../../core/Rule.ts';
 import { parseHex, rgbToHex, rgbToHsl, hslToRgb } from './ColorPicker.ts';
 
@@ -77,7 +77,6 @@ function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: n
 
 export class ColorPickerSquare extends Component('arianna-color-picker-square', HTMLElement, {}, {
     attrs : ['color', 'alpha', 'size'],
-    shadow: false,
 })
 {
     state$: Signal<HSVState> = signal<HSVState>({ h: 325, s: 90, v: 90, a: 1 });
@@ -220,7 +219,7 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
             </div>
         `;
 
-        this.Sheet = ColorPickerSquare.DefaultSheet();
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ColorPickerSquare.DefaultSheet();
     }
 
     /** Draw the canvas surfaces. Called on mount and on state change. */
@@ -341,11 +340,11 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
     private onAlphaPointer : (e: Event) => void = () => {};
     private onReadoutChange: (e: Event) => void = () => {};
 
-    static DefaultSheet(): Sheet
+    static DefaultSheet(): Stylesheet
     {
-        return new Sheet(
+        return new Stylesheet(
 [
-                new Rule(':root', {
+                new Rule(':host', {
                     background  : 'var(--arianna-bg, #fff)',
                     border      : '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 8px)',
