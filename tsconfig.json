@@ -18,5 +18,8 @@
     "components/**/*.ts",
     "types/**/*.ts",
     "AriannA.ts"
+  ],
+  "exclude": [
+    "devtools"
   ]
 }
