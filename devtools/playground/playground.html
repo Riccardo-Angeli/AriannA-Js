@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AriannA Playground — v3</title>
+<link rel="stylesheet" href="./playground.css">
+<style>
+    body { background: var(--ar-bg-dark); color: var(--ar-text-dark); }
+    main { padding: 14px 16px; }
+    .topbar {
+        background    : var(--ar-bg-dark2);
+        border-bottom : 1px solid var(--ar-border-dark);
+        color         : var(--ar-text-dark);
+    }
+    .brand   { color: var(--ar-text-dark); }
+    .tab     { color: var(--ar-muted-dark); }
+    .tab:hover { color: var(--ar-text-dark); }
+    .footbar { background: var(--ar-bg-dark2); border-top: 1px solid var(--ar-border-dark); color: var(--ar-muted-dark); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+    <h1 class="brand">AriannA Playground <span class="version">v3</span></h1>
+    <span style="color: var(--ar-border-dark);">│</span>
+    <span id="status" class="repl-status loading">Booting…</span>
+    <span style="color: var(--ar-border-dark);">│</span>
+
+    <select id="examples" class="select dark">
+        <option value="hello">Hello world (Real)</option>
+        <option value="signal">Signal + effect counter</option>
+        <option value="component">Component class</option>
+        <option value="observable">Observable deep log</option>
+        <option value="rule-css">Rule.css + Real.Sheet</option>
+        <option value="dotted">Dotted path + .sub()</option>
+        <option value="virtual-fiber">Virtual fiber inspection</option>
+        <option value="components-html">Components via HTML tags</option>
+    </select>
+
+    <button id="save-example" class="btn dark">＋ Save</button>
+    <button id="run"          class="btn primary">▶ Run (Ctrl/Cmd+Enter)</button>
+    <button id="clear"        class="btn dark">Clear stage</button>
+
+    <label style="color: var(--ar-muted-dark); font-size: 11px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+        <input type="checkbox" id="auto-run" checked> Auto-run on edit
+    </label>
+</header>
+
+<div id="save-dialog" class="modal-overlay" hidden>
+    <div class="modal-card">
+        <h3>Save current code as a new example</h3>
+        <label for="save-name">Example name</label>
+        <input id="save-name" type="text" placeholder="My custom example">
+        <div class="modal-actions">
+            <button id="save-cancel" class="btn">Cancel</button>
+            <button id="save-confirm" class="btn primary">Save</button>
+        </div>
+    </div>
+</div>
+
+<main>
+    <div class="repl-frame">
+        <div class="repl-grid">
+
+            <section class="repl-cell repl-cell-js">
+                <h3>
+                    <span>JS / TypeScript <span class="meta">— Ctrl/Cmd+Enter to run · Ctrl/Cmd+F to find</span></span>
+                </h3>
+                <arianna-code-editor
+                    id="editor-js"
+                    language="ts"
+                    theme="material-darker"
+                    indent="4"
+                    tab-size="4"
+                    line-numbers="true"
+                    match-brackets="true"
+                    auto-close-brackets="true"
+                    smart-indent="true"
+                    auto-focus="true"
+                ></arianna-code-editor>
+            </section>
+
+            <!-- Vertical splitter (between left column and right column) -->
+            <div id="split-v" class="repl-split-v"></div>
+            <!-- Horizontal splitter (between top row and bottom row) -->
+            <div id="split-h" class="repl-split-h"></div>
+
+            <section class="repl-cell repl-cell-stage">
+                <h3>
+                    <span>Stage <span class="meta">— live render</span></span>
+                    <button id="toggle-markup" class="btn tiny dark">View HTML</button>
+                </h3>
+                <div id="stage" class="repl-stage"></div>
+            </section>
+
+            <section class="repl-cell repl-cell-html">
+                <h3>
+                    <span>HTML <span class="meta">— injected into &lt;stage&gt; before script runs</span></span>
+                </h3>
+                <arianna-code-editor
+                    id="editor-html"
+                    language="html"
+                    theme="material-darker"
+                    indent="2"
+                    tab-size="2"
+                    line-numbers="true"
+                    line-wrapping="true"
+                    match-brackets="true"
+                    auto-close-brackets="true"
+                ></arianna-code-editor>
+            </section>
+
+            <section class="repl-cell repl-cell-log">
+                <h3>
+                    <span>Console <span class="meta">— log / warn / error</span></span>
+                    <button id="log-clear" class="btn tiny dark">Clear</button>
+                </h3>
+                <div id="log" class="repl-log"></div>
+            </section>
+
+        </div>
+    </div>
+</main>
+
+<footer class="footbar">
+    <span>AriannA Playground v3</span>
+    <span class="muted">·</span>
+    <span class="muted">ESM bundles · pre-compiled · zero esbuild-wasm</span>
+    <span class="spacer"></span>
+    <span class="muted" id="ready-status">booting…</span>
+</footer>
+
+
+<script type="module">
+    // ── Status helpers ─────────────────────────────────────────────
+    const statusEl = document.getElementById('status');
+    const setStatus = (cls, txt) => { statusEl.className = 'repl-status ' + cls; statusEl.textContent = txt; };
+    setStatus('loading', 'Loading bundles…');
+
+    // ── Load the 3 framework bundles in dependency order ──────────
+    // The bundles can live in different places depending on the repo layout.
+    // We auto-probe a list of candidate base paths and use the first one
+    // that resolves arianna.js. Users can also force a path with
+    //   ?bundle=/path/to/folder/      (note the trailing slash)
+    // in the URL.
+
+    const params       = new URLSearchParams(location.search);
+    const overrideBase = params.get('bundle');
+    const candidates   = overrideBase
+        ? [overrideBase]
+        : [
+            '../../release/dist/', // devtools/playground → repo/release/dist (canonical)
+            '../../dist/',
+            '../../build/',
+            './',                  // bundles next to playground.html
+            '../',                 // one level up
+            '../../',              // two levels up
+            '../dist/',
+            '../build/',
+            '/release/dist/',      // absolute paths
+            '/dist/',
+            '/build/',
+            '/',
+        ];
+
+    let baseUrl   = null;
+    let arianna, additionals, components;
+    for (const base of candidates) {
+        try {
+            arianna = await import(new URL(base + 'arianna.js', location.href).href);
+            baseUrl = base;
+            break;
+        } catch (_) { /* try next */ }
+    }
+
+    if (!baseUrl) {
+        setStatus('error', 'Bundle load failed');
+        const logEl0 = document.getElementById('log');
+        logEl0.innerHTML =
+            '<div class="entry err">[bootstrap] Could not find arianna.js in any of:</div>' +
+            candidates.map(b => '<div class="entry err">  ' + b + 'arianna.js</div>').join('') +
+            '<div class="entry warn">Try opening with <code>?bundle=/path/to/your/bundles/</code> in the URL.</div>';
+        throw new Error('arianna.js not found');
+    }
+
+    try {
+        additionals = await import(new URL(baseUrl + 'arianna-additionals.js', location.href).href);
+        components  = await import(new URL(baseUrl + 'arianna-components.js',  location.href).href);
+    } catch (err) {
+        setStatus('error', 'Bundle load failed (additionals/components)');
+        document.getElementById('log').innerHTML =
+            '<div class="entry err">[bootstrap] Found arianna.js at ' + baseUrl +
+            ' but companion bundles failed: ' + (err && err.message ? err.message : String(err)) + '</div>';
+        throw err;
+    }
+
+    // Expose to globals — but PROTECT browser built-ins. Some AriannA
+    // additionals modules are named after built-in JS globals (Math, Date,
+    // Number, Promise, ...). If we blindly `Object.defineProperty(window, key, ...)`
+    // we'd replace `window.Math` with AriannA's Math namespace, which has no
+    // `.random()` / `.floor()` / etc — and the framework itself depends on
+    // those (e.g. `_installFacilities` uses `Math.random().toString(36)`).
+    //
+    // We expose the AriannA module under a prefixed alias (`Arianna<Name>`)
+    // when it would collide with a built-in.
+    const BUILTIN_GLOBALS = new Set([
+        'Math', 'Date', 'Number', 'String', 'Boolean', 'Symbol', 'BigInt',
+        'Object', 'Array', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Promise',
+        'JSON', 'RegExp', 'Error', 'TypeError', 'RangeError', 'SyntaxError',
+        'Proxy', 'Reflect', 'Function', 'Infinity', 'NaN', 'undefined',
+        'globalThis', 'console', 'window', 'document', 'navigator',
+        'location', 'history', 'localStorage', 'sessionStorage',
+        'fetch', 'XMLHttpRequest', 'WebSocket', 'Worker', 'Audio',
+        // Note: Audio is in this list because window.Audio is the built-in
+        // HTMLAudioElement constructor; AriannA's Audio namespace would shadow it.
+    ]);
+    for (const ns of [arianna, additionals, components]) {
+        for (const key of Object.keys(ns)) {
+            try {
+                if (BUILTIN_GLOBALS.has(key)) {
+                    // Expose under prefixed alias, leave built-in intact
+                    Object.defineProperty(window, 'Arianna' + key, {
+                        value: ns[key], writable: false, configurable: true, enumerable: true,
+                    });
+                } else {
+                    Object.defineProperty(window, key, {
+                        value: ns[key], writable: false, configurable: true, enumerable: true,
+                    });
+                }
+            } catch (_) { /* ignore read-only collision */ }
+        }
+    }
+    window.__ARIANNA_READY__ = true;
+    setStatus('ready', 'Ready');
+    const readyStatus = document.getElementById('ready-status');
+    readyStatus.textContent =
+        `ready · base ${baseUrl} · core ${Object.keys(arianna).length} · additionals ${Object.keys(additionals).length} · components ${Object.keys(components).length}`;
+
+    // ── Editor refs ───────────────────────────────────────────────
+    const edJsEl   = document.getElementById('editor-js');
+    const edHtmlEl = document.getElementById('editor-html');
+
+    // The custom <arianna-code-editor> elements already exist in the DOM
+    // BEFORE the bundle is loaded. Core.Observer is a MutationObserver that
+    // only fires for nodes added AFTER it starts observing — pre-existing
+    // nodes are invisible to it. We must manually upgrade them.
+    function upgradeNow(el) {
+        if (!window.Core || !window.Core.GetDescriptor) return false;
+        const d = window.Core.GetDescriptor(el.tagName.toLowerCase());
+        if (!d || !d.Custom) return false;
+        // Prefer namespace.Update (the canonical AriannA upgrade path)
+        if (d.Namespace && typeof d.Namespace.Update === 'function') {
+            try { d.Namespace.Update(el, d); return true; }
+            catch (e) { console.warn('[playground] namespace.Update failed:', e); }
+        } else if (typeof d.Update === 'function') {
+            try { d.Update(el); return true; }
+            catch (e) { console.warn('[playground] descriptor.Update failed:', e); }
+        }
+        return false;
+    }
+
+    // Wait until the descriptor exists, then manually upgrade both editors.
+    // If descriptor already there → upgrade immediately; otherwise listen for
+    // `arianna-wip:defined` which AriannA dispatches after every Core.Define.
+    await new Promise((resolve) => {
+        const tryUpgrade = () => {
+            if (window.Core && window.Core.GetDescriptor &&
+                window.Core.GetDescriptor('arianna-code-editor')) {
+                upgradeNow(edJsEl);
+                upgradeNow(edHtmlEl);
+                return true;
+            }
+            return false;
+        };
+        if (tryUpgrade()) return resolve();
+        const onDefined = (e) => {
+            if (e && e.detail && e.detail.tag === 'arianna-code-editor') {
+                document.removeEventListener('arianna-wip:defined', onDefined);
+                upgradeNow(edJsEl);
+                upgradeNow(edHtmlEl);
+                resolve();
+            }
+        };
+        document.addEventListener('arianna-wip:defined', onDefined);
+        setTimeout(() => {
+            document.removeEventListener('arianna-wip:defined', onDefined);
+            resolve();
+        }, 2000);
+    });
+    // Microtask flush — after setPrototypeOf in namespace.Update, give any
+    // built-in `build()` / `onCreated()` hooks a tick to finish.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Upgrade EVERY pre-existing <arianna-*> in the DOM.
+    // Core.Observer is a MutationObserver that only fires for nodes added
+    // AFTER it starts observing — pre-existing nodes (statically declared in
+    // the HTML before the bundle loaded) are invisible to it. We walk the
+    // DOM and call namespace.Update on every match.
+    //
+    // ORDER MATTERS: deepest-first. arianna-splitter's template.mount() will
+    // process <slot name="pane-a"> by moving children into the slot's
+    // position. If we upgrade an outer splitter before its inner children
+    // are upgraded, those inner arianna-* (like nested splitters and
+    // arianna-code-editor) get moved DURING mount and lose their upgrade
+    // chance — Core.Observer might fire then, but only for "added" events,
+    // not for re-parented nodes that are still children of an already-seen
+    // subtree.
+    const allAriannaEls = Array.from(document.querySelectorAll('[is], *'))
+        .filter(el => el.tagName.toLowerCase().startsWith('arianna-'));
+    // Sort deepest-first by counting ancestors
+    allAriannaEls.sort((a, b) => {
+        let da = 0, db = 0;
+        for (let n = a.parentElement; n; n = n.parentElement) da++;
+        for (let n = b.parentElement; n; n = n.parentElement) db++;
+        return db - da; // deepest first
+    });
+    for (const el of allAriannaEls) {
+        if (!el.__ariannaUpgraded) {
+            upgradeNow(el);
+        }
+    }
+
+    // One more microtask flush after all upgrades + template.mount() calls
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Verify the editors actually have the API surface we need.
+    // v3 CodeEditor exposes Value/Language as property accessors (not
+    // getValue/setValue methods). Check that the descriptor link is good.
+    if (typeof edJsEl.Value !== 'string' && !('Value' in edJsEl)) {
+        setStatus('error', 'CodeEditor upgrade failed');
+        const d = window.Core?.GetDescriptor?.('arianna-code-editor');
+        console.group('CodeEditor upgrade diagnostics');
+        console.log('Core.GetDescriptor:', d);
+        console.log('  descriptor.Constructor:', d?.Constructor);
+        console.log('  descriptor.Constructor.name:', d?.Constructor?.name);
+        console.log('Instance prototype:', Object.getPrototypeOf(edJsEl));
+        console.log('window.CodeEditor:', window.CodeEditor);
+        console.log('window.CodeEditor === descriptor.Constructor?',
+                    window.CodeEditor === d?.Constructor);
+        console.groupEnd();
+        throw new Error('CodeEditor instance missing API — framework fix not applied? Make sure Namespace.ts + CodeEditor.ts are rebuilt.');
+    }
+
+    const getJs   = () => edJsEl.Value;
+    const setJs   = (v) => { edJsEl.Value = v; };
+    const getHtml = () => edHtmlEl.Value;
+    const setHtml = (v) => { edHtmlEl.Value = v; };
+
+    // ── Stage + log ──────────────────────────────────────────────
+    const stage   = document.getElementById('stage');
+    const logEl   = document.getElementById('log');
+    const toggleMarkup = document.getElementById('toggle-markup');
+    let   markupOn = false;
+
+    function logPush(level, args) {
+        const div = document.createElement('div');
+        div.className = 'entry' + (level === 'error' ? ' err' : level === 'warn' ? ' warn' : '');
+        const time = new Date().toTimeString().slice(0, 8);
+        div.innerHTML = `<span class="meta-time">${time}</span>` + args.map(formatArg).join(' ');
+        logEl.appendChild(div);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+    function formatArg(a) {
+        if (a == null) return String(a);
+        if (typeof a === 'string') return escapeHtml(a);
+        if (typeof a === 'number' || typeof a === 'boolean') return String(a);
+        try { return escapeHtml(JSON.stringify(a, null, 2)); }
+        catch (_) { return escapeHtml(String(a)); }
+    }
+    function escapeHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Mirror console into the panel
+    const origLog = console.log, origWarn = console.warn, origErr = console.error;
+    console.log   = (...a) => { origLog(...a);  logPush('log', a); };
+    console.warn  = (...a) => { origWarn(...a); logPush('warn', a); };
+    console.error = (...a) => { origErr(...a);  logPush('error', a); };
+    window.addEventListener('error', (e) => logPush('error', [e.message || e.error]));
+    window.addEventListener('unhandledrejection', (e) => logPush('error', [e.reason]));
+
+    // ── Examples ─────────────────────────────────────────────────
+    const EXAMPLES = {
+        'hello': {
+            js: `// Hello world via Real — the AriannA reactive DOM proxy
+//
+// API basics:
+//   new Real(stage)            wraps an existing element
+//   new Real('div')            creates a fresh element of that tag
+//   .add(child)                appends children (Real | Node | string)
+//   .set('attr', value)        sets attribute or property
+//   .sub('style').set(k, v)    fluent nested-property accessor
+//   .text(() => 'hello')       reactive text content (takes a getter)
+
+const root = new Real(stage);
+
+const greeting = new Real('div');
+greeting.sub('style')
+    .set('background',  'linear-gradient(135deg, #e40c88, #ff6fab)')
+    .set('color',       'white')
+    .set('padding',     '24px 28px')
+    .set('borderRadius','12px')
+    .set('fontSize',    '20px')
+    .set('fontWeight',  '600');
+greeting.text(() => 'Hello, AriannA!');
+
+root.add(greeting);
+
+console.log('Hello — root id:', root.render().id);`,
+            html: ''
+        },
+        'signal': {
+            js: `// Reactive signals + effect — auto-rerender on change
+const count = signal(0);
+
+const root = new Real(stage);
+
+const ui = new Real('div');
+ui.sub('style').set('display', 'flex').set('gap', '10px').set('alignItems', 'center');
+
+const label = new Real('span');
+label.sub('style').set('fontSize', '18px').set('color', 'white');
+label.text(() => 'Count: ' + count.get());   // reactive — re-runs on count.set()
+
+const btn = new Real('button');
+btn.text(() => '+1');
+btn.sub('style')
+    .set('background', '#e40c88').set('color', 'white').set('border', 'none')
+    .set('borderRadius', '6px').set('padding', '8px 16px').set('cursor', 'pointer');
+btn.on('click', () => count.set(count.peek() + 1));
+
+ui.add(label, btn);
+root.add(ui);
+
+console.log('Click the button — the label re-renders reactively.');`,
+            html: ''
+        },
+        'component': {
+            js: `// A bespoke Component class using Component(tag, base, defaults, config)
+class FuchsiaCard extends Component('arianna-fuchsia-card', HTMLElement, {}, {
+    attrs: ['title', 'body'],
+}) {
+    build() {
+        this.Sheet = new Sheet(
+            new Rule(':root', { display: 'block', background: '#fff', borderRadius: '8px',
+                                padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }),
+            new Rule(':root h3', { margin: '0 0 6px 0', color: '#e40c88', fontSize: '14px' }),
+            new Rule(':root p',  { margin: '0', color: '#444', fontSize: '13px' }),
+        );
+        const h3 = document.createElement('h3'); h3.textContent = this.getAttribute('title') ?? '';
+        const p  = document.createElement('p');  p.textContent  = this.getAttribute('body')  ?? '';
+        this.append(h3, p);
+    }
+}
+
+const card = document.createElement('arianna-fuchsia-card');
+card.setAttribute('title', 'Component class');
+card.setAttribute('body',  'A custom element built on AriannA v2 — declarative + reactive.');
+stage.appendChild(card);
+
+console.log('Component registered:', !!Core.GetDescriptor('arianna-fuchsia-card'));`,
+            html: ''
+        },
+        'observable': {
+            js: `// Deep-watch a nested Observable + log every mutation
+const state = new State({ user: { name: 'Riccardo', items: ['ts', 'css'] } });
+
+deepWatch(state, (path, value, prev) => {
+    console.log('change at', path.join('.'), '→', value, '(was', prev, ')');
+});
+
+state.Value.user.name = 'Arianna';
+state.Value.user.items.push('html');
+state.Value.user.items[0] = 'tsx';
+
+const root = new Real(stage);
+const pre = new Real('pre');
+pre.text(() => JSON.stringify(state.Value, null, 2));
+pre.sub('style')
+   .set('background', '#16171a').set('color', '#c0c4ca')
+   .set('padding', '12px').set('borderRadius', '6px');
+root.add(pre);`,
+            html: ''
+        },
+        'rule-css': {
+            js: `// v2 — Rule.css() static helper + Real.Sheet scoping
+const root = new Real(stage);
+
+// Per-instance Sheet — auto-scoped to this Real's generated class
+root.Sheet = new Sheet(
+    Rule.css(':root', {
+        display: 'block', background: '#fff', borderRadius: '8px',
+        padding: '24px', maxWidth: '440px',
+    }),
+    Rule.css(':root h2', { margin: '0 0 8px 0', color: '#e40c88' }),
+    Rule.css(':root p',  { margin: 0, color: '#444', fontSize: '13px' }),
+);
+
+const h2 = new Real('h2'); h2.text(() => 'Rule.css + Real.Sheet');
+const p  = new Real('p');  p.text(() => 'The styles above are scoped to this Real instance only.');
+root.add(h2, p);
+
+console.log('Generated scoped class:', root.render().className);`,
+            html: ''
+        },
+        'dotted': {
+            js: `// v2 — Dotted path + .sub() fluent accessor
+const root = new Real(stage);
+
+// Dotted set/get on the underlying element
+root.set('style.background', '#e40c88');
+root.set('style.color', 'white');
+root.set('style.padding', '24px');
+root.set('style.borderRadius', '8px');
+
+console.log('background:', root.get('style.background'));
+
+// Fluent .sub() chain
+root.sub('style')
+    .set('fontSize', '18px')
+    .set('fontWeight', '600')
+    .set('textAlign', 'center');
+
+// Append a text child
+root.add('Dotted + .sub() — fluent API for nested properties');`,
+            html: ''
+        },
+        'virtual-fiber': {
+            js: `// Inspect a Virtual fiber
+const v = new Virtual('div', { class: 'fiber' });
+console.log('Virtual tag:', v.Tag);
+
+// Render to a DOM element
+const real = new Real(stage);
+real.add(v);
+console.log('Mounted!');`,
+            html: ''
+        },
+        'components-html': {
+            js: `// Components instantiated via DECLARATIVE HTML — see the HTML pane below.
+// They register themselves as custom elements automatically when the bundle loads.
+const btn = stage.querySelector('arianna-button');
+if (btn) {
+    setTimeout(() => btn.setAttribute('label', 'Changed via JS!'), 1500);
+}
+console.log('Look at the HTML pane — that is the source of the stage above.');`,
+            html: `<div style="display: flex; flex-direction: column; gap: 16px; padding: 12px;">
+
+  <arianna-banner
+      title="Banner from HTML"
+      body="This component was created declaratively in the HTML pane."
+      variant="info">
+  </arianna-banner>
+
+  <div style="display: flex; gap: 12px; align-items: center;">
+    <arianna-button label="Click me" variant="primary"></arianna-button>
+    <arianna-button label="Secondary"></arianna-button>
+    <arianna-switch checked="true"></arianna-switch>
+    <arianna-checkbox label="Accept" checked="true"></arianna-checkbox>
+  </div>
+
+  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+    <arianna-chip label="TypeScript"></arianna-chip>
+    <arianna-chip label="AriannA" variant="primary"></arianna-chip>
+    <arianna-chip label="Closable" closable="true"></arianna-chip>
+  </div>
+
+  <arianna-progress-bar value="65" max="100"></arianna-progress-bar>
+
+</div>`
+        },
+    };
+
+    // ── Run user code ────────────────────────────────────────────
+    let runVersion = 0;
+    async function run() {
+        const myVersion = ++runVersion;
+        logEl.innerHTML = '';
+        stage.innerHTML = getHtml() || '';
+        delete stage.dataset.savedHtml;
+
+        const userJs = getJs();
+        const blobUrl = URL.createObjectURL(new Blob(
+            [
+                '// playground module\n',
+                '(async () => {\n',
+                '  try {\n',
+                userJs, '\n',
+                '  } catch (err) {\n',
+                '    console.error(err && err.message ? err.message : err);\n',
+                '  }\n',
+                '})();\n',
+            ],
+            { type: 'text/javascript' }
+        ));
+        try {
+            await import(/* @vite-ignore */ blobUrl);
+        } catch (err) {
+            if (myVersion === runVersion) {
+                console.error('Run failed:', err && err.message ? err.message : err);
+            }
+        } finally {
+            URL.revokeObjectURL(blobUrl);
+        }
+    }
+
+    // ── Toolbar wiring ───────────────────────────────────────────
+    document.getElementById('run').addEventListener('click', () => run());
+    document.getElementById('clear').addEventListener('click', () => {
+        stage.innerHTML = ''; logEl.innerHTML = '';
+    });
+    document.getElementById('log-clear').addEventListener('click', () => { logEl.innerHTML = ''; });
+
+    // Ctrl/Cmd+Enter inside editors — listen globally; the editors are
+    // textareas so keydown bubbles up to document.
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            run();
+        }
+    });
+
+    // Example selector
+    const examplesSelect = document.getElementById('examples');
+    examplesSelect.addEventListener('change', () => loadExample(examplesSelect.value));
+
+    function loadExample(key) {
+        const ex = EXAMPLES[key];
+        if (!ex) return;
+        setJs(ex.js);
+        setHtml(ex.html || '');
+        run();
+    }
+    loadExample('hello');
+
+    // Auto-run on edit (debounced)
+    const autoRunChk = document.getElementById('auto-run');
+    let dbTimer = null;
+    function scheduleAutoRun() {
+        if (!autoRunChk.checked) return;
+        if (dbTimer) clearTimeout(dbTimer);
+        dbTimer = setTimeout(run, 350);
+    }
+    edJsEl.addEventListener  ('change', () => scheduleAutoRun());
+    edHtmlEl.addEventListener('change', () => scheduleAutoRun());
+
+    // Save dialog
+    const saveDialog = document.getElementById('save-dialog');
+    const saveName   = document.getElementById('save-name');
+    document.getElementById('save-example').addEventListener('click', () => {
+        saveDialog.hidden = false;
+        saveName.value = '';
+        setTimeout(() => saveName.focus(), 10);
+    });
+    document.getElementById('save-cancel').addEventListener('click', () => { saveDialog.hidden = true; });
+    document.getElementById('save-confirm').addEventListener('click', () => {
+        const name = saveName.value.trim();
+        if (!name) return;
+        const key = 'user:' + name;
+        EXAMPLES[key] = { js: getJs(), html: getHtml() };
+        const opt = document.createElement('option');
+        opt.value = key; opt.textContent = name;
+        examplesSelect.appendChild(opt);
+        examplesSelect.value = key;
+        saveDialog.hidden = true;
+        try {
+            const custom = JSON.parse(localStorage.getItem('arianna-playground-examples') || '{}');
+            custom[name] = { js: getJs(), html: getHtml() };
+            localStorage.setItem('arianna-playground-examples', JSON.stringify(custom));
+        } catch (_) {}
+    });
+    try {
+        const custom = JSON.parse(localStorage.getItem('arianna-playground-examples') || '{}');
+        for (const [name, ex] of Object.entries(custom)) {
+            const key = 'user:' + name;
+            EXAMPLES[key] = ex;
+            const opt = document.createElement('option');
+            opt.value = key; opt.textContent = name;
+            examplesSelect.appendChild(opt);
+        }
+    } catch (_) {}
+
+    // ── Resizable splitters — manual drag (proven, simple) ───────────
+    // The .repl-grid uses CSS custom properties for column/row sizes
+    // that we update on drag.
+    const replGrid = document.querySelector('.repl-grid');
+    const splitV   = document.getElementById('split-v');
+    const splitH   = document.getElementById('split-h');
+
+    // Restore saved sizes
+    try {
+        const saved = JSON.parse(localStorage.getItem('arianna-playground-sizes') || 'null');
+        if (saved && saved.colLeft && saved.colRight && saved.rowTop && saved.rowBot) {
+            replGrid.style.setProperty('--repl-col-left',  saved.colLeft);
+            replGrid.style.setProperty('--repl-col-right', saved.colRight);
+            replGrid.style.setProperty('--repl-row-top',   saved.rowTop);
+            replGrid.style.setProperty('--repl-row-bot',   saved.rowBot);
+        }
+    } catch (_) {}
+
+    function saveSizes() {
+        try {
+            localStorage.setItem('arianna-playground-sizes', JSON.stringify({
+                colLeft : replGrid.style.getPropertyValue('--repl-col-left')  || '1fr',
+                colRight: replGrid.style.getPropertyValue('--repl-col-right') || '1fr',
+                rowTop  : replGrid.style.getPropertyValue('--repl-row-top')   || '65%',
+                rowBot  : replGrid.style.getPropertyValue('--repl-row-bot')   || '35%',
+            }));
+        } catch (_) {}
+    }
+
+    function attachDrag(handle, orientation) {
+        let active = false;
+        handle.addEventListener('mousedown', (e) => {
+            active = true;
+            handle.classList.add('dragging');
+            document.body.style.cursor = orientation === 'v' ? 'col-resize' : 'row-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!active) return;
+            const rect = replGrid.getBoundingClientRect();
+            if (orientation === 'v') {
+                const x     = e.clientX - rect.left;
+                const total = rect.width - 6;
+                const left  = Math.max(120, Math.min(total - 120, x));
+                replGrid.style.setProperty('--repl-col-left',  left + 'px');
+                replGrid.style.setProperty('--repl-col-right', (total - left) + 'px');
+            } else {
+                const y     = e.clientY - rect.top;
+                const total = rect.height - 6;
+                const top   = Math.max(80, Math.min(total - 80, y));
+                replGrid.style.setProperty('--repl-row-top', top + 'px');
+                replGrid.style.setProperty('--repl-row-bot', (total - top) + 'px');
+            }
+        });
+        window.addEventListener('mouseup', () => {
+            if (!active) return;
+            active = false;
+            handle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            saveSizes();
+        });
+    }
+    attachDrag(splitV, 'v');
+    attachDrag(splitH, 'h');
+
+
+    toggleMarkup.addEventListener('click', () => {
+        markupOn = !markupOn;
+        toggleMarkup.textContent = markupOn ? 'View Stage' : 'View HTML';
+        if (markupOn) {
+            stage.dataset.savedHtml = stage.innerHTML;
+            stage.innerHTML = '<pre style="margin:0;padding:0;color:#79c0ff;font-family:var(--ar-font-mono);font-size:11px;white-space:pre-wrap;">' +
+                escapeHtml(stage.dataset.savedHtml.trim() || '(stage empty)') + '</pre>';
+        } else {
+            stage.innerHTML = stage.dataset.savedHtml || '';
+            delete stage.dataset.savedHtml;
+        }
+    });
+
+</script>
+</body>
+</html>

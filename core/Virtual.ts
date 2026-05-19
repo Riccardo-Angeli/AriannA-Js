@@ -45,6 +45,7 @@ export class VirtualNode {
     #dom: Element | null = null; #parent: VirtualNode | null = null; #mounted = false;
     #domQueue: QueuedListener[] = []; #effects: Array<() => void> = []; #sinks: PendingSink[] = [];
     #sheet: Stylesheet | null = null; #styleNode: HTMLStyleElement | null = null; #instanceId: string = ''; #sheetSync: (() => void) | null = null;
+    #real: object | null = null;
     static readonly Instances: VirtualNode[] = [];
     constructor(def: VNodeDef | string | AriannATemplate, attrs?: VAttrs, ...children: VChild[]) {
         if (def instanceof AriannATemplate) { const el = def.clone(); this.#tag = el.tagName.toLowerCase(); this.#attrs = {}; this.#children = []; this.#text = ''; this.#id = uid(); _nodes[this.#id] = this; VirtualNode.Instances.push(this); this.#dom = el; return; }
@@ -165,9 +166,105 @@ export class VirtualNode {
     cls(name: string, getter: Getter<boolean>): this { if (this.#dom) { const el = this.#dom; this.#effects.push(effect(() => { if (getter()) el.classList.add(name); else el.classList.remove(name); })); } else this.#sinks.push({ type: 'cls', getter, name }); return this; }
     clsMono(name: string): (v: boolean) => void { const el = this.render(); return (v: boolean) => { if (v) el.classList.add(name); else el.classList.remove(name); }; }
     prop(name: string, getter: Getter<unknown>): this { if (this.#dom) { const rec = this.#dom as unknown as Record<string, unknown>; this.#effects.push(effect(() => { rec[name] = getter(); })); } else this.#sinks.push({ type: 'prop', getter, name }); return this; }
-    style(prop: string, getter: Getter<string>): this { if (this.#dom) { const el = this.#dom as HTMLElement; const p = prop.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`); this.#effects.push(effect(() => { el.style.setProperty(p, getter()); })); } else this.#sinks.push({ type: 'style', getter, name: prop }); return this; }
+    /**
+     * .style(...) — overloaded stylesheet/rule/object/text/prop setter.
+     *
+     * Five forms:
+     *   .style(prop, getter)   → reactive single-prop binding (legacy)
+     *   .style(rule)           → apply Rule as scoped Sheet
+     *   .style(sheet)          → assign Stylesheet directly to Sheet
+     *   .style({ a: 'b' })     → build Rule(':root', obj), apply as Sheet
+     *   .style('button {...}') → parse CSS text → Stylesheet, apply
+     *   .style('color:red')    → apply as inline style attribute
+     */
+    style(propOrThing: string | Rule | Stylesheet | Record<string, string>, getter?: Getter<string>): this {
+        // Form 1: reactive (prop, getter)
+        if (typeof propOrThing === 'string' && typeof getter === 'function') {
+            if (this.#dom) {
+                const el = this.#dom as HTMLElement;
+                const p = propOrThing.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`);
+                this.#effects.push(effect(() => { el.style.setProperty(p, getter()); }));
+            } else {
+                this.#sinks.push({ type: 'style', getter, name: propOrThing });
+            }
+            return this;
+        }
+        // Form 2: Rule
+        if (propOrThing instanceof Rule) { this.Sheet = new Stylesheet([propOrThing]); return this; }
+        // Form 3: Stylesheet
+        if (propOrThing instanceof Stylesheet) { this.Sheet = propOrThing; return this; }
+        // Form 4/5: string (CSS text or inline declarations)
+        if (typeof propOrThing === 'string') {
+            if (propOrThing.indexOf('{') !== -1) {
+                const rules: Rule[] = [];
+                for (const chunk of propOrThing.split('}')) {
+                    const i = chunk.indexOf('{');
+                    if (i === -1) continue;
+                    const selector = chunk.slice(0, i).trim();
+                    const body     = chunk.slice(i + 1).trim();
+                    if (!selector || !body) continue;
+                    const props: Record<string, string> = {};
+                    for (const decl of body.split(';')) {
+                        const c = decl.indexOf(':');
+                        if (c === -1) continue;
+                        const k = decl.slice(0, c).trim();
+                        const v = decl.slice(c + 1).trim();
+                        if (k && v) props[k] = v;
+                    }
+                    if (Object.keys(props).length) rules.push(new Rule(selector, props));
+                }
+                if (rules.length) this.Sheet = new Stylesheet(rules);
+            } else if (propOrThing.indexOf(':') !== -1) {
+                // Inline declaration list — apply as style attribute on rendered DOM
+                if (this.#dom) {
+                    const el = this.#dom as HTMLElement;
+                    el.setAttribute('style', (el.getAttribute('style') ?? '') + ';' + propOrThing);
+                } else {
+                    // Defer until render: stash in attrs
+                    const cur = (this.#attrs.style as string | undefined) ?? '';
+                    this.#attrs.style = cur ? cur + ';' + propOrThing : propOrThing;
+                }
+            }
+            return this;
+        }
+        // Form 6: plain object
+        if (propOrThing && typeof propOrThing === 'object') {
+            this.Sheet = new Stylesheet([new Rule(':root', propOrThing as Record<string, string>)]);
+            return this;
+        }
+        return this;
+    }
     bind(getter: Getter<string>, setter?: (v: string) => void): this { this.prop('value', getter); if (setter) this.on('input', e => setter((e.target as HTMLInputElement).value)); return this; }
     destroy(): this { this.#effects.forEach(s => s()); this.#effects = []; this.#sinks = []; this.Sheet = null; return this; }
+
+    /**
+     * Lazy `.Real` companion — wraps the same underlying element as a Real
+     * (live DOM, fluent), materialised on first access. Mutations through
+     * either facet land on the same DOM element. Useful for code that
+     * starts with a Virtual (e.g. for SSR) and then needs the Real fluent
+     * API surface for client-side reactivity.
+     *
+     *   const v = new VirtualNode({ Tag: 'div' });
+     *   v.append('#app');               // materialises into DOM
+     *   v.Real.set('class', 'hero')    // mutates same element via Real API
+     *        .on('click', handler);
+     *
+     * Note: Real imports VirtualNode (this file), so we can't import Real
+     * at the top here without breaking module init order. Instead we
+     * resolve `Real` through `globalThis` (the runtime bundle installs
+     * `window.Real`), or use a deferred dynamic import.
+     */
+    get Real(): object {
+        if (!this.#real) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const g = globalThis as unknown as { Real?: new (el: Element) => object };
+            if (!g.Real) {
+                throw new Error('[arianna] VirtualNode.Real requires window.Real (loaded by core/index.ts)');
+            }
+            this.#real = new g.Real(this.render());
+        }
+        return this.#real;
+    }
 
     /**
      * Scoped Sheet for this VirtualNode instance.

@@ -66,6 +66,7 @@ import Core, {
 } from './Core.ts';
 import { signal, effect, type Signal } from './Observable.ts';
 import { Stylesheet } from './Stylesheet.ts';
+import Rule from './Rule.ts';
 import { readDottedPath, writeDottedPath, makeSubAccessor, type SubAccessor } from './Real.ts';
 import Real from './Real.ts';
 import Virtual, { VirtualNode } from './Virtual.ts';
@@ -335,6 +336,90 @@ function _installFacilities(el: Element): Element
             get(this: Element): string { return stash.__sheet ? stash.__sheet.toString() : ''; },
         },
 
+        // ── render() / valueOf() ─────────────────────────────────────────
+        // Many component constructors call `self.render()` to grab the host
+        // element. Without these installed at facility-time, the call fails
+        // synchronously inside super() chains. Returning `this` is the
+        // correct semantics: the element IS its own render target.
+        render: {
+            configurable: true, writable: false,
+            value(this: Element): Element { return this; },
+        },
+        valueOf: {
+            configurable: true, writable: false,
+            value(this: Element): Element { return this; },
+        },
+
+        // ── style() — multi-form CSS application ─────────────────────────
+        // Five forms:
+        //   .style(prop, getter)   → reactive single-prop binding (legacy)
+        //   .style(rule)           → apply Rule as scoped Sheet
+        //   .style(sheet)          → assign Stylesheet directly to this.Sheet
+        //   .style({ a: 'b' })     → build Rule(':host', obj), apply as Sheet
+        //   .style('button {...}') → parse CSS text → Stylesheet, apply
+        // Returns `this` for chaining.
+        style: {
+            configurable: true, writable: false,
+            value(this: Element, a: unknown, b?: unknown): Element {
+                // Form 1: (prop, getter) — reactive single-prop binding
+                if (typeof a === 'string' && typeof b === 'function') {
+                    const el = this as HTMLElement;
+                    const cssProp = a.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`);
+                    const eff = effect(() => { el.style.setProperty(cssProp, (b as () => string)()); });
+                    stash.__effects = stash.__effects ?? [];
+                    stash.__effects.push(eff as unknown as () => void);
+                    return this;
+                }
+                // Form 2: Rule instance
+                if (a instanceof Rule) {
+                    _applySheet(this, new Stylesheet([a]));
+                    return this;
+                }
+                // Form 3: Stylesheet instance
+                if (a instanceof Stylesheet) {
+                    _applySheet(this, a);
+                    return this;
+                }
+                // Form 4: string — parse as CSS text if it looks like CSS,
+                // otherwise apply as inline style attribute.
+                if (typeof a === 'string') {
+                    if (a.indexOf('{') !== -1) {
+                        // CSS text — parse into Rules. Very small parser:
+                        // splits on `}`, each chunk is `selector { props }`.
+                        const rules: Rule[] = [];
+                        for (const chunk of a.split('}')) {
+                            const i = chunk.indexOf('{');
+                            if (i === -1) continue;
+                            const selector = chunk.slice(0, i).trim();
+                            const body     = chunk.slice(i + 1).trim();
+                            if (!selector || !body) continue;
+                            const props: Record<string, string> = {};
+                            for (const decl of body.split(';')) {
+                                const c = decl.indexOf(':');
+                                if (c === -1) continue;
+                                const k = decl.slice(0, c).trim();
+                                const v = decl.slice(c + 1).trim();
+                                if (k && v) props[k] = v;
+                            }
+                            if (Object.keys(props).length) rules.push(new Rule(selector, props));
+                        }
+                        if (rules.length) _applySheet(this, new Stylesheet(rules));
+                    } else {
+                        // Bare CSS — apply as inline style attribute (set)
+                        (this as HTMLElement).setAttribute('style',
+                            ((this as HTMLElement).getAttribute('style') ?? '') + ';' + a);
+                    }
+                    return this;
+                }
+                // Form 5: plain object → Rule(':host', obj)
+                if (a && typeof a === 'object') {
+                    _applySheet(this, new Stylesheet([new Rule(':host', a as Record<string, string>)]));
+                    return this;
+                }
+                return this;
+            },
+        },
+
         // ── attrSignal accessor ────────────────────────────────────────────
         attrSignal: { configurable: true, writable: false, value(this: Element, name: string) {
             return stash.__attrSignals?.[name];
@@ -454,6 +539,44 @@ function _installFacilities(el: Element): Element
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    //  Auto shadow-DOM attachment (BEFORE build()).
+    //
+    //  Components default to shadow:'closed'. Without this step, when an
+    //  element is created via `new MyComp()` (rather than via markup /
+    //  document.createElement), the Namespace.Update path doesn't run
+    //  Step 7 — so the shadow root never exists, and DefaultSheet rules
+    //  that target `:host` / `.inner-class` are applied as light-DOM rules
+    //  injected into `<head>`. Those rules don't reach the inner template
+    //  (which is in the future shadow root) — the component renders styled
+    //  only on its host box, missing all internal styling.
+    //
+    //  Fix: install the shadow root NOW. _applySheet (called by build()'s
+    //  `this.Sheet = X` assignment) then detects shadowRoot and injects the
+    //  <style> there, so internal selectors work. Step 7 (markup path) still
+    //  guards `if (!hostWithTpl.shadowRoot)` so it is a no-op for these.
+    //
+    //  Mode resolution: def.shadow === false  → skip (light DOM opt-out)
+    //                   def.shadow === 'open' → open
+    //                   anything else         → closed (default)
+    // ─────────────────────────────────────────────────────────────────────
+    {
+        const ctorWithDef = (el as Element).constructor as unknown as {
+            __ariannaDef?: { shadow?: 'open' | 'closed' | boolean };
+        };
+        const def       = ctorWithDef.__ariannaDef ?? {};
+        const defShadow = def.shadow;
+        const mode: 'open' | 'closed' | false =
+            defShadow === false ? false :
+            defShadow === 'open' ? 'open' :
+            'closed';
+        const hostEl = el as HTMLElement & { shadowRoot?: ShadowRoot | null };
+        if (mode !== false && !hostEl.shadowRoot) {
+            try { hostEl.attachShadow({ mode }); }
+            catch { /* element doesn't support shadow — fall through to light DOM */ }
+        }
+    }
+
     // Call build() synchronously now that facilities are installed.
     // For classes that `extends Component(tag, Base)`, this is the only place
     // build() can be invoked automatically — the patched native constructor
@@ -473,6 +596,45 @@ function _installFacilities(el: Element): Element
             const args = (el as unknown as { __buildArgs?: unknown[] }).__buildArgs ?? [];
             try { userBuild.apply(el, args); }
             catch (e) { console.warn('[arianna] build() threw:', e); }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  Auto-attach `this.template` (set by build()) to the shadow root.
+    //
+    //  Step 7 of Namespace.Update would do this, but only when the element
+    //  enters the DOM via the Observer. Direct JS-creation (`new MyComp()`)
+    //  doesn't pass through Observer until the user appends the element
+    //  manually — and even then, Observer's Update may run AFTER the user
+    //  inspects/uses the element. Attaching here makes the template active
+    //  immediately, so `new MyComp()` produces a fully-rendered element.
+    //
+    //  Skipped if shadowRoot already has content (Step 7 already ran).
+    // ─────────────────────────────────────────────────────────────────────
+    {
+        const elHasTpl = el as unknown as {
+            template?: {
+                attach?: (host: ParentNode, instance: object, signals?: Record<string, unknown>) => unknown;
+                mount?:  (host: Element,    scope: unknown) => unknown;
+            };
+            __templateRendered?: boolean;
+            __attrSignals?: Record<string, unknown>;
+            shadowRoot?: ShadowRoot | null;
+        };
+        if (elHasTpl.template && !elHasTpl.__templateRendered) {
+            elHasTpl.__templateRendered = true;
+            const renderTarget: ParentNode =
+                (elHasTpl.shadowRoot as ParentNode | undefined) ?? (el as ParentNode);
+            const signals = elHasTpl.__attrSignals ?? {};
+            try {
+                if (typeof elHasTpl.template.attach === 'function') {
+                    elHasTpl.template.attach(renderTarget, el as unknown as object, signals);
+                } else if (typeof elHasTpl.template.mount === 'function') {
+                    elHasTpl.template.mount(renderTarget as Element, el as unknown as object);
+                }
+            } catch (e) {
+                console.warn('[arianna] template attach failed:', e);
+            }
         }
     }
 
