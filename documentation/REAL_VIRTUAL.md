@@ -88,6 +88,37 @@ r.log(): this                            // console.log(el), pass-through
 r.Virtual: Virtual                       // lazy getter — convert to Virtual wrapping same element
 ```
 
+### Sub-accessor & fluent return (`.sub()` / `.end()`)
+
+`.sub(path)` returns a `SubAccessor` for nested object navigation (e.g. `style`, `dataset`). To **return to the parent Real** in the fluent chain, call `.end()`:
+
+```ts
+new Real('div')
+    .sub('style')
+        .set('background', 'orange')
+        .set('color',      'white')
+        .sub('transform')
+            .set('rotate', '45deg')
+            .end()                       // back to .sub('style')
+        .end()                            // back to Real('div')
+    .on('click', handleClick)
+    .append('#app');
+```
+
+`SubAccessor` API:
+
+```ts
+interface SubAccessor {
+    set(key, value): SubAccessor;        // chain on same sub
+    get(key): unknown;
+    sub(key): SubAccessor;               // descend further
+    unwrap(): unknown;                   // raw object at this path
+    end<T>(): T;                         // ← return to owning Real/Virtual
+}
+```
+
+There is no `.up()` method — `.end()` was chosen because it reads naturally as "end the sub-block". You can call `.end()` multiple times to climb out of nested `.sub()` chains.
+
 ### `.set()` — smart routing
 
 `set(name, value)` looks up `name` case-insensitively. Order:

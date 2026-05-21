@@ -41,7 +41,6 @@ export { MapEmbed }       from './MapEmbed.ts';
 export { GoogleMap }      from './GoogleMap.ts';
 export { OpenStreetMap }  from './OpenStreetMap.ts';
 export { AppleMap }       from './AppleMap.ts';
-export { BingMap }        from './BingMap.ts';
 export { AzureMap }       from './AzureMap.ts';
 export { MapLibreMap }    from './MapLibreMap.ts';
 

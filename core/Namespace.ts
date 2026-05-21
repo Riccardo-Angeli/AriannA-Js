@@ -271,15 +271,32 @@ function _installFragileProxy(outer: Element, spec: FragileSpec): void
         Object.defineProperty(outer, 'shadow', {
             configurable: true,
             writable    : false,
-            value(this: Element, mode: 'open' | 'closed' = 'open') {
-                if ((this as HTMLElement).shadowRoot) return (this as HTMLElement).shadowRoot;
-                try { return (this as HTMLElement).attachShadow({ mode }); }
-                catch { return null; }
+            value(this: Element, mode: 'open' | 'closed' = 'closed') {
+                return _attachAriannaShadow(this, mode);
             },
         });
     } catch { /* shadow already defined elsewhere */ }
 }
 
+
+const SHADOW_ROOT = Symbol.for('arianna.shadow.root');
+
+function _getAriannaShadowRoot(el: Element): ShadowRoot | null
+{
+    return ((el as unknown as Record<symbol, unknown>)[SHADOW_ROOT] as ShadowRoot | undefined)
+        ?? ((el as HTMLElement).shadowRoot ?? null);
+}
+
+function _attachAriannaShadow(el: Element, mode: 'open' | 'closed' = 'closed'): ShadowRoot | null
+{
+    const existing = _getAriannaShadowRoot(el);
+    if (existing) return existing;
+    try {
+        const root = (el as HTMLElement).attachShadow({ mode });
+        Object.defineProperty(el, SHADOW_ROOT, { value: root, enumerable: false, configurable: false, writable: false });
+        return root;
+    } catch { return null; }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Fragile-interface specification map (module-level)
@@ -1124,20 +1141,14 @@ export class Namespace
             // Find or create the render target.
             let renderTarget: ParentNode = node;
             if (shadowMode !== false) {
-                if (!hostWithTpl.shadowRoot) {
-                    try {
-                        const sr = (node as unknown as { attachShadow: (init: ShadowRootInit) => ShadowRoot })
-                            .attachShadow({ mode: shadowMode });
-                        renderTarget = sr;
-                    } catch (e) {
-                        // attachShadow can fail for elements that don't support it
-                        // (e.g. <img>, customized built-ins on certain interfaces).
-                        // Fall back to light DOM.
-                        console.warn(`[arianna] attachShadow failed for <${desc.Tags[0]}>, falling back to light DOM:`, e);
-                        renderTarget = node;
-                    }
-                } else {
-                    renderTarget = hostWithTpl.shadowRoot;
+                const sr = _attachAriannaShadow(node, shadowMode);
+                if (sr) renderTarget = sr;
+                else {
+                    // attachShadow can fail for elements that don't support it
+                    // (e.g. <img>, customized built-ins on certain interfaces).
+                    // Fall back to light DOM.
+                    console.warn(`[arianna] attachShadow failed for <${desc.Tags[0]}>, falling back to light DOM.`);
+                    renderTarget = node;
                 }
             }
 

@@ -154,8 +154,32 @@ export interface AriannaElement extends HTMLElement
 // ── Private flags & registries ──────────────────────────────────────────────
 
 const FACILITY_FLAG = Symbol.for('arianna.component.installed');
+const SHADOW_ROOT   = Symbol.for('arianna.shadow.root');
 const BUSES: Record<string, Signal<unknown[]>> = {};
 const DEF_KEYS = new Set(['attrs', 'shadow', 'render', 'bus', 'css']);
+
+
+function _getShadowRoot(el: Element): ShadowRoot | null
+{
+    return ((el as unknown as Record<symbol, unknown>)[SHADOW_ROOT] as ShadowRoot | undefined)
+        ?? ((el as HTMLElement).shadowRoot ?? null);
+}
+
+function _attachAriannaShadow(el: Element, mode: 'open' | 'closed' = 'closed'): ShadowRoot | null
+{
+    const existing = _getShadowRoot(el);
+    if (existing) return existing;
+    try {
+        const root = (el as HTMLElement).attachShadow({ mode });
+        Object.defineProperty(el, SHADOW_ROOT, {
+            value: root, enumerable: false, configurable: false, writable: false,
+        });
+        return root;
+    } catch (e) {
+        console.warn('[arianna] attachShadow failed — element type does not support Shadow DOM:', e);
+        return null;
+    }
+}
 
 function _bus(parentTag: string): Signal<unknown[]>
 {
@@ -497,22 +521,11 @@ function _installFacilities(el: Element): Element
             return this;
         }},
         // .shadow(mode?) — attach (or return existing) Shadow DOM root.
-        //
-        //   const root = this.shadow();          // mode: 'open' (default)
-        //   const root = this.shadow('closed');  // closed mode (no .shadowRoot exposure)
-        //   const root = this.shadow();          // returns existing if already attached
-        //
-        // Mode argument is honoured only on the first attach call. Subsequent
-        // calls return the existing ShadowRoot (mode can't be changed after
-        // attach — that's a browser constraint, not ours).
-        shadow: { configurable: true, writable: false, value(this: Element, mode: 'open' | 'closed' = 'open') {
-            const existing = (this as HTMLElement).shadowRoot;
-            if (existing) return existing;
-            try { return (this as HTMLElement).attachShadow({ mode }); }
-            catch (e) {
-                console.warn('[arianna] .shadow() failed — element type does not support Shadow DOM:', e);
-                return null;
-            }
+        // Default is closed, matching AriannA 2.0 component policy.
+        // Closed roots are stored privately on a Symbol so runtime/tests can use
+        // this method instead of the browser's el.shadowRoot property.
+        shadow: { configurable: true, writable: false, value(this: Element, mode: 'open' | 'closed' = 'closed') {
+            return _attachAriannaShadow(this, mode);
         }},
     });
 
@@ -570,11 +583,7 @@ function _installFacilities(el: Element): Element
             defShadow === false ? false :
             defShadow === 'open' ? 'open' :
             'closed';
-        const hostEl = el as HTMLElement & { shadowRoot?: ShadowRoot | null };
-        if (mode !== false && !hostEl.shadowRoot) {
-            try { hostEl.attachShadow({ mode }); }
-            catch { /* element doesn't support shadow — fall through to light DOM */ }
-        }
+        if (mode !== false) _attachAriannaShadow(el, mode);
     }
 
     // Call build() synchronously now that facilities are installed.
@@ -728,8 +737,9 @@ function _applySheet(el: Element, next: Stylesheet | null): void
     if (!stash.__instanceId) stash.__instanceId = 'c' + Math.random().toString(36).slice(2, 10);
 
     const tag       = el.tagName.toLowerCase();
-    const useShadow = !!(el as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot;
-    const replace   = useShadow ? ':host' : tag;
+    const shadowRoot = _getShadowRoot(el);
+    const useShadow  = !!shadowRoot;
+    const replace    = useShadow ? ':host' : tag;
 
     let css = '';
     for (const r of next.Rules) {
@@ -762,7 +772,7 @@ function _applySheet(el: Element, next: Stylesheet | null): void
     styleEl.setAttribute('data-arianna-sheet',    tag);
     styleEl.setAttribute('data-arianna-instance', stash.__instanceId);
 
-    if (useShadow) (el as Element & { shadowRoot: ShadowRoot }).shadowRoot.appendChild(styleEl);
+    if (useShadow && shadowRoot) shadowRoot.appendChild(styleEl);
     else {
         const head = document.head ?? document.documentElement;
         const existing = head.querySelector<HTMLStyleElement>(

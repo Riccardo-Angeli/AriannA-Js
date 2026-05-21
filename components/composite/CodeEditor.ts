@@ -204,7 +204,11 @@ function esc(s: string): string
    ───────────────────────────────────────────────────────────────────── */
 
 export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}, {
-    attrs : ['language', 'indent', 'readonly', 'line-numbers', 'tab-size', 'height'],
+    attrs : ['language', 'indent', 'readonly', 'line-numbers', 'tab-size', 'height', 'auto-focus'],
+    // AriannA 2.0: CodeEditor internals live inside the component render root.
+    // Closed Shadow DOM is the default; external playground/app code must use
+    // el.Shadow.Root (or the public Value API), never host.querySelector().
+    shadow: 'closed',
 })
 {
     /** Source code as a reactive Signal. */
@@ -373,7 +377,7 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
                 outline:        'none',
                 resize:         'none',
                 background:     'transparent',
-                color:          'transparent',
+                color:          'var(--arianna-code-editor-input-color, #e6e8eb)',
                 caretColor:     '#e6e8eb',
                 fontFamily:     'inherit',
                 fontSize:       'inherit',
@@ -440,12 +444,20 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
         this._ta.setAttribute('autocapitalize', 'off');
         this._ta.setAttribute('autocorrect', 'off');
         this._ta.setAttribute('wrap', 'off');
+        // Silence the "form field element should have an id or name attribute"
+        // browser accessibility warning. Use the host id as a meaningful name
+        // when available; otherwise a stable per-instance unique name.
+        this._ta.setAttribute('name', this.id ? this.id + '-textarea' : 'arianna-code-editor-' + Math.random().toString(36).slice(2, 10));
         if (this._readonly) this._ta.readOnly = true;
 
         stage.appendChild(this._pre);
         stage.appendChild(this._ta);
         this._wrap.appendChild(stage);
-        this.appendChild(this._wrap);
+
+        // AriannA 2.0 / Shadow closed: render internals into the retained
+        // render root. Fall back to the host only for legacy/light-DOM mode.
+        const renderRoot = (this as unknown as { Shadow?: { Root?: ShadowRoot | null } }).Shadow?.Root ?? this;
+        renderRoot.appendChild(this._wrap);
 
         // ── Initial paint ────────────────────────────────────────────────
         this._ta.value = this.value.get();

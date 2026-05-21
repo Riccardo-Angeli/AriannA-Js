@@ -1,3 +1,4 @@
+import Core from './Core.ts';
 /**
  * @module    Directive
  * @author    Riccardo Angeli
@@ -809,7 +810,7 @@ export interface ComponentMeta
     template?: string;
     /** CSS string for the component's styles. */
     style?   : string;
-    /** Shadow DOM mode ('open' | 'closed'). Default: 'open'. */
+    /** Shadow DOM mode ('open' | 'closed'). Default: 'closed'. */
     shadow?  : 'open' | 'closed' | false;
 }
 
@@ -826,26 +827,33 @@ export function Component(meta: ComponentMeta)
 {
     return function <T extends typeof HTMLElement>(Base: T): T
     {
-        // Inject template + style into connectedCallback
+        // Legacy decorator compatibility, routed through AriannA's registry.
+        // No customElements.define(): Component registration belongs to Core/Namespace.
+        const rendered = new WeakSet<HTMLElement>();
+        const roots    = new WeakMap<HTMLElement, ShadowRoot>();
         const _connected = (Base.prototype as unknown as { connectedCallback?: () => void }).connectedCallback;
 
         (Base.prototype as unknown as { connectedCallback: unknown }).connectedCallback = function connectedCallback(this: HTMLElement)
         {
-            if (meta.shadow !== false && !this.shadowRoot)
+            if (!rendered.has(this))
             {
-                const root = this.attachShadow({ mode: meta.shadow ?? 'open' });
-                if (meta.style)    { const s = document.createElement('style'); s.textContent = meta.style; root.appendChild(s); }
-                if (meta.template) { const t = document.createElement('template'); t.innerHTML = meta.template; root.appendChild(t.content.cloneNode(true)); }
-            } else if (meta.template && !this.children.length)
-            {
-                this.innerHTML = meta.template;
+                rendered.add(this);
+                if (meta.shadow !== false)
+                {
+                    const existing = this.shadowRoot ?? roots.get(this);
+                    const root = existing ?? this.attachShadow({ mode: meta.shadow ?? 'closed' });
+                    roots.set(this, root);
+                    if (meta.style)    { const s = document.createElement('style'); s.textContent = meta.style; root.appendChild(s); }
+                    if (meta.template) { const t = document.createElement('template'); t.innerHTML = meta.template; root.appendChild(t.content.cloneNode(true)); }
+                } else if (meta.template && !this.children.length)
+                {
+                    this.innerHTML = meta.template;
+                }
             }
             if (_connected) _connected.call(this);
         };
 
-        if (!customElements.get(meta.tag))
-            customElements.define(meta.tag, Base);
-
+        Core.Define(meta.tag, Base as unknown as new (...a: unknown[]) => Element, HTMLElement);
         return Base;
     };
 }

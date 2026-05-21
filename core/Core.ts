@@ -686,6 +686,67 @@ export function Create(tag: string): Element | null
     return el;
 }
 
+/**
+ * Returns true when AriannA has already upgraded an Element via Namespace.Update().
+ * Uses the same flag as Namespace.Update/Core.Create, so checks are O(1).
+ */
+export function IsUpgraded(node: unknown): boolean
+{
+    return !!(node && typeof node === 'object'
+        && (node as { __ariannaUpgraded?: boolean }).__ariannaUpgraded === true);
+}
+
+/**
+ * Upgrade a single Element using the AriannA namespace registry.
+ * This is intentionally single-node and O(1): descriptor lookup by tag/namespace,
+ * then Namespace.Update(). It does not walk descendants.
+ */
+export function Upgrade(node: Node | Element | null | undefined): Element | null
+{
+    if (!(node instanceof Element)) return null;
+    if (IsUpgraded(node)) return node;
+
+    const d = GetDescriptor(node);
+    if (!d || !d.Custom || !d.Constructor) return node;
+
+    const ns = d.Namespace as unknown as { Update?: (el: Element, hint?: TypeDescriptor) => void };
+    if (ns && typeof ns.Update === 'function') {
+        try { ns.Update(node, d); }
+        catch (e) { console.warn('[Core.Upgrade] namespace.Update failed:', e); }
+    } else if (d.Update) {
+        try { d.Update(node); }
+        catch (e) { console.warn('[Core.Upgrade] descriptor.Update failed:', e); }
+    }
+    return node;
+}
+
+/**
+ * Explicit escape hatch for precomposed markup/fragments/SSR hydration tests.
+ * The default Markup IR path remains MutationObserver + O(1) single-node Upgrade().
+ * This method performs a lightweight DFS and calls Upgrade() per Element.
+ */
+export function UpgradeTree(root: Node | Element | Document | DocumentFragment | null | undefined): number
+{
+    if (!root) return 0;
+    let count = 0;
+
+    const visit = (node: Node): void => {
+        if (node instanceof Element) {
+            const before = IsUpgraded(node);
+            Upgrade(node);
+            if (!before && IsUpgraded(node)) count++;
+            for (let child = node.firstElementChild; child; child = child.nextElementSibling)
+                visit(child);
+            return;
+        }
+        for (let child = node.firstChild; child; child = child.nextSibling)
+            visit(child);
+    };
+
+    visit(root as Node);
+    return count;
+}
+
 // ── DOM Events static bus ─────────────────────────────────────────────────────
 
 /**
@@ -807,20 +868,7 @@ export const Observer = new MutationObserver((mutations: MutationRecord[]) => {
                 if (node instanceof Element)
                     node.dispatchEvent(new CustomEvent('arianna-wip:nodeadding', { detail }));
 
-                if (d && d.Custom && d.Constructor)
-                {
-                    // Prefer Namespace.Update — the Namespace owns the upgrade
-                    // logic (prototype-swap, body re-run, Component(el) install).
-                    // descriptor.Update is the legacy fallback path.
-                    const ns = d.Namespace as unknown as { Update?: (el: Element, hint?: unknown) => void };
-                    if (ns && typeof ns.Update === 'function') {
-                        try { ns.Update(node as Element, d); }
-                        catch (e) { console.warn('[Core.Observer] namespace.Update failed:', e); }
-                    } else if (d.Update) {
-                        try { d.Update(node as Element); }
-                        catch (e) { console.warn('[Core.Observer] descriptor.Update failed:', e); }
-                    }
-                }
+                if (node instanceof Element) Upgrade(node);
 
                 detail.state = { loading: false, loaded: true, name: 'Loaded' };
                 document.dispatchEvent(new CustomEvent('arianna-wip:nodeadded', { detail }));
@@ -1603,6 +1651,9 @@ function _buildCore()
         IndexCustom,
         Define,
         Create,
+        IsUpgraded,
+        Upgrade,
+        UpgradeTree,
         Events,
         Observer,
         Property,
