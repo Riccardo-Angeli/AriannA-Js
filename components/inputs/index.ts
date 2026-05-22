@@ -20,7 +20,7 @@
  *   on top of v2 reactive primitives. Tracked in TODO_RICHTEXTEDITOR_V2.md.
  */
 
-export { Button }      from './Button.ts';
+export { Button, ButtonDefaultSheet, ButtonStyleMap } from './Button.ts';
 export { Switch }      from './Switch.ts';
 export { Checkbox }    from './Checkbox.ts';
 export { Radio }       from './Radio.ts';

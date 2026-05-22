@@ -66,6 +66,7 @@ import Core, {
 } from './Core.ts';
 import { signal, effect, type Signal } from './Observable.ts';
 import { Stylesheet } from './Stylesheet.ts';
+import type { SheetObjectDef } from './Stylesheet.ts';
 import Rule from './Rule.ts';
 import { readDottedPath, writeDottedPath, makeSubAccessor, type SubAccessor } from './Real.ts';
 import Real from './Real.ts';
@@ -75,7 +76,7 @@ import Virtual, { VirtualNode } from './Virtual.ts';
 //  Public types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ShadowSetting = false | true | 'open' | 'close' | 'drop' | 'inset' | 'glow' | 'layered';
+export type ShadowSetting = false | true | 'open' | 'closed' | 'drop' | 'inset' | 'glow' | 'layered';
 export type RenderMode    = 'real' | 'virtual';
 
 export interface ComponentDef
@@ -84,7 +85,19 @@ export interface ComponentDef
     shadow? : ShadowSetting;
     render? : RenderMode;
     bus?    : string;
-    css?    : Record<string, string>;
+    css?    : ComponentStyleInput;
+}
+
+export type ComponentStyleInput =
+    | Stylesheet
+    | Rule
+    | Rule[]
+    | string
+    | Record<string, unknown>;
+
+export interface ComponentStyleMap
+{
+    [publicName: string]: string;
 }
 
 /**
@@ -119,6 +132,10 @@ export interface AriannaElement extends HTMLElement
 
     /** Current Stylesheet for this component. Assigning replaces it. */
     Sheet: Stylesheet | null;
+
+    /** Public render-root facade for closed Shadow DOM. */
+    readonly Shadow: { readonly Root: ShadowRoot | null };
+    readonly RenderRoot: ShadowRoot | Element;
 
     /** Reactive template (Vue-style DSL via core/Template.ts). */
     template: unknown;
@@ -444,6 +461,25 @@ function _installFacilities(el: Element): Element
             },
         },
 
+
+        // ── Shadow facade ──────────────────────────────────────────────────
+        // Closed ShadowRoot is not reachable through native .shadowRoot.
+        // AriannA exposes it through el.Shadow.Root for framework internals,
+        // tests, and trusted component/subclass authoring.
+        Shadow: {
+            configurable: true,
+            get(this: Element): { readonly Root: ShadowRoot | null } {
+                const host = this;
+                return Object.freeze({
+                    get Root(): ShadowRoot | null { return _getShadowRoot(host); },
+                });
+            },
+        },
+        RenderRoot: {
+            configurable: true,
+            get(this: Element): ShadowRoot | Element { return _getShadowRoot(this) ?? this; },
+        },
+
         // ── attrSignal accessor ────────────────────────────────────────────
         attrSignal: { configurable: true, writable: false, value(this: Element, name: string) {
             return stash.__attrSignals?.[name];
@@ -586,6 +622,19 @@ function _installFacilities(el: Element): Element
         if (mode !== false) _attachAriannaShadow(el, mode);
     }
 
+    // Apply the class-level default sheet BEFORE build(). This is the AriannA
+    // 2.0 styling contract: Component(tag, Base, css, def) seeds the instance
+    // Sheet.Current. build() may add behaviour/state, but should not be the
+    // place where the structural component stylesheet first appears.
+    {
+        const ctorWithSheet = (el as Element).constructor as unknown as {
+            __ariannaSheetDefault?: Stylesheet;
+        };
+        if (ctorWithSheet.__ariannaSheetDefault && !stash.__sheet) {
+            _applySheet(el, new Stylesheet(ctorWithSheet.__ariannaSheetDefault));
+        }
+    }
+
     // Call build() synchronously now that facilities are installed.
     // For classes that `extends Component(tag, Base)`, this is the only place
     // build() can be invoked automatically — the patched native constructor
@@ -633,7 +682,7 @@ function _installFacilities(el: Element): Element
         if (elHasTpl.template && !elHasTpl.__templateRendered) {
             elHasTpl.__templateRendered = true;
             const renderTarget: ParentNode =
-                (elHasTpl.shadowRoot as ParentNode | undefined) ?? (el as ParentNode);
+                _getShadowRoot(el) ?? (el as ParentNode);
             const signals = elHasTpl.__attrSignals ?? {};
             try {
                 if (typeof elHasTpl.template.attach === 'function') {
@@ -721,6 +770,54 @@ function rewriteHostWithArgs(src: string, replace: string): string
 }
 
 
+
+function _normaliseComponentSheet(input: ComponentStyleInput | undefined): Stylesheet | undefined
+{
+    if (!input) return undefined;
+    if (input instanceof Stylesheet) return new Stylesheet(input);
+    if (input instanceof Rule) return new Stylesheet([input]);
+    if (Array.isArray(input)) return new Stylesheet(input as Rule[]);
+    if (typeof input === 'string') return new Stylesheet(input);
+    if (typeof input === 'object') return new Stylesheet(input as SheetObjectDef);
+    return undefined;
+}
+
+function _escapeRegExp(src: string): string
+{
+    return src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function _rewriteShadowFacadeSelector(selectorText: string, el: Element): string
+{
+    const tag = el.tagName.toLowerCase();
+    const ctor = el.constructor as unknown as { StyleMap?: ComponentStyleMap };
+    const styleMap = ctor.StyleMap ?? {};
+    let selector = selectorText;
+
+    // Inside Shadow DOM, component-local styles may be authored as if they were
+    // normal page CSS:
+    //   s-button { ... }              -> :host { ... }
+    //   s-button[variant="x"] { ... } -> :host([variant="x"]) { ... }
+    //   s-button::label { ... }       -> .ar-btn__label { ... }
+    //   s-button::button { ... }      -> .ar-btn__native { ... }
+    // The compiled result is still a normal Rule/Stylesheet injected into the
+    // retained Shadow.Root.
+    selector = selector.replace(
+        new RegExp(`(^|,\\s*)${_escapeRegExp(tag)}(::[a-zA-Z][\\w-]*)`, 'g'),
+        (_m, pre: string, pseudo: string) => {
+            const key = pseudo.slice(2);
+            return pre + (styleMap[key] ?? pseudo);
+        },
+    );
+
+    selector = selector.replace(
+        new RegExp(`(^|,\\s*)${_escapeRegExp(tag)}(\\[[^\\]]+\\]|:[a-zA-Z-]+(?:\\([^)]*\\))?)*`, 'g'),
+        (_m, pre: string, suffix: string = '') => pre + (suffix ? `:host(${suffix})` : ':host'),
+    );
+
+    return selector;
+}
+
 function _applySheet(el: Element, next: Stylesheet | null): void
 {
     const stash = el as Element & {
@@ -751,6 +848,10 @@ function _applySheet(el: Element, next: Stylesheet | null): void
         let scoped = r.Text;
         if (useShadow) {
             // In shadow DOM, :root/& should become :host. :host stays.
+            // Also compile the AriannA facade selectors declared by the
+            // component's static StyleMap so users can author component-local
+            // sheets with normal-looking selectors.
+            scoped = _rewriteShadowFacadeSelector(scoped, el);
             scoped = scoped.replace(/(^|,\s*|\s)(:root|&)(?![\w-])/g, (_m, pre: string) => pre + ':host');
         } else {
             // In light DOM, every host-selector form becomes the tag selector.
@@ -881,8 +982,8 @@ interface ComponentCallable
 
     /** Define a custom element by extending the returned class. */
     (tag: string, base: new (...a: unknown[]) => Element): new (...a: unknown[]) => AriannaElement;
-    (tag: string, base: new (...a: unknown[]) => Element, css: Record<string, string>): new (...a: unknown[]) => AriannaElement;
-    (tag: string, base: new (...a: unknown[]) => Element, css: Record<string, string>, def: ComponentDef): new (...a: unknown[]) => AriannaElement;
+    (tag: string, base: new (...a: unknown[]) => Element, css: ComponentStyleInput): new (...a: unknown[]) => AriannaElement;
+    (tag: string, base: new (...a: unknown[]) => Element, css: ComponentStyleInput, def: ComponentDef): new (...a: unknown[]) => AriannaElement;
     (tag: string, base: new (...a: unknown[]) => Element, mixed: ComponentDef & Record<string, string>): new (...a: unknown[]) => AriannaElement;
 
     /* ── New v2 form — `new Component(tag, opts?)` ──────────────────────────
@@ -937,15 +1038,15 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
     const arg3 = args[2];
     const arg4 = args[3];
 
-    let css: Record<string, string> = {};
-    let def: ComponentDef            = {};
+    let css: ComponentStyleInput | undefined = undefined;
+    let def: ComponentDef = {};
 
     if (arg3 !== undefined) {
         if (_isMixedDef(arg3)) {
             def = arg3 as ComponentDef;
-            css = (arg3 as ComponentDef & Record<string, string>).css ?? {};
+            css = (arg3 as ComponentDef).css;
         } else {
-            css = arg3 as Record<string, string>;
+            css = arg3 as ComponentStyleInput;
             if (arg4) def = arg4 as ComponentDef;
         }
     }
@@ -975,6 +1076,7 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
     };
     (Bound as unknown as { __ariannaComponent: boolean }).__ariannaComponent = true;
     (Bound as unknown as { __ariannaDef: ComponentDef }).__ariannaDef         = def;
+    (Bound as unknown as { __ariannaSheetDefault?: Stylesheet }).__ariannaSheetDefault = _normaliseComponentSheet(css);
 
     const pretty = tag
         .replace(/^arianna-/, '')
@@ -995,7 +1097,7 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
         tag,
         Bound as unknown as new (...a: unknown[]) => Element,
         base as unknown as new (...a: unknown[]) => Element,
-        css,
+        {},
     );
     return Bound as unknown as new (...a: unknown[]) => Element;
 }
