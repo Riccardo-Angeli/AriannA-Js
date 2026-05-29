@@ -322,8 +322,6 @@ export function IndexCustom(d: TypeDescriptor): void
     for (const t of (d.Tags ?? [])) _indexTag(t, d);
 }
 
-// ── Type descriptor registry ──────────────────────────────────────────────────
-
 /**
  * Look up a type descriptor by tag name, constructor name, or Node instance.
  * Searches all registered namespaces (standard + custom).
@@ -519,6 +517,34 @@ export function Define(
 {
     const ct = tag.toLowerCase();
 
+    // ── Slide-args: tolerant 3-arg form ───────────────────────────────────
+    // Allow Core.Define(tag, ctor, style)  AND  Core.Define(tag, ctor, null, def).
+    // When the 3rd argument isn't a constructor function (e.g. plain object,
+    // Rule, Stylesheet, null, undefined), treat it as the style/def and
+    // default base to HTMLElement — the `extends Y` introspection below will
+    // then promote it to the right native interface if the user wrote
+    // `class X extends HTMLDivElement` (or SVGSVGElement, MathMLElement, …).
+    //
+    // Concretely accepted runtime forms:
+    //   Core.Define('case-3a', A3a)                                  base=auto
+    //   Core.Define('case-3a', A3a, { Background: 'red' })           base=auto, style=arg3
+    //   Core.Define('case-3a', A3a, null)                            base=auto
+    //   Core.Define('case-3a', A3a, null, { shadow: 'closed' })      base=auto, def=arg4
+    //   Core.Define('case-3a', A3a, HTMLDivElement, { ... })         classic typed form
+    {
+        const baseAny = base as unknown;
+        if (baseAny === null || baseAny === undefined)
+        {
+            base = HTMLElement;
+        }
+        else if (typeof baseAny !== 'function')
+        {
+            // 3rd arg is actually style/def — slide it.
+            style = baseAny as Record<string, string>;
+            base  = HTMLElement;
+        }
+    }
+
     // ── Introspect base from `class X extends Y { ... }` ─────────────────
     // When the user omits the base argument, scan the ctor body for an
     // `extends Y` clause. If Y is a known native interface (HTMLDivElement,
@@ -554,10 +580,27 @@ export function Define(
         } catch { /* introspection is best-effort */ }
     }
 
-    // Already registered? Return existing factory (idempotent).
+    // Already registered? Update mutable slots in place and reuse Factory.
+    //
+    // This is the hot-reload contract: a second Core.Define('case-1b', A1b_new,
+    // base, ruleInstance_new) does NOT create a new Factory (avoids memory
+    // leaks, broken prototype chains, double-define on the same tag), but it
+    // DOES update the descriptor's mutable fields so that the next markup
+    // upgrade and the next factory call see the new style / constructor.
+    //
+    // Mutable slots: Style (CSS rules / Rule / Stylesheet), Constructor (user
+    // class or function body). Interface / Tags / Name / Factory / Standard
+    // are immutable — they identify the registration itself.
+    //
+    // The factory closure in Namespace.Define must read these slots from
+    // `descriptor.Style` and `descriptor.Constructor` rather than capturing
+    // them as locals, otherwise the update is silent.
     const existing = GetDescriptor(ct);
     if (existing && existing.Factory)
     {
+        // Update mutable slots — never replace Factory or Interface.
+        if (typeof style !== 'undefined') existing.Style = style;
+        if (typeof constructor === 'function') existing.Constructor = constructor;
         return existing.Factory;
     }
 

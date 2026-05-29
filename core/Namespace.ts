@@ -138,14 +138,30 @@ const _cssPropertyMap: Map<string, string> = (() => {
  */
 function applyRulesToStyle(
     style: CSSStyleDeclaration,
-    rules: Record<string, string>,
+    rules: Record<string, string> | unknown,
 ): void
 {
     if (!style || !rules) return;
+    // ── Duck-type support for Rule / Stylesheet instances ─────────────────
+    // Some callers pass `new Rule(':host', { Background: 'red' })` or a
+    // Stylesheet as the 4th arg of Core.Define. Their CSS data is stored
+    // in private (#) slots, invisible to for…in. Extract them here so the
+    // remainder of this function (and every legacy call site) keeps the
+    // same plain-object contract.
+    if (typeof rules === 'object' && rules !== null) {
+        const r = rules as { Selector?: unknown; Properties?: unknown; Rules?: unknown };
+        if (Array.isArray(r.Rules)) {
+            for (const sub of r.Rules) applyRulesToStyle(style, sub);
+            return;
+        }
+        if (typeof r.Selector === 'string' && r.Properties && typeof r.Properties === 'object') {
+            rules = r.Properties as Record<string, string>;
+        }
+    }
     const styleRecord = style as unknown as Record<string, string>;
-    for (const Key in rules) {
+    for (const Key in rules as Record<string, string>) {
         if (!Object.prototype.hasOwnProperty.call(rules, Key)) continue;
-        const value = rules[Key];
+        const value = (rules as Record<string, string>)[Key];
         if (typeof value !== 'string') continue;
         // Map: user's PascalCase key → browser's exact camelCase property name.
         const camel = _cssPropertyMap.get(Key.toLowerCase());
@@ -691,8 +707,8 @@ export class Namespace
 
     Define(
         tag           : string,
-        ctor          : new (...a: never[]) => Element,
-        baseInterface?: new (...a: never[]) => Element,
+        ctor          : new (...a: unknown[]) => Element,
+        baseInterface?: new (...a: unknown[]) => Element,
         style?        : Record<string, string>,
     ): new (...a: unknown[]) => Element
     {
@@ -700,6 +716,19 @@ export class Namespace
         const _interface = baseInterface ?? this.base;
         const _style     = style ?? {};
         const isClass    = /^class[\s{]/.test(ctor.toString());
+
+        // ── Hot-reload anchor: liveDesc points to THIS registration's descriptor
+        // once it's created (see end of Namespace.Define). It exists to let the
+        // factory and Update closures read mutable slots (Style, Constructor)
+        // through the descriptor rather than capturing them as locals — so that
+        // a second Core.Define('case-1b', A1b_new, base, ruleInstance_new) call
+        // (which the Core-level idempotent guard handles by updating the
+        // descriptor's Style/Constructor in-place) actually takes effect on
+        // the next factory call or markup upgrade. Without this, the closure
+        // captures the FIRST registration's style forever.
+        let liveDesc: TypeDescriptor | null = null;
+        const liveStyle = () => (liveDesc?.Style ?? _style) as Record<string, string>;
+        const liveCtor  = () => (liveDesc?.Constructor ?? ctor) as new (...args: unknown[]) => Element;
 
         // ── Cement the prototype chain: ctor → _interface ────────────────────
         // Core.Extends(Sub, Super) sets:
@@ -805,17 +834,17 @@ export class Namespace
                 _installFragileProxy(el, fragileSpec);
             }
 
-            // Apply default _style inline using the Golem v1 pattern via
-            // applyRulesToStyle(). The browser's CSSStyleDeclaration is the
-            // source of truth for which PascalCase keys translate to which
-            // camelCase property names. No regex, no custom mapping table.
-            const applyInlineStyle = () => {
-                if (!Object.keys(_style).length) return;
-                const style = (el as HTMLElement).style;
-                if (!style) return;
-                applyRulesToStyle(style, _style);
-            };
-            applyInlineStyle();
+            // Apply default style. Now supports plain object, Rule instance,
+            // and Stylesheet instance — applyRulesToStyle duck-types the input
+            // and extracts the relevant CSS properties before applying inline.
+            // Read via liveStyle() so a Core.Define hot-reload takes effect.
+            {
+                const curStyle = liveStyle();
+                if (curStyle) {
+                    const elStyle = (el as HTMLElement).style;
+                    if (elStyle) applyRulesToStyle(elStyle, curStyle);
+                }
+            }
 
             // Install Component facilities if requested. For CLASS form this is
             // ALREADY done by the class body itself if it calls Component(this);
@@ -828,15 +857,22 @@ export class Namespace
             }
 
             // Run user's constructor body for FUNCTION form. CLASS form already
-            // ran the body inside Reflect.construct above.
+            // ran the body inside Reflect.construct above. Read via liveCtor()
+            // so a Core.Define hot-reload uses the new function body.
             if (!isClass) {
-                try { (ctor as unknown as (this: Element, ...a: unknown[]) => void).apply(el, args); }
+                try { (liveCtor() as unknown as (this: Element, ...a: unknown[]) => void).apply(el, args); }
                 catch (e) { console.warn(`[arianna] ${_tag} FUNCTION body failed:`, e); }
             }
 
             // Re-apply style AFTER body, idempotent — restores anything the
             // body may have accidentally cleared.
-            applyInlineStyle();
+            {
+                const curStyle = liveStyle();
+                if (curStyle) {
+                    const elStyle2 = (el as HTMLElement).style;
+                    if (elStyle2) applyRulesToStyle(elStyle2, curStyle);
+                }
+            }
 
             // Mark as upgraded so markup-upgrade path (Update) doesn't re-run
             // the body when the same factory-instantiated element is appended
@@ -913,10 +949,18 @@ export class Namespace
                 }
 
                 // Apply inline style as a robust fallback (same as factory path).
-                // Uses the Golem v1 pattern: applyRulesToStyle.
-                if (Object.keys(_style).length > 0) {
-                    const style = (el as HTMLElement).style;
-                    if (style) applyRulesToStyle(style, _style);
+                // applyRulesToStyle duck-types Rule / Stylesheet, so we MUST NOT
+                // guard with Object.keys(_style).length > 0 — on a Rule instance
+                // Object.keys returns [] because the data lives in #properties
+                // (private), and the check would falsely skip valid Rule input.
+                // applyRulesToStyle itself handles the empty-input no-op case.
+                // Read via liveStyle() for Core.Define hot-reload support.
+                {
+                    const curStyle = liveStyle();
+                    if (curStyle) {
+                        const style = (el as HTMLElement).style;
+                        if (style) applyRulesToStyle(style, curStyle);
+                    }
                 }
 
                 if (wantsAutoComp && typeof win.Component === 'function') {
@@ -924,8 +968,10 @@ export class Namespace
                     catch (e) { console.warn(`[arianna] Component(el) on markup-upgrade failed for <${_tag}>:`, e); }
                 }
                 if (!isClass) {
-                    // FUNCTION form — safely run the body with `this = el`
-                    try { (ctor as unknown as (this: Element) => void).call(el); }
+                    // FUNCTION form — safely run the body with `this = el`.
+                    // liveCtor() returns the most recent Core.Define-registered
+                    // function (hot-reload).
+                    try { (liveCtor() as unknown as (this: Element) => void).call(el); }
                     catch (e) { console.warn(`[arianna] FUNCTION body on markup-upgrade failed for <${_tag}>:`, e); }
                 }
                 // CLASS form on markup-upgrade: we CANNOT run the constructor
@@ -953,25 +999,38 @@ export class Namespace
         this.Custom.Tags[_tag]            = descriptor;
         this.tags[_tag]                    = descriptor;
 
+        // Hot-reload anchor: now that the descriptor exists, point liveDesc at
+        // it so the factory and Update closures (created above but yet to run)
+        // read Style/Constructor via the descriptor — which Core.Define mutates
+        // in-place on every subsequent register call for the same tag.
+        liveDesc = descriptor;
+
         // Apply default CSS as a stylesheet rule for the tag.
         //
         // Generates the rule text by applying _style to a probe
         // CSSStyleDeclaration (same Golem v1 pattern as applyRulesToStyle)
         // and reading back the browser-normalised cssText — which already
         // contains valid kebab-case property names. No regex.
-        if (Object.keys(_style).length > 0) {
-            try {
-                const styleEl = document.createElement('style');
-                const probe = document.createElement('style').style;
-                applyRulesToStyle(probe, _style);
-                const cssText = probe.cssText;   // → 'background: red; font-weight: 700; ...'
+        //
+        // NB: we DELIBERATELY do NOT pre-guard with Object.keys(_style).length —
+        // on a Rule instance the data lives in #private slots, so Object.keys
+        // returns [] and the check would falsely skip valid CSS. Instead we
+        // POST-guard on probe.cssText: if applyRulesToStyle (which duck-types
+        // Rule / Stylesheet) yields any CSS text, inject the <style>; if not,
+        // skip silently (no empty rulesets polluting head).
+        try {
+            const styleEl = document.createElement('style');
+            const probe = document.createElement('style').style;
+            applyRulesToStyle(probe, _style);
+            const cssText = probe.cssText;   // → 'background: red; font-weight: 700; ...'
+            if (cssText && cssText.trim().length > 0) {
                 // Dual selector: matches both <my-tag> (markup-instantiated,
                 // HTMLUnknownElement) and <baseTag is="my-tag"> (factory-built).
                 styleEl.textContent = `${_tag},[is="${_tag}"]{${cssText}}`;
                 styleEl.setAttribute('data-arianna-tag-style', _tag);
                 (document.head ?? document.documentElement).appendChild(styleEl);
-            } catch { /* DOM not ready, skip */ }
-        }
+            }
+        } catch { /* DOM not ready, skip */ }
 
         // Fire 'arianna-wip:defined' for listeners
         if (typeof document !== 'undefined') {
@@ -1021,40 +1080,79 @@ export class Namespace
             const targetTag = desc.Tags?.[0];
             const baseCtor  = desc.Constructor;
             const globalScope = (typeof window !== 'undefined' ? window : globalThis) as unknown as Record<string, unknown>;
-            // Pass 1 (STRICT): accept ONLY a candidate whose __ariannaTag equals
-            // our target tag. This is the reliable signal — multiple components
-            // share the same base (all `extends Component(tag, HTMLElement)`), so
-            // "extends the same base" is NOT sufficient to disambiguate. Picking
-            // the first base-matching class is exactly the bug that reprototyped
-            // <arianna-code-editor> to ArrayModifierElement.
-            for (const key of Object.keys(globalScope)) {
-                const candidate = globalScope[key];
-                if (typeof candidate !== 'function') continue;
-                if (candidate === baseCtor) continue;
-                const candidateTag = (candidate as { __ariannaTag?: string }).__ariannaTag;
-                if (!candidateTag || !targetTag) continue;          // need a tag to match on
-                if (candidateTag !== targetTag) continue;           // must match exactly
-                // Sanity: it should still extend the declared base.
-                const candidateProto = (candidate as { prototype?: object }).prototype;
-                const baseProto = (baseCtor as { prototype?: object }).prototype;
-                if (candidateProto && baseProto) {
-                    let p: object | null = Object.getPrototypeOf(candidateProto);
-                    let ok = false;
-                    while (p) { if (p === baseProto) { ok = true; break; } p = Object.getPrototypeOf(p); }
-                    if (!ok) continue;
+
+            // ── helper: ensure candidate extends baseCtor ────────────────
+            const extendsBase = (candidate: Function): boolean => {
+                if (candidate === baseCtor) return false;
+                const cp = (candidate as { prototype?: object }).prototype;
+                const bp = (baseCtor as { prototype?: object }).prototype;
+                if (!cp || !bp) return true;
+                let p: object | null = Object.getPrototypeOf(cp);
+                while (p) {
+                    if (p === bp) return true;
+                    p = Object.getPrototypeOf(p);
                 }
-                userClass = candidate as Function;
-                break;
+                return false;
+            };
+
+            // ── STRATEGY 0: PascalCase-from-tag direct lookup ──────────────
+            // Components are registered on window with a PascalCase key derived
+            // from the kebab tag, with the namespace prefix stripped:
+            //   arianna-button         → window.Button
+            //   arianna-code-editor    → window.CodeEditor
+            //   arianna-keyframe-editor→ window.KeyframeEditor
+            //   papa                   → window.Papa
+            //   my-comp                → window.MyComp
+            //
+            // This is fast (O(1)), unambiguous, and works for any component
+            // that follows the convention — even when __ariannaTag was never
+            // stamped (which is the common case, since Component.Define() is
+            // an opt-in API most user code does NOT call).
+            if (targetTag) {
+                const parts = targetTag.split('-').filter(Boolean);
+                const start = parts[0] === 'arianna' ? 1 : 0;
+                const pretty = parts.slice(start).map(seg =>
+                    seg.charAt(0).toUpperCase() + seg.slice(1)
+                ).join('');
+                if (pretty) {
+                    const direct = globalScope[pretty];
+                    if (typeof direct === 'function' && extendsBase(direct as Function)) {
+                        userClass = direct as Function;
+                    }
+                }
             }
-            // NOTE: deliberately NO permissive pass. If no class carries a
-            // matching __ariannaTag, we leave userClass null and fall through to
-            // the base Constructor below. Reprototyping the node to the WRONG
-            // component (any class that merely extends the same base) is worse
-            // than leaving it on the base: a wrong prototype silently breaks
+
+            // ── STRATEGY 1 (STRICT): __ariannaTag scan ─────────────────────
+            // Accept ONLY a candidate whose __ariannaTag equals our target
+            // tag. This is the reliable signal — multiple components share
+            // the same base (all `extends Component(tag, HTMLElement)`), so
+            // "extends the same base" is NOT sufficient to disambiguate.
+            // Picking the first base-matching class is exactly the bug that
+            // reprototyped <arianna-code-editor> to ArrayModifierElement.
+            //
+            // NOTE on enumerable-vs-non-enumerable: components register on
+            // window with `enumerable: false`, so `Object.keys(window)` does
+            // NOT see them — `Object.getOwnPropertyNames` is required.
+            if (!userClass) {
+                for (const key of Object.getOwnPropertyNames(globalScope)) {
+                    const candidate = globalScope[key];
+                    if (typeof candidate !== 'function') continue;
+                    if (candidate === baseCtor) continue;
+                    const candidateTag = (candidate as { __ariannaTag?: string }).__ariannaTag;
+                    if (!candidateTag || !targetTag) continue;          // need a tag to match on
+                    if (candidateTag !== targetTag) continue;           // must match exactly
+                    if (!extendsBase(candidate as Function)) continue;  // sanity: extends declared base
+                    userClass = candidate as Function;
+                    break;
+                }
+            }
+            // NOTE: deliberately NO permissive base-only pass. If no class
+            // matches by PascalCase name AND no class carries a matching
+            // __ariannaTag, leave userClass null and fall through to the
+            // base Constructor. Reprototyping the node to the WRONG component
+            // (any class that merely extends the same base) is worse than
+            // leaving it on the base: a wrong prototype silently breaks
             // build()/Value/etc., which is precisely the failure this avoids.
-            // The robust fix for markup-only components is Component.Boot()/an
-            // explicit registration so descriptor.Class is set without relying
-            // on a global-scope scan.
             if (userClass) {
                 (desc as { Class?: Function | null }).Class = userClass;
             }
@@ -1136,11 +1234,17 @@ export class Namespace
             catch (e) { console.warn(`[arianna] fragile proxy install failed on <${desc.Tags[0]}>:`, e); }
         }
 
-        // Step 3: apply default CSS inline (Golem v1 pattern)
-        const styleRules = (desc.Style ?? {}) as Record<string, string>;
-        if (Object.keys(styleRules).length > 0) {
+        // Step 3: apply default CSS inline (Golem v1 pattern).
+        //
+        // NB: we MUST NOT guard with `Object.keys(styleRules).length > 0` —
+        // on a Rule instance (`new Rule(':host', {...})`) Object.keys returns
+        // `[]` because the data lives in #private slots, and the check would
+        // falsely skip a perfectly valid CSS source. applyRulesToStyle itself
+        // handles the empty-plain-object no-op case AND duck-types Rule /
+        // Stylesheet instances (extracts .Properties before iterating).
+        if (desc.Style) {
             const style = (node as HTMLElement).style;
-            if (style) applyRulesToStyle(style, styleRules);
+            if (style) applyRulesToStyle(style, desc.Style);
         }
 
         // Step 4: Component(this) auto-install — THE single facility installer.
@@ -1171,6 +1275,35 @@ export class Namespace
         if (wantsAutoComponent && typeof win.Component === 'function') {
             try { win.Component(node); }
             catch (e) { console.warn(`[arianna] Component(el) failed for <${desc.Tags[0]}>`, e); }
+        }
+        else if (desc.Declaration === 'FUNCTION') {
+            // ── FUNCTION-body execution (non-Component path) ─────────────────
+            //
+            // The refactor that consolidated everything under _installFacilities
+            // (the "Component(this) auto-install" branch above) covers EVERY
+            // arianna-* tag and any tag whose ctor explicitly opts in. It does
+            // NOT cover the legitimate non-arianna FUNCTION-form path used by
+            // `Core.Define('case-1a', A1a, HTMLElement, { … })` style tests
+            // and by user code that registers plain function constructors for
+            // tags outside the arianna-* namespace.
+            //
+            // For those, the body of `function A1a() { this.textContent = … }`
+            // must still be invoked with `this = node` once the prototype is
+            // spliced (Step 1 above). Without this branch the body is silently
+            // skipped — the element shows up with its inline default CSS
+            // applied (the `_style` argument to Core.Define) but with NO
+            // textContent, NO event listeners, NO state set by the ctor body.
+            // That is the "barra bianca" symptom: visible because of the CSS
+            // default, empty because the body never ran.
+            //
+            // CLASS-form ctors cannot be invoked here — a class constructor
+            // can only run via `new`, and we already have the element from
+            // the HTML parser / createElement path. Users wanting setup logic
+            // on markup-instantiated CLASS-form components must put it in
+            // `build()` (handled by _installFacilities when wantsAutoComponent
+            // is true).
+            try { (ctor as unknown as (this: Element) => void).call(node); }
+            catch (e) { console.warn(`[arianna] FUNCTION body failed for <${desc.Tags[0]}>:`, e); }
         }
 
         return node;
@@ -1392,8 +1525,8 @@ export class Namespace
             // (which lives on the instance) gets invoked correctly.
             Define        : (
                 tag: string,
-                ctor: new (...a: never[]) => Element,
-                baseInterface?: new (...a: never[]) => Element,
+                ctor: new (...a: unknown[]) => Element,
+                baseInterface?: new (...a: unknown[]) => Element,
                 style?: Record<string, string>,
             ) => self.Define(tag, ctor, baseInterface, style),
         };

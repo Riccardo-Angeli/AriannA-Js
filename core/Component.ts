@@ -724,10 +724,17 @@ function _installFacilities(el: Element): Element
         // Use the browser's CSSStyleDeclaration via bracket notation
         // (camelCase) — same Golem v1 pattern as Namespace.applyRulesToStyle.
         // The browser handles the kebab translation internally.
+        //
+        // def.css is typed as ComponentStyleInput (union of Stylesheet | Rule |
+        // Rule[] | string | Record<string, unknown>); only the record-shape is
+        // iterable as a flat key-value map here, so narrow explicitly.
+        const cssMap = def.css as Record<string, unknown>;
         const style = (el as HTMLElement).style as unknown as Record<string, string>;
-        for (const k of Object.keys(def.css)) {
+        for (const k of Object.keys(cssMap)) {
             const camelKey = k[0].toLowerCase() + k.slice(1);
-            try { style[camelKey] = def.css[k]; }
+            const v = cssMap[k];
+            if (typeof v !== 'string') continue;
+            try { style[camelKey] = v; }
             catch { /* unsupported property — skip */ }
         }
     }
