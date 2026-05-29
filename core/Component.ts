@@ -71,18 +71,40 @@ import Rule from './Rule.ts';
 import { readDottedPath, writeDottedPath, makeSubAccessor, type SubAccessor } from './Real.ts';
 import Real from './Real.ts';
 import Virtual, { VirtualNode } from './Virtual.ts';
+import {
+    AttachAriannaShadow,
+    RenderIntoAriannaShadow,
+    IsAriannaShadow,
+    IsIframeBackend,
+    type AriannaShadow,
+    type AriannaShadowOptions,
+} from './Shadow.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Public types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ShadowSetting = false | true | 'open' | 'closed' | 'drop' | 'inset' | 'glow' | 'layered';
+/**
+ * Shadow mode setting. See SHADOW.md for the architectural model.
+ *   - 'open' / 'closed' → native attachShadow with given mode; falls back to
+ *                         AriannaShadow (light backend) on failure
+ *   - 'iframe'          → AriannaShadow with iframe backend (hard isolation)
+ *   - 'arianna'         → AriannaShadow with light backend, forced even when
+ *                         native would work (useful for testing the polyfill)
+ *   - true              → same as 'closed'
+ *   - false             → no shadow (template renders into host's light DOM)
+ *   - 'drop'/'inset'/'glow'/'layered' → legacy v1 values, treated as 'closed'
+ */
+export type ShadowSetting = false | true | 'open' | 'closed' | 'iframe' | 'arianna' | 'drop' | 'inset' | 'glow' | 'layered';
 export type RenderMode    = 'real' | 'virtual';
 
 export interface ComponentDef
 {
     attrs?  : string[];
     shadow? : ShadowSetting;
+    /** Options for the AriannaShadow iframe backend (used when shadow === 'iframe').
+     *  See AriannaShadowOptions in Shadow.ts: sandbox, bridgeEvents, projection, width, height, autoResize. */
+    iframe? : AriannaShadowOptions;
     render? : RenderMode;
     bus?    : string;
     css?    : ComponentStyleInput;
@@ -176,27 +198,145 @@ const BUSES: Record<string, Signal<unknown[]>> = {};
 const DEF_KEYS = new Set(['attrs', 'shadow', 'render', 'bus', 'css']);
 
 
-function _getShadowRoot(el: Element): ShadowRoot | null
+function _getShadowRoot(el: Element): ShadowRoot | AriannaShadow | null
 {
-    return ((el as unknown as Record<symbol, unknown>)[SHADOW_ROOT] as ShadowRoot | undefined)
+    return ((el as unknown as Record<symbol, unknown>)[SHADOW_ROOT] as (ShadowRoot | AriannaShadow) | undefined)
         ?? ((el as HTMLElement).shadowRoot ?? null);
 }
 
-function _attachAriannaShadow(el: Element, mode: 'open' | 'closed' = 'closed'): ShadowRoot | null
+/**
+ * Attach a shadow root to `el` according to the requested mode. Implements the
+ * escalation policy documented in SHADOW.md §0.3–§0.4 and §8:
+ *
+ *   - 'iframe'  → AriannaShadow with iframe backend (hard isolation)
+ *   - 'arianna' → AriannaShadow with light backend (force polyfill)
+ *   - 'open'    → THE DEFAULT. Try native attachShadow({mode:'open'}); if it
+ *                 throws (HTMLUnknownElement / non-standard tag), fall back to
+ *                 the AriannaShadow LIGHT backend (also open/inspectable).
+ *                 This is the only mode that accepts non-standard tags.
+ *   - 'closed'  → OPT-IN EXCEPTION. Native attachShadow({mode:'closed'}) ONLY.
+ *                 Requires a standard, attachShadow-capable element. Does NOT
+ *                 fall back to an AriannA backend (no silent downgrade to open).
+ *   - false     → no shadow (caller checks before calling this)
+ *
+ * The returned value is one of:
+ *   - native ShadowRoot (open or closed)
+ *   - AriannaShadow (light backend, always open)
+ *   - AriannaShadow (iframe backend)
+ *   - null (closed on an incapable element, or every attempt failed)
+ *
+ * All non-null types are stored under `el[Symbol.for('arianna.shadow.root')]`.
+ * Use `IsAriannaShadow()` to distinguish from native, and `shadow.Backend`
+ * (or `IsIframeBackend()`) to distinguish the polyfill backend. There is NO
+ * separate IframeShadow type — the iframe is a backend of AriannaShadow.
+ */
+function _attachAriannaShadow(
+    el: Element,
+    mode: 'open' | 'closed' | 'iframe' | 'arianna' = 'open',
+    iframeOpts?: AriannaShadowOptions,
+): ShadowRoot | AriannaShadow | null
 {
     const existing = _getShadowRoot(el);
     if (existing) return existing;
+
+    // ── Mode: 'iframe' → AriannaShadow with iframe backend ──────────────
+    if (mode === 'iframe') {
+        try {
+            return AttachAriannaShadow(el, 'closed', { ...iframeOpts, backend: 'iframe' });
+        } catch (e) {
+            console.warn('[arianna] AriannaShadow (iframe backend) failed:', e);
+            return null;
+        }
+    }
+
+    // ── Mode: 'arianna' → force light backend ───────────────────────────
+    if (mode === 'arianna') {
+        try {
+            return AttachAriannaShadow(el, 'closed', { backend: 'light' });
+        } catch (e) {
+            console.warn('[arianna] AriannaShadow (light backend, forced) failed:', e);
+            return null;
+        }
+    }
+
+    // ── Mode: 'open' / 'closed' → native attachShadow ──────────────────────
+    //
+    // Policy (SHADOW.md §0.3–§0.4, §8):
+    //   • 'open'   → try native open; on failure (HTMLUnknownElement / non-
+    //                standard tag) fall back to the AriannaShadow LIGHT backend,
+    //                which is ALSO open/inspectable. This is the default and the
+    //                only mode that accepts non-standard tags.
+    //   • 'closed' → native CLOSED shadow via attachShadow. Requires a native
+    //                attachShadow-capable element (standard tag). Does NOT fall
+    //                back to an AriannA backend: a silent downgrade from native-
+    //                closed to light-open would violate the author's intent.
+    //
+    // NOTE on customElements.define (policy §0.4): closed is the ONLY mode that
+    // should ever touch the native registry. `attachShadow({mode:'closed'})`
+    // already gives a real, browser-managed CLOSED root on any HTMLElement, so
+    // closed encapsulation works here WITHOUT define. A full `customElements.
+    // define` for closed (to also get native UPGRADE lifecycle) requires the
+    // defined class to BE the AriannA bridge AND the manual upgrade path
+    // (Namespace.Update / Core.Observer) to SKIP natively-defined tags — neither
+    // coordination exists yet. Until that is built and tested, we deliberately
+    // do NOT call define here: doing so would make the browser upgrade <tag> to
+    // a class that conflicts with AriannA's prototype-splice. See _registerClosed
+    // CustomElement below (kept, unused) for the registration primitive.
+    const nativeMode = mode === 'open' ? 'open' : 'closed';
     try {
-        const root = (el as HTMLElement).attachShadow({ mode });
+        const root = (el as HTMLElement).attachShadow({ mode: nativeMode });
         Object.defineProperty(el, SHADOW_ROOT, {
             value: root, enumerable: false, configurable: false, writable: false,
         });
         return root;
     } catch (e) {
-        console.warn('[arianna] attachShadow failed — element type does not support Shadow DOM:', e);
+        if (mode === 'closed') {
+            console.warn(
+                '[arianna] shadow:\'closed\' requires a native attachShadow-capable, ' +
+                'standard-tag element. Non-standard tags cannot use closed shadow; ' +
+                'use the default \'open\' (light backend) or \'iframe\' instead.', e,
+            );
+            return null;
+        }
+        // 'open': native failed (non-standard tag) → fall through to light backend.
+    }
+    try {
+        return AttachAriannaShadow(el, 'open', { backend: 'light' });
+    } catch (e) {
+        console.warn('[arianna] AriannaShadow (light backend) failed:', e);
         return null;
     }
 }
+
+// ── Closed-mode native registration primitive (NOT yet wired — see note above)
+//
+// Per policy §0.4, customElements.define must be used ONLY for shadow:'closed'.
+// This primitive registers `tag` as an autonomous custom element exactly once,
+// rejecting non-standard tags. It is intentionally NOT called yet: wiring it
+// requires coordinating with the manual upgrade path so the two upgrade
+// mechanisms don't collide (the defined class must delegate to AriannA, and
+// Namespace.Update must skip natively-defined tags). Kept here so that work has
+// a single, correct registration point when it is built and testable.
+const _closedDefined = new Set<string>();
+function _registerClosedCustomElement(tag: string): boolean
+{
+    if (_closedDefined.has(tag)) return true;
+    if (typeof customElements === 'undefined' || !customElements) return false;
+    const valid = /^[a-z][a-z0-9._]*-[a-z0-9._-]*$/.test(tag);
+    if (!valid) return false;
+    try { if (customElements.get(tag)) { _closedDefined.add(tag); return true; } } catch { /* ignore */ }
+    try {
+        const ClosedElement = class extends HTMLElement {};
+        Object.defineProperty(ClosedElement, 'name', { value: 'AriannaClosed_' + tag });
+        customElements.define(tag, ClosedElement);
+        _closedDefined.add(tag);
+        return true;
+    } catch (e) {
+        console.warn('[arianna] customElements.define failed for closed tag <' + tag + '>:', e);
+        return false;
+    }
+}
+void _registerClosedCustomElement;
 
 function _bus(parentTag: string): Signal<unknown[]>
 {
@@ -468,16 +608,16 @@ function _installFacilities(el: Element): Element
         // tests, and trusted component/subclass authoring.
         Shadow: {
             configurable: true,
-            get(this: Element): { readonly Root: ShadowRoot | null } {
+            get(this: Element): { readonly Root: ShadowRoot | AriannaShadow | null } {
                 const host = this;
                 return Object.freeze({
-                    get Root(): ShadowRoot | null { return _getShadowRoot(host); },
+                    get Root(): ShadowRoot | AriannaShadow | null { return _getShadowRoot(host); },
                 });
             },
         },
         RenderRoot: {
             configurable: true,
-            get(this: Element): ShadowRoot | Element { return _getShadowRoot(this) ?? this; },
+            get(this: Element): ShadowRoot | AriannaShadow | Element { return _getShadowRoot(this) ?? this; },
         },
 
         // ── attrSignal accessor ────────────────────────────────────────────
@@ -565,9 +705,13 @@ function _installFacilities(el: Element): Element
         }},
     });
 
-    // Apply def-driven features stored on the constructor.
-    const ctor = el.constructor as unknown as { __ariannaDef?: ComponentDef };
-    const def  = ctor.__ariannaDef ?? {};
+    // Apply def-driven features. The def is PER-TAG, stored on the descriptor
+    // (keyed by the element's tag), NOT on the constructor — because the
+    // Component class link is shared across all tags with the same base.
+    // Descriptor is the single source of truth (anti-rot rule 3).
+    const _elTag = el.tagName.toLowerCase();
+    const _desc  = GetDescriptor(_elTag) as { Def?: ComponentDef; __ariannaSheetDefault?: Stylesheet } | false;
+    const def    = (_desc && _desc.Def) ? _desc.Def : {};
 
     if (def.attrs && def.attrs.length) _wireAttrs(el, def.attrs);
     if (def.bus) {
@@ -606,20 +750,27 @@ function _installFacilities(el: Element): Element
     //  guards `if (!hostWithTpl.shadowRoot)` so it is a no-op for these.
     //
     //  Mode resolution: def.shadow === false  → skip (light DOM opt-out)
-    //                   def.shadow === 'open' → open
-    //                   anything else         → closed (default)
+    //                   def.shadow === 'closed' → closed (native customElements; opt-in exception)
+    //                   anything else (incl. undefined) → 'open' (the DEFAULT, §0.3)
     // ─────────────────────────────────────────────────────────────────────
     {
-        const ctorWithDef = (el as Element).constructor as unknown as {
-            __ariannaDef?: { shadow?: 'open' | 'closed' | boolean };
-        };
-        const def       = ctorWithDef.__ariannaDef ?? {};
-        const defShadow = def.shadow;
-        const mode: 'open' | 'closed' | false =
-            defShadow === false ? false :
-            defShadow === 'open' ? 'open' :
-            'closed';
-        if (mode !== false) _attachAriannaShadow(el, mode);
+        // Shadow mode from the same per-tag descriptor def resolved above.
+        const defShadow = (def as { shadow?: ShadowSetting }).shadow;
+        const iframeOpts = (def as { iframe?: AriannaShadowOptions }).iframe;
+        // Resolve to one of: false | 'open' | 'closed' | 'iframe' | 'arianna'.
+        // DEFAULT IS 'open' (COMPONENTS.md §0.3 / SHADOW.md §0.3): open is what
+        // lets AriannA accept non-standard tags via its own upgrade + light
+        // backend fallback, and keeps Shadow.Root inspectable. 'closed' is the
+        // explicit opt-in exception (native customElements; standard tag only).
+        const mode: false | 'open' | 'closed' | 'iframe' | 'arianna' =
+            defShadow === false                ? false       :
+            defShadow === 'closed'             ? 'closed'    :
+            defShadow === 'iframe'             ? 'iframe'    :
+            defShadow === 'arianna'            ? 'arianna'   :
+            // 'open', true, undefined, and legacy v1 values (drop/inset/glow/
+            // layered) all resolve to the default: 'open'.
+            'open';
+        if (mode !== false) _attachAriannaShadow(el, mode, iframeOpts);
     }
 
     // Apply the class-level default sheet BEFORE build(). This is the AriannA
@@ -627,11 +778,10 @@ function _installFacilities(el: Element): Element
     // Sheet.Current. build() may add behaviour/state, but should not be the
     // place where the structural component stylesheet first appears.
     {
-        const ctorWithSheet = (el as Element).constructor as unknown as {
-            __ariannaSheetDefault?: Stylesheet;
-        };
-        if (ctorWithSheet.__ariannaSheetDefault && !stash.__sheet) {
-            _applySheet(el, new Stylesheet(ctorWithSheet.__ariannaSheetDefault));
+        // Default sheet from the per-tag descriptor (resolved above as _desc).
+        const sheetDefault = _desc ? _desc.__ariannaSheetDefault : undefined;
+        if (sheetDefault && !stash.__sheet) {
+            _applySheet(el, new Stylesheet(sheetDefault));
         }
     }
 
@@ -642,7 +792,7 @@ function _installFacilities(el: Element): Element
     // schedule would fail the contract of test 3.1 which reads `trace` SYNC
     // right after `new MyComp(opts)`.
     //
-    // Args: read from el.__buildArgs which the Bound constructor stashed
+    // Args: read from el.__buildArgs which the Component constructor stashed
     // before delegating to ComponentFn. Falls back to [] (markup / Core.Create
     // path: no constructor args available).
     //
@@ -681,14 +831,34 @@ function _installFacilities(el: Element): Element
         };
         if (elHasTpl.template && !elHasTpl.__templateRendered) {
             elHasTpl.__templateRendered = true;
-            const renderTarget: ParentNode =
-                _getShadowRoot(el) ?? (el as ParentNode);
+            const root = _getShadowRoot(el);
             const signals = elHasTpl.__attrSignals ?? {};
             try {
-                if (typeof elHasTpl.template.attach === 'function') {
-                    elHasTpl.template.attach(renderTarget, el as unknown as object, signals);
-                } else if (typeof elHasTpl.template.mount === 'function') {
-                    elHasTpl.template.mount(renderTarget as Element, el as unknown as object);
+                if (IsAriannaShadow(root)) {
+                    // AriannaShadow (either backend — light or iframe): render the
+                    // template into a transient fragment, then pass it to
+                    // RenderIntoAriannaShadow. The function branches internally on
+                    // shadow.Backend: 'light' projects into host light DOM,
+                    // 'iframe' imports into the iframe contentDocument. We don't
+                    // distinguish backends here — that's the whole point of having
+                    // a single shadow type with a Backend field.
+                    const ariannaShadow = root as AriannaShadow;
+                    const tmpHost = document.createDocumentFragment();
+                    if (typeof elHasTpl.template.attach === 'function') {
+                        elHasTpl.template.attach(tmpHost as unknown as ParentNode, el as unknown as object, signals);
+                    } else if (typeof elHasTpl.template.mount === 'function') {
+                        elHasTpl.template.mount(tmpHost as unknown as Element, el as unknown as object);
+                    }
+                    RenderIntoAriannaShadow(ariannaShadow, tmpHost);
+                } else {
+                    // Native ShadowRoot or no shadow at all: render directly
+                    // into the target (existing behaviour).
+                    const renderTarget: ParentNode = (root as ParentNode | null) ?? (el as ParentNode);
+                    if (typeof elHasTpl.template.attach === 'function') {
+                        elHasTpl.template.attach(renderTarget, el as unknown as object, signals);
+                    } else if (typeof elHasTpl.template.mount === 'function') {
+                        elHasTpl.template.mount(renderTarget as Element, el as unknown as object);
+                    }
                 }
             } catch (e) {
                 console.warn('[arianna] template attach failed:', e);
@@ -833,26 +1003,52 @@ function _applySheet(el: Element, next: Stylesheet | null): void
     if (!next) return;
     if (!stash.__instanceId) stash.__instanceId = 'c' + Math.random().toString(36).slice(2, 10);
 
-    const tag       = el.tagName.toLowerCase();
+    const tag        = el.tagName.toLowerCase();
     const shadowRoot = _getShadowRoot(el);
-    const useShadow  = !!shadowRoot;
-    const replace    = useShadow ? ':host' : tag;
+    // Distinguish three rendering targets:
+    //   - nativeShadow: a real ShadowRoot (CSS encapsulated via browser boundary)
+    //   - iframeShadow: an AriannaShadow using the iframe backend (CSS encapsulated inside the iframe document)
+    //   - everything else (AriannaShadow light backend or no shadow): light DOM, scoped via instance-id
+    const iframeShadow = IsIframeBackend(shadowRoot) ? (shadowRoot as AriannaShadow) : null;
+    const nativeShadow = shadowRoot && !IsAriannaShadow(shadowRoot) ? (shadowRoot as ShadowRoot) : null;
+    const useShadow    = !!nativeShadow || !!iframeShadow;
+    // Selector rewrite target depends on the mode:
+    //   - native:    :host stays as :host (browser handles)
+    //   - iframe:    :host becomes html (the iframe document's root IS the host scope)
+    //   - light DOM: :host becomes the tag selector (with instance-id appended)
+    const replace      = iframeShadow ? 'html' : (nativeShadow ? ':host' : tag);
+
+    // In light DOM mode (no shadow boundary of any kind), the host must carry
+    // the instance attribute so that scoped selectors like
+    //   arianna-foo[data-arianna-instance="cabc123"] { ... }
+    // can target THIS specific instance without bleeding to siblings.
+    if (!useShadow) {
+        try { el.setAttribute('data-arianna-instance', stash.__instanceId); } catch { /* ignore */ }
+    }
 
     let css = '';
     for (const r of next.Rules) {
         // Rewrite host selectors:
         //   :root and &  — legacy v1/v2 conventions
         //   :host        — shadow-DOM standard (post-migration default in v3)
-        //   :host(X)     — host with attribute/pseudo X (rewrite the wrapper
-        //                  away in light DOM; keep as-is in shadow DOM)
+        //   :host(X)     — host with attribute/pseudo X (rewrite differently per mode)
         let scoped = r.Text;
-        if (useShadow) {
-            // In shadow DOM, :root/& should become :host. :host stays.
+        if (nativeShadow) {
+            // In native shadow DOM, :root/& should become :host. :host stays.
             // Also compile the AriannA facade selectors declared by the
             // component's static StyleMap so users can author component-local
             // sheets with normal-looking selectors.
             scoped = _rewriteShadowFacadeSelector(scoped, el);
             scoped = scoped.replace(/(^|,\s*|\s)(:root|&)(?![\w-])/g, (_m, pre: string) => pre + ':host');
+        } else if (iframeShadow) {
+            // In iframe shadow, :host rewrites to `html` because the iframe's
+            // document root IS the component scope. :host(X) → html(X) is
+            // invalid CSS, so we attach the X as an attribute selector on html.
+            //   :host([dark])         →  html[dark]
+            //   :host                  →  html
+            //   :root / &              →  html
+            scoped = rewriteHostWithArgs(scoped, 'html');
+            scoped = scoped.replace(/(^|,\s*|\s)(:root|:host|&)(?![\w-])/g, (_m, pre: string) => pre + 'html');
         } else {
             // In light DOM, every host-selector form becomes the tag selector.
             //   :host([direction="vertical"])  →  arianna-splitter[direction="vertical"]
@@ -873,8 +1069,30 @@ function _applySheet(el: Element, next: Stylesheet | null): void
     styleEl.setAttribute('data-arianna-sheet',    tag);
     styleEl.setAttribute('data-arianna-instance', stash.__instanceId);
 
-    if (useShadow && shadowRoot) shadowRoot.appendChild(styleEl);
-    else {
+    if (nativeShadow) {
+        nativeShadow.appendChild(styleEl);
+    } else if (iframeShadow) {
+        // Inject into the iframe document's <head>. We must create the <style>
+        // element from the iframe's document so it belongs to the right realm.
+        const iframeDoc = iframeShadow.document;
+        if (iframeDoc) {
+            const iframeStyle = iframeDoc.createElement('style');
+            iframeStyle.textContent = css;
+            iframeStyle.setAttribute('data-arianna-sheet',    tag);
+            iframeStyle.setAttribute('data-arianna-instance', stash.__instanceId);
+            const head = iframeDoc.head ?? iframeDoc.documentElement;
+            // Remove any previous style for this instance.
+            const existing = head.querySelector(
+                `style[data-arianna-sheet="${tag}"][data-arianna-instance="${stash.__instanceId}"]`,
+            );
+            if (existing) existing.remove();
+            head.appendChild(iframeStyle);
+            // We keep `styleEl` (outer-document copy) as `stash.__styleNode`
+            // so cleanup works, but the actual rendering uses iframeStyle.
+            stash.__styleNode = iframeStyle as unknown as HTMLStyleElement;
+            return;
+        }
+    } else {
         const head = document.head ?? document.documentElement;
         const existing = head.querySelector<HTMLStyleElement>(
             `style[data-arianna-sheet="${tag}"][data-arianna-instance="${stash.__instanceId}"]`,
@@ -999,6 +1217,28 @@ interface ComponentCallable
      *   pluto.Virtual.append('#app');     // same underlying element
      */
     new (tag: string, opts?: Record<string, unknown>): ComponentWrapper;
+
+    /**
+     * Component.Boot() — populate descriptor.Class for every registered tag
+     * whose subclass has been defined but never instantiated via `new`.
+     *
+     * See SHADOW.md / COMPONENTS.md §3.4 for the rationale. Call once at
+     * app entry, after all component modules have been imported.
+     */
+    Boot(): void;
+
+    /**
+     * Component.Define(tag, subclass) — explicitly bind a user subclass to its
+     * tag without instantiating it. Call once at module load, right after the
+     * class declaration:
+     *
+     *   class CodeEditor extends Component('arianna-code-editor', HTMLElement, …) { … }
+     *   Component.Define('arianna-code-editor', CodeEditor);
+     *
+     * Needed because subclasses of HTMLElement that aren't registered via native
+     * customElements throw on `new`, so the lazy `new.target` capture never runs.
+     */
+    Define(tag: string, subclass: Function): void;
 }
 
 function ComponentFn(this: unknown, ...args: unknown[]): unknown
@@ -1029,6 +1269,157 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
     if (args.length === 1 && args[0] instanceof Element)
         return _installFacilities(args[0]);
 
+    // ── Decorator form ────────────────────────────────────────────────────
+    //
+    //   @Component('arianna-x', css, def)            ← positional
+    //   class A extends HTMLElement { ... }
+    //
+    //   @Component({ tag: 'arianna-x', style, attrs, ... })  ← object-style
+    //   class A extends HTMLElement { ... }
+    //
+    // The decorator is detected when:
+    //   - args[0] is a string (positional) AND args[1] is NOT a constructor
+    //     function (it's css | object | Rule | Stylesheet | null | undefined)
+    //   - OR args[0] is a plain object with a `tag` key (object-style)
+    //
+    // The returned function is a class decorator that:
+    //   1. Receives the user's class as `target`
+    //   2. Reads its superclass from Object.getPrototypeOf(target.prototype).constructor
+    //   3. Registers the tag in CUSTOM with descriptor.Class = target
+    //   4. Returns `target` unchanged so the class identity is preserved
+    //
+    // Object-style accepts keys: tag, base, css, style, template, shadow,
+    // attrs, bus, render. style and css are aliases.
+    {
+        const isPositionalDecorator =
+            typeof args[0] === 'string'
+            && typeof args[1] !== 'function';
+
+        const isObjectStyleDecorator =
+            typeof args[0] === 'object'
+            && args[0] !== null
+            && !(args[0] instanceof Element)
+            && typeof (args[0] as { tag?: unknown }).tag === 'string';
+
+        if (isPositionalDecorator || isObjectStyleDecorator) {
+            let dTag: string;
+            let dCss: ComponentStyleInput | undefined;
+            let dDef: ComponentDef = {};
+            let dBaseHint: Function | undefined;
+
+            if (isObjectStyleDecorator) {
+                const opts = args[0] as {
+                    tag: string;
+                    base?: Function;
+                    css?: ComponentStyleInput;
+                    style?: ComponentStyleInput;
+                    template?: string;
+                    shadow?: 'open' | 'closed' | boolean;
+                    attrs?: string[];
+                    bus?: string;
+                    render?: 'real' | 'virtual';
+                };
+                dTag = opts.tag;
+                dCss = opts.css ?? opts.style;
+                dBaseHint = opts.base;
+                if (opts.shadow   !== undefined) dDef.shadow   = opts.shadow as ComponentDef['shadow'];
+                if (opts.attrs    !== undefined) dDef.attrs    = opts.attrs;
+                if (opts.bus      !== undefined) dDef.bus      = opts.bus;
+                if (opts.render   !== undefined) dDef.render   = opts.render;
+                if (opts.template !== undefined) (dDef as { template?: string }).template = opts.template;
+            } else {
+                dTag = args[0] as string;
+                const dArg2 = args[1];
+                const dArg3 = args[2];
+                if (dArg2 !== undefined && dArg2 !== null) {
+                    if (_isMixedDef(dArg2)) {
+                        dDef = dArg2 as ComponentDef;
+                        dCss = (dArg2 as ComponentDef).css;
+                    } else {
+                        dCss = dArg2 as ComponentStyleInput;
+                        if (dArg3) dDef = dArg3 as ComponentDef;
+                    }
+                } else if (dArg3 !== undefined) {
+                    dDef = dArg3 as ComponentDef;
+                }
+            }
+
+            // Return the actual decorator function.
+            //
+            // This function is meant to be invoked ONLY as a class decorator —
+            // either via `@Component(...)` (TC39 stage 3 / TypeScript legacy
+            // decorator), or by a build tool's decorator transformer.
+            //
+            // The programmatic invocation form
+            //     Component('tag', css, def)(class extends Base { ... })
+            // is DEPRECATED in AriannA 2.0 and will throw. Use the factory form:
+            //     class A extends Component('tag', Base, css, def) { build() {...} }
+            // or the standard decorator:
+            //     @Component('tag', css, def)
+            //     class A extends Base { ... }
+            //
+            // The heuristic to detect programmatic invocation: anonymous classes
+            // (target.name === '' or '_default') passed at the decorator call
+            // site are nearly always the result of `Component(...)(class { ... })`
+            // because user-written decorators receive named classes.
+            return function decorator(target: Function, _context?: unknown): Function {
+                if (typeof target !== 'function') {
+                    throw new TypeError(
+                        '[arianna] @Component decorator expects a class; got: ' + typeof target,
+                    );
+                }
+                // Programmatic form detection — reject with a migration message.
+                if (!target.name || target.name === '_default') {
+                    throw new Error(
+                        "[arianna] Component('" + dTag + "', css, def)(class { ... }) " +
+                        'is the deprecated programmatic-decorator form and is removed ' +
+                        'in AriannA 2.0. Use the factory form:\n' +
+                        "  class MyClass extends Component('" + dTag + "', Base, css, def) { build() {...} }\n" +
+                        'or the standard class decorator:\n' +
+                        "  @Component('" + dTag + "', css, def)\n" +
+                        '  class MyClass extends Base { ... }',
+                    );
+                }
+
+                // Read the superclass from the class's prototype chain
+                const superCtor = dBaseHint
+                    ?? (Object.getPrototypeOf(target.prototype)?.constructor as Function | undefined)
+                    ?? HTMLElement;
+
+                // Register the tag in CUSTOM
+                CoreDefine(
+                    dTag,
+                    target as new (...a: unknown[]) => Element,
+                    superCtor as new (...a: unknown[]) => Element,
+                    {},
+                );
+
+                // Stash def + sheet on the user class (so build() can read them)
+                const desc = GetDescriptor(dTag) as {
+                    Class?       : Function | null;
+                    Constructor? : Function | null;
+                    Prototype?   : object   | null;
+                    Def?         : ComponentDef;
+                    __ariannaSheetDefault?: Stylesheet;
+                } | false;
+                if (desc) {
+                    desc.Class       = target;
+                    desc.Constructor = target;
+                    desc.Prototype   = (target as { prototype: object }).prototype;
+                    desc.Def         = dDef;
+                    desc.__ariannaSheetDefault = _normaliseComponentSheet(dCss);
+                }
+                (target as unknown as { __ariannaDef: ComponentDef }).__ariannaDef = dDef;
+                (target as unknown as { __ariannaTag: string }).__ariannaTag       = dTag;
+                (target as unknown as { __ariannaSheetDefault?: Stylesheet }).__ariannaSheetDefault = _normaliseComponentSheet(dCss);
+                // Fix B — explicit flag for Namespace.Update wantsAutoComponent
+                (target as unknown as { __ariannaComponent: boolean }).__ariannaComponent = true;
+
+                return target;
+            };
+        }
+    }
+
     // Factory form: Component(tag, Base, ...)
     const tag  = args[0];
     const base = args[1];
@@ -1058,51 +1449,322 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
     //
     // We forward the user's constructor arguments to ComponentFn so that
     // build(opts) receives whatever the user passed to `new MyComp(opts)`.
-    // The args are stashed on the element under __buildArgs for the microtask
-    // scheduler in _installFacilities to pick up.
+    // The args are stashed on the element under __buildArgs for the
+    // _installFacilities pipeline to pick up.
     //
-    // NOTE on descriptor identity: Component(tag, Base, ...) registers `Bound`
-    // in the descriptor, but the actual user class (e.g. `_CodeEditor extends
-    // Component(...)`) lives one level deeper. Namespace.Update repoints the
-    // descriptor to the most-derived user class on first call (via the
-    // window.<PascalCase> convention) — that's where markup-instantiated
-    // elements have their user methods spliced from.
-    const Bound = class extends (base as new () => HTMLElement) {
+    // ── What the factory returns: the shared `Component` class ──────────────
+    //
+    // `Component(tag, base, css, def)` returns the shared, per-base `Component`
+    // class (see _resolveComponentClassForBase). The user writes:
+    //
+    //     class Cuore extends Component('papa', HTMLDivElement, css, def) {
+    //         build() { ... }
+    //     }
+    //
+    // which makes the chain `Cuore → Component → HTMLDivElement → HTMLElement`.
+    // `Component` is a NAMED class (not an anonymous `Bound`), shared across
+    // all tags that share a base, so `Core.GetPrototypeChain(node)` reports
+    // "Component" — the architectural invariant (COMPONENTS.md §1).
+    //
+    // Inside the Component constructor, after `super(...)`, `new.target` is the
+    // most-derived class — the user's class (Cuore). The first `new Cuore()`
+    // captures it and populates the descriptor's Class / Constructor / Prototype
+    // (keyed by the element's live tag). From that point markup-instantiated
+    // <papa> nodes are upgraded by the MutationObserver by splicing
+    // `descriptor.Prototype` (= Cuore.prototype) onto them — exactly the way
+    // `customElements.define('papa', Cuore)` would, but registry-mediated.
+    //
+    // PER-TAG data (def, default sheet) is NOT stored on the shared Component
+    // class (that would collide across tags). It lives on the descriptor, keyed
+    // by tag — the single source of truth. _installFacilities reads it from
+    // GetDescriptor(el.tagName), never from the constructor.
+    //
+    // For the markup-only case (component placed in HTML before any `new Sub()`
+    // ran), `Component.Boot()` or the Namespace fallback lookup populates
+    // descriptor.Class once; thereafter Update uses Sub.prototype directly.
+    // ── ROOT-CAUSE FIX (28/05/2026) ──────────────────────────────────────
+    // The 22/05 baseline called CoreDefine(tag, Bound, base, {}) where Bound
+    // was the per-tag user-builder class. The current revision had degraded
+    // to CoreDefine(tag, base, base, {}) — registering the descriptor with
+    // Constructor === Interface === wrapped (the patched native). In the
+    // window between that registration and the post-hoc overwrite at line
+    // 1530, three things ran with an inconsistent ctor:
+    //   • Core.Extends(wrapped, wrapped) — cycle (mitigated by the Extends
+    //     wouldCycle guard in Core.ts, but the underlying mismatch remained)
+    //   • Namespace.Define's internal _factory was built around ctor=wrapped
+    //   • the `arianna-wip:defined` event fired with a descriptor whose
+    //     Constructor pointed at the patched native — any listener that
+    //     later instantiated through it constructed the native as if it
+    //     were the custom ctor, surfacing as async "Illegal constructor".
+    //
+    // Fix: resolve the shared ComponentClass FIRST and pass it to CoreDefine.
+    // The descriptor is now coherent from the moment of registration; the
+    // subsequent assignments at line 1530 below remain (they set per-tag
+    // statics on the descriptor — Class/Def/__ariannaSheetDefault — that
+    // were never part of CoreDefine's contract).
+    const ComponentClass = _resolveComponentClassForBase(base, null);
+
+    CoreDefine(
+        tag,
+        ComponentClass as unknown as new (...a: unknown[]) => Element,
+        base           as unknown as new (...a: unknown[]) => Element,
+        {},
+    );
+    const descriptor = GetDescriptor(tag) as {
+        Class?       : Function | null;
+        Constructor? : Function | null;
+        Prototype?   : object   | null;
+        Style?       : Record<string, string>;
+        Def?         : ComponentDef;
+        __ariannaSheetDefault? : Stylesheet;
+    } | false;
+
+    // ─── The interposed class IS `Component` (not an anonymous `Bound`) ──────
+    //
+    // The chain we want for every component instance is:
+    //
+    //     Subclass → Component → [HTML(X)Element] → HTMLElement → …
+    //
+    // `Component` is ONE shared class per base interface. We cache it in
+    // `_componentClassByBase` so that all `arianna-*` tags sharing a base
+    // (almost always HTMLElement) reuse the SAME `Component` link in the
+    // chain — no proliferation, no per-tag anonymous wrappers. This is the
+    // single most important architectural rule (COMPONENTS.md §1, §2, anti-rot
+    // rule 5: "No wrappers between user subclass and Component").
+    //
+    // The class is a NAMED class expression `class Component extends base`,
+    // so `Core.GetPrototypeChain(node)` reports "Component" — not "Bound",
+    // not "" (anonymous). The constructor holds the shared facility-install
+    // logic and captures `new.target` (the user subclass) on first `new`.
+    //
+    // `Component` is also a callable dispatcher (ComponentFn). The class link
+    // and the dispatcher are two faces of the same symbol exported as
+    // `Component`: the dispatcher handles `Component(el)`, `Component('#id')`,
+    // `Component(tag, base, css, def)`; the class handles `extends Component(...)`
+    // and `new Subclass()`. They are NOT the same object instance here (the
+    // dispatcher is `ComponentFn`, the per-base link is this cached class), but
+    // they share the name `Component` and the dispatcher delegates instance
+    // installation to the class via `ComponentFn.call(null, this)`.
+
+    if (descriptor) {
+        descriptor.Class               = null;          // populated lazily on first `new Subclass()`
+        descriptor.Constructor         = ComponentClass; // the shared Component-per-base link
+        descriptor.Prototype           = (ComponentClass as { prototype: object }).prototype;
+        descriptor.Def                 = def;
+        descriptor.__ariannaSheetDefault = _normaliseComponentSheet(css);
+    }
+
+    // ─── Per-tag statics carried on a thin trampoline ───────────────────────
+    //
+    // `__ariannaDef`, `__ariannaSheetDefault`, and `__ariannaTag` are PER-TAG,
+    // but `ComponentClass` is shared across all tags with the same base. We
+    // therefore cannot stash per-tag statics directly on the shared class.
+    //
+    // Instead the factory returns the shared `ComponentClass` for the user to
+    // extend, and the per-tag statics are recorded on the descriptor (read by
+    // Namespace.Update and _installFacilities from there). The user subclass
+    // (e.g. `class Button extends Component(...)`) inherits NOTHING per-tag via
+    // statics — everything per-tag is descriptor-mediated, keyed by tag, which
+    // is exactly the "descriptor is the single source of truth" rule.
+    //
+    // We still set __ariannaComponent on the shared class so
+    // wantsAutoComponent detection works (it's a constant `true`, identical
+    // for every component, so sharing it is correct).
+    (ComponentClass as unknown as { __ariannaComponent: boolean }).__ariannaComponent = true;
+
+    return ComponentClass as unknown as new (...a: unknown[]) => Element;
+}
+
+// ─── Per-base Component class cache ──────────────────────────────────────────
+//
+// One `Component` class per base interface. `arianna-button` and any other
+// HTMLElement-based tag share the SAME Component class — the chain link is
+// identical, only the descriptor (keyed by tag) differs. This keeps the chain
+// `Subclass → Component → base` with a single shared Component per base.
+const _componentClassByBase = new WeakMap<Function, Function>();
+
+function _resolveComponentClassForBase(
+    base: Function,
+    _descriptor: unknown | null,
+): Function
+{
+    const cached = _componentClassByBase.get(base);
+    if (cached) return cached;
+
+    // Named class expression: the name `Component` is what shows up in the
+    // prototype chain. The constructor:
+    //   1. super() — chains to the base (HTMLElement / HTMLDivElement / …)
+    //   2. captures new.target (the user subclass) into the tag's descriptor
+    //   3. stashes constructor args for build()
+    //   4. installs facilities (shadow / sheet / attrs / build / template)
+    //
+    // The descriptor lookup at construction time is keyed by the element's
+    // tag (resolved inside _installFacilities / via the live tagName), NOT by
+    // a closed-over descriptor — because this class is shared across tags.
+    const Component = class Component extends (base as new () => HTMLElement) {
         constructor(...args: unknown[]) {
             super();
+            // Capture the user subclass at first instantiation, into the
+            // descriptor for THIS element's tag. new.target is the most-derived
+            // class (the user's Subclass) because super() propagates it.
+            const ctor = new.target as unknown as Function | undefined;
+            if (ctor) {
+                const liveTag = (this as Element).tagName?.toLowerCase?.();
+                if (liveTag) {
+                    const d = GetDescriptor(liveTag) as { Class?: Function | null; Constructor?: Function; Prototype?: object } | false;
+                    if (d && !d.Class) {
+                        d.Class       = ctor;
+                        d.Constructor = ctor;
+                        d.Prototype   = (ctor as { prototype: object }).prototype;
+                    }
+                }
+            }
             (this as unknown as { __buildArgs?: unknown[] }).__buildArgs = args;
             ComponentFn.call(null, this);
         }
     };
-    (Bound as unknown as { __ariannaComponent: boolean }).__ariannaComponent = true;
-    (Bound as unknown as { __ariannaDef: ComponentDef }).__ariannaDef         = def;
-    (Bound as unknown as { __ariannaSheetDefault?: Stylesheet }).__ariannaSheetDefault = _normaliseComponentSheet(css);
 
-    const pretty = tag
-        .replace(/^arianna-/, '')
-        .replace(/-(.)/g, (_, c: string) => c.toUpperCase())
-        .replace(/^./, c => c.toUpperCase());
-    try { Object.defineProperty(Bound, 'name', { value: pretty }); } catch { /* native */ }
-
-    // Register the tag via Core.Define (terminal — does NOT return a factory).
-    // What `extends Component('my-tag', HTMLDivElement)` extends is the Bound
-    // class declared above. The user's class chain:
-    //
-    //   UserClass -> Bound -> HTMLDivElement -> HTMLElement -> ...
-    //
-    // When the user creates the element via markup (<my-tag>),
-    // document.createElement, or Core.Create, the Observer/Update path
-    // splices the user's prototype + applies CSS + runs body.
-    CoreDefine(
-        tag,
-        Bound as unknown as new (...a: unknown[]) => Element,
-        base as unknown as new (...a: unknown[]) => Element,
-        {},
-    );
-    return Bound as unknown as new (...a: unknown[]) => Element;
+    _componentClassByBase.set(base, Component);
+    return Component;
 }
 
 Object.defineProperty(ComponentFn, 'name', { value: 'Component' });
+
+/**
+ * Component.Boot — close the markup-only gap.
+ *
+ * The descriptor's `Class` field is populated the first time `new Subclass()`
+ * runs (via super-propagated `new.target` in the Component constructor). For
+ * applications that only use markup (no programmatic `new Button()` ever),
+ * `Class` stays null and Namespace.Update has to fall back to a global lookup.
+ *
+ * `Component.Boot()` makes the population explicit. It walks every registered
+ * custom descriptor whose `Class` is null and tries to find the user subclass
+ * via the convention that every component module does
+ *   `Object.defineProperty(window, '<Name>', { value: <Name> })`
+ * at module load. If found, it calls `new Subclass()` once to trigger the
+ * `descriptor.Class = new.target` capture inside the Component constructor, then
+ * discards the throwaway instance.
+ *
+ * Idempotent — only descriptors with `Class === null` are touched. Safe to
+ * call multiple times (subsequent calls do nothing).
+ *
+ * Recommended call site: after all component imports at app entry.
+ *   import './components/inputs/Button.ts';
+ *   import './components/inputs/Input.ts';
+ *   Component.Boot();
+ */
+/**
+ * Component.Define(tag, subclass) — explicit, reliable registration of a user
+ * subclass for a tag, WITHOUT instantiating it.
+ *
+ * Why this exists: the factory returns a SHARED `Component`-per-base class and
+ * cannot see the user subclass, so `descriptor.Class` is normally populated
+ * lazily by `new.target` on the first `new Subclass()`. But for components that
+ * extend `HTMLElement` and are NOT registered via native `customElements`,
+ * `new Subclass()` throws "Illegal constructor" — so the lazy capture never
+ * runs, `descriptor.Class` stays null, and markup-upgrade cannot find the right
+ * subclass (it may even pick a different class that shares the same base —
+ * exactly the <arianna-code-editor> → ArrayModifierElement bug).
+ *
+ * `Component.Define('arianna-code-editor', CodeEditor)` sets the descriptor's
+ * Class/Constructor/Prototype directly. Call it once at module load, right
+ * after the class declaration. No `new`, no throw, no global scan, no ambiguity.
+ */
+(ComponentFn as unknown as { Define: (tag: string, subclass: Function) => void }).Define =
+function Define(tag: string, subclass: Function): void
+{
+    if (!tag || typeof subclass !== 'function') return;
+    const desc = GetDescriptor(tag.toLowerCase()) as {
+        Class?: Function | null; Constructor?: Function; Prototype?: object; Custom?: boolean;
+    } | false;
+    if (!desc) {
+        console.warn(`[arianna] Component.Define: no descriptor for <${tag}> — was Component('${tag}', …) called first?`);
+        return;
+    }
+    desc.Class       = subclass;
+    desc.Prototype   = (subclass as { prototype: object }).prototype;
+    // DO NOT overwrite desc.Constructor.
+    //
+    // The markup-upgrade path (Namespace.Update) uses desc.Class / desc.Prototype
+    // to prototype-splice the node — that is all that is needed to bind the
+    // subclass to markup-created elements (which is the editor's case).
+    //
+    // desc.Constructor is used by a DIFFERENT path: Namespace.Create Path 1 and
+    // the _factory do `Reflect.construct(desc.Constructor, args, desc.Constructor)`.
+    // The Component factory deliberately set desc.Constructor to the SHARED
+    // Component-per-base class, whose construction routes through the patched
+    // native base so `super()` yields a real element. Overwriting it with the raw
+    // user subclass makes Reflect.construct run the subclass `super()` against a
+    // base that the browser refuses to `new` → "Illegal constructor". Legacy
+    // Component.js never did this (its factory used createElement + setPrototypeOf,
+    // never re-constructed the class). So: bind Class/Prototype, leave Constructor.
+    // Stamp the tag on the subclass so tag-based lookup can disambiguate it.
+    try { (subclass as { __ariannaTag?: string }).__ariannaTag = tag.toLowerCase(); } catch { /* frozen ctor */ }
+};
+
+(ComponentFn as unknown as { Boot: () => void }).Boot = function Boot(): void
+{
+    const globalScope = (typeof window !== 'undefined' ? window : globalThis) as unknown as Record<string, unknown>;
+    const namespaces  = Namespaces as Record<string, { Custom?: { Tags?: Record<string, unknown> } }>;
+
+    for (const nsKey of Object.keys(namespaces)) {
+        const ns = namespaces[nsKey];
+        const tags = ns?.Custom?.Tags;
+        if (!tags) continue;
+
+        for (const tag of Object.keys(tags)) {
+            const desc = tags[tag] as {
+                Class?       : Function | null;
+                Constructor? : Function;
+                Tags?        : string[];
+                Custom?      : boolean;
+            };
+            if (!desc || !desc.Custom) continue;
+            if (desc.Class) continue;   // already known
+            const baseCtor = desc.Constructor;
+            if (!baseCtor) continue;
+
+            // Walk global scope for a constructor whose prototype chain
+            // contains baseCtor.prototype AND whose __ariannaTag matches.
+            const targetTag = desc.Tags?.[0] ?? tag;
+            const baseProto = (baseCtor as { prototype?: object }).prototype;
+            if (!baseProto) continue;
+
+            for (const key of Object.keys(globalScope)) {
+                const candidate = globalScope[key];
+                if (typeof candidate !== 'function') continue;
+                if (candidate === baseCtor) continue;
+                const candidateProto = (candidate as { prototype?: object }).prototype;
+                if (!candidateProto) continue;
+                // Check chain inclusion.
+                let p: object | null = Object.getPrototypeOf(candidateProto);
+                let found = false;
+                while (p) {
+                    if (p === baseProto) { found = true; break; }
+                    p = Object.getPrototypeOf(p);
+                }
+                if (!found) continue;
+                // Optional tag cross-check.
+                const candidateTag = (candidate as { __ariannaTag?: string }).__ariannaTag;
+                if (candidateTag && candidateTag !== targetTag) continue;
+                // Found it — instantiate once to populate desc.Class.
+                try {
+                    // The new instance is thrown away. Its only purpose is to
+                    // trigger the Component constructor's `descriptor.Class = new.target` capture.
+                    const throwaway = new (candidate as new (...a: unknown[]) => Element)();
+                    // If the throwaway was inserted anywhere (shouldn't be, but defensive), remove it.
+                    if ((throwaway as Element).parentNode) {
+                        (throwaway as Element).parentNode!.removeChild(throwaway as Element);
+                    }
+                } catch (e) {
+                    console.warn(`[arianna] Component.Boot: failed to instantiate ${(candidate as { name?: string }).name} for tag <${targetTag}>:`, e);
+                }
+                break;   // moved on to next descriptor
+            }
+        }
+    }
+};
 
 // NOTE: Component.Types is intentionally REMOVED in v2.
 // Use Core.Define(tag, ctor, Base, css) instead — it auto-resolves the

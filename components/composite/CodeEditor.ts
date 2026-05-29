@@ -208,7 +208,7 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
     // AriannA 2.0: CodeEditor internals live inside the component render root.
     // Closed Shadow DOM is the default; external playground/app code must use
     // el.Shadow.Root (or the public Value API), never host.querySelector().
-    shadow: 'closed',
+    shadow: false,
 })
 {
     /** Source code as a reactive Signal. */
@@ -454,10 +454,22 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
         stage.appendChild(this._ta);
         this._wrap.appendChild(stage);
 
-        // AriannA 2.0 / Shadow closed: render internals into the retained
-        // render root. Fall back to the host only for legacy/light-DOM mode.
-        const renderRoot = (this as unknown as { Shadow?: { Root?: ShadowRoot | null } }).Shadow?.Root ?? this;
-        renderRoot.appendChild(this._wrap);
+        // ── Mount internals into the correct render target ────────────────
+        //
+        // CodeEditor builds its internals as raw DOM (textarea + pre + gutter),
+        // so it needs a real Node with appendChild to mount into. Under the
+        // open-default shadow model (COMPONENTS.md §0.6 / SHADOW.md §0), the
+        // render root behind `this.Shadow.Root` can be one of:
+        //   • a native ShadowRoot  → has appendChild (mount directly)
+        //   • an AriannaShadow LIGHT backend  → NO appendChild; its `.Host` is
+        //     the real element whose light DOM holds the content → mount there
+        //   • an AriannaShadow IFRAME backend → mount into its document.body
+        //   • nothing (shadow:false)          → mount into the host (this)
+        //
+        // We resolve a concrete appendable Node here. We deliberately do NOT
+        // call appendChild on the AriannaShadow object (it is not a Node).
+        const mountTarget = this._resolveMountTarget();
+        mountTarget.appendChild(this._wrap);
 
         // ── Initial paint ────────────────────────────────────────────────
         this._ta.value = this.value.get();
@@ -488,6 +500,56 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
     override blur():  void { this._ta?.blur(); }
 
     // ─── Internals ───────────────────────────────────────────────────────
+
+    /**
+     * Resolve a concrete, appendable DOM Node for mounting raw internals,
+     * working across every shadow backend (COMPONENTS.md §0.6.2):
+     *   • native ShadowRoot         → the root itself (has appendChild)
+     *   • AriannaShadow light       → its `.Host` element (light DOM)
+     *   • AriannaShadow iframe      → the iframe's document.body
+     *   • no shadow (shadow:false)  → the host element (`this`)
+     * Never calls appendChild on a non-Node AriannaShadow object.
+     */
+    private _resolveMountTarget(): Element | ShadowRoot | DocumentFragment
+    {
+        const root = (this as unknown as {
+            Shadow?: { Root?: unknown };
+        }).Shadow?.Root as unknown;
+
+        // No shadow at all → mount into the host element directly.
+        if (!root) return this as unknown as Element;
+
+        // Native ShadowRoot (open or closed): it is a real Node.
+        if (typeof (root as { appendChild?: unknown }).appendChild === 'function'
+            && !(root as { IsAriannaShadow?: boolean }).IsAriannaShadow) {
+            return root as ShadowRoot;
+        }
+
+        // AriannaShadow (light or iframe backend).
+        const ar = root as {
+            IsAriannaShadow?: boolean;
+            Backend?: 'light' | 'iframe';
+            Host?: Element;
+            document?: Document | null;
+            iframe?: HTMLIFrameElement | null;
+        };
+        if (ar.IsAriannaShadow) {
+            if (ar.Backend === 'iframe') {
+                const doc = ar.document ?? (ar.iframe ? ar.iframe.contentDocument : null);
+                if (doc && doc.body) return doc.body as unknown as Element;
+                // iframe not ready → fall back to host so build() still completes.
+                return (ar.Host ?? (this as unknown as Element));
+            }
+            // light backend → mount into the host's light DOM.
+            return ar.Host ?? (this as unknown as Element);
+        }
+
+        // Unknown shape that happens to be appendable → use it; else host.
+        if (typeof (root as { appendChild?: unknown }).appendChild === 'function') {
+            return root as ShadowRoot;
+        }
+        return this as unknown as Element;
+    }
 
     private _onInput(): void
     {
@@ -820,5 +882,16 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
 
     onCreated?(): void { this.build(); }
 }
+
+// ── Registration ─────────────────────────────────────────────────────────
+// Component(tag, base, …) registers the tag with descriptor.Class = null.
+// The user subclass (CodeEditor) is normally captured on the first
+// `new CodeEditor()` via new.target through super(). But CodeEditor extends
+// HTMLElement and is NOT registered via native customElements, so `new
+// CodeEditor()` throws "Illegal constructor" — the lazy capture never runs and
+// descriptor.Class stays null, which made markup-upgrade pick the wrong class
+// (e.g. ArrayModifierElement). We therefore bind the subclass to its tag
+// EXPLICITLY and safely, without `new`:
+Component.Define('arianna-code-editor', CodeEditor);
 
 export default CodeEditor;

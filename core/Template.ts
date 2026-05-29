@@ -188,6 +188,13 @@ function walk(node: Node, path: number[], out: BindingDesc[]): void
         return;
     }
 
+    // Tracks whether we found an `a-for` on THIS element. If so, we must NOT
+    // descend into its children during this pass — they will be walked later,
+    // per-iteration, by `applyForBinding`, with the iterator variable in scope.
+    // Otherwise child bindings like `:src="item.url"` would be evaluated here
+    // with the parent's signals, where `item` doesn't exist → ReferenceError.
+    let stopDescent = false;
+
     if (node.nodeType === Node.ELEMENT_NODE) {
         const el = node as Element;
         const attrs = Array.from(el.attributes);
@@ -225,11 +232,14 @@ function walk(node: Node, path: number[], out: BindingDesc[]): void
                 if (m) {
                     out.push({ kind: 'for', path: [...path], iter: m[1], expr: m[2] });
                     el.removeAttribute(name);
+                    stopDescent = true;
                     continue;
                 }
             }
         }
     }
+
+    if (stopDescent) return;
 
     const children = node.childNodes;
     for (let i = 0; i < children.length; i++) {
@@ -372,6 +382,14 @@ function resolvePath(root: Node, path: number[]): Node | null
 
 function applyBinding(b: BindingDesc, node: Node, instance: object, signals: Record<string, unknown>): (() => void) | null
 {
+    // Text bindings legitimately target Text nodes; everything else targets
+    // an Element. Guard against accidentally calling Element-only methods
+    // (removeAttribute, setAttribute, classList…) on Text/Comment nodes,
+    // which happens when path resolution lands on a re-parented Text after
+    // a list re-render. Without this we get `el.removeAttribute is not a function`.
+    if (b.kind !== 'text' && node.nodeType !== Node.ELEMENT_NODE) {
+        return null;
+    }
     switch (b.kind) {
         case 'attr':  return applyAttrBinding(b, node as Element, instance, signals);
         case 'event': return applyEventBinding(b, node as Element, instance, signals);
@@ -424,7 +442,6 @@ function applyAttrBinding(
 
 function applyStyleValue(el: HTMLElement, v: unknown): void
 {
-    const style = el.style;
     if (v == null || v === false) {
         el.removeAttribute('style');
         return;
@@ -434,6 +451,19 @@ function applyStyleValue(el: HTMLElement, v: unknown): void
         return;
     }
     if (typeof v === 'object') {
+        // Guard: some legacy/SVG elements may not expose `style` as
+        // CSSStyleDeclaration. Fall back to a plain inline string in that
+        // case so the binding doesn't blow up the whole template.
+        const style = el.style;
+        if (!style) {
+            const parts: string[] = [];
+            for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+                if (val == null || val === false) continue;
+                parts.push(`${k}: ${String(val)}`);
+            }
+            el.setAttribute('style', parts.join('; '));
+            return;
+        }
         for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
             if (val == null || val === false) {
                 if (k.indexOf('-') !== -1) style.removeProperty(k);

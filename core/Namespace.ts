@@ -287,6 +287,16 @@ function _getAriannaShadowRoot(el: Element): ShadowRoot | null
         ?? ((el as HTMLElement).shadowRoot ?? null);
 }
 
+/**
+ * Standalone helper backing the `el.shadow('open'|'closed')` convenience
+ * method (defined above). This is NOT the framework's template-mount shadow
+ * path — that lives entirely in Component.ts (_installFacilities →
+ * _attachAriannaShadow → Shadow.ts backends). This helper only does a native
+ * attachShadow attempt for users who manually call `el.shadow()` and want a
+ * raw ShadowRoot. It deliberately does not pull in the AriannaShadow polyfill
+ * or the iframe backend (that would create a Namespace→Component dependency).
+ * For full shadow semantics, use `def.shadow` on the component, not this.
+ */
 function _attachAriannaShadow(el: Element, mode: 'open' | 'closed' = 'closed'): ShadowRoot | null
 {
     const existing = _getAriannaShadowRoot(el);
@@ -573,21 +583,37 @@ export class Namespace
         // For SVG / MathML / X3D customs, swap the wire-level tag to the base
         // interface tag (e.g. 'svg') so the layout engine renders it.
         let wireTag = t;
-        if (this.NS && desc && desc.Custom && desc.Interface) {
-            const baseDesc = this.Standard.Interfaces[(desc.Interface as { name?: string }).name ?? ''];
-            const baseTag = (baseDesc as { Tags?: string[] } | undefined)?.Tags?.[0];
-            if (baseTag) wireTag = baseTag;
+        if (desc && desc.Custom && desc.Interface) {
+            const ifaceName = (desc.Interface as { name?: string }).name ?? '';
+            const baseDesc  = this.Standard.Interfaces[ifaceName];
+            const baseTag   = (baseDesc as { Tags?: string[] } | undefined)?.Tags?.[0];
+
+            // AriannA supports semantic/custom vocabulary tags such as <papa>
+            // without browser-level custom-element registration. When the user
+            // declares a concrete native base (HTMLDivElement, HTMLButtonElement,
+            // SVGSVGElement, ...), the wire-level element must be that base tag
+            // so browser internals (including attachShadow support) are valid.
+            // Plain HTMLElement remains autonomous and keeps the declared tag.
+            if (baseTag && ifaceName && ifaceName !== 'HTMLElement') wireTag = baseTag;
         }
 
         const el = this.NS && this.URI
             ? document.createElementNS(this.URI, wireTag) as unknown as Element
             : document.createElement(wireTag);
 
+        if (desc && desc.Custom && wireTag !== t && el instanceof HTMLElement) {
+            el.setAttribute('is', t);
+            el.setAttribute('data-arianna-tag', t);
+        }
+
         // For custom tags (FUNCTION-form here, since CLASS is handled above),
         // synchronously run the upgrade — Update applies prototype splice,
         // style, runs FUNCTION body, installs Component, fires build().
         if (desc && desc.Custom) {
-            try { this.Update(el, desc); }
+            try {
+                const updated = this.Update(el, desc);
+                if (updated instanceof Element) return updated;
+            }
             catch (e) { console.warn(`[arianna] Update failed for <${t}>:`, e); }
         }
 
@@ -968,49 +994,115 @@ export class Namespace
     //   3. If Custom & Component(this) was in the body — auto-install facilities
     //   4. Run the user's constructor body bound to the element
 
-    Update(node: Element, hint?: TypeDescriptor): void
+    Update(node: Element, hint?: TypeDescriptor): Element | void
     {
         if (!(node instanceof Element)) return;
 
         const desc = hint ?? this.GetDescriptor(node);
         if (!desc || !desc.Custom || !desc.Constructor) return;
 
-        // ── REPOINT DESCRIPTOR TO MOST-DERIVED USER CLASS ─────────────────
-        // Component(tag, Base, ...) registers an intermediate empty `Bound`
-        // class in the descriptor. The actual user class (the one that
-        // `extends Component(...)`) lives on global scope (window.<PascalCase>)
-        // after the bundle exports it. Without this repoint, setPrototypeOf
-        // below would splice Bound.prototype (empty) onto the node, losing
-        // all user methods.
+        // ── USER SUBCLASS LOOKUP ─────────────────────────────────────────
+        // The factory `Component(tag, base, css, def)` registered the tag
+        // with Class=null. The user subclass is captured at the first
+        // `new <subclass>()` call via super() propagation of `new.target`
+        // inside the anonymous constructor returned by the factory.
         //
-        // This scan runs ONCE per tag (cached on desc.__userResolved). It
-        // looks for a globally-exposed class whose prototype chain includes
-        // the current descriptor.Constructor and walks down to the leaf.
-        const cachedDesc = desc as TypeDescriptor & { __userResolved?: boolean };
-        if (!cachedDesc.__userResolved) {
-            cachedDesc.__userResolved = true;
-            const win = (typeof window !== 'undefined' ? window : globalThis) as Record<string, unknown>;
-            const currentCtor = desc.Constructor as Function;
-            // Derive the PascalCase name from the tag: arianna-code-editor → CodeEditor
-            const tag = desc.Tags[0] ?? '';
-            const pretty = tag
-                .replace(/^arianna-/, '')
-                .replace(/-(.)/g, (_, c: string) => c.toUpperCase())
-                .replace(/^./, c => c.toUpperCase());
-            const candidate = win[pretty];
-            if (typeof candidate === 'function' && candidate !== currentCtor) {
-                // Verify it extends the current Bound (transitively)
-                let proto = (candidate as Function).prototype;
-                let extendsBound = false;
-                while (proto && proto !== Object.prototype) {
-                    if (proto === currentCtor.prototype) { extendsBound = true; break; }
-                    proto = Object.getPrototypeOf(proto);
+        // If desc.Class is still null here, no `new <subclass>()` has ever
+        // run — the user has placed <arianna-button> in markup but never
+        // instantiated Button in JS. We try a heuristic global lookup:
+        // scan `window` for any constructor whose prototype chain includes
+        // the factory `Bound` (which is `desc.Constructor`) AND whose
+        // `__ariannaTag` matches our tag. This catches the common case where
+        // the component file imports & defines `class Button extends
+        // Component('arianna-button', ...)` then assigns `window.Button =
+        // Button` — that side-effect makes the subclass globally findable.
+        let userClass = (desc as TypeDescriptor & { Class?: Function | null }).Class;
+        if (!userClass) {
+            const targetTag = desc.Tags?.[0];
+            const baseCtor  = desc.Constructor;
+            const globalScope = (typeof window !== 'undefined' ? window : globalThis) as unknown as Record<string, unknown>;
+            // Pass 1 (STRICT): accept ONLY a candidate whose __ariannaTag equals
+            // our target tag. This is the reliable signal — multiple components
+            // share the same base (all `extends Component(tag, HTMLElement)`), so
+            // "extends the same base" is NOT sufficient to disambiguate. Picking
+            // the first base-matching class is exactly the bug that reprototyped
+            // <arianna-code-editor> to ArrayModifierElement.
+            for (const key of Object.keys(globalScope)) {
+                const candidate = globalScope[key];
+                if (typeof candidate !== 'function') continue;
+                if (candidate === baseCtor) continue;
+                const candidateTag = (candidate as { __ariannaTag?: string }).__ariannaTag;
+                if (!candidateTag || !targetTag) continue;          // need a tag to match on
+                if (candidateTag !== targetTag) continue;           // must match exactly
+                // Sanity: it should still extend the declared base.
+                const candidateProto = (candidate as { prototype?: object }).prototype;
+                const baseProto = (baseCtor as { prototype?: object }).prototype;
+                if (candidateProto && baseProto) {
+                    let p: object | null = Object.getPrototypeOf(candidateProto);
+                    let ok = false;
+                    while (p) { if (p === baseProto) { ok = true; break; } p = Object.getPrototypeOf(p); }
+                    if (!ok) continue;
                 }
-                if (extendsBound) {
-                    // Re-point: descriptor now refers to the user class
-                    (desc as { Constructor: Function }).Constructor = candidate;
-                    (desc as { Prototype: object }).Prototype      = (candidate as { prototype: object }).prototype;
+                userClass = candidate as Function;
+                break;
+            }
+            // NOTE: deliberately NO permissive pass. If no class carries a
+            // matching __ariannaTag, we leave userClass null and fall through to
+            // the base Constructor below. Reprototyping the node to the WRONG
+            // component (any class that merely extends the same base) is worse
+            // than leaving it on the base: a wrong prototype silently breaks
+            // build()/Value/etc., which is precisely the failure this avoids.
+            // The robust fix for markup-only components is Component.Boot()/an
+            // explicit registration so descriptor.Class is set without relying
+            // on a global-scope scan.
+            if (userClass) {
+                (desc as { Class?: Function | null }).Class = userClass;
+            }
+        }
+        if (userClass) {
+            (desc as { Constructor: Function }).Constructor = userClass;
+            (desc as { Prototype: object }).Prototype      = (userClass as { prototype: object }).prototype;
+        }
+
+        const ctor  = desc.Constructor;
+        const iface = desc.Interface;
+        if (!ctor || !iface) return;
+
+        // Markup can legally use an AriannA vocabulary tag that is not a
+        // browser custom-element name, for example:
+        //
+        //   class Cuore extends Component('papa', HTMLDivElement, ...)
+        //   <papa>Papa</papa>
+        //
+        // The DOM parser creates <papa> as HTMLUnknownElement. AriannA must not
+        // force users to rename it to a dashed tag. Instead, Namespace.Update()
+        // coerces the wire-level node to the declared native base (here <div>)
+        // and preserves the public vocabulary via is="papa" and
+        // data-arianna-tag="papa". This keeps attachShadow, native slots, and
+        // element internals valid while preserving AriannA's vocabulary model.
+        {
+            const ifaceName = (iface as { name?: string }).name ?? '';
+            const baseDesc  = this.Standard.Interfaces[ifaceName];
+            const baseTag   = (baseDesc as { Tags?: string[] } | undefined)?.Tags?.[0];
+            const declaredTag = desc.Tags?.[0] ?? node.tagName.toLowerCase();
+            let matchesInterface = true;
+            try { matchesInterface = node instanceof (iface as unknown as typeof Element); }
+            catch { matchesInterface = true; }
+
+            if (!matchesInterface && baseTag && ifaceName !== 'HTMLElement' && node.tagName.toLowerCase() !== baseTag) {
+                const replacement = this.NS && this.URI
+                    ? document.createElementNS(this.URI, baseTag) as unknown as Element
+                    : document.createElement(baseTag);
+
+                for (const attr of Array.from(node.attributes)) {
+                    try { replacement.setAttribute(attr.name, attr.value); } catch { /* ignore */ }
                 }
+                try { replacement.setAttribute('is', declaredTag); } catch { /* ignore */ }
+                try { replacement.setAttribute('data-arianna-tag', declaredTag); } catch { /* ignore */ }
+
+                while (node.firstChild) replacement.appendChild(node.firstChild);
+                if (node.parentNode) node.parentNode.replaceChild(replacement, node);
+                node = replacement;
             }
         }
 
@@ -1019,12 +1111,8 @@ export class Namespace
         // calls Update before returning. The factory path also marks the node;
         // skipping here keeps body / build / proxy install from running twice.
         const tagged = node as Element & { __ariannaUpgraded?: boolean };
-        if (tagged.__ariannaUpgraded) return;
+        if (tagged.__ariannaUpgraded) return node;
         tagged.__ariannaUpgraded = true;
-
-        const ctor  = desc.Constructor;
-        const iface = desc.Interface;
-        if (!ctor || !iface) return;
 
         // Step 1: ensure prototype chain
         try {
@@ -1055,7 +1143,24 @@ export class Namespace
             if (style) applyRulesToStyle(style, styleRules);
         }
 
-        // Step 4: optional Component(this) auto-install
+        // Step 4: Component(this) auto-install — THE single facility installer.
+        //
+        // This calls _installFacilities(node), which is the ONE place that does:
+        //   - shadow attachment (native / AriannaShadow light / iframe backend)
+        //   - default sheet application
+        //   - reactive attribute signal wiring
+        //   - build() invocation
+        //   - template mount (this.template → shadow root, with slot projection)
+        //
+        // Namespace.Update MUST NOT duplicate any of that work. Its job is
+        // purely: resolve the descriptor, fix the prototype chain (Steps 1-3
+        // above), then hand off to the facility installer. Everything after
+        // the prototype is fixed is Component's responsibility — one source of
+        // truth (see COMPONENTS.md §36, anti-rot rule 4: "Update reads, never
+        // invents"). The old Step 5 (FUNCTION body), Step 6 (build), and
+        // Step 7 (template mount) were removed: they duplicated
+        // _installFacilities and raced with it, setting __templateRendered
+        // before the correct mount could run.
         const win = (typeof window !== 'undefined' ? window : globalThis) as unknown as { Component?: (el: Element) => Element };
         const ctorSrc = (() => { try { return ctor.toString(); } catch { return ''; } })();
         const wantsAutoComponent =
@@ -1068,104 +1173,7 @@ export class Namespace
             catch (e) { console.warn(`[arianna] Component(el) failed for <${desc.Tags[0]}>`, e); }
         }
 
-        // Step 5: run the user's body for FUNCTION form only.
-        // CLASS form CANNOT have its constructor body invoked here — class
-        // constructors require `new`. Users who want setup logic on
-        // markup-instantiated classes must put it in `build()` below.
-        if (desc.Declaration === 'FUNCTION') {
-            try { (ctor as unknown as (this: Element) => void).call(node); }
-            catch (e) { console.warn(`[arianna] FUNCTION ctor body failed for <${desc.Tags[0]}>`, e); }
-        }
-
-        // Step 6: build() hook (once per element, guarded by __isBuilt)
-        if (wantsAutoComponent) {
-            const stash = node as Element & { __isBuilt?: boolean };
-            if (!stash.__isBuilt) {
-                const userBuild = (node as unknown as { build?: () => void }).build;
-                if (typeof userBuild === 'function') {
-                    stash.__isBuilt = true;
-                    try { userBuild.call(node); }
-                    catch (e) { console.warn(`[arianna] build() threw for <${desc.Tags[0]}>:`, e); }
-                }
-            }
-        }
-
-        // Step 7: render `this.template` via shadow DOM (default closed)
-        //
-        // The Component(...) convention is for build() to assign
-        //     this.template = html`<div>...</div>`
-        // which yields a Template (v3 reactive template) instance.
-        //
-        // Shadow DOM is closed by default. Components can opt-in to open
-        // shadow via `def.shadow: 'open'` (useful for libraries that need
-        // external CSS to reach in). Components that explicitly disable
-        // shadow via `def.shadow: false` render into the light DOM and
-        // forfeit slot semantics — they should not use <slot> in that case.
-        //
-        // The `template.attach(host, instance, signals)` call:
-        //   - clones the parsed <template> content
-        //   - applies all bindings (`:attr`, `@event`, `a-if`, etc.) with
-        //     `this = instance` for expression evaluation
-        //   - inserts into the shadow root (or host directly if light DOM)
-        //   - relies on native `<slot>` projection — zero custom slot code
-        const hostWithTpl = node as unknown as {
-            template?: {
-                attach?: (host: ParentNode, instance: object, signals?: Record<string, unknown>) => unknown;
-                // Legacy v2 API — supported as fallback
-                mount?:  (host: Element,    scope: unknown) => unknown;
-            };
-            __templateRendered?: boolean;
-            __attrSignals?: Record<string, unknown>;
-            shadowRoot?: ShadowRoot | null;
-            attachShadow?: (init: ShadowRootInit) => ShadowRoot;
-        };
-
-        if (hostWithTpl.template && !hostWithTpl.__templateRendered)
-        {
-            hostWithTpl.__templateRendered = true;
-
-            // Retrieve def from the constructor (set by Component factory).
-            // After descriptor repoint, ctor is the user class (e.g. _Splitter);
-            // __ariannaDef is inherited via static prototype chain from Bound.
-            const ctorWithDef = ctor as unknown as { __ariannaDef?: Record<string, unknown> };
-            const def = ctorWithDef.__ariannaDef ?? {};
-
-            // Determine shadow mode. Default: closed.
-            const defShadow = def.shadow;
-            let shadowMode: 'open' | 'closed' | false;
-            if (defShadow === false)        shadowMode = false;
-            else if (defShadow === 'open')  shadowMode = 'open';
-            else if (defShadow === 'closed' || defShadow === undefined || defShadow === true) shadowMode = 'closed';
-            else shadowMode = 'closed';
-
-            // Find or create the render target.
-            let renderTarget: ParentNode = node;
-            if (shadowMode !== false) {
-                const sr = _attachAriannaShadow(node, shadowMode);
-                if (sr) renderTarget = sr;
-                else {
-                    // attachShadow can fail for elements that don't support it
-                    // (e.g. <img>, customized built-ins on certain interfaces).
-                    // Fall back to light DOM.
-                    console.warn(`[arianna] attachShadow failed for <${desc.Tags[0]}>, falling back to light DOM.`);
-                    renderTarget = node;
-                }
-            }
-
-            const signals = hostWithTpl.__attrSignals ?? {};
-
-            try {
-                if (typeof hostWithTpl.template.attach === 'function') {
-                    // v3 API
-                    hostWithTpl.template.attach(renderTarget, node, signals);
-                } else if (typeof hostWithTpl.template.mount === 'function') {
-                    // v2 legacy fallback
-                    hostWithTpl.template.mount(renderTarget as Element, node);
-                }
-            } catch (e) {
-                console.warn(`[arianna] template render failed for <${desc.Tags[0]}>:`, e);
-            }
-        }
+        return node;
     }
 
 
@@ -1257,41 +1265,75 @@ export class Namespace
         const self  = this;
 
         const wrapped = function (this: Element): Element {
-            // 1. Figure out what tag to actually create
-            //    - If the user class is a registered Custom in this NS, use its tag
-            //    - Otherwise, use the native interface's base tag
+            // 1. Resolve the wire-level tag.
             //
-            // EXCEPTION for non-HTML namespaces (SVG / MathML / X3D): the browser
-            // layout engine only renders elements whose nodeName is in the W3C-
-            // recognised tag set for that namespace. <form-d> inside SVG namespace
-            // is not renderable — must be <svg>. So for those namespaces we use
-            // the BASE tag (e.g. 'svg' for SVGSVGElement) regardless of the custom
-            // tag registered. The custom prototype is still spliced on so the
-            // class identity is preserved.
-            let tagToCreate = baseTag;
+            //    AriannA's `Component(tag, Base, ...)` lets users declare semantic
+            //    tags like `papa`, `cuore`, `mio-elemento` on top of any native
+            //    interface (HTMLDivElement, HTMLButtonElement, etc.). The browser
+            //    parser produces HTMLUnknownElement for any tag it doesn't know,
+            //    and HTMLUnknownElement does NOT support attachShadow.
+            //
+            //    Strategy — mirrors Namespace.Update:1027-1051 (markup path):
+            //
+            //      (a) If interface IS HTMLElement (autonomous custom element):
+            //          no native base tag exists. Use the custom tag directly.
+            //          The result is HTMLUnknownElement. Shadow support depends
+            //          on AriannaShadow polyfill (separate fix).
+            //
+            //      (b) If interface has a concrete native base tag (HTMLDivElement
+            //          → 'div', HTMLButtonElement → 'button', etc.) AND we're in
+            //          the HTML namespace: produce the NATIVE element and decorate
+            //          with is="<customTag>" + data-arianna-tag="<customTag>".
+            //          Result: real <div is="papa">, real layout, attachShadow OK,
+            //          internal slots intact for fragile interfaces.
+            //
+            //      (c) SVG / MathML / X3D namespaces: always use the base tag, no
+            //          `is=` attribute. The layout engine rejects custom tags
+            //          inside non-HTML namespaces, so identity is preserved only
+            //          via prototype splicing.
+            //
+            //    The user prototype is spliced onto the element regardless.
+            let tagToCreate    = baseTag;
+            let customTagAlias = '';
             let userProto: object = nativeProto;
             try {
                 const userCtor = this.constructor as { name?: string; prototype?: object };
                 if (userCtor && userCtor !== (wrapped as unknown as { constructor: unknown })) {
                     const custom = self.GetDescriptor(userCtor as new () => Element);
                     if (custom && custom.Custom && custom.Tags && custom.Tags[0]) {
-                        // Only use the custom tag as nodeName for HTML namespace.
-                        // SVG/MathML/X3D need the native base tag for the engine
-                        // to actually render the element.
-                        if (!useNS) {
-                            tagToCreate = custom.Tags[0];
+                        const customTag = custom.Tags[0];
+                        if (useNS) {
+                            // (c) SVG / MathML / X3D — always native base tag, no is=.
+                            tagToCreate = baseTag;
+                        } else if (baseTag && ifaceName !== 'HTMLElement') {
+                            // (b) HTML with concrete native base (div, button, …).
+                            //     Use the native base tag + is="<customTag>" pattern.
+                            tagToCreate    = baseTag;
+                            customTagAlias = customTag;
+                        } else {
+                            // (a) HTML with HTMLElement (autonomous custom element).
+                            //     No native base tag — use the custom tag directly.
+                            tagToCreate = customTag;
                         }
                     }
                     if (userCtor.prototype) userProto = userCtor.prototype;
                 }
             } catch { /* fall through to base */ }
 
-            // 2. Create the element with the correct namespace
+            // 2. Create the element with the correct namespace.
             const el = useNS && URI
                 ? document.createElementNS(URI, tagToCreate) as unknown as Element
                 : document.createElement(tagToCreate);
 
-            // 3. Splice the user prototype onto the element
+            // 3. Decorate with is= + data-arianna-tag when we swapped to baseTag.
+            //    These two attributes make the element queryable as the semantic
+            //    custom tag while keeping the native nodeName for layout/shadow.
+            if (customTagAlias && el instanceof HTMLElement) {
+                try { el.setAttribute('is',               customTagAlias); } catch { /* ignore */ }
+                try { el.setAttribute('data-arianna-tag', customTagAlias); } catch { /* ignore */ }
+            }
+
+            // 4. Splice the user prototype onto the element.
             return Object.setPrototypeOf(el, userProto);
         };
 

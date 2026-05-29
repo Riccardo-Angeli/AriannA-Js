@@ -360,9 +360,16 @@ export function GetDescriptor(
         }
     }
     else if (obj instanceof Node) {
-        const k = obj.nodeName.toLowerCase();
-        const hit = _tagIndex.get(k);
-        if (hit) return hit;
+        const el = obj as Element;
+        const keys = [
+            el.getAttribute?.('data-arianna-tag'),
+            el.getAttribute?.('is'),
+            el.nodeName?.toLowerCase(),
+        ].filter(Boolean) as string[];
+        for (const key of keys) {
+            const hit = _tagIndex.get(key.toLowerCase());
+            if (hit) return hit;
+        }
     }
 
     // ── Slow-path fallback (scan all namespaces) ──────────────────────────
@@ -375,7 +382,12 @@ export function GetDescriptor(
         key = (obj as { name: string }).name.toLowerCase();
     } else if (obj instanceof Node)
     {
-        key = obj.nodeName.toLowerCase();
+        const el = obj as Element;
+        key = (
+            el.getAttribute?.('data-arianna-tag') ||
+            el.getAttribute?.('is') ||
+            el.nodeName
+        ).toLowerCase();
     } else
     {
         const o = obj as Record<string, unknown>;
@@ -842,6 +854,25 @@ function _splitTypes(s: string): string[]
  *   document.addEventListener('arianna-wip:nodeadded', e => console.log(e.detail));
  */
 export const Observer = new MutationObserver((mutations: MutationRecord[]) => {
+    // ── Listener-error isolation ─────────────────────────────────────────
+    // The DOM contract is that an exception thrown by an event listener is
+    // reported asynchronously as an uncaught error attributed to the
+    // dispatchEvent site — NOT propagated to the caller. A try/catch around
+    // dispatchEvent does NOT catch the listener's throw. The only reliable
+    // way to isolate a misbehaving listener (in a component, in the
+    // playground, anywhere) is to call dispatchEvent inside an explicit
+    // try/catch within the Observer body itself.
+    //
+    // Without this guard, an "Illegal constructor" (or any other listener
+    // throw) from a component or extension surfaces with a single-frame
+    // stack pointing at this Observer loop — which is the symptom the
+    // playground hit at boot, with the throw misattributed to an unrelated
+    // source line in the host HTML.
+    const safeDispatch = (target: EventTarget, ev: Event): void => {
+        try { target.dispatchEvent(ev); }
+        catch (e) { console.warn('[arianna] Observer dispatchEvent listener threw:', e); }
+    };
+
     for (const m of mutations)
     {
         // Attribute change → dispatch {tagname}-change event on the element
@@ -850,7 +881,7 @@ export const Observer = new MutationObserver((mutations: MutationRecord[]) => {
             if (attr)
             {
                 const evName = /^(\w+)/.exec(attr.name)?.[1]?.toLowerCase() ?? attr.name;
-                m.target.dispatchEvent(new CustomEvent(`${evName}-change`, {
+                safeDispatch(m.target, new CustomEvent(`${evName}-change`, {
                     detail: { element: m.target, attribute: attr },
                 }));
             }
@@ -866,18 +897,21 @@ export const Observer = new MutationObserver((mutations: MutationRecord[]) => {
                 };
 
                 if (node instanceof Element)
-                    node.dispatchEvent(new CustomEvent('arianna-wip:nodeadding', { detail }));
+                    safeDispatch(node, new CustomEvent('arianna-wip:nodeadding', { detail }));
 
-                if (node instanceof Element) Upgrade(node);
+                if (node instanceof Element) {
+                    try { Upgrade(node); }
+                    catch (e) { console.warn('[arianna] Observer Upgrade threw:', e); }
+                }
 
                 detail.state = { loading: false, loaded: true, name: 'Loaded' };
-                document.dispatchEvent(new CustomEvent('arianna-wip:nodeadded', { detail }));
+                safeDispatch(document, new CustomEvent('arianna-wip:nodeadded', { detail }));
             }
 
             for (const node of Array.from(m.removedNodes))
             {
                 const d = node instanceof Element ? GetDescriptor(node) : false;
-                document.dispatchEvent(new CustomEvent('arianna-wip:noderemoved', {
+                safeDispatch(document, new CustomEvent('arianna-wip:noderemoved', {
                     detail: { node, descriptor: d },
                 }));
             }
@@ -1319,10 +1353,37 @@ export function Extends(...classes: unknown[]): unknown
         const SuperF = Super as unknown as { prototype: object };
         if (!SubF.prototype || !SuperF.prototype) continue;
 
+        // ── Cycle guard ──────────────────────────────────────────────────
+        // setPrototypeOf throws "TypeError: can't set prototype: it would
+        // cause a prototype chain cycle" when the target is already in the
+        // source's chain — most commonly when Sub === Super (e.g.
+        // ComponentFn calls Define(tag, base, base) → Extends(base, base)).
+        // Skip any stitch that would close a cycle; do each independently.
+        const wouldCycle = (child: object, parent: object): boolean =>
+        {
+            let p: object | null = parent;
+            while (p)
+            {
+                if (p === child) return true;
+                p = Object.getPrototypeOf(p);
+            }
+            return false;
+        };
+
         try
         {
-            Object.setPrototypeOf(SubF.prototype, SuperF.prototype);
-            Object.setPrototypeOf(SubF, SuperF);
+            if (SubF.prototype !== SuperF.prototype &&
+                Object.getPrototypeOf(SubF.prototype) !== SuperF.prototype &&
+                !wouldCycle(SubF.prototype, SuperF.prototype))
+            {
+                Object.setPrototypeOf(SubF.prototype, SuperF.prototype);
+            }
+            if ((SubF as object) !== (SuperF as object) &&
+                Object.getPrototypeOf(SubF as object) !== (SuperF as object) &&
+                !wouldCycle(SubF as object, SuperF as object))
+            {
+                Object.setPrototypeOf(SubF, SuperF);
+            }
         }
         catch { /* native built-ins may resist — skip */ }
     }

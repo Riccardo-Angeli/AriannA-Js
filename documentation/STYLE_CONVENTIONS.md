@@ -533,47 +533,35 @@ Even in trusted mode, AriannA should prefer StyleMap selectors over arbitrary in
 
 ## 11. Subclass Styling
 
-Subclassing is a first-class customization mechanism.
+Subclassing is a first-class customization mechanism, but examples such as `s-button` are **playground/demo examples only** unless the project explicitly decides to promote them into production components.
 
-Example: `s-button` extends `Button` and changes background.
+Do **not** add `SButton.ts` to `components/inputs/` and do **not** export it from the input barrel. The canonical component remains `Button`; `s-button` is only a sample custom element created inside the playground example to demonstrate subclass styling.
+
+Example playground-only subclass: `s-button` extends `Button` and changes background.
 
 ```ts
-import { Component } from '../../core/Component.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
-import { Button } from './Button.ts';
-
-export class SButton extends Component(
+// Playground example code only. Not a new source component.
+class SButton extends Component(
     's-button',
     Button,
     new Stylesheet([
         new Rule('.arianna-button', {
             background: '#111827',
-            color     : '#ffffff',
-            border    : '1px solid #374151',
-        }),
-        new Rule(':host([variant="danger"]) .arianna-button', {
-            background: '#dc2626',
-            color     : '#ffffff',
+            color: '#ffffff',
+            border: '1px solid #374151',
         }),
         new Rule('.arianna-button-label', {
             fontWeight: '700',
         }),
     ]),
     {
-        attrs : ['variant', 'size', 'disabled', 'icon', 'icon-right', 'label'],
+        attrs : ['variant', 'size', 'icon', 'disabled', 'label'],
         shadow: 'closed',
     }
-) {
-    build(opts = {}) {
-        super.build?.(opts);
-    }
-}
+) {}
 ```
 
-This is better than external deep CSS because it composes through the same AriannA style pipeline.
-
----
+This produces a temporary demo custom element with its own default style while still inheriting `Button` behavior. Production components must only be added as real source files when intentionally accepted as part of the public API.
 
 ## 12. Instance Styling
 
