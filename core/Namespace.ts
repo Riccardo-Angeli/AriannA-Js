@@ -170,7 +170,7 @@ function applyRulesToStyle(
         // Pseudo-class variants (`:host:hover`, `:host .inner`, …) need a
         // real stylesheet to take effect; skipping them here is the correct
         // no-op for inline rendering. The <style>-head injection path
-        // handles them via applyNestedRulesToCss below.
+        // handles them via generateNestedCss below.
         if (value !== null && typeof value === 'object') {
             const kt = Key.trim();
             if (kt === ':host' || kt === ':scope' || kt === '&') {
@@ -189,24 +189,17 @@ function applyRulesToStyle(
 
 
 /**
- * Detect whether a rules object is "nested" — i.e. has at least one key
- * whose value is a plain object (selector → properties), as opposed to a
- * flat `{ Background: 'red', Padding: '4px' }` map.
- *
- * Rule and Stylesheet instances are NOT considered nested even though
- * they're objects with non-string properties — they expose Selector +
- * Properties getters and are handled by the duck-type path in
- * applyRulesToStyle and the probe path in generateNestedCss / the
- * <style>-head injection block below.
+ * Detect whether a rules object is "nested" — at least one value is a
+ * plain object (selector → properties). Rule and Stylesheet instances
+ * are NOT nested (they expose Selector + Properties getters and are
+ * handled by the duck-type path).
  */
 function isNestedRules(rules: unknown): boolean
 {
     if (!rules || typeof rules !== 'object') return false;
-    // Rule instance? Skip — its Properties getter returns a flat object.
     const ruleLike = rules as { Selector?: unknown; Properties?: unknown; Rules?: unknown };
     if (typeof ruleLike.Selector === 'string' && ruleLike.Properties) return false;
     if (Array.isArray(ruleLike.Rules)) return false;
-    // Look for any value that's a plain object (i.e. nested selector block).
     const rec = rules as Record<string, unknown>;
     for (const k in rec) {
         if (!Object.prototype.hasOwnProperty.call(rec, k)) continue;
@@ -219,25 +212,9 @@ function isNestedRules(rules: unknown): boolean
 
 /**
  * Generate browser-normalised CSS text for a NESTED rules object, scoped
- * to a tag name. Splits the input into one CSS block per selector, with
- * `:host`-pseudoselectors translated to the dual selector that hits both
- * markup-instantiated and factory-built variants of the tag.
- *
- * Input shape:
- *   {
- *     ':host':         { Display: 'block', Background: '#fff3cd' },
- *     ':host:hover':   { Background: '#ffecb3' },
- *     ':host .inner':  { Color: 'crimson', FontWeight: 'bold' },
- *     // flat keys (no nested object) collected into :host
- *     Padding: '4px',
- *   }
- *
- * Output:
- *   '<tag>,[is="<tag>"]{display:block;background:#fff3cd;padding:4px}
- *    <tag>:hover,[is="<tag>"]:hover{background:#ffecb3}
- *    <tag> .inner,[is="<tag>"] .inner{color:crimson;font-weight:bold}'
- *
- * Returns an empty string if the input yields no CSS.
+ * to a tag name. `:host` and `:host*` selectors are translated to the
+ * dual `tag,[is="tag"]` form so both markup-instantiated and factory-
+ * built variants are covered.
  */
 function generateNestedCss(rules: unknown, tag: string): string
 {
@@ -1111,6 +1088,27 @@ export class Namespace
         this.Custom.Tags[_tag]            = descriptor;
         this.tags[_tag]                    = descriptor;
 
+        // ── Populate Core's global fast-lookup indexes ───────────────────────
+        // Without this, `Core.GetDescriptor(<user-class>)` returns false for
+        // every class registered via Core.Define / Component, because
+        // _tagIndex / _nameIndex / _ctorIndex are only ever populated by
+        // RegisterNamespace at namespace-creation time. The cascade:
+        //
+        //   class Card2o extends Component('case-card-2o', HTMLDivElement, …)
+        //   Core.Define('case-2o', A2o, Card2o)
+        //         └─ Core.GetDescriptor(Card2o) → false (not in any index)
+        //         └─ warning "base 'Card2o' not found, defaulting to html"
+        //
+        // The warning was misleading but the cascade also broke any subsequent
+        // lookup that relies on the global indexes (e.g. _patchNative wrapper
+        // resolving the user prototype via Core.GetDescriptor at super() time).
+        //
+        // IndexCustom is idempotent (re-running on the same descriptor is a
+        // no-op set), so this is safe even when Core.Define is called twice
+        // for the same tag during hot-reload.
+        try { Core.IndexCustom(descriptor); }
+        catch { /* indexer rejected — non-fatal */ }
+
         // Hot-reload anchor: now that the descriptor exists, point liveDesc at
         // it so the factory and Update closures (created above but yet to run)
         // read Style/Constructor via the descriptor — which Core.Define mutates
@@ -1338,18 +1336,38 @@ export class Namespace
 
         // Step 1: ensure prototype chain.
         //
-        // FUNCTION form: ctor.prototype.[[Prototype]] defaults to Object.prototype
-        // (plain functions have no extends), so splice the iface in.
+        // We need `node.[[Prototype]] → ctor.prototype` and `ctor.prototype's
+        // chain` to eventually reach the native interface (HTMLElement /
+        // SVGSVGElement / MathMLElement / …) so DOM APIs work.
         //
-        // CLASS form: native `class A3p extends SvgBase3p` already wired the
-        // full chain. Forcing iface.prototype here would OVERWRITE that chain
-        // (e.g. replacing SVGSVGElement with HTMLElement when base auto-
-        // resolution defaulted), breaking the SVG/MathML nature of the
-        // element. So for CLASS we leave ctor.prototype's [[Prototype]] alone
-        // and only splice node → ctor.prototype.
+        // Three flavours of ctor:
+        //
+        //   A) FUNCTION form (`function A() {}`): ctor.prototype.[[Prototype]]
+        //      is Object.prototype by default. Must splice iface in.
+        //
+        //   B) CLASS without extends (`class A {}`): same as A — prototype
+        //      ends at Object.prototype. Must splice iface in.
+        //
+        //   C) CLASS with native extends (`class A3p extends SvgBase3p`,
+        //      `class A4n extends Component(...)`, etc.): the chain is
+        //      already wired by `extends` and ALREADY reaches iface.prototype
+        //      (or one of its supers). Forcing setPrototypeOf would REPLACE
+        //      that chain with iface directly, destroying the user's super
+        //      classes — breaking e.g. SVGSVGElement specificity, custom
+        //      methods on intermediate user classes, etc.
+        //
+        // So: walk ctor.prototype's chain; if iface.prototype is already
+        // reachable, leave it alone. Otherwise splice.
         try {
-            if (desc.Declaration !== 'CLASS') {
-                Object.setPrototypeOf(ctor.prototype, (iface as { prototype: object }).prototype);
+            const targetIfacePrototype = (iface as { prototype: object }).prototype;
+            let needsSplice = true;
+            let p: object | null = Object.getPrototypeOf(ctor.prototype);
+            while (p && p !== Object.prototype) {
+                if (p === targetIfacePrototype) { needsSplice = false; break; }
+                p = Object.getPrototypeOf(p);
+            }
+            if (needsSplice) {
+                Object.setPrototypeOf(ctor.prototype, targetIfacePrototype);
             }
             Object.setPrototypeOf(node, (ctor as { prototype: object }).prototype);
         } catch { /* setPrototypeOf can fail on some hosts */ }
