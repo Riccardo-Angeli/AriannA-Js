@@ -159,9 +159,25 @@ function applyRulesToStyle(
         }
     }
     const styleRecord = style as unknown as Record<string, string>;
-    for (const Key in rules as Record<string, string>) {
-        if (!Object.prototype.hasOwnProperty.call(rules, Key)) continue;
-        const value = (rules as Record<string, string>)[Key];
+    const rulesRec = rules as Record<string, unknown>;
+    for (const Key in rulesRec) {
+        if (!Object.prototype.hasOwnProperty.call(rulesRec, Key)) continue;
+        const value = rulesRec[Key];
+        // ── Nested CSS support ────────────────────────────────────────────
+        // `{ ':host': { Background: 'red' }, ':host:hover': {…} }`
+        // For inline-style apply we descend ONLY into `:host` / `:scope` /
+        // `&` — those properties belong on the host element directly.
+        // Pseudo-class variants (`:host:hover`, `:host .inner`, …) need a
+        // real stylesheet to take effect; skipping them here is the correct
+        // no-op for inline rendering. The <style>-head injection path
+        // handles them via applyNestedRulesToCss below.
+        if (value !== null && typeof value === 'object') {
+            const kt = Key.trim();
+            if (kt === ':host' || kt === ':scope' || kt === '&') {
+                applyRulesToStyle(style, value);
+            }
+            continue;
+        }
         if (typeof value !== 'string') continue;
         // Map: user's PascalCase key → browser's exact camelCase property name.
         const camel = _cssPropertyMap.get(Key.toLowerCase());
@@ -169,6 +185,102 @@ function applyRulesToStyle(
         try { styleRecord[camel] = value; }
         catch { /* setter refused (read-only / unsupported value) */ }
     }
+}
+
+
+/**
+ * Detect whether a rules object is "nested" — i.e. has at least one key
+ * whose value is a plain object (selector → properties), as opposed to a
+ * flat `{ Background: 'red', Padding: '4px' }` map.
+ *
+ * Rule and Stylesheet instances are NOT considered nested even though
+ * they're objects with non-string properties — they expose Selector +
+ * Properties getters and are handled by the duck-type path in
+ * applyRulesToStyle and the probe path in generateNestedCss / the
+ * <style>-head injection block below.
+ */
+function isNestedRules(rules: unknown): boolean
+{
+    if (!rules || typeof rules !== 'object') return false;
+    // Rule instance? Skip — its Properties getter returns a flat object.
+    const ruleLike = rules as { Selector?: unknown; Properties?: unknown; Rules?: unknown };
+    if (typeof ruleLike.Selector === 'string' && ruleLike.Properties) return false;
+    if (Array.isArray(ruleLike.Rules)) return false;
+    // Look for any value that's a plain object (i.e. nested selector block).
+    const rec = rules as Record<string, unknown>;
+    for (const k in rec) {
+        if (!Object.prototype.hasOwnProperty.call(rec, k)) continue;
+        const v = rec[k];
+        if (v !== null && typeof v === 'object' && !Array.isArray(v)) return true;
+    }
+    return false;
+}
+
+
+/**
+ * Generate browser-normalised CSS text for a NESTED rules object, scoped
+ * to a tag name. Splits the input into one CSS block per selector, with
+ * `:host`-pseudoselectors translated to the dual selector that hits both
+ * markup-instantiated and factory-built variants of the tag.
+ *
+ * Input shape:
+ *   {
+ *     ':host':         { Display: 'block', Background: '#fff3cd' },
+ *     ':host:hover':   { Background: '#ffecb3' },
+ *     ':host .inner':  { Color: 'crimson', FontWeight: 'bold' },
+ *     // flat keys (no nested object) collected into :host
+ *     Padding: '4px',
+ *   }
+ *
+ * Output:
+ *   '<tag>,[is="<tag>"]{display:block;background:#fff3cd;padding:4px}
+ *    <tag>:hover,[is="<tag>"]:hover{background:#ffecb3}
+ *    <tag> .inner,[is="<tag>"] .inner{color:crimson;font-weight:bold}'
+ *
+ * Returns an empty string if the input yields no CSS.
+ */
+function generateNestedCss(rules: unknown, tag: string): string
+{
+    if (!rules || typeof rules !== 'object') return '';
+    const rec = rules as Record<string, unknown>;
+    const propBlocks: Array<{ selector: string; props: unknown }> = [];
+    const hostBlock: Record<string, string> = {};
+
+    for (const Key in rec) {
+        if (!Object.prototype.hasOwnProperty.call(rec, Key)) continue;
+        const value = rec[Key];
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+            propBlocks.push({ selector: Key, props: value });
+        }
+        else if (typeof value === 'string') {
+            hostBlock[Key] = value;
+        }
+    }
+    if (Object.keys(hostBlock).length > 0) {
+        propBlocks.unshift({ selector: ':host', props: hostBlock });
+    }
+
+    let css = '';
+    for (const block of propBlocks) {
+        const probe = document.createElement('style').style;
+        applyRulesToStyle(probe, block.props);
+        const inner = probe.cssText.trim();
+        if (!inner) continue;
+        const sel = block.selector.trim();
+        let realSel: string;
+        if (sel === ':host') {
+            realSel = `${tag},[is="${tag}"]`;
+        }
+        else if (sel.indexOf(':host') === 0) {
+            const suffix = sel.slice(5);
+            realSel = `${tag}${suffix},[is="${tag}"]${suffix}`;
+        }
+        else {
+            realSel = sel;
+        }
+        css += `${realSel}{${inner}}`;
+    }
+    return css;
 }
 
 
@@ -1019,16 +1131,28 @@ export class Namespace
         // Rule / Stylesheet) yields any CSS text, inject the <style>; if not,
         // skip silently (no empty rulesets polluting head).
         try {
-            const styleEl = document.createElement('style');
-            const probe = document.createElement('style').style;
-            applyRulesToStyle(probe, _style);
-            const cssText = probe.cssText;   // → 'background: red; font-weight: 700; ...'
-            if (cssText && cssText.trim().length > 0) {
-                // Dual selector: matches both <my-tag> (markup-instantiated,
-                // HTMLUnknownElement) and <baseTag is="my-tag"> (factory-built).
-                styleEl.textContent = `${_tag},[is="${_tag}"]{${cssText}}`;
-                styleEl.setAttribute('data-arianna-tag-style', _tag);
-                (document.head ?? document.documentElement).appendChild(styleEl);
+            if (isNestedRules(_style)) {
+                // Nested CSS path: multi-selector blocks for `:host`,
+                // `:host:hover`, `:host .inner`, etc.
+                const css = generateNestedCss(_style, _tag);
+                if (css.trim().length > 0) {
+                    const styleEl = document.createElement('style');
+                    styleEl.textContent = css;
+                    styleEl.setAttribute('data-arianna-tag-style', _tag);
+                    (document.head ?? document.documentElement).appendChild(styleEl);
+                }
+            }
+            else {
+                // Original path: flat object / Rule / Stylesheet via probe.
+                const styleEl = document.createElement('style');
+                const probe = document.createElement('style').style;
+                applyRulesToStyle(probe, _style);
+                const cssText = probe.cssText;
+                if (cssText && cssText.trim().length > 0) {
+                    styleEl.textContent = `${_tag},[is="${_tag}"]{${cssText}}`;
+                    styleEl.setAttribute('data-arianna-tag-style', _tag);
+                    (document.head ?? document.documentElement).appendChild(styleEl);
+                }
             }
         } catch { /* DOM not ready, skip */ }
 
@@ -1212,9 +1336,21 @@ export class Namespace
         if (tagged.__ariannaUpgraded) return node;
         tagged.__ariannaUpgraded = true;
 
-        // Step 1: ensure prototype chain
+        // Step 1: ensure prototype chain.
+        //
+        // FUNCTION form: ctor.prototype.[[Prototype]] defaults to Object.prototype
+        // (plain functions have no extends), so splice the iface in.
+        //
+        // CLASS form: native `class A3p extends SvgBase3p` already wired the
+        // full chain. Forcing iface.prototype here would OVERWRITE that chain
+        // (e.g. replacing SVGSVGElement with HTMLElement when base auto-
+        // resolution defaulted), breaking the SVG/MathML nature of the
+        // element. So for CLASS we leave ctor.prototype's [[Prototype]] alone
+        // and only splice node → ctor.prototype.
         try {
-            Object.setPrototypeOf(ctor.prototype, (iface as { prototype: object }).prototype);
+            if (desc.Declaration !== 'CLASS') {
+                Object.setPrototypeOf(ctor.prototype, (iface as { prototype: object }).prototype);
+            }
             Object.setPrototypeOf(node, (ctor as { prototype: object }).prototype);
         } catch { /* setPrototypeOf can fail on some hosts */ }
 
@@ -1304,6 +1440,26 @@ export class Namespace
             // is true).
             try { (ctor as unknown as (this: Element) => void).call(node); }
             catch (e) { console.warn(`[arianna] FUNCTION body failed for <${desc.Tags[0]}>:`, e); }
+        }
+        else if (desc.Declaration === 'CLASS') {
+            // ── CLASS-form build() execution (non-Component path) ────────────
+            //
+            // A class ctor cannot be invoked on an existing element — but
+            // user-defined `build()` methods can and SHOULD run on markup
+            // upgrade. The wantsAutoComponent branch above handles arianna-*
+            // tags via _installFacilities; this branch handles every other
+            // CLASS registration (e.g. case-2a, case-2b, …).
+            //
+            // Idempotency: mark __isBuilt so a later run doesn't fire twice.
+            const stash = node as Element & { __isBuilt?: boolean };
+            if (!stash.__isBuilt) {
+                stash.__isBuilt = true;
+                const userBuild = (node as unknown as { build?: () => void }).build;
+                if (typeof userBuild === 'function') {
+                    try { userBuild.call(node); }
+                    catch (e) { console.warn(`[arianna] build() on markup-upgrade failed for <${desc.Tags[0]}>:`, e); }
+                }
+            }
         }
 
         return node;
