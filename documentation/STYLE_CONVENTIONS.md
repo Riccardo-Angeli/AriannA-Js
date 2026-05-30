@@ -328,6 +328,88 @@ Structural selectors may be used internally, but they must not be the primary ov
 
 ---
 
+## 6.5 Framework-generated default class selector
+
+When a component is registered with a **plain object** as its default style argument (third argument to `Component(...)` / `Core.Define(...)`), AriannA auto-generates a class selector from the **constructor name** rather than the tag.
+
+### 6.5.1 Rule
+
+```
+class MiaClasse extends XYZ                  → selector = .MiaClasse
+function A1o() { ... }                       → selector = .A1o
+Component('case-card-1o', ..., {...})        → selector = .{user-class-name}  (lazy)
+```
+
+The framework reads `ctor.name` at registration time and injects:
+
+```html
+<style data-arianna-tag-style="case-card-1o" data-arianna-class="Card1o">.Card1o{...}</style>
+```
+
+### 6.5.2 Why class names, not tags
+
+- Class selector specificity (0,1,0) is low enough to be overridden by other classes / IDs / inline styles
+- NOT bound to the tag — same class name composes across tags
+- Tag selector (`case-card-1o`) is too rigid and DOM-position-coupled
+- `[is="..."]` attribute selector forces the framework to set the `is` attribute at upgrade and binds CSS to a specific element-customization pattern
+- Class name allows natural CSS inheritance via multi-class composition: an element can carry `class="ParentClass ChildClass"` and both rules apply with predictable cascade
+
+### 6.5.3 Plain object vs Rule / Stylesheet
+
+The auto-generated selector applies **only** to the plain default-style object form. When the user passes a `Rule` or `Stylesheet` instance, the user's explicit `Selector` is honoured verbatim — no auto-rewriting.
+
+```ts
+// Plain object → framework auto-selector
+Component('case-card-1o', HTMLDivElement, { Background: '#fff' });
+// → <style>.{ctor.name}{background:#fff}</style>
+
+// Rule with explicit selector → user-controlled
+Component('arianna-button', HTMLElement, new Rule('.arianna-button', {
+    background: '#1f6feb',
+}));
+// → <style>.arianna-button{background:#1f6feb}</style>
+```
+
+### 6.5.4 Nested CSS `:host` translation
+
+For nested rules-object syntax, `:host` (and `:host:hover`, `:host .inner`, etc.) auto-translates to `.{ctor.name}` so the user can write canonical-looking host rules without knowing the class name:
+
+```ts
+Component('case-card-1o', HTMLDivElement, {
+    ':host'      : { Background: '#fff' },
+    ':host:hover': { Background: '#eee' },
+});
+// → <style>.Card1o{background:#fff}.Card1o:hover{background:#eee}</style>
+```
+
+### 6.5.5 Two-phase injection — solving the Component shared-class problem
+
+`Component(tag, base, ...)` internally caches a shared `ComponentClass` per `base` interface (one per HTMLDivElement, one per SVGSVGElement, etc.) — this keeps the prototype chain canonical `Subclass → Component → base`. The trade-off: at the moment of `Namespace.Define`, the constructor passed in is the shared `ComponentClass` whose `name === 'Component'` — not yet the user's `Card1o`.
+
+To avoid every Component-registered tag colliding on a `.Component` selector, the framework uses **two-phase injection**:
+
+1. **Phase 1 — Namespace.Define**: if `ctor.__ariannaComponent === true` (shared class marker), **skip** the `<style>` injection. The descriptor's `Style` is stored, but no `<style>` element is appended yet.
+
+2. **Phase 2 — Component constructor**: when `new Card1o()` runs and `super()` reaches the Component constructor, `new.target` resolves to `Card1o` (the most-derived class). The constructor inspects the descriptor; if `d.Style` is present and `d._cssInjected` is not set, it injects `<style>.Card1o{...}</style>` and marks `d._cssInjected = true` to prevent doubling on subsequent instances.
+
+This idempotent late-binding is invisible to component authors: the `<style>` element shows up in `<head>` the first time the component is instantiated, with the correct user-class selector, regardless of the shared-class machinery.
+
+For non-Component registrations (direct `Core.Define('case-1o', A1o, ...)` with a FUNCTION or CLASS that isn't the shared one), Phase 1 alone suffices — the `<style>` is injected immediately with `.A1o` selector.
+
+### 6.5.6 Implementation surface
+
+| File | Role |
+|---|---|
+| `core/Namespace.ts` → `Namespace.Define` style block | Phase 1: inject for non-Component ctors; skip when `ctor.__ariannaComponent`. |
+| `core/Component.ts` → Component constructor | Phase 2: inject lazily via `new.target.name` when `descriptor.Class` first set. |
+| `core/Namespace.ts` → `generateNestedCss` | Translate `:host` → `.{className}` inside nested rules. |
+
+Idempotency marker: `descriptor._cssInjected: boolean`.
+
+DOM marker: every framework-injected `<style>` carries `data-arianna-tag-style="{tag}"` and `data-arianna-class="{ClassName}"` attributes for debug / hot-reload tooling.
+
+---
+
 ## 7. Host vs Internal Classes
 
 Use `:host` for host-level behavior:

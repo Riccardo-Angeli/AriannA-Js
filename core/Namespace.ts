@@ -212,11 +212,11 @@ function isNestedRules(rules: unknown): boolean
 
 /**
  * Generate browser-normalised CSS text for a NESTED rules object, scoped
- * to a tag name. `:host` and `:host*` selectors are translated to the
- * dual `tag,[is="tag"]` form so both markup-instantiated and factory-
- * built variants are covered.
+ * to a class name (per CONVENTIONS.md, selectors are class-based).
+ * `:host` and `:host*` selectors are translated to `.className`
+ * pseudoselector composites.
  */
-function generateNestedCss(rules: unknown, tag: string): string
+function generateNestedCss(rules: unknown, className: string): string
 {
     if (!rules || typeof rules !== 'object') return '';
     const rec = rules as Record<string, unknown>;
@@ -245,12 +245,13 @@ function generateNestedCss(rules: unknown, tag: string): string
         if (!inner) continue;
         const sel = block.selector.trim();
         let realSel: string;
+        // Convention: `:host` → `.{ClassName}` class selector. See STYLE_CONVENTIONS.md §6.5.
         if (sel === ':host') {
-            realSel = `${tag},[is="${tag}"]`;
+            realSel = `.${className}`;
         }
         else if (sel.indexOf(':host') === 0) {
             const suffix = sel.slice(5);
-            realSel = `${tag}${suffix},[is="${tag}"]${suffix}`;
+            realSel = `.${className}${suffix}`;
         }
         else {
             realSel = sel;
@@ -258,6 +259,62 @@ function generateNestedCss(rules: unknown, tag: string): string
         css += `${realSel}{${inner}}`;
     }
     return css;
+}
+
+
+/**
+ * Walk the prototype chain of an iface and collect every Custom ancestor
+ * class name. Used at registration time to precompute the list of CSS
+ * class names to apply via `classList.add(...)` so ancestor styles
+ * naturally compose on the descendant via multi-class CSS matching.
+ *
+ * Rules:
+ *   - Start at the iface itself (e.g. Card1o, not getPrototypeOf(Card1o))
+ *   - Stop at the first native interface (HTMLElement, SVG*Element, MathML*Element, Node, Object)
+ *   - Skip the shared `Component` class (name === 'Component') — keep walking
+ *   - Dedupe by name
+ *
+ * For `Core.Define('case-1o', A1o, Card1o, …)`:
+ *   _collectAncestorClassNames(Card1o) → ['Card1o']
+ *   (Component is skipped, HTMLDivElement is native — stop)
+ *
+ * For `Core.Define('case-1n', A1n, L3_1n, …)` (deep chain):
+ *   _collectAncestorClassNames(L3_1n) → ['L3_1n', 'L2_1n', 'L1_1n']
+ *   (HTMLElement is native — stop)
+ *
+ * For `Component('case-4b', HTMLElement, …)`:
+ *   _collectAncestorClassNames(HTMLElement) → [] (native — stop immediately)
+ */
+function _collectAncestorClassNames(iface: unknown): string[]
+{
+    const out: string[] = [];
+    if (!iface || typeof iface !== 'function') return out;
+    const seen = new Set<string>();
+    let cursor: object | null = iface as object;
+    while (cursor && cursor !== Function.prototype && cursor !== Object.prototype)
+    {
+        const name = (cursor as { name?: string }).name;
+        if (!name)
+        {
+            cursor = Object.getPrototypeOf(cursor);
+            continue;
+        }
+        // Stop at native interfaces — these contribute nothing stylistically
+        // and their name shouldn't pollute classList.
+        if (/^(HTML|SVG|Math)\w*Element$/.test(name) || name === 'Element' || name === 'Node' || name === 'EventTarget')
+        {
+            break;
+        }
+        // The shared Component class is a chain bridge, not a stylable entity.
+        // Skip but keep walking.
+        if (name !== 'Component' && !seen.has(name))
+        {
+            seen.add(name);
+            out.push(name);
+        }
+        cursor = Object.getPrototypeOf(cursor);
+    }
+    return out;
 }
 
 
@@ -871,6 +928,12 @@ export class Namespace
         const fragileSpec = _FRAGILE_PROXY_SPEC[_interface.name];
         const isFragile   = !!fragileSpec;
 
+        // Precompute ancestor class names (walk iface chain at registration
+        // time). Reused both by the factory (programmatic `new`) and by the
+        // Update method (markup upgrade), stored in the descriptor for
+        // observability. See STYLE_CONVENTIONS.md §6.5.
+        const _ancestorClassNames = _collectAncestorClassNames(_interface);
+
         // ── Build the factory ─────────────────────────────────────────────
         const win = (typeof window !== 'undefined' ? window : globalThis) as unknown as
             { Component?: (el: Element) => Element };
@@ -922,6 +985,22 @@ export class Namespace
             if (isFragile) {
                 _installFragileProxy(el, fragileSpec);
             }
+
+            // ── Apply ancestor + own CSS classes ──────────────────────────
+            // Convention (STYLE_CONVENTIONS.md §6.5): every component default
+            // style is registered with a `.{ClassName}` selector. By adding
+            // every ancestor's class name AND the own class name to the
+            // node's classList, ancestor styles compose naturally onto the
+            // descendant via standard CSS multi-class matching.
+            //
+            //   <case-1o class="Card1o A1o">    → .Card1o + .A1o both apply
+            //
+            // Ancestor list was precomputed at registration time.
+            try {
+                for (const c of _ancestorClassNames) el.classList.add(c);
+                const ownClass = (ctor as { name?: string }).name;
+                if (ownClass && ownClass !== 'Component') el.classList.add(ownClass);
+            } catch { /* classList unavailable on some node types */ }
 
             // Apply default style. Now supports plain object, Rule instance,
             // and Stylesheet instance — applyRulesToStyle duck-types the input
@@ -1014,6 +1093,11 @@ export class Namespace
             Standard    : false,
             Custom      : true,
             Style       : _style,
+            // List of ancestor class names (from iface prototype chain),
+            // applied as classList entries at element creation/upgrade time
+            // so ancestor `<style>.AncestorClass{…}</style>` rules match
+            // naturally on this tag's elements. See STYLE_CONVENTIONS.md §6.5.
+            AncestorCssClasses: _ancestorClassNames,
             // Factory exposed on descriptor for advanced access
             Factory     : _factory,
             // Update is called by Core.Observer when an element is added to the
@@ -1129,27 +1213,47 @@ export class Namespace
         // Rule / Stylesheet) yields any CSS text, inject the <style>; if not,
         // skip silently (no empty rulesets polluting head).
         try {
-            if (isNestedRules(_style)) {
-                // Nested CSS path: multi-selector blocks for `:host`,
-                // `:host:hover`, `:host .inner`, etc.
-                const css = generateNestedCss(_style, _tag);
-                if (css.trim().length > 0) {
-                    const styleEl = document.createElement('style');
-                    styleEl.textContent = css;
-                    styleEl.setAttribute('data-arianna-tag-style', _tag);
-                    (document.head ?? document.documentElement).appendChild(styleEl);
+            // ── Skip if this is a Component-shared class registration ────
+            // When `Component('tag', base, {Style})` is called as part of
+            // `class UserClass extends Component(...)`, the ctor passed to
+            // Namespace.Define is the SharedComponentClass (cached per base
+            // in _componentClassByBase) whose .name is 'Component'. At this
+            // point we don't yet know UserClass's name — that information
+            // becomes available only when `new UserClass()` runs and the
+            // Component constructor captures `new.target`. The Component
+            // constructor itself performs the <style> injection with the
+            // correct `.UserClass` selector. Marker: __ariannaComponent.
+            const ctorMarker = (ctor as { __ariannaComponent?: boolean }).__ariannaComponent;
+            if (!ctorMarker) {
+                if (isNestedRules(_style)) {
+                    // Nested path translates `:host` → `.{ClassName}` (see
+                    // generateNestedCss). Convention: selector is the class
+                    // name passed to Core.Define / Component, not the tag.
+                    const className = (ctor as { name?: string }).name || _tag;
+                    const css = generateNestedCss(_style, className);
+                    if (css.trim().length > 0) {
+                        const styleEl = document.createElement('style');
+                        styleEl.textContent = css;
+                        styleEl.setAttribute('data-arianna-tag-style', _tag);
+                        (document.head ?? document.documentElement).appendChild(styleEl);
+                    }
                 }
-            }
-            else {
-                // Original path: flat object / Rule / Stylesheet via probe.
-                const styleEl = document.createElement('style');
-                const probe = document.createElement('style').style;
-                applyRulesToStyle(probe, _style);
-                const cssText = probe.cssText;
-                if (cssText && cssText.trim().length > 0) {
-                    styleEl.textContent = `${_tag},[is="${_tag}"]{${cssText}}`;
-                    styleEl.setAttribute('data-arianna-tag-style', _tag);
-                    (document.head ?? document.documentElement).appendChild(styleEl);
+                else {
+                    // Flat path: single `.{ClassName}` selector block.
+                    // Convention: selector is the constructor/class name passed
+                    // to Core.Define / Component. e.g. `class MiaClasse extends X`
+                    // registers `<style>.MiaClasse{…}</style>`. The tag is NOT
+                    // used — class names compose naturally via multi-class.
+                    const styleEl = document.createElement('style');
+                    const probe = document.createElement('style').style;
+                    applyRulesToStyle(probe, _style);
+                    const cssText = probe.cssText;
+                    if (cssText && cssText.trim().length > 0) {
+                        const className = (ctor as { name?: string }).name || _tag;
+                        styleEl.textContent = `.${className}{${cssText}}`;
+                        styleEl.setAttribute('data-arianna-tag-style', _tag);
+                        (document.head ?? document.documentElement).appendChild(styleEl);
+                    }
                 }
             }
         } catch { /* DOM not ready, skip */ }
@@ -1371,6 +1475,20 @@ export class Namespace
             }
             Object.setPrototypeOf(node, (ctor as { prototype: object }).prototype);
         } catch { /* setPrototypeOf can fail on some hosts */ }
+
+        // ── Apply ancestor + own CSS classes ──────────────────────────────
+        // See factory's equivalent block (same logic). On markup upgrade we
+        // also add classes so `<case-1o>` written directly in HTML gets the
+        // ancestor styles applied (e.g. `.Card1o` from Card1o's registered
+        // descriptor matches alongside `.A1o` from case-1o's own style).
+        try {
+            const ancestors = (desc as { AncestorCssClasses?: string[] }).AncestorCssClasses;
+            if (ancestors) {
+                for (const c of ancestors) node.classList.add(c);
+            }
+            const ownClass = (ctor as { name?: string }).name;
+            if (ownClass && ownClass !== 'Component') node.classList.add(ownClass);
+        } catch { /* classList unavailable on some node types */ }
 
         // Step 2: install the fragile-interface proxy wrapper if the user
         // extended HTMLInputElement, HTMLSelectElement, HTMLCanvasElement,

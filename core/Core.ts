@@ -63,6 +63,14 @@ export interface TypeDescriptor
     Standard    : boolean;
     Custom      : boolean;
     Style       : Record<string, string>;
+    /**
+     * Class names to apply to every instance via `node.classList.add(...)` so
+     * that ancestor styles (e.g. `.Card1o`) match alongside the own class
+     * style (e.g. `.A1o`). Computed at registration time by walking the
+     * iface prototype chain; native interfaces (HTML*Element, SVG*Element,
+     * MathML*Element) are excluded. See STYLE_CONVENTIONS.md §6.5.
+     */
+    AncestorCssClasses? : string[];
     /** The factory built by Namespace.Define — `new`-able to produce an instance. */
     Factory?    : new (...args: unknown[]) => Element;
     /** Called by Core.Observer when an element is added via markup. */
@@ -295,11 +303,29 @@ const _ctorIndex : WeakMap<Function, TypeDescriptor> = new WeakMap();
 function _indexInterface(ifaceName: string, d: TypeDescriptor): void
 {
     if (!d) return;
-    _nameIndex.set(ifaceName, d);
-    _nameIndex.set(ifaceName.toLowerCase(), d);
+    // Constructor key is descriptor-specific (each Custom has its own unique
+    // generated class via Component(...)), so set unconditionally.
     if (d.Constructor) _ctorIndex.set(d.Constructor as Function, d);
-    if (d.Interface && d.Interface !== d.Constructor) {
+
+    // Interface key (e.g. HTMLElement, SVGSVGElement) is SHARED across many
+    // descriptors: every Custom registered with `extends Component(tag,
+    // HTMLElement, …)` has `d.Interface === HTMLElement`. Last-write-wins
+    // here would corrupt the global index — a subsequent
+    // GetDescriptor(HTMLElement) would return the latest registered Custom
+    // descriptor instead of the standard HTMLElement one. Standard
+    // descriptors are registered first by RegisterNamespace at namespace
+    // creation, so a "first-write-wins" check on _ctorIndex protects them
+    // from being clobbered by Custom registrations.
+    //
+    // For _nameIndex the same logic applies: 'HTMLElement' string key
+    // belongs to the standard descriptor, not to any Custom that happens
+    // to use HTMLElement as its iface.
+    if (d.Interface && d.Interface !== d.Constructor && !_ctorIndex.has(d.Interface as Function)) {
         _ctorIndex.set(d.Interface as Function, d);
+    }
+    if (!_nameIndex.has(ifaceName)) {
+        _nameIndex.set(ifaceName, d);
+        _nameIndex.set(ifaceName.toLowerCase(), d);
     }
     for (const t of (d.Tags ?? [])) _tagIndex.set(t.toLowerCase(), d);
 }
@@ -320,6 +346,26 @@ export function IndexCustom(d: TypeDescriptor): void
     if (!d) return;
     if (d.Name) _indexInterface(d.Name, d);
     for (const t of (d.Tags ?? [])) _indexTag(t, d);
+}
+
+/**
+ * Index a user subclass captured on first `new Subclass()` against its own
+ * descriptor. The factory registers the descriptor under the shared Component
+ * class (Constructor) and Name 'Component', so GetDescriptor(Subclass) would
+ * miss until now. After this, `Core.Define('case-1o', A1o, Card1o)` resolves
+ * Card1o as the Custom base it is — instead of failing the lookup and falling
+ * back to a standard/HTMLElement guess. Self-contained: drop this function and
+ * its single call site to roll back.
+ */
+export function IndexClass(ctor: Function, d: TypeDescriptor): void
+{
+    if (!ctor || !d) return;
+    _ctorIndex.set(ctor, d);                              // GetDescriptor(Card1o) → desc
+    const n = (ctor as { name?: string }).name;
+    if (n && !_nameIndex.has(n)) {                        // GetDescriptor('Card1o') → desc
+        _nameIndex.set(n, d);
+        _nameIndex.set(n.toLowerCase(), d);
+    }
 }
 
 /**
@@ -614,33 +660,66 @@ export function Define(
     //
     let ns: NamespaceDescriptor | null = null;
 
+    // O(1) fast path — _ctorIndex / _nameIndex / _tagIndex via GetDescriptor.
+    // Covers every registered native interface and every Custom descriptor
+    // (Namespace.Define calls Core.IndexCustom on register, so the WeakMap is
+    // pre-populated for both standard ancestors and user Components).
     const baseDsc = GetDescriptor(base);
-    if (baseDsc && baseDsc.Namespace)
+    if (baseDsc && baseDsc.Namespace) ns = baseDsc.Namespace;
+
+    // ── First-use registration for unregistered user-class bases ──────────
+    //
+    // The base may be a user class that extends a registered class but is
+    // not itself in any index. Three idiomatic patterns:
+    //
+    //   class Card extends Component('arianna-card', HTMLDivElement, …) { }
+    //   class SvgBase extends SVGSVGElement { }
+    //   class MathBase extends MathMLElement { }
+    //
+    // None of these user classes appear in _ctorIndex / _nameIndex / the
+    // namespace interfaces — only their ancestors do. Walk
+    // Object.getPrototypeOf(base) ONCE to find the first registered
+    // ancestor, then register the user class against the same descriptor
+    // so every subsequent Core.Define / GetDescriptor call hits the O(1)
+    // Map lookup. The walk is bounded by the inheritance depth (typically
+    // 1–3 steps) and happens at most once per user-class lifetime.
+    if (!ns)
     {
-        ns = baseDsc.Namespace;
-    } else
-    {
-        for (const nsKey of Object.keys(Namespaces))
+        let ancestor: object | null = Object.getPrototypeOf(base);
+        let hitDesc : TypeDescriptor | null = null;
+        while (ancestor && ancestor !== Function.prototype && ancestor !== Object.prototype)
         {
-            const candidate = Namespaces[nsKey];
-
-            if (candidate.base === base)
+            // Fast path: ancestor itself is indexed (Component-returned class,
+            // native interface like SVGSVGElement).
+            const aDsc = _ctorIndex.get(ancestor as Function);
+            if (aDsc && aDsc.Namespace) { ns = aDsc.Namespace; hitDesc = aDsc; break; }
+            // Slow path: scan standard interfaces (covers SVGSVGElement →
+            // SVGGraphicsElement → SVGElement when the WeakMap was missed,
+            // and namespace.base equality).
+            for (const nsKey of Object.keys(Namespaces))
             {
-                ns = candidate;
-                break;
-            }
-
-            for (const k of Object.keys(candidate.types.standard.interfaces))
-            {
-                const d = candidate.types.standard.interfaces[k];
-                if (d.Constructor === base || d.Interface === base)
+                const candidate = Namespaces[nsKey];
+                if (candidate.base === ancestor) { ns = candidate; break; }
+                for (const k of Object.keys(candidate.types.standard.interfaces))
                 {
-                    ns = candidate;
-                    break;
+                    const d = candidate.types.standard.interfaces[k];
+                    if (d.Constructor === ancestor || d.Interface === ancestor)
+                    {
+                        ns      = candidate;
+                        hitDesc = d;
+                        break;
+                    }
                 }
+                if (ns) break;
             }
             if (ns) break;
+            ancestor = Object.getPrototypeOf(ancestor);
         }
+        // Memoize: register base against its ancestor's descriptor so the
+        // next call is O(1). Without a descriptor we can't memoize (no
+        // payload to store), but that path also doesn't take the walk
+        // route, so no extra cost.
+        if (hitDesc) _ctorIndex.set(base as Function, hitDesc);
     }
 
     if (!ns)
@@ -1427,6 +1506,40 @@ export function Extends(...classes: unknown[]): unknown
             {
                 Object.setPrototypeOf(SubF, SuperF);
             }
+
+            // ── Function-Sub + registered-component Super (Extends.js parity) ──
+            // When Sub is a plain FUNCTION (no `extends`) and Super is a
+            // registered Custom (e.g. Core.Extends(A1o, Card1o)), the prototype
+            // splices above are not enough: `new A1o()` would run A1o's body on
+            // a plain object, so `this.innerHTML = …` throws "called on an
+            // object that does not implement interface Element". Legacy
+            // Extends.js (function-Sub branch) replaces window[Sub.name] with a
+            // wrapper that (1) builds a real Super element, (2) applies Sub's
+            // body on it ("the good old call"), (3) reprototypes. Mirror that
+            // so `new A1o()` returns a live, body-applied element.
+            const subIsClass   = /^class[\s{]/.test(Function.prototype.toString.call(Sub));
+            const superTag     = GetTags(Super as Parameters<typeof GetTags>[0])[0];
+            const win          = (typeof window !== 'undefined' ? window : globalThis) as Record<string, unknown>;
+            if (!subIsClass && superTag)
+            {
+                const SubFn = Sub as (this: Element, ...a: unknown[]) => void;
+                const subName = (Sub as { name?: string }).name || 'AriannaSub';
+                const wrapper = function (this: unknown, ...args: unknown[]): Element | undefined
+                {
+                    const el = Create(superTag);            // real, upgraded Super element
+                    if (!el) return undefined;
+                    try { SubFn.apply(el, args); } catch { /* body best-effort */ }
+                    const proto = (new.target ? (new.target as { prototype: object }).prototype
+                                              : (wrapper as { prototype: object }).prototype);
+                    return Object.setPrototypeOf(el, proto);
+                };
+                try { Object.defineProperty(wrapper, 'name', { value: subName }); } catch { /* frozen */ }
+                wrapper.prototype = (Sub as { prototype: object }).prototype;
+                (wrapper.prototype as { constructor: unknown }).constructor = wrapper;
+                Object.setPrototypeOf(wrapper, Super as object);
+                win[subName] = wrapper;                      // `new A1o()` resolves to this
+                classes[i] = wrapper;                        // returned/threaded to caller
+            }
         }
         catch { /* native built-ins may resist — skip */ }
     }
@@ -1753,6 +1866,7 @@ function _buildCore()
         GetTags,
         GetNamespace,
         IndexCustom,
+        IndexClass,
         Define,
         Create,
         IsUpgraded,

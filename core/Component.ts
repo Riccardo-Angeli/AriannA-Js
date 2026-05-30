@@ -1616,13 +1616,98 @@ function _resolveComponentClassForBase(
             // class (the user's Subclass) because super() propagates it.
             const ctor = new.target as unknown as Function | undefined;
             if (ctor) {
-                const liveTag = (this as Element).tagName?.toLowerCase?.();
+                // The component's own tag — NOT this.tagName. After super() on a
+                // concrete native base (HTMLDivElement) this.tagName is 'DIV',
+                // whose descriptor is the standard div; writing d.Class onto it
+                // leaves case-card-1o's descriptor empty and its .{ClassName}
+                // style un-injected. The shared Component class this ctor
+                // extends IS the descriptor's Constructor, so resolve the tag
+                // from that descriptor; fall back to this.tagName for plain
+                // native-extends classes that have no Component descriptor.
+                const sharedProto = Object.getPrototypeOf((ctor as { prototype: object }).prototype);
+                const ownDesc = GetDescriptor(
+                    (sharedProto && sharedProto.constructor) as new (...a: unknown[]) => Element,
+                ) as { Tags?: string[] } | false;
+                const liveTag = (ownDesc && ownDesc.Tags && ownDesc.Tags[0]?.toLowerCase())
+                    || (this as Element).tagName?.toLowerCase?.();
                 if (liveTag) {
-                    const d = GetDescriptor(liveTag) as { Class?: Function | null; Constructor?: Function; Prototype?: object } | false;
-                    if (d && !d.Class) {
-                        d.Class       = ctor;
-                        d.Constructor = ctor;
-                        d.Prototype   = (ctor as { prototype: object }).prototype;
+                    const d = GetDescriptor(liveTag) as {
+                        Class?: Function | null;
+                        Constructor?: Function;
+                        Prototype?: object;
+                        Style?: unknown;
+                        AncestorCssClasses?: string[];
+                        _cssInjected?: boolean;
+                    } | false;
+                    if (d) {
+                        // ── Apply own + ancestor CSS classes (EVERY instance) ──
+                        // Convention: every component default style is registered
+                        // with a `.{ClassName}` selector. Add own class name +
+                        // every registered ancestor's name to classList so
+                        // multi-class CSS matches naturally on every node.
+                        try {
+                            const ownClass = (ctor as { name?: string }).name;
+                            if (ownClass && ownClass !== 'Component') {
+                                (this as Element).classList.add(ownClass);
+                            }
+                            if (d.AncestorCssClasses) {
+                                for (const c of d.AncestorCssClasses) {
+                                    (this as Element).classList.add(c);
+                                }
+                            }
+                        } catch { /* classList unavailable */ }
+
+                        // ── First-instance only: capture Class + late <style> injection ──
+                        if (!d.Class) {
+                            d.Class       = ctor;
+                            d.Constructor = ctor;
+                            d.Prototype   = (ctor as { prototype: object }).prototype;
+                            // Register the subclass under its own identity so
+                            // GetDescriptor(Card1o) resolves — lets Core.Define
+                            // treat a component used as a base (Core.Define(tag,
+                            // fn, Card1o)) as the Custom it is. Rollback: remove
+                            // this line + Core.IndexClass.
+                            try { Core.IndexClass(ctor, d as unknown as never); } catch { /* index best-effort */ }
+
+                            // Late <style> injection with real class name.
+                            // Namespace.Define skipped style injection for tags
+                            // registered via Component (see __ariannaComponent
+                            // check there) because at that point ctor.name was
+                            // 'Component' (shared cached class). Now we know
+                            // the true user-class name via new.target — inject
+                            // the <style> with `.{ctor.name}` selector exactly
+                            // once (idempotent via d._cssInjected).
+                            if (d.Style && !d._cssInjected) {
+                                try {
+                                    const className = (ctor as { name?: string }).name;
+                                    if (className && className !== 'Component') {
+                                        const probe = document.createElement('style').style;
+                                        // applyRulesToStyle is the duck-typing
+                                        // helper used by Namespace; we replicate
+                                        // its behaviour inline here to avoid an
+                                        // import cycle (Component → Namespace).
+                                        const styleObj = d.Style as Record<string, unknown>;
+                                        const recProbe = probe as unknown as Record<string, string>;
+                                        for (const Key in styleObj) {
+                                            if (!Object.prototype.hasOwnProperty.call(styleObj, Key)) continue;
+                                            const value = styleObj[Key];
+                                            if (typeof value !== 'string') continue;
+                                            try { recProbe[Key.charAt(0).toLowerCase() + Key.slice(1)] = value; }
+                                            catch { /* readonly / unsupported */ }
+                                        }
+                                        const cssText = probe.cssText;
+                                        if (cssText && cssText.trim().length > 0) {
+                                            const styleEl = document.createElement('style');
+                                            styleEl.textContent = `.${className}{${cssText}}`;
+                                            styleEl.setAttribute('data-arianna-tag-style', liveTag);
+                                            styleEl.setAttribute('data-arianna-class', className);
+                                            (document.head ?? document.documentElement).appendChild(styleEl);
+                                        }
+                                        d._cssInjected = true;
+                                    }
+                                } catch { /* DOM not ready or refused — non-fatal */ }
+                            }
+                        }
                     }
                 }
             }
