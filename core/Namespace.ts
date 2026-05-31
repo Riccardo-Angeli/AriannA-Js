@@ -194,6 +194,35 @@ function applyRulesToStyle(
  * are NOT nested (they expose Selector + Properties getters and are
  * handled by the duck-type path).
  */
+/**
+ * Snapshot the author's markup light-DOM content before build() runs.
+ * Returns the child nodes only when there is REAL author content (an element
+ * or non-whitespace text) and NO shadow root (with a shadow the content stays
+ * in light DOM and projects through a <slot>, so there is no conflict).
+ * Returns null otherwise (e.g. `new MyComp()` with no markup children).
+ */
+function _snapshotAuthorContent(el: Element): Node[] | null
+{
+    const hasReal = Array.from(el.childNodes).some(
+        n => n.nodeType === 1 /* Element */
+            || (n.nodeType === 3 /* Text */ && (n.textContent ?? '').trim() !== ''),
+    );
+    return hasReal ? Array.from(el.childNodes) : null;
+}
+
+/**
+ * Restore the author's markup content if build() overwrote it. The author's
+ * content wins over build()'s default. No-op when nothing was snapshotted or
+ * build() left the content untouched.
+ */
+function _restoreAuthorContent(el: Element, snapshot: Node[] | null): void
+{
+    if (!snapshot || snapshot.length === 0) return;
+    const same = el.childNodes.length === snapshot.length
+        && snapshot.every((n, i) => el.childNodes[i] === n);
+    if (!same) (el as unknown as { replaceChildren: (...n: Node[]) => void }).replaceChildren(...snapshot);
+}
+
 function isNestedRules(rules: unknown): boolean
 {
     if (!rules || typeof rules !== 'object') return false;
@@ -1061,8 +1090,12 @@ export class Namespace
                     stash.__isBuilt = true;
                     const userBuild = (el as unknown as { build?: (...a: unknown[]) => void }).build;
                     if (typeof userBuild === 'function') {
+                        // Author markup content (e.g. <case-4a>Ciao</case-4a>)
+                        // must OVERRIDE build()'s default (this.textContent=…).
+                        const authorContent = _snapshotAuthorContent(el);
                         try { userBuild.apply(el, args); }
                         catch (e) { console.warn(`[arianna] build() threw for <${_tag}>:`, e); }
+                        _restoreAuthorContent(el, authorContent);
                     }
                 }
             }
@@ -1138,8 +1171,10 @@ export class Namespace
                 {
                     const curStyle = liveStyle();
                     if (curStyle) {
-                        const style = (el as HTMLElement).style;
-                        if (style) applyRulesToStyle(style, curStyle);
+                        try {
+                            const style = (el as HTMLElement).style;
+                            if (style) applyRulesToStyle(style, curStyle);
+                        } catch { /* element interface lacks .style — skip */ }
                     }
                 }
 
@@ -1167,8 +1202,10 @@ export class Namespace
                         stash.__isBuilt = true;
                         const userBuild = (el as unknown as { build?: () => void }).build;
                         if (typeof userBuild === 'function') {
+                            const authorContent = _snapshotAuthorContent(el);
                             try { userBuild.call(el); }
                             catch (e) { console.warn(`[arianna] build() on markup-upgrade threw for <${_tag}>:`, e); }
+                            _restoreAuthorContent(el, authorContent);
                         }
                     }
                 }
@@ -1522,8 +1559,10 @@ export class Namespace
         // handles the empty-plain-object no-op case AND duck-types Rule /
         // Stylesheet instances (extracts .Properties before iterating).
         if (desc.Style) {
-            const style = (node as HTMLElement).style;
-            if (style) applyRulesToStyle(style, desc.Style);
+            try {
+                const style = (node as HTMLElement).style;
+                if (style) applyRulesToStyle(style, desc.Style);
+            } catch { /* element interface lacks .style — skip */ }
 
             // Inline style (above) CANNOT express pseudo-classes/compound
             // selectors (:host:hover, :host .inner, ::before, …) — they were

@@ -758,8 +758,10 @@ function _installFacilities(el: Element): Element
         // Rule[] | string | Record<string, unknown>); only the record-shape is
         // iterable as a flat key-value map here, so narrow explicitly.
         const cssMap = def.css as Record<string, unknown>;
-        const style = (el as HTMLElement).style as unknown as Record<string, string>;
-        for (const k of Object.keys(cssMap)) {
+        let style: Record<string, string> | null = null;
+        try { style = (el as HTMLElement).style as unknown as Record<string, string>; }
+        catch { style = null; /* element interface lacks .style — skip inline */ }
+        if (style) for (const k of Object.keys(cssMap)) {
             const camelKey = k[0].toLowerCase() + k.slice(1);
             const v = cssMap[k];
             if (typeof v !== 'string') continue;
@@ -832,6 +834,20 @@ function _installFacilities(el: Element): Element
     // before delegating to ComponentFn. Falls back to [] (markup / Core.Create
     // path: no constructor args available).
     //
+    // Snapshot the AUTHOR's markup content before build(). Per the content
+    // precedence rule, light-DOM content written by the page author
+    // (`<miotag>Ciao</miotag>`) must OVERRIDE whatever build() sets as a default
+    // (`this.textContent = 'ABC'`). build() writes this.textContent to the
+    // host's LIGHT DOM (not the shadow), so the conflict exists regardless of
+    // whether a shadow root is attached — the restored content then projects
+    // through the shadow's <slot> if one exists. Ignore pure-whitespace nodes
+    // from pretty-printed markup.
+    const hasRealAuthorContent = Array.from(el.childNodes).some(
+        n => n.nodeType === 1 /* Element */
+            || (n.nodeType === 3 /* Text */ && (n.textContent ?? '').trim() !== ''),
+    );
+    const authorMarkup = hasRealAuthorContent ? Array.from(el.childNodes) : null;
+
     // Guarded by __isBuilt — runs once per element lifetime.
     if (!stash.__isBuilt) {
         const userBuild = (el as unknown as { build?: (...a: unknown[]) => void }).build;
@@ -840,6 +856,16 @@ function _installFacilities(el: Element): Element
             const args = (el as unknown as { __buildArgs?: unknown[] }).__buildArgs ?? [];
             try { userBuild.apply(el, args); }
             catch (e) { console.warn('[arianna] build() threw:', e); }
+        }
+    }
+
+    // Restore the author's markup content if build() overwrote it. The author's
+    // content wins over build()'s default.
+    if (authorMarkup && authorMarkup.length > 0) {
+        const sameContent = el.childNodes.length === authorMarkup.length
+            && authorMarkup.every((n, i) => el.childNodes[i] === n);
+        if (!sameContent) {
+            el.replaceChildren(...authorMarkup);
         }
     }
 
