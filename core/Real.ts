@@ -111,6 +111,14 @@ function _shadowCSS(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule 
 export type RealTarget = string | Element | AriannATemplate | (new (...a: unknown[]) => Element) | VirtualNode | RealDef | Real;
 export interface RealDef { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string>; }
 type Getter<T> = () => T;
+
+// Accept a getter OR a static value. The fluent binding methods (text, attr,
+// cls, prop, style) run their argument inside an effect; a non-function value
+// (e.g. .text("XYZ")) used to throw "getter is not a function". Wrap statics so
+// both forms work: .text(() => name())  AND  .text("Hello").
+function asGetter<T>(g: Getter<T> | T): Getter<T> {
+    return typeof g === 'function' ? (g as Getter<T>) : () => g;
+}
 type NodeInput = RealTarget | string | Element | Node | VirtualNode | Real | null;
 function toNodes(items: NodeInput[]): Node[] {
     return items.flatMap(item => {
@@ -150,11 +158,19 @@ export class Real {
             // Single line: namespace.Create() — via functions.create — handles
             // every case (CLASS via Reflect.construct, FUNCTION via createElement
             // + Update, plain native tags). Real has no upgrade logic of its
-            // own; it just asks the namespace for an upgraded element.
+            // own; it asks Core to create an UPGRADED element. For a registered
+            // Custom tag Core.Create runs the namespace Update synchronously —
+            // splicing the user subclass into the prototype chain and calling
+            // build() — so `new Real('case-4b')` / `new Component(tag).Real`
+            // produce a live, built element (not a bare, un-upgraded one).
             const d = Core.GetDescriptor(arg0);
-            this.#el = (d && d.Namespace?.functions?.create)
-                ? d.Namespace.functions.create(arg0) as Element
-                : document.createElement(arg0);
+            if (d && (d as { Custom?: boolean }).Custom && typeof Core.Create === 'function') {
+                this.#el = (Core.Create(arg0) as Element) ?? document.createElement(arg0);
+            } else {
+                this.#el = (d && d.Namespace?.functions?.create)
+                    ? d.Namespace.functions.create(arg0) as Element
+                    : document.createElement(arg0);
+            }
             if (d) this.#descriptor = d;
         }
         else if (arg0 instanceof Element) { this.#el = arg0; this.#descriptor = Core.GetDescriptor(arg0); }
@@ -200,13 +216,13 @@ export class Real {
     signalMono<T>(value: T): SignalMono<T> { return signalMono(value); }
     effect(fn: () => void): this { this.#effects.push(effect(fn)); return this; }
     computed<T>(fn: () => T): ReadonlySignal<T> { const s = signal<T>(undefined as T); this.#effects.push(effect(() => s.set(fn()))); return s.readonly(); }
-    text(getter: Getter<string>): this { const node = document.createTextNode(getter()); this.#el.appendChild(node); this.#effects.push(effect(() => { node.nodeValue = getter(); })); return this; }
+    text(getter: Getter<string> | string): this { const g = asGetter(getter); const node = document.createTextNode(g()); this.#el.appendChild(node); this.#effects.push(effect(() => { node.nodeValue = g(); })); return this; }
     textMono(s: SignalMono<string>, node?: Text): this { if (!node) { node = document.createTextNode(s.peek()); this.#el.appendChild(node); } sinkText(s, node); return this; }
-    attr(name: string, getter: Getter<string | null>): this { const el = this.#el; this.#effects.push(effect(() => { const v = getter(); if (v === null) el.removeAttribute(name); else el.setAttribute(name, v); })); return this; }
-    cls(name: string, getter: Getter<boolean>): this { const el = this.#el; this.#effects.push(effect(() => { if (getter()) el.classList.add(name); else el.classList.remove(name); })); return this; }
+    attr(name: string, getter: Getter<string | null> | string | null): this { const g = asGetter(getter); const el = this.#el; this.#effects.push(effect(() => { const v = g(); if (v === null) el.removeAttribute(name); else el.setAttribute(name, v); })); return this; }
+    cls(name: string, getter: Getter<boolean> | boolean): this { const g = asGetter(getter); const el = this.#el; this.#effects.push(effect(() => { if (g()) el.classList.add(name); else el.classList.remove(name); })); return this; }
     clsMono(name: string): (v: boolean) => void { const el = this.#el; return (v: boolean) => { if (v) el.classList.add(name); else el.classList.remove(name); }; }
-    prop(name: string, getter: Getter<unknown>): this { const rec = this.#el as unknown as Record<string, unknown>; this.#effects.push(effect(() => { rec[name] = getter(); })); return this; }
-    style(prop: string, getter: Getter<string>): this { const el = this.#el as HTMLElement; const cssProp = prop.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`); this.#effects.push(effect(() => { el.style.setProperty(cssProp, getter()); })); return this; }
+    prop(name: string, getter: Getter<unknown> | unknown): this { const g = asGetter(getter); const rec = this.#el as unknown as Record<string, unknown>; this.#effects.push(effect(() => { rec[name] = g(); })); return this; }
+    style(prop: string, getter: Getter<string> | string): this { const g = asGetter(getter); const el = this.#el as HTMLElement; const cssProp = prop.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`); this.#effects.push(effect(() => { el.style.setProperty(cssProp, g()); })); return this; }
     bind(getter: Getter<string>, setter?: (v: string) => void): this { this.prop('value', getter); if (setter) this.#el.addEventListener('input', e => setter((e.target as HTMLInputElement).value)); return this; }
     destroy(): this { this.#effects.forEach(s => s()); this.#effects = []; this.Sheet = null; return this; }
 
@@ -292,5 +308,9 @@ export class Real {
     static untrack    = untrack;
     static template   = (html: string) => new AriannATemplate(html);
 }
+// Pin the constructor name: the bundler renames the local binding to `_Real`
+// to avoid colliding with the global `Real` defined just below, which makes
+// `constructor.name` (and GetPrototypeChain) report `_Real`. Force it back.
+try { Object.defineProperty(Real, 'name', { value: 'Real', configurable: true }); } catch { /* frozen */ }
 if (typeof window !== 'undefined') Object.defineProperty(window, 'Real', { enumerable: true, configurable: false, writable: false, value: Real });
 export default Real;

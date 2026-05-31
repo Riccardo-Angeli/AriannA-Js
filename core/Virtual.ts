@@ -236,6 +236,13 @@ interface QueuedListener
 /** Generic getter for reactive sinks. */
 type Getter<T> = () => T;
 
+// Accept a getter OR a static value (mirrors Real.asGetter). Non-function
+// arguments to text/attr/cls/prop/style are wrapped so a static value works
+// in both the immediate and deferred-sink paths instead of throwing.
+function asGetter<T>(g: Getter<T> | T): Getter<T> {
+    return typeof g === 'function' ? (g as Getter<T>) : () => g;
+}
+
 /** Reactive binding queued before render(). Flushed by #applySinks. */
 interface PendingSink
 {
@@ -316,6 +323,8 @@ export class VirtualNode
     #created     = true;
     #connected   = false;
     #mounted     = false;
+    /** Deferred-mount closure from a Jsx.ts Snabbdom vnode / React element. */
+    #deferredMount: ((container: Element) => Node | undefined) | null = null;
     #loaded      = false;
     #rendered    = false;
 
@@ -387,6 +396,26 @@ export class VirtualNode
         ...children : VChild[]
     )
     {
+        // ── Deferred-mount path (Jsx.ts Snabbdom vnode / React element) ──────
+        // Jsx.ts h()/createElement results carry a non-enumerable
+        // __ariannaMount(container) closure. When one is passed to
+        // `new Virtual(vnode)`, we don't rebuild it as a native VirtualNode —
+        // we stash the closure and run it on .append()/.mount(). This makes
+        // Virtual the single entry point for AriannA, Snabbdom and React, with
+        // identical syntax: new Virtual(x).append(container).
+        if (def && typeof def === 'object' && typeof (def as { __ariannaMount?: unknown }).__ariannaMount === 'function')
+        {
+            this.#deferredMount = (def as { __ariannaMount: (c: Element) => Node | undefined }).__ariannaMount;
+            this.#tag      = 'div';
+            this.#attrs    = {};
+            this.#children = [];
+            this.#text     = '';
+            this.#id       = uid();
+            _nodes[this.#id] = this;
+            VirtualNode.Instances.push(this);
+            return;
+        }
+
         // ── Template clone path ──────────────────────────────────────────
         // The template already produced a real Element; we wrap it and skip
         // attribute/child rebuilding. Used for high-throughput list
@@ -849,6 +878,16 @@ export class VirtualNode
             : parent instanceof Element                  ? parent
             : null;
 
+        // Deferred-mount (Snabbdom vnode / React element via Jsx.ts): run the
+        // marker closure against the resolved container. It owns patch/diff
+        // (Snabbdom) or createRoot + setState loop (React).
+        if (this.#deferredMount)
+        {
+            if (p instanceof Element) this.#deferredMount(p);
+            this.#mounted = true;
+            return this;
+        }
+
         if (p) p.appendChild(this.render());
         this.#mounted = true;
         return this;
@@ -1178,17 +1217,18 @@ export class VirtualNode
      * Append a reactive Text node whose value is `getter()`. Updates
      * automatically whenever the getter's dependencies change.
      */
-    text(getter: Getter<string>): this
+    text(getter: Getter<string> | string): this
     {
+        const g: Getter<string> = asGetter(getter);
         if (this.#dom)
         {
-            const n = document.createTextNode(getter());
+            const n = document.createTextNode(g());
             this.#dom.appendChild(n);
-            this.#effects.push(effect(() => { n.nodeValue = getter(); }));
+            this.#effects.push(effect(() => { n.nodeValue = g(); }));
         }
         else
         {
-            this.#sinks.push({ type: 'text', getter });
+            this.#sinks.push({ type: 'text', getter: g });
         }
         return this;
     }
@@ -1215,38 +1255,40 @@ export class VirtualNode
     }
 
     /** Bind an attribute reactively; `null` removes the attribute. */
-    attr(name: string, getter: Getter<string | null>): this
+    attr(name: string, getter: Getter<string | null> | string | null): this
     {
+        const g: Getter<string | null> = asGetter(getter);
         if (this.#dom)
         {
             const el = this.#dom;
             this.#effects.push(effect(() => {
-                const v = getter();
+                const v = g();
                 if (v === null) el.removeAttribute(name);
                 else            el.setAttribute(name, v);
             }));
         }
         else
         {
-            this.#sinks.push({ type: 'attr', getter, name });
+            this.#sinks.push({ type: 'attr', getter: g, name });
         }
         return this;
     }
 
     /** Toggle a class reactively (`true` adds, `false` removes). */
-    cls(name: string, getter: Getter<boolean>): this
+    cls(name: string, getter: Getter<boolean> | boolean): this
     {
+        const g: Getter<boolean> = asGetter(getter);
         if (this.#dom)
         {
             const el = this.#dom;
             this.#effects.push(effect(() => {
-                if (getter()) el.classList.add(name);
-                else          el.classList.remove(name);
+                if (g()) el.classList.add(name);
+                else     el.classList.remove(name);
             }));
         }
         else
         {
-            this.#sinks.push({ type: 'cls', getter, name });
+            this.#sinks.push({ type: 'cls', getter: g, name });
         }
         return this;
     }
@@ -1266,16 +1308,17 @@ export class VirtualNode
     }
 
     /** Bind a DOM property reactively. */
-    prop(name: string, getter: Getter<unknown>): this
+    prop(name: string, getter: Getter<unknown> | unknown): this
     {
+        const g: Getter<unknown> = asGetter(getter);
         if (this.#dom)
         {
             const rec = this.#dom as unknown as Record<string, unknown>;
-            this.#effects.push(effect(() => { rec[name] = getter(); }));
+            this.#effects.push(effect(() => { rec[name] = g(); }));
         }
         else
         {
-            this.#sinks.push({ type: 'prop', getter, name });
+            this.#sinks.push({ type: 'prop', getter: g, name });
         }
         return this;
     }
@@ -1293,23 +1336,24 @@ export class VirtualNode
      */
     style(
         propOrThing : string | Rule | Stylesheet | Record<string, string>,
-        getter?     : Getter<string>,
+        getter?     : Getter<string> | string,
     ): this
     {
-        // Form 1: reactive (prop, getter)
-        if (typeof propOrThing === 'string' && typeof getter === 'function')
+        // Form 1: reactive (prop, getter) — also accept a static value.
+        if (typeof propOrThing === 'string' && typeof getter !== 'undefined')
         {
+            const g = asGetter(getter);
             if (this.#dom)
             {
                 const el = this.#dom as HTMLElement;
                 const p  = propOrThing.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`);
                 this.#effects.push(effect(() => {
-                    el.style.setProperty(p, getter());
+                    el.style.setProperty(p, g());
                 }));
             }
             else
             {
-                this.#sinks.push({ type: 'style', getter, name: propOrThing });
+                this.#sinks.push({ type: 'style', getter: g, name: propOrThing });
             }
             return this;
         }

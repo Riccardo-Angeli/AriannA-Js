@@ -817,39 +817,108 @@ export interface ComponentMeta
 /**
  * Class decorator — defines and registers a Custom Element.
  *
- * @example
- *   @Component({ tag: 'my-button', template: '<button><slot></slot></button>' })
- *   class MyButton extends HTMLElement {
- *     connectedCallback() { this.#render(); }
- *   }
+ * Two call forms, both supported (mirrors the Component(...) constructor):
+ *
+ *  • Positional (same as the constructor):
+ *      @Component('dec-card', Rule | Stylesheet | object | cssString, options?)
+ *      class DecCard extends HTMLElement {}
+ *
+ *  • Object:
+ *      @Component({ tag: 'dec-card', template: '<slot></slot>', style: '…', shadow: 'open' })
+ *      class DecCard extends HTMLElement {}
  */
-export function Component(meta: ComponentMeta)
+export function Component(
+    arg0: ComponentMeta | string,
+    style?: unknown,
+    options?: { shadow?: 'open' | 'closed' | false; template?: string },
+)
 {
+    // ── Normalize both call forms into a single ComponentMeta ──────────────
+    let meta: ComponentMeta;
+    if (typeof arg0 === 'string') {
+        // Positional form: @Component('tag', style, options)
+        // `style` may be a Rule, Stylesheet, plain object, or CSS string. We
+        // serialize to a CSS string for the decorator's <style> injection.
+        let styleStr: string | undefined;
+        const sAny = style as { Text?: string; cssText?: string; toString?: () => string } | string | undefined;
+        if (sAny == null)                       styleStr = undefined;
+        else if (typeof sAny === 'string')      styleStr = sAny;
+        else if (typeof sAny.Text === 'string') styleStr = sAny.Text;       // Rule / Stylesheet
+        else if (typeof sAny.cssText === 'string') styleStr = sAny.cssText;  // Rule
+        else if (typeof sAny === 'object') {
+            // plain object: { Display:'block', ... } → :host { … }
+            const props = Object.entries(sAny as Record<string, unknown>)
+                .filter(([, v]) => typeof v === 'string' || typeof v === 'number')
+                .map(([k, v]) => `${k.replace(/[A-Z]/g, m => '-' + m.toLowerCase())}:${v}`)
+                .join(';');
+            styleStr = props ? `:host{${props}}` : undefined;
+        }
+        meta = {
+            tag     : arg0,
+            style   : styleStr,
+            template: options?.template,
+            shadow  : options?.shadow ?? 'closed',
+        };
+    } else {
+        // Object form: @Component({ tag, template, style, shadow })
+        meta = arg0;
+    }
+
     return function <T extends typeof HTMLElement>(Base: T): T
     {
         // Legacy decorator compatibility, routed through AriannA's registry.
         // No customElements.define(): Component registration belongs to Core/Namespace.
         const rendered = new WeakSet<HTMLElement>();
         const roots    = new WeakMap<HTMLElement, ShadowRoot>();
-        const _connected = (Base.prototype as unknown as { connectedCallback?: () => void }).connectedCallback;
+        const proto    = Base.prototype as unknown as {
+            connectedCallback?: () => void;
+            build?: (...a: unknown[]) => void;
+        };
+        const _connected = proto.connectedCallback;
+        const _build     = proto.build;
 
-        (Base.prototype as unknown as { connectedCallback: unknown }).connectedCallback = function connectedCallback(this: HTMLElement)
-        {
-            if (!rendered.has(this))
-            {
-                rendered.add(this);
-                if (meta.shadow !== false)
-                {
-                    const existing = this.shadowRoot ?? roots.get(this);
-                    const root = existing ?? this.attachShadow({ mode: meta.shadow ?? 'closed' });
+        // Shared render: attach shadow (or light) and inject template + style.
+        // Idempotent per element via the `rendered` WeakSet.
+        const _render = function (this: HTMLElement) {
+            if (rendered.has(this)) return;
+            rendered.add(this);
+            if (meta.shadow !== false) {
+                const existing = this.shadowRoot ?? roots.get(this);
+                let root: ShadowRoot | null = existing ?? null;
+                if (!root) {
+                    try { root = this.attachShadow({ mode: meta.shadow ?? 'closed' }); }
+                    catch { root = null; }
+                }
+                if (root) {
                     roots.set(this, root);
                     if (meta.style)    { const s = document.createElement('style'); s.textContent = meta.style; root.appendChild(s); }
                     if (meta.template) { const t = document.createElement('template'); t.innerHTML = meta.template; root.appendChild(t.content.cloneNode(true)); }
-                } else if (meta.template && !this.children.length)
-                {
-                    this.innerHTML = meta.template;
+                    return;
                 }
+                // attachShadow failed (non-capable tag): fall through to light DOM.
             }
+            // Light DOM: inject style into <head> (scoped to the tag) + template
+            // into the element's own children.
+            if (meta.style) {
+                const s = document.createElement('style');
+                s.textContent = meta.style.replace(/:host/g, meta.tag);
+                document.head.appendChild(s);
+            }
+            if (meta.template && !this.children.length) this.innerHTML = meta.template;
+        };
+
+        // AriannA calls build() on upgrade (it does NOT use customElements, so
+        // the browser never fires connectedCallback). Hook build() so decorator
+        // components render within AriannA's pipeline.
+        proto.build = function (this: HTMLElement, ...a: unknown[]) {
+            _render.call(this);
+            if (_build) _build.apply(this, a);
+        };
+
+        // Also keep connectedCallback for any environment that DOES use
+        // customElements (harmless double-guarded by the `rendered` set).
+        proto.connectedCallback = function connectedCallback(this: HTMLElement) {
+            _render.call(this);
             if (_connected) _connected.call(this);
         };
 

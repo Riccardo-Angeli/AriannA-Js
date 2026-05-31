@@ -298,7 +298,23 @@ export class Stylesheet
 
     #parseObject(obj: SheetObjectDef): void
     {
-        for (const [, def] of Object.entries(obj))
+        const entries = Object.entries(obj);
+
+        // ── Flat property map detection ──────────────────────────────────────
+        // A flat map like { Display:'block', Background:'…', Color:'white' } is a
+        // single rule's PROPERTIES, not a selector→properties map. Its values are
+        // CSS primitives (string/number), never nested rule objects. In that case
+        // wrap the whole object as one `:host { … }` rule. (Without this the loop
+        // below pushes ZERO rules — the cause of plain-object CSS, e.g. case 4a/4e,
+        // producing an empty stylesheet and no applied styles.)
+        const isFlatPropertyMap = entries.length > 0 && entries.every(([, v]) =>
+            typeof v !== 'object' || v === null);
+        if (isFlatPropertyMap) {
+            this.#rules.push(new Rule(':host', obj as unknown as CSSProperties));
+            return;
+        }
+
+        for (const [, def] of entries)
         {
             const d = def as RuleDefinition;
             if (d.Selector || d.Contents || d.Content || d.Rule || d.Body)

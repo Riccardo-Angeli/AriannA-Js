@@ -747,15 +747,18 @@ export class Namespace
         let wireTag = t;
         if (desc && desc.Custom && desc.Interface) {
             const ifaceName = (desc.Interface as { name?: string }).name ?? '';
-            const baseDesc  = this.Standard.Interfaces[ifaceName];
-            const baseTag   = (baseDesc as { Tags?: string[] } | undefined)?.Tags?.[0];
+            // Resolve the base tag from the INTERFACE's own descriptor, which
+            // GetDescriptor finds across ALL namespaces (SVG/MathML interfaces
+            // live in their own registries, NOT in the HTML namespace's
+            // Standard.Interfaces — so a this.Standard lookup misses them).
+            const ifaceDesc = Core.GetDescriptor(desc.Interface as new (...a: unknown[]) => Element) as { Tags?: string[] } | false
+                || (this.Standard.Interfaces[ifaceName] as { Tags?: string[] } | undefined);
+            const baseTag   = (ifaceDesc as { Tags?: string[] } | undefined)?.Tags?.[0];
 
-            // AriannA supports semantic/custom vocabulary tags such as <papa>
-            // without browser-level custom-element registration. When the user
-            // declares a concrete native base (HTMLDivElement, HTMLButtonElement,
-            // SVGSVGElement, ...), the wire-level element must be that base tag
-            // so browser internals (including attachShadow support) are valid.
-            // Plain HTMLElement remains autonomous and keeps the declared tag.
+            // When the user declares a concrete native base (HTMLDivElement,
+            // HTMLButtonElement, SVGSVGElement, …), the wire-level element must
+            // be that base tag so browser internals (style, type, attachShadow)
+            // are valid. Plain HTMLElement stays autonomous (keeps custom tag).
             if (baseTag && ifaceName && ifaceName !== 'HTMLElement') wireTag = baseTag;
         }
 
@@ -1009,8 +1012,10 @@ export class Namespace
             {
                 const curStyle = liveStyle();
                 if (curStyle) {
-                    const elStyle = (el as HTMLElement).style;
-                    if (elStyle) applyRulesToStyle(elStyle, curStyle);
+                    try {
+                        const elStyle = (el as HTMLElement).style;
+                        if (elStyle) applyRulesToStyle(elStyle, curStyle);
+                    } catch { /* element interface lacks .style (e.g. SVG-namespaced custom) — skip */ }
                 }
             }
 
@@ -1037,8 +1042,10 @@ export class Namespace
             {
                 const curStyle = liveStyle();
                 if (curStyle) {
-                    const elStyle2 = (el as HTMLElement).style;
-                    if (elStyle2) applyRulesToStyle(elStyle2, curStyle);
+                    try {
+                        const elStyle2 = (el as HTMLElement).style;
+                        if (elStyle2) applyRulesToStyle(elStyle2, curStyle);
+                    } catch { /* element interface lacks .style — skip */ }
                 }
             }
 
@@ -1517,6 +1524,63 @@ export class Namespace
         if (desc.Style) {
             const style = (node as HTMLElement).style;
             if (style) applyRulesToStyle(style, desc.Style);
+
+            // Inline style (above) CANNOT express pseudo-classes/compound
+            // selectors (:host:hover, :host .inner, ::before, …) — they were
+            // silently dropped, so `:hover` never worked on function/Update-path
+            // components (e.g. case-1c). Collect every rule whose selector is
+            // NOT a bare :host/:root/& and emit a real <style>, scoped to THIS
+            // instance, into <head>.
+            try {
+                const styleObj = desc.Style as {
+                    Rules?: unknown;
+                    Selector?: string; Properties?: unknown;
+                };
+                let ruleList: Array<{ Selector?: string; Properties?: unknown }> = [];
+                const rv = styleObj.Rules as unknown;
+                if (rv && typeof rv === 'object') {
+                    // Stylesheet.Rules is a RulesView (iterable + indexable), not a
+                    // plain Array — pull every rule out generically.
+                    if (typeof (rv as Iterable<unknown>)[Symbol.iterator] === 'function') {
+                        ruleList = Array.from(rv as Iterable<{ Selector?: string; Properties?: unknown }>);
+                    } else if (typeof (rv as { length?: number }).length === 'number') {
+                        const n = (rv as { length: number }).length;
+                        for (let k = 0; k < n; k++) ruleList.push((rv as Record<number, { Selector?: string; Properties?: unknown }>)[k]);
+                    }
+                }
+                if (!ruleList.length && typeof styleObj.Selector === 'string') {
+                    ruleList = [styleObj as { Selector?: string; Properties?: unknown }];
+                }
+                const isBareHost = (sel: string) => {
+                    const s = sel.trim();
+                    return s === ':host' || s === ':root' || s === '&' || s === '';
+                };
+                const pseudoRules = ruleList.filter(r => typeof r.Selector === 'string' && !isBareHost(r.Selector));
+                if (pseudoRules.length) {
+                    const el2 = node as Element & { __instanceId?: string };
+                    if (!el2.__instanceId) el2.__instanceId = 'c' + Math.random().toString(36).slice(2, 10);
+                    try { el2.setAttribute('data-arianna-instance', el2.__instanceId); } catch { /* ignore */ }
+                    const scope = `${node.tagName.toLowerCase()}[data-arianna-instance="${el2.__instanceId}"]`;
+                    let css = '';
+                    for (const r of pseudoRules) {
+                        const probe = document.createElement('style').style;
+                        applyRulesToStyle(probe, r.Properties);
+                        const inner = probe.cssText.trim();
+                        if (!inner) continue;
+                        // :host:hover → scope:hover ; :host .x → scope .x ; other → leave
+                        const sel = (r.Selector as string).trim();
+                        const real = sel.indexOf(':host') === 0 ? scope + sel.slice(5) : sel;
+                        css += `${real}{${inner}}`;
+                    }
+                    if (css) {
+                        const styleEl = document.createElement('style');
+                        styleEl.textContent = css;
+                        styleEl.setAttribute('data-arianna-sheet', node.tagName.toLowerCase());
+                        styleEl.setAttribute('data-arianna-instance', el2.__instanceId);
+                        (document.head || document.documentElement).appendChild(styleEl);
+                    }
+                }
+            } catch (e) { console.warn('[arianna] pseudo-rule <style> emission failed:', e); }
         }
 
         // Step 4: Component(this) auto-install — THE single facility installer.
@@ -1550,32 +1614,27 @@ export class Namespace
         }
         else if (desc.Declaration === 'FUNCTION') {
             // ── FUNCTION-body execution (non-Component path) ─────────────────
-            //
-            // The refactor that consolidated everything under _installFacilities
-            // (the "Component(this) auto-install" branch above) covers EVERY
-            // arianna-* tag and any tag whose ctor explicitly opts in. It does
-            // NOT cover the legitimate non-arianna FUNCTION-form path used by
-            // `Core.Define('case-1a', A1a, HTMLElement, { … })` style tests
-            // and by user code that registers plain function constructors for
-            // tags outside the arianna-* namespace.
-            //
-            // For those, the body of `function A1a() { this.textContent = … }`
-            // must still be invoked with `this = node` once the prototype is
-            // spliced (Step 1 above). Without this branch the body is silently
-            // skipped — the element shows up with its inline default CSS
-            // applied (the `_style` argument to Core.Define) but with NO
-            // textContent, NO event listeners, NO state set by the ctor body.
-            // That is the "barra bianca" symptom: visible because of the CSS
-            // default, empty because the body never ran.
-            //
-            // CLASS-form ctors cannot be invoked here — a class constructor
-            // can only run via `new`, and we already have the element from
-            // the HTML parser / createElement path. Users wanting setup logic
-            // on markup-instantiated CLASS-form components must put it in
-            // `build()` (handled by _installFacilities when wantsAutoComponent
-            // is true).
-            try { (ctor as unknown as (this: Element) => void).call(node); }
-            catch (e) { console.warn(`[arianna] FUNCTION body failed for <${desc.Tags[0]}>:`, e); }
+            // (see notes below) — but GUARD against a class that was
+            // mis-detected as FUNCTION: `class A2i {}` cannot be called without
+            // `new` (throws "class constructors must be invoked with 'new'").
+            // If the ctor source is actually a class, run its build() instead.
+            const ctorIsClass = /^class[\s{]/.test((() => { try { return (ctor as object).toString(); } catch { return ''; } })());
+            if (ctorIsClass) {
+                const stash = node as Element & { __isBuilt?: boolean };
+                if (!stash.__isBuilt) {
+                    stash.__isBuilt = true;
+                    const userBuild = (node as unknown as { build?: () => void }).build;
+                    if (typeof userBuild === 'function') {
+                        try { userBuild.call(node); }
+                        catch (e) { console.warn(`[arianna] build() failed for <${desc.Tags[0]}>:`, e); }
+                    }
+                }
+            } else {
+                // The body of `function A1a() { this.textContent = … }` must be
+                // invoked with `this = node` once the prototype is spliced.
+                try { (ctor as unknown as (this: Element) => void).call(node); }
+                catch (e) { console.warn(`[arianna] FUNCTION body failed for <${desc.Tags[0]}>:`, e); }
+            }
         }
         else if (desc.Declaration === 'CLASS') {
             // ── CLASS-form build() execution (non-Component path) ────────────
@@ -1721,12 +1780,26 @@ export class Namespace
             let tagToCreate    = baseTag;
             let customTagAlias = '';
             let userProto: object = nativeProto;
+            // For the autonomous interface (HTMLElement) the standard baseTag is
+            // the FIRST generic tag in HTMLElement's list ('address'), which is
+            // never what an autonomous component wants. Resolve the custom tag
+            // from the user constructor; if the descriptor isn't indexed yet at
+            // super() time, fall back to the constructor's own tag stamp / name
+            // lookup. Only if everything fails do we keep baseTag.
             try {
-                const userCtor = this.constructor as { name?: string; prototype?: object };
+                const userCtor = this.constructor as { name?: string; prototype?: object; __ariannaTag?: string };
                 if (userCtor && userCtor !== (wrapped as unknown as { constructor: unknown })) {
-                    const custom = self.GetDescriptor(userCtor as new () => Element);
-                    if (custom && custom.Custom && custom.Tags && custom.Tags[0]) {
-                        const customTag = custom.Tags[0];
+                    let custom = self.GetDescriptor(userCtor as new () => Element) as
+                        { Custom?: boolean; Tags?: string[] } | false;
+                    // Resolve the custom tag even if GetDescriptor(ctor) misses:
+                    // try the stamped __ariannaTag, then the constructor-name index.
+                    let customTag = (custom && custom.Custom && custom.Tags && custom.Tags[0]) || '';
+                    if (!customTag && userCtor.__ariannaTag) customTag = userCtor.__ariannaTag;
+                    if (!customTag && userCtor.name) {
+                        const byName = self.GetDescriptor(userCtor.name) as { Custom?: boolean; Tags?: string[] } | false;
+                        if (byName && byName.Custom && byName.Tags && byName.Tags[0]) customTag = byName.Tags[0];
+                    }
+                    if (customTag) {
                         if (useNS) {
                             // (c) SVG / MathML / X3D — always native base tag, no is=.
                             tagToCreate = baseTag;
@@ -1736,10 +1809,16 @@ export class Namespace
                             tagToCreate    = baseTag;
                             customTagAlias = customTag;
                         } else {
-                            // (a) HTML with HTMLElement (autonomous custom element).
-                            //     No native base tag — use the custom tag directly.
+                            // (a) HTML autonomous (HTMLElement). Use the custom tag
+                            //     directly (result: HTMLUnknownElement with the
+                            //     real custom tag name — NOT generic 'address').
                             tagToCreate = customTag;
                         }
+                    } else if (ifaceName === 'HTMLElement') {
+                        // Autonomous but tag unresolved: do NOT create 'address'.
+                        // Prefer this element's own pending tagName if meaningful.
+                        const tn = (this as Element).tagName?.toLowerCase?.();
+                        if (tn && tn !== 'address' && tn.includes('-')) tagToCreate = tn;
                     }
                     if (userCtor.prototype) userProto = userCtor.prototype;
                 }
@@ -1753,6 +1832,10 @@ export class Namespace
             // 3. Decorate with is= + data-arianna-tag when we swapped to baseTag.
             //    These two attributes make the element queryable as the semantic
             //    custom tag while keeping the native nodeName for layout/shadow.
+            //    NOTE: we deliberately do NOT override nodeName/tagName — that
+            //    was an extreme monkey-patch (custom-tag IDL identity) that the
+            //    platform does not sustain and CSS-by-tag cannot match. Identity
+            //    is carried by is=/data-arianna-tag + the .{ClassName} class.
             if (customTagAlias && el instanceof HTMLElement) {
                 try { el.setAttribute('is',               customTagAlias); } catch { /* ignore */ }
                 try { el.setAttribute('data-arianna-tag', customTagAlias); } catch { /* ignore */ }

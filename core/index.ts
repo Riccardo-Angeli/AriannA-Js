@@ -65,6 +65,33 @@ export {
     Prop,
 } from './Directive.ts';
 
+// ── JSX.ts — unified hyperscript / component interfaces ─────────────────────
+// One module, three interfaces:
+//   • AriannA native runtime: hAriannA / jsx / jsxs / Fragment / setDefaultRuntime
+//   • Snabbdom-compatible:    h (selector + {on,props,attrs,style,class}) + patch
+//   • React-compatible:       createElement / Component / createRoot / React
+// The public `h` and `patch` are the Snabbdom pair (what the docs example uses).
+export {
+    // AriannA native
+    hAriannA,
+    jsx,
+    jsxs,
+    Fragment,
+    setDefaultRuntime,
+    getDefaultRuntime,
+    // Snabbdom-compatible
+    h,
+    patch,
+    // React-compatible
+    createElement,
+    Component as ReactComponent,
+    createRoot,
+    React,
+} from './Jsx.ts';
+export type { JSXNode, JSXProps, JSXRuntime } from './Jsx.ts';
+export type { VNode, SnabbdomData, ReactElement, Root } from './Jsx.ts';
+export { jsxDEV } from './jsx/jsx-dev-runtime.ts';
+
 // ── SSR + Workers utilities ─────────────────────────────────────────────────
 export { escapeHtml, renderToString, hydrate, Island, SSR } from './SSR.ts';
 export { WorkerPool, Workers }                              from './Workers.ts';
