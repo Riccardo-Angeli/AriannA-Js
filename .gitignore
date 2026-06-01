@@ -121,6 +121,8 @@ documentation/internal/
 documentation/private/
 **/*.local.md
 **/*.local.ts
+documentation/private documentation/ExamplesToBeFixedList.md
+documentation/private documentation/ARIANNA_V2_FIXES_README.md
 
 
 # ── Devtools (development utilities, not part of distribution) ───────────────
