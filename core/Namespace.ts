@@ -1132,6 +1132,14 @@ export class Namespace
             Type        : 'CUSTOM',
             Standard    : false,
             Custom      : true,
+            // A hyphen in the tag is the requirement for a valid native
+            // custom-element name (customElements.define). Native=true marks the
+            // tag as eligible for native registration + native shadow; consumers
+            // (GetTag/GetInterface) can branch on it to use real native shadow
+            // instead of the AriannA polyfill. NOTE: hyphen is necessary but not
+            // sufficient — SVG/MathML-derived customs have a hyphen yet cannot be
+            // autonomous custom elements (see the guarded define below).
+            Native      : typeof _tag === 'string' && _tag.includes('-'),
             Style       : _style,
             // List of ancestor class names (from iface prototype chain),
             // applied as classList entries at element creation/upgrade time
@@ -1237,6 +1245,14 @@ export class Namespace
         try { Core.IndexCustom(descriptor); }
         catch { /* indexer rejected — non-fatal */ }
 
+        // NOTE: AriannA deliberately does NOT call customElements.define. Its
+        // upgrade model is MutationObserver + prototype splicing + Reflect.construct
+        // where the constructor may RETURN a different element — which native custom
+        // elements forbid ("constructor returned a wrong element" + re-entrant
+        // construction). descriptor.Native is informational only (see GetTag/
+        // GetInterface); it does NOT trigger native registration.
+
+
         // Hot-reload anchor: now that the descriptor exists, point liveDesc at
         // it so the factory and Update closures (created above but yet to run)
         // read Style/Constructor via the descriptor — which Core.Define mutates
@@ -1331,101 +1347,71 @@ export class Namespace
         if (!desc || !desc.Custom || !desc.Constructor) return;
 
         // ── USER SUBCLASS LOOKUP ─────────────────────────────────────────
-        // The factory `Component(tag, base, css, def)` registered the tag
-        // with Class=null. The user subclass is captured at the first
-        // `new <subclass>()` call via super() propagation of `new.target`
-        // inside the anonymous constructor returned by the factory.
-        //
-        // If desc.Class is still null here, no `new <subclass>()` has ever
-        // run — the user has placed <arianna-button> in markup but never
-        // instantiated Button in JS. We try a heuristic global lookup:
-        // scan `window` for any constructor whose prototype chain includes
-        // the factory `Bound` (which is `desc.Constructor`) AND whose
-        // `__ariannaTag` matches our tag. This catches the common case where
-        // the component file imports & defines `class Button extends
-        // Component('arianna-button', ...)` then assigns `window.Button =
-        // Button` — that side-effect makes the subclass globally findable.
+        // The factory registered the tag with Class=null; the user subclass is
+        // captured on the first `new <subclass>()` via new.target. If Class is
+        // still null here (markup-placed component never instantiated via new),
+        // recover the real subclass from the global scope: PascalCase-from-tag,
+        // then strict __ariannaTag exact match. No permissive base-only pass.
         let userClass = (desc as TypeDescriptor & { Class?: Function | null }).Class;
-        if (!userClass) {
+        // Only fall back to a global scan when NO real user class is registered
+        // yet: i.e. desc.Constructor is still the bare base interface or the
+        // factory (markup-only component never instantiated). When Core.Define
+        // was called with an explicit user class — Core.Define('case-3i', A3i, …)
+        // — desc.Constructor is ALREADY that class (≠ Interface, ≠ factory), so
+        // the scan must NOT run: otherwise a same-named/same-tag class left in
+        // global scope by a previously-run example overwrites it (regression that
+        // broke case-3i/3j only after other examples ran).
+        const existingCtor = desc.Constructor as Function | null | undefined;
+        const ctorIsBareBase =
+            !existingCtor
+            || existingCtor === (desc.Interface as unknown as Function)
+            || existingCtor === (desc as { Factory?: Function }).Factory
+            || existingCtor === (desc.Prototype ? (desc.Prototype as { constructor?: Function }).constructor : undefined);
+        if (!userClass && ctorIsBareBase) {
             const targetTag = desc.Tags?.[0];
             const baseCtor  = desc.Constructor;
             const globalScope = (typeof window !== 'undefined' ? window : globalThis) as unknown as Record<string, unknown>;
 
-            // ── helper: ensure candidate extends baseCtor ────────────────
             const extendsBase = (candidate: Function): boolean => {
                 if (candidate === baseCtor) return false;
                 const cp = (candidate as { prototype?: object }).prototype;
                 const bp = (baseCtor as { prototype?: object }).prototype;
                 if (!cp || !bp) return true;
                 let p: object | null = Object.getPrototypeOf(cp);
-                while (p) {
-                    if (p === bp) return true;
-                    p = Object.getPrototypeOf(p);
-                }
+                while (p) { if (p === bp) return true; p = Object.getPrototypeOf(p); }
                 return false;
             };
 
-            // ── STRATEGY 0: PascalCase-from-tag direct lookup ──────────────
-            // Components are registered on window with a PascalCase key derived
-            // from the kebab tag, with the namespace prefix stripped:
-            //   arianna-button         → window.Button
-            //   arianna-code-editor    → window.CodeEditor
-            //   arianna-keyframe-editor→ window.KeyframeEditor
-            //   papa                   → window.Papa
-            //   my-comp                → window.MyComp
-            //
-            // This is fast (O(1)), unambiguous, and works for any component
-            // that follows the convention — even when __ariannaTag was never
-            // stamped (which is the common case, since Component.Define() is
-            // an opt-in API most user code does NOT call).
             if (targetTag) {
                 const parts = targetTag.split('-').filter(Boolean);
                 const start = parts[0] === 'arianna' ? 1 : 0;
-                const pretty = parts.slice(start).map(seg =>
-                    seg.charAt(0).toUpperCase() + seg.slice(1)
-                ).join('');
+                const pretty = parts.slice(start).map(seg => seg.charAt(0).toUpperCase() + seg.slice(1)).join('');
                 if (pretty) {
-                    const direct = globalScope[pretty];
-                    if (typeof direct === 'function' && extendsBase(direct as Function)) {
-                        userClass = direct as Function;
-                    }
+                    let direct: unknown;
+                    try { direct = globalScope[pretty]; }
+                    catch { direct = undefined; }
+                    if (typeof direct === 'function' && extendsBase(direct as Function)) userClass = direct as Function;
                 }
             }
-
-            // ── STRATEGY 1 (STRICT): __ariannaTag scan ─────────────────────
-            // Accept ONLY a candidate whose __ariannaTag equals our target
-            // tag. This is the reliable signal — multiple components share
-            // the same base (all `extends Component(tag, HTMLElement)`), so
-            // "extends the same base" is NOT sufficient to disambiguate.
-            // Picking the first base-matching class is exactly the bug that
-            // reprototyped <arianna-code-editor> to ArrayModifierElement.
-            //
-            // NOTE on enumerable-vs-non-enumerable: components register on
-            // window with `enumerable: false`, so `Object.keys(window)` does
-            // NOT see them — `Object.getOwnPropertyNames` is required.
             if (!userClass) {
                 for (const key of Object.getOwnPropertyNames(globalScope)) {
-                    const candidate = globalScope[key];
+                    // Safari throws "SecurityError: The operation is insecure"
+                    // when reading certain window properties (security-sensitive
+                    // getters). Guard each access so one such property is skipped
+                    // instead of aborting the entire markup upgrade.
+                    let candidate: unknown;
+                    try { candidate = globalScope[key]; }
+                    catch { continue; }
                     if (typeof candidate !== 'function') continue;
                     if (candidate === baseCtor) continue;
                     const candidateTag = (candidate as { __ariannaTag?: string }).__ariannaTag;
-                    if (!candidateTag || !targetTag) continue;          // need a tag to match on
-                    if (candidateTag !== targetTag) continue;           // must match exactly
-                    if (!extendsBase(candidate as Function)) continue;  // sanity: extends declared base
+                    if (!candidateTag || !targetTag || candidateTag !== targetTag) continue;
+                    if (!extendsBase(candidate as Function)) continue;
                     userClass = candidate as Function;
                     break;
                 }
             }
-            // NOTE: deliberately NO permissive base-only pass. If no class
-            // matches by PascalCase name AND no class carries a matching
-            // __ariannaTag, leave userClass null and fall through to the
-            // base Constructor. Reprototyping the node to the WRONG component
-            // (any class that merely extends the same base) is worse than
-            // leaving it on the base: a wrong prototype silently breaks
-            // build()/Value/etc., which is precisely the failure this avoids.
-            if (userClass) {
-                (desc as { Class?: Function | null }).Class = userClass;
-            }
+            if (userClass) (desc as { Class?: Function | null }).Class = userClass;
         }
         if (userClass) {
             (desc as { Constructor: Function }).Constructor = userClass;

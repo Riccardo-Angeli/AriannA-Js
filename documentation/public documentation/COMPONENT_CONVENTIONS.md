@@ -115,9 +115,20 @@ class Button extends Component(
 | 3 | `css` | `CssInput` (5 forms — see §5.7) | optional |
 | 4 | `def` | `ComponentDef` (see §5.1) | optional |
 
-**Class identity**: the class that extends `Component(...)` is **the** user class. AriannA captures it at the first `new MyClass()` (or `Reflect.construct(MyClass, ...)`) via the `super()` chain — `new.target` propagates through and is recorded in `descriptor.Class`. Subsequent markup instantiations splice the user class prototype.
+**Class identity (v2 — eager registration)**: the class that extends `Component(...)` is **the** user class. The chain is `MyClass → Component → super` — a SINGLE shared `Component` link per base interface (no per-tag bridge/wrapper, no anonymous parent). `Component(tag, super, …)` calls `Core.Define` under the hood, which registers the descriptor BEFORE use; `descriptor.Class` is populated **eagerly** and refined to the precise user subclass via `new.target` on the first `new MyClass()` / `Reflect.construct(MyClass, …)`, or immediately via `Component.Define(tag, MyClass)`. There is no `window`/global scan.
 
-**Anonymous parent**: `Component(...)` returns an anonymous class with `name === ""`. This is intentional — `GetPrototypeChain(node)` returns the user class name as the leaf, then the anonymous parent (rendered as `(anon)` or empty), then the browser base.
+**Base class — extend the MOST-SPECIFIC native interface (v2 rule)**: a component extends the browser interface whose behaviour it wants, not plain `HTMLElement` by default. A button extends `HTMLButtonElement`, an input `HTMLInputElement`, a list `HTMLUListElement`, etc. Plain `HTMLElement` is for genuinely generic/box components only. When a component extends a CONCRETE built-in the host element IS that element — it must NOT also wrap an inner native element of the same kind (no `<button>` inside a button-based component). Style the host via `:host`.
+
+**`descriptor.Native`**: set by Define to `true` when the tag contains a hyphen. It marks the tag as eligible for native `customElements.define` (autonomous `HTMLElement`-based tags only) and native shadow; read it via `GetTag`/`GetInterface`/`GetDescriptor`. Concrete built-in bases (button/input/…) are NOT natively defined — they upgrade via AriannA's `MutationObserver` + prototype splicing (cross-browser, Safari included).
+
+**Markup-only components — call `Component.Define`**: a component placed in markup but never instantiated via `new` registers its class up front so `descriptor.Class` is set without any global scan:
+
+```ts
+class Button extends Component('arianna-button', HTMLButtonElement, css, def) { … }
+Component.Define('arianna-button', Button);   // eager Class binding for markup upgrade
+```
+
+This replaces the legacy `window.Button = Button` side-effect (the old global-scan recovery is removed).
 
 ---
 

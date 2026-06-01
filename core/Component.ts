@@ -59,7 +59,6 @@
  */
 
 import Core, {
-    Define as CoreDefine,
     GetDescriptor,
     GetPrototypeChain,
     Namespaces,
@@ -873,19 +872,22 @@ function _installFacilities(el: Element): Element
     // author snapshot, otherwise the post-build restore re-inserts the iframe
     // and discards build()'s textContent (the iframe is an Element node, so it
     // would falsely count as "real author content").
-    const __preBuildShadow = _getShadowRoot(el);
-    const __injectedIframe = IsAriannaShadow(__preBuildShadow)
-        ? (__preBuildShadow as AriannaShadow).iframe as unknown as Node | undefined
-        : undefined;
-    const __isAuthorNode = (n: Node): boolean => {
-        if (n === __injectedIframe) return false;
-        return n.nodeType === 1 /* Element */
-            || (n.nodeType === 3 /* Text */ && (n.textContent ?? '').trim() !== '');
-    };
-    const hasRealAuthorContent = Array.from(el.childNodes).some(__isAuthorNode);
-    const authorMarkup = hasRealAuthorContent
-        ? Array.from(el.childNodes).filter(__isAuthorNode)
-        : null;
+    let authorMarkup: Node[] | null = null;
+    try {
+        const __preBuildShadow = _getShadowRoot(el);
+        const __injectedIframe = IsAriannaShadow(__preBuildShadow)
+            ? (__preBuildShadow as AriannaShadow).iframe as unknown as Node | undefined
+            : undefined;
+        const __isAuthorNode = (n: Node): boolean => {
+            if (n === __injectedIframe) return false;
+            return n.nodeType === 1 /* Element */
+                || (n.nodeType === 3 /* Text */ && (n.textContent ?? '').trim() !== '');
+        };
+        const hasRealAuthorContent = Array.from(el.childNodes).some(__isAuthorNode);
+        authorMarkup = hasRealAuthorContent
+            ? Array.from(el.childNodes).filter(__isAuthorNode)
+            : null;
+    } catch { authorMarkup = null; }
 
     // Guarded by __isBuilt — runs once per element lifetime.
     if (!stash.__isBuilt) {
@@ -1147,7 +1149,19 @@ function _normaliseComponentSheet(input: ComponentStyleInput | undefined): Style
 {
     if (!input) return undefined;
     if (input instanceof Stylesheet) return new Stylesheet(input);
-    if (input instanceof Rule) return new Stylesheet([input]);
+    if (input instanceof Rule) {
+        // A selectorless Rule (e.g. `new Rule({ display:'block', padding:'…' })`
+        // — properties only, no selector) defaults to `:host`, mirroring how a
+        // plain flat-property object maps to `:host`. Without this the rule
+        // serialises as `{ … }` with no target and never applies.
+        const r = input as Rule & { Selector: string };
+        if (!r.Selector || !r.Selector.trim()) {
+            const clone = (input as Rule).clone() as Rule & { Selector: string };
+            clone.Selector = ':host';
+            return new Stylesheet([clone]);
+        }
+        return new Stylesheet([input]);
+    }
     if (Array.isArray(input)) return new Stylesheet(input as Rule[]);
     if (typeof input === 'string') return new Stylesheet(input);
     if (typeof input === 'object') return new Stylesheet(input as SheetObjectDef);
@@ -1353,6 +1367,20 @@ function _applySheet(el: Element, next: Stylesheet | null): void
             iframeStyle.setAttribute('data-arianna-instance', stash.__instanceId);
             head.appendChild(iframeStyle);
             stash.__styleNode = iframeStyle as unknown as HTMLStyleElement;
+            // The component's :host border-radius is rewritten to `html{…}`, but
+            // the VISIBLE box is the <iframe> ELEMENT, not the inner html — a
+            // radius on inner html alone is never seen. Mirror border-radius
+            // onto the iframe element and clip its content with overflow:hidden.
+            try {
+                const ifrEl = (iframeShadow as unknown as { iframe?: HTMLIFrameElement }).iframe;
+                if (ifrEl) {
+                    const m = /border-radius\s*:\s*([^;]+)/i.exec(css);
+                    if (m && m[1]) {
+                        ifrEl.style.borderRadius = m[1].trim();
+                        ifrEl.style.overflow = 'hidden';
+                    }
+                }
+            } catch { /* best-effort */ }
         };
         inject();
         const ifr = (iframeShadow as unknown as { iframe?: HTMLIFrameElement }).iframe;
@@ -1663,7 +1691,7 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
                     ?? HTMLElement;
 
                 // Register the tag in CUSTOM
-                CoreDefine(
+                Core.Define(
                     dTag,
                     target as new (...a: unknown[]) => Element,
                     superCtor as new (...a: unknown[]) => Element,
@@ -1758,9 +1786,9 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
     // ran), `Component.Boot()` or the Namespace fallback lookup populates
     // descriptor.Class once; thereafter Update uses Sub.prototype directly.
     // ── ROOT-CAUSE FIX (28/05/2026) ──────────────────────────────────────
-    // The 22/05 baseline called CoreDefine(tag, Bound, base, {}) where Bound
+    // The 22/05 baseline called Core.Define(tag, Bound, base, {}) where Bound
     // was the per-tag user-builder class. The current revision had degraded
-    // to CoreDefine(tag, base, base, {}) — registering the descriptor with
+    // to Core.Define(tag, base, base, {}) — registering the descriptor with
     // Constructor === Interface === wrapped (the patched native). In the
     // window between that registration and the post-hoc overwrite at line
     // 1530, three things ran with an inconsistent ctor:
@@ -1772,14 +1800,14 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
     //     later instantiated through it constructed the native as if it
     //     were the custom ctor, surfacing as async "Illegal constructor".
     //
-    // Fix: resolve the shared ComponentClass FIRST and pass it to CoreDefine.
+    // Fix: resolve the shared ComponentClass FIRST and pass it to Core.Define.
     // The descriptor is now coherent from the moment of registration; the
     // subsequent assignments at line 1530 below remain (they set per-tag
     // statics on the descriptor — Class/Def/__ariannaSheetDefault — that
-    // were never part of CoreDefine's contract).
-    const ComponentClass = _resolveComponentClassForBase(base, null);
+    // were never part of Core.Define's contract).
+    const ComponentClass = _resolveComponentClassForBase(base, tag);
 
-    CoreDefine(
+    Core.Define(
         tag,
         ComponentClass as unknown as new (...a: unknown[]) => Element,
         base           as unknown as new (...a: unknown[]) => Element,
@@ -1796,16 +1824,16 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
 
     // ─── The interposed class IS `Component` (not an anonymous `Bound`) ──────
     //
-    // The chain we want for every component instance is:
+    // The chain for every component instance is a SINGLE Component link:
     //
     //     Subclass → Component → [HTML(X)Element] → HTMLElement → …
     //
-    // `Component` is ONE shared class per base interface. We cache it in
-    // `_componentClassByBase` so that all `arianna-*` tags sharing a base
-    // (almost always HTMLElement) reuse the SAME `Component` link in the
-    // chain — no proliferation, no per-tag anonymous wrappers. This is the
-    // single most important architectural rule (COMPONENTS.md §1, §2, anti-rot
-    // rule 5: "No wrappers between user subclass and Component").
+    // `Component` is created PER-TAG and cached in `_componentClassByTag`. Each
+    // tag has its own Component class whose `tag` is captured in closure, so the
+    // class carries the tag identity itself — NO per-tag bridge, NO anonymous
+    // wrappers between the user subclass and Component. This satisfies anti-rot
+    // rule 5 ("No wrappers between user subclass and Component") and matches the
+    // reference Component.js (single Component, tag resolved from the registry).
     //
     // The class is a NAMED class expression `class Component extends base`,
     // so `Core.GetPrototypeChain(node)` reports "Component" — not "Bound",
@@ -1830,26 +1858,20 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
 
     (ComponentClass as unknown as { __ariannaComponent: boolean }).__ariannaComponent = true;
 
-    // ─── Per-tag BRIDGE (Option A, descriptor-resolved — legacy parity) ──────
-    // The user writes `class A4a extends Component('case-4a', …)`. We return a
-    // thin per-tag bridge `class extends Component {}` and register it as the
-    // tag's descriptor.Constructor. The chain becomes
-    //     A4a → Component (bridge, case-4a) → Component (shared) → base
-    // and at `new A4a()` the constructor resolves its tag purely via
-    // descriptors: GetDescriptor(Object.getPrototypeOf(new.target)).Tags[0]
-    // → 'case-4a', DETERMINISTIC and unambiguous across the dozens of
-    // HTMLElement-based tags (no shared-class ambiguity, no FIFO queue).
-    const Bridge = class Component extends (ComponentClass as new (...a: unknown[]) => HTMLElement) {};
-    (Bridge as unknown as { __ariannaComponent: boolean }).__ariannaComponent = true;
+    // ─── NO per-tag bridge ───────────────────────────────────────────────────
+    // ComponentClass is now created PER-TAG (its `tag` is captured in closure,
+    // see _resolveComponentClassForBase below), so it carries the tag identity
+    // itself. The chain is a SINGLE "Component" link:  A4a → Component → base.
+    // The tag is known from registration (Core.Define(tag, …)) and read from the
+    // closure inside the constructor — no getPrototypeOf bridge, no tagName
+    // fallback, no customElements.define. Constructor/Prototype already point at
+    // ComponentClass via Core.Define above.
     if (descriptor) {
-        descriptor.Constructor = Bridge as unknown as Function;   // GetDescriptor(Bridge).Tags → [tag]
-        descriptor.Prototype   = (Bridge as { prototype: object }).prototype;
+        descriptor.Constructor = ComponentClass as unknown as Function;
+        descriptor.Prototype   = (ComponentClass as { prototype: object }).prototype;
     }
-    // Index the bridge under this tag's descriptor so GetDescriptor(Bridge)
-    // resolves (by constructor identity) → its Tags.
-    try { Core.IndexClass(Bridge as unknown as Function, descriptor as unknown as never); } catch { /* best-effort */ }
 
-    return Bridge as unknown as new (...a: unknown[]) => Element;
+    return ComponentClass as unknown as new (...a: unknown[]) => Element;
 }
 
 // ─── Per-base Component class cache ──────────────────────────────────────────
@@ -1858,47 +1880,32 @@ function ComponentFn(this: unknown, ...args: unknown[]): unknown
 // HTMLElement-based tag share the SAME Component class — the chain link is
 // identical, only the descriptor (keyed by tag) differs. This keeps the chain
 // `Subclass → Component → base` with a single shared Component per base.
-const _componentClassByBase = new WeakMap<Function, Function>();
+const _componentClassByTag = new Map<string, Function>();
 
 function _resolveComponentClassForBase(
     base: Function,
-    _descriptor: unknown | null,
+    tag: string,
 ): Function
 {
-    const cached = _componentClassByBase.get(base);
+    // Cache PER-TAG: each tag gets its own Component class whose `tag` is
+    // captured in closure. This is what lets us drop the per-tag bridge — the
+    // class itself carries the tag identity, so the chain is a single
+    // "Component" link (A4a → Component → base). The tag is already registered
+    // in the AriannA Registry by Core.Define(tag, …); the constructor reads it
+    // from this closure, never from getPrototypeOf or this.tagName.
+    const cached = _componentClassByTag.get(tag);
     if (cached) return cached;
 
-    // Named class expression: the name `Component` is what shows up in the
-    // prototype chain. The constructor:
-    //   1. super() — chains to the base (HTMLElement / HTMLDivElement / …)
-    //   2. captures new.target (the user subclass) into the tag's descriptor
-    //   3. stashes constructor args for build()
-    //   4. installs facilities (shadow / sheet / attrs / build / template)
-    //
-    // The descriptor lookup at construction time is keyed by the element's
-    // tag (resolved inside _installFacilities / via the live tagName), NOT by
-    // a closed-over descriptor — because this class is shared across tags.
+    const liveTag = tag.toLowerCase();
+
     const Component = class Component extends (base as new () => HTMLElement) {
         constructor(...args: unknown[]) {
             super();
             const ctor = new.target as unknown as Function | undefined;
             if (ctor) {
-                const bridge   = Object.getPrototypeOf(ctor) as Function;
-                const bDesc    = GetDescriptor(bridge as new (...a: unknown[]) => Element) as { Tags?: string[] } | false;
-                const liveTag  = (bDesc && bDesc.Tags && bDesc.Tags[0]?.toLowerCase())
-                    || (this as Element).tagName?.toLowerCase?.() || '';
-
-                // ── Legacy-faithful element creation (Component.js 5737-5751) ──
-                // `super()` on a custom-tag subclass that isn't natively
-                // registered yields a bare element with the WRONG tag and a
-                // prototype chain flattened to HTMLElement. So we create the REAL
-                // element via Core.Create(liveTag) — which runs the namespace's
-                // Update (correct tag, prototype splice, data-arianna-tag stamp,
-                // classes, facilities, build) — bind the subclass into the
-                // descriptor first, set its prototype on top, and RETURN it.
-                // Returning an object from a constructor overrides `this`
-                // (ECMA-262 §9.2.2), exactly as legacy did.
-                if (liveTag) {
+                // `liveTag` comes from the closure (registration-time tag) —
+                // deterministic, no bridge, no tagName fallback.
+                {
                     const d0 = GetDescriptor(liveTag) as { Class?: Function | null; Constructor?: Function; Prototype?: object; Interface?: unknown } | false;
                     if (d0 && !d0.Class) { d0.Class = ctor; d0.Constructor = ctor; d0.Prototype = (ctor as { prototype: object }).prototype; }
 
@@ -1951,7 +1958,7 @@ function _resolveComponentClassForBase(
         }
     };
 
-    _componentClassByBase.set(base, Component);
+    _componentClassByTag.set(tag, Component);
     return Component;
 }
 

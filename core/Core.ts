@@ -62,6 +62,16 @@ export interface TypeDescriptor
     Type        : 'STANDARD' | 'CUSTOM';
     Standard    : boolean;
     Custom      : boolean;
+    /** The resolved user subclass bound to this tag. For direct registrations
+     *  (Core.Define('case-3i', A3i)) this is the user class itself, set eagerly.
+     *  For the `extends Component(...)` pattern, Constructor is the shared
+     *  Component class and Class is refined to the real subclass via new.target
+     *  capture / Component.Define. Used by markup-upgrade to splice the proto. */
+    Class?      : Function | null;
+    /** True when the tag contains a hyphen — eligible for native
+     *  customElements.define and native shadow. Hyphen is necessary but not
+     *  sufficient (SVG/MathML-derived customs cannot be autonomous customs). */
+    Native?     : boolean;
     Style       : Record<string, string>;
     /**
      * Class names to apply to every instance via `node.classList.add(...)` so
@@ -757,6 +767,7 @@ export function Define(
         Type        : 'CUSTOM',
         Standard    : false,
         Custom      : true,
+        Native      : typeof ct === 'string' && ct.includes('-'),
         Style       : style,
     };
     ns.types.custom.interfaces[constructor.name] = descriptor;
@@ -1519,6 +1530,7 @@ export function Extends(...classes: unknown[]): unknown
             // so `new A1o()` returns a live, body-applied element.
             const subIsClass   = /^class[\s{]/.test(Function.prototype.toString.call(Sub));
             const superTag     = GetTags(Super as Parameters<typeof GetTags>[0])[0];
+            const subTag       = GetTags(Sub as Parameters<typeof GetTags>[0])[0];
             const win          = (typeof window !== 'undefined' ? window : globalThis) as Record<string, unknown>;
             if (!subIsClass && superTag)
             {
@@ -1526,9 +1538,23 @@ export function Extends(...classes: unknown[]): unknown
                 const subName = (Sub as { name?: string }).name || 'AriannaSub';
                 const wrapper = function (this: unknown, ...args: unknown[]): Element | undefined
                 {
-                    const el = Create(superTag);            // real, upgraded Super element
+                    const el = Create(superTag);            // real Super element (case-card-1o)
                     if (!el) return undefined;
                     try { SubFn.apply(el, args); } catch { /* body best-effort */ }
+                    // Carry the Sub's identity via is= / data-arianna-tag and
+                    // its .{ClassName} class (no nodeName/tagName override — see
+                    // single-IDL-terminator contract). Create() already added
+                    // the Super's class; add the Sub's on top.
+                    try {
+                        if (subTag) {
+                            (el as HTMLElement).setAttribute?.('is', subTag);
+                            (el as HTMLElement).setAttribute?.('data-arianna-tag', subTag);
+                        }
+                        const subClass = (Sub as { name?: string }).name;
+                        if (subClass && subClass !== 'Component') {
+                            (el as HTMLElement).classList?.add(subClass);
+                        }
+                    } catch { /* attributes/classList best-effort */ }
                     const proto = (new.target ? (new.target as { prototype: object }).prototype
                                               : (wrapper as { prototype: object }).prototype);
                     return Object.setPrototypeOf(el, proto);
