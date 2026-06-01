@@ -635,10 +635,35 @@ function _installFacilities(el: Element): Element
         // tests, and trusted component/subclass authoring.
         Shadow: {
             configurable: true,
-            get(this: Element): { readonly Root: ShadowRoot | AriannaShadow | null } {
+            get(this: Element): {
+                readonly Root: ShadowRoot | AriannaShadow | null;
+                readonly Backend?: string;
+                readonly iframe?: HTMLIFrameElement | null;
+                readonly document?: Document | null;
+                readonly window?: Window | null;
+            } {
                 const host = this;
                 return Object.freeze({
                     get Root(): ShadowRoot | AriannaShadow | null { return _getShadowRoot(host); },
+                    // Forward AriannaShadow fields when the backend is an
+                    // AriannaShadow (light/iframe). Native ShadowRoot has none of
+                    // these, so they read undefined/null — callers check Backend.
+                    get Backend(): string | undefined {
+                        const r = _getShadowRoot(host);
+                        return IsAriannaShadow(r) ? (r as AriannaShadow).Backend : undefined;
+                    },
+                    get iframe(): HTMLIFrameElement | null {
+                        const r = _getShadowRoot(host);
+                        return IsAriannaShadow(r) ? ((r as AriannaShadow).iframe ?? null) : null;
+                    },
+                    get document(): Document | null {
+                        const r = _getShadowRoot(host);
+                        return IsAriannaShadow(r) ? ((r as AriannaShadow).document ?? null) : null;
+                    },
+                    get window(): Window | null {
+                        const r = _getShadowRoot(host);
+                        return IsAriannaShadow(r) ? ((r as AriannaShadow).window ?? null) : null;
+                    },
                 });
             },
         },
@@ -842,11 +867,25 @@ function _installFacilities(el: Element): Element
     // whether a shadow root is attached — the restored content then projects
     // through the shadow's <slot> if one exists. Ignore pure-whitespace nodes
     // from pretty-printed markup.
-    const hasRealAuthorContent = Array.from(el.childNodes).some(
-        n => n.nodeType === 1 /* Element */
-            || (n.nodeType === 3 /* Text */ && (n.textContent ?? '').trim() !== ''),
-    );
-    const authorMarkup = hasRealAuthorContent ? Array.from(el.childNodes) : null;
+    // The shadow backend may have ALREADY appended an <iframe> (iframe backend)
+    // or other injected infrastructure into the host's light DOM before build()
+    // runs. That iframe is NOT author content — it must be excluded from the
+    // author snapshot, otherwise the post-build restore re-inserts the iframe
+    // and discards build()'s textContent (the iframe is an Element node, so it
+    // would falsely count as "real author content").
+    const __preBuildShadow = _getShadowRoot(el);
+    const __injectedIframe = IsAriannaShadow(__preBuildShadow)
+        ? (__preBuildShadow as AriannaShadow).iframe as unknown as Node | undefined
+        : undefined;
+    const __isAuthorNode = (n: Node): boolean => {
+        if (n === __injectedIframe) return false;
+        return n.nodeType === 1 /* Element */
+            || (n.nodeType === 3 /* Text */ && (n.textContent ?? '').trim() !== '');
+    };
+    const hasRealAuthorContent = Array.from(el.childNodes).some(__isAuthorNode);
+    const authorMarkup = hasRealAuthorContent
+        ? Array.from(el.childNodes).filter(__isAuthorNode)
+        : null;
 
     // Guarded by __isBuilt — runs once per element lifetime.
     if (!stash.__isBuilt) {
@@ -998,16 +1037,30 @@ function _installFacilities(el: Element): Element
         } else if (!elHasTpl.template && !elHasTpl.__templateRendered) {
             // NO template (build() wrote this.textContent / innerHTML directly).
             // For the iframe backend this content lives in the HOST light DOM,
-            // but the scoped <style> (html{…}) lives INSIDE the iframe — so the
-            // host content is unstyled. Project it INTO the iframe via a default
-            // <slot>, where the iframe's html-scoped rules reach it.
+            // but the scoped <style> (html{…}) lives INSIDE the iframe. build()'s
+            // `this.textContent = …` ALSO detaches the framework iframe from the
+            // host (textContent replaces all children). So we: (1) capture the
+            // build content from `el`, (2) re-attach the iframe, (3) project the
+            // captured content into the iframe document.
             const root = _getShadowRoot(el);
             if (IsAriannaShadow(root) && (root as AriannaShadow).Backend === 'iframe') {
                 elHasTpl.__templateRendered = true;
                 try {
+                    const ifr = (root as AriannaShadow).iframe as unknown as Node | undefined;
+                    // Capture every light child that is NOT the framework iframe.
+                    const captured: Node[] = [];
+                    for (const child of Array.from(el.childNodes)) {
+                        if (child !== ifr) captured.push(child);
+                    }
+                    for (const child of captured) { try { el.removeChild(child); } catch { /* ignore */ } }
+                    // build()'s textContent setter detaches the iframe — put it
+                    // back so it stays in the DOM and renders.
+                    if (ifr && (ifr as Node).parentNode !== el) {
+                        try { el.appendChild(ifr); } catch { /* ignore */ }
+                    }
                     const frag = document.createDocumentFragment();
                     frag.appendChild(document.createElement('slot'));
-                    RenderIntoAriannaShadow(root as AriannaShadow, frag);
+                    RenderIntoAriannaShadow(root as AriannaShadow, frag, captured);
                 } catch (e) {
                     console.warn('[arianna] iframe default-slot projection failed:', e);
                 }
@@ -1256,6 +1309,40 @@ function _applySheet(el: Element, next: Stylesheet | null): void
             if (!iframeDoc) return;
             const head = iframeDoc.head ?? iframeDoc.documentElement;
             if (!head) return;
+            // Base normalization: the component's :host rules are rewritten to
+            // `html`, but the projected content lives in `body`. Without a reset
+            // the body's default 8px margin offsets the content and it does not
+            // reliably fill/inherit the html-scoped background & color. This
+            // reset makes html/body predictable: no default margins, body fills
+            // the html box, inherits color/font, and is transparent so the
+            // html background (e.g. the user's gradient) shows through.
+            const RESET_TAG = 'arianna-iframe-reset';
+            if (!head.querySelector(`style[data-arianna-sheet="${RESET_TAG}"]`)) {
+                // Inherit the parent document's font as a LOW-PRIORITY base.
+                // The iframe is an isolated document — it does not see the
+                // outer page's font-family or @font-face by default (it falls
+                // back to the UA serif). Copy the host's resolved font so the
+                // iframe matches the page. Because the user's stylesheet is
+                // injected AFTER this reset, an explicit FontFamily on :host
+                // (→ html{font-family:…}) overrides this by cascade order.
+                let parentFont = '';
+                try {
+                    const cs = window.getComputedStyle(el as HTMLElement);
+                    parentFont =
+                        `html{font-family:${cs.fontFamily};` +
+                        `font-size:${cs.fontSize};` +
+                        `font-weight:${cs.fontWeight};` +
+                        `line-height:${cs.lineHeight};}`;
+                } catch { parentFont = ''; }
+                const resetStyle = iframeDoc.createElement('style');
+                resetStyle.textContent =
+                    'html,body{margin:0;padding:0;box-sizing:border-box;}' +
+                    parentFont +
+                    'body{color:inherit;font:inherit;background:transparent;}' +
+                    '*,*::before,*::after{box-sizing:inherit;}';
+                resetStyle.setAttribute('data-arianna-sheet', RESET_TAG);
+                head.appendChild(resetStyle);
+            }
             const prev = head.querySelector(
                 `style[data-arianna-sheet="${tag}"][data-arianna-instance="${stash.__instanceId}"]`,
             );

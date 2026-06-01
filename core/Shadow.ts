@@ -214,9 +214,9 @@ export function AttachAriannaShadow(
  * Render a template's output (a DocumentFragment) into an AriannaShadow.
  * Branches on the shadow's backend. Used by the Component template pipeline.
  */
-export function RenderIntoAriannaShadow(shadow: AriannaShadow, templateFragment: DocumentFragment): void
+export function RenderIntoAriannaShadow(shadow: AriannaShadow, templateFragment: DocumentFragment, capturedLight?: Node[]): void
 {
-    if (shadow.Backend === 'iframe') _renderIntoIframe(shadow, templateFragment);
+    if (shadow.Backend === 'iframe') _renderIntoIframe(shadow, templateFragment, capturedLight);
     else                             _renderIntoLight(shadow, templateFragment);
 }
 
@@ -367,6 +367,16 @@ function _attachIframeBackend(host: Element, mode: ShadowMode, options: AriannaS
 
     host.appendChild(iframe);
 
+    // Chrome (and other engines) expose iframe.contentDocument SYNCHRONOUSLY
+    // after appendChild — but it is a transient initial about:blank document.
+    // The srcdoc content loads ASYNCHRONOUSLY and REPLACES that document. If we
+    // inject into the blank doc, the srcdoc load wipes our content. Track the
+    // real load so the renderer only writes into the settled srcdoc document.
+    (iframe as unknown as { __srcdocLoaded?: boolean }).__srcdocLoaded = false;
+    iframe.addEventListener('load', () => {
+        (iframe as unknown as { __srcdocLoaded?: boolean }).__srcdocLoaded = true;
+    }, { once: true });
+
     const pendingReplies = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void; timer: number }>();
     let   nextCorrelationId = 1;
     let   disposed   = false;
@@ -486,20 +496,28 @@ function _attachIframeBackend(host: Element, mode: ShadowMode, options: AriannaS
     });
     observer.observe(host, { childList: true });
 
-    // Auto-resize via ResizeObserver on iframe body.
+    // Auto-resize via ResizeObserver. We must size the iframe to the FULL
+    // document height — documentElement.scrollHeight — not the body's
+    // contentRect. The component's :host styles are rewritten to `html`, so
+    // padding/borders live on <html>; the body's contentRect excludes them and
+    // would size the iframe too small (clipping the content). Observe both the
+    // documentElement and body so any layout change re-fires.
     if (autoResize) {
         const installResize = () => {
             const doc = iframe.contentDocument;
-            if (!doc || !doc.body) return false;
+            if (!doc || !doc.body || !doc.documentElement) return false;
             try {
-                resizeObs = new ResizeObserver(entries => {
+                const measure = () => {
                     if (disposed) return;
-                    for (const e of entries) {
-                        const h = e.contentRect.height;
-                        if (h > 0) iframe.style.height = h + 'px';
-                    }
-                });
+                    const root = iframe.contentDocument?.documentElement;
+                    if (!root) return;
+                    const h = root.scrollHeight;
+                    if (h > 0) iframe.style.height = h + 'px';
+                };
+                resizeObs = new ResizeObserver(() => measure());
+                resizeObs.observe(doc.documentElement);
                 resizeObs.observe(doc.body);
+                measure();
                 return true;
             } catch { return false; }
         };
@@ -512,24 +530,33 @@ function _attachIframeBackend(host: Element, mode: ShadowMode, options: AriannaS
     return shadow;
 }
 
-function _renderIntoIframe(shadow: AriannaShadow, templateFragment: DocumentFragment): void
+function _renderIntoIframe(shadow: AriannaShadow, templateFragment: DocumentFragment, capturedLight?: Node[]): void
 {
     const iframe = shadow.iframe;
     const doc    = shadow.document ?? null;
     if (!iframe) return;
-    if (!doc) {
-        iframe.addEventListener('load', () => _renderIntoIframe(shadow, templateFragment), { once: true });
-        return;
-    }
 
     const host = shadow.Host;
 
-    // 1. Snapshot light children (everything except the iframe).
-    const lightChildren: Node[] = [];
-    for (const child of Array.from(host.childNodes)) {
-        if (child !== iframe) lightChildren.push(child);
+    // 1. Snapshot light children (everything except the iframe) NOW — at call
+    //    time — so build()'s content is captured before any async deferral.
+    //    On a deferred re-entry we reuse the already-captured snapshot.
+    const lightChildren: Node[] = capturedLight ?? [];
+    if (!capturedLight) {
+        for (const child of Array.from(host.childNodes)) {
+            if (child !== iframe) lightChildren.push(child);
+        }
+        for (const child of lightChildren) { try { host.removeChild(child); } catch { /* ignore */ } }
     }
-    for (const child of lightChildren) { try { host.removeChild(child); } catch { /* ignore */ } }
+
+    // Only write once the srcdoc document has SETTLED. In Chrome, `doc` is
+    // non-null immediately (transient blank doc) — writing now would be wiped
+    // by the async srcdoc load. Defer to the load event unless it already fired.
+    const srcdocLoaded = (iframe as unknown as { __srcdocLoaded?: boolean }).__srcdocLoaded === true;
+    if (!doc || !doc.body || !srcdocLoaded) {
+        iframe.addEventListener('load', () => _renderIntoIframe(shadow, templateFragment, lightChildren), { once: true });
+        return;
+    }
 
     // 2. Process <slot> → Comment anchors in the OUTER fragment.
     _processSlots(templateFragment, shadow.Slots);
