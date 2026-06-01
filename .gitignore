@@ -136,3 +136,5 @@ coverage/
 .nyc_output/
 *.tgz
 /documentation/COMPONENT_CONVENTIONS.md
+/documentation/private documentation/AriannA-2.0-Shadow-Migration-Handoff.md
+/documentation/private documentation/ROADMAP_v2.0.0.md
