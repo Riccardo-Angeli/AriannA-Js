@@ -266,6 +266,18 @@ function _attachLightBackend(host: Element, mode: ShadowMode): AriannaShadow
         window   : null,
     };
 
+    // Default slot — guarantees a projection target for unslotted host content
+    // (e.g. build()'s `this.textContent = …`). Without it, _assignLightChildrenToSlots
+    // drops any node whose `slot` doesn't match a registered slot, so content with
+    // no explicit slot vanishes (the empty-box bug). Mirrors the native backend,
+    // which auto-inserts a default <slot>. The anchor is (re)attached to the host
+    // by _projectSlotsLight, so a `this.textContent` write that wipes it is recovered.
+    {
+        const defAnchor = document.createComment(`${SLOT_ANCHOR_PREFIX}default`);
+        (defAnchor as unknown as Record<symbol, string>)[SLOT_INTERNAL_KEY] = '';
+        slots.set('', { Name: '', Anchor: defAnchor, Fallback: [], Projected: [] });
+    }
+
     (host as unknown as Record<symbol, unknown>)[ARIANNA_SHADOW_KEY] = shadow;
     try { host.setAttribute(HOST_FLAG_ATTR, mode); } catch { /* ignore */ }
 
@@ -308,6 +320,12 @@ function _projectSlotsLight(host: Element, slots: Map<string, AriannaSlot>): voi
 {
     const lightChildren = _collectLightChildren(host);
     if (lightChildren.length) _assignLightChildrenToSlots(lightChildren, slots);
+
+    // Recover the default-slot anchor if a `this.textContent` write (or any full
+    // light-DOM replacement) wiped it. Otherwise its parentNode is null and the
+    // projection loop below `continue`s past it, losing unslotted content.
+    const _def = slots.get('');
+    if (_def && !_def.Anchor.parentNode) host.appendChild(_def.Anchor);
 
     for (const slot of slots.values()) {
         _clearProjectedAfterAnchor(slot);

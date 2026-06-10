@@ -72,8 +72,10 @@
  */
 
 import Observable from './Observable.ts';
+import { toCamel } from './Core.ts';
 import { Rule } from './Rule.ts';
 import type { RuleDefinition, CSSProperties } from './Rule.ts';
+import type { ShadowState, ShadowMode, ShadowOptions, ShadowLayer } from './Rule.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -130,16 +132,6 @@ export type SheetRule = Rule | CSSRule | string;
 
 // ── Normalizers ───────────────────────────────────────────────────────────────
 
-function toKebab(s: string): string
-{
-    return s.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`);
-}
-
-function toCamel(s: string): string
-{
-    return s.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
-}
-
 // ── Less parser — thin wrapper to additionals/Less ────────────────────────────
 //
 // Historical note: prior versions of this file embedded a minimal indentation-
@@ -152,10 +144,50 @@ function toCamel(s: string): string
 
 import { parseLess } from '../additionals/Less.ts';
 
+// Adopt a rule-like value into a LOCAL Rule (cross-module-safe).
+//   • a same-module Rule          → used as-is
+//   • a foreign Rule (instanceof fails under bundle duplication) → rebuilt from
+//     its public Selector + Properties, so it isn't mis-read as a CSSRule
+//   • a CSSRule (CSSOM)           → wrapped via the Rule(cssRule) constructor
+function _adoptRule(r: unknown): Rule
+{
+    if (r instanceof Rule) return r;
+    const sel = (r as { Selector?: unknown }).Selector;
+    if (typeof sel === 'string')
+    {
+        const props = (r as { Properties?: CSSProperties }).Properties ?? ({} as CSSProperties);
+        return new Rule(sel, props);
+    }
+    return new Rule(r as CSSRule);
+}
+
+// True only for a genuine iterable (has a callable Symbol.iterator) — used to
+// recognise a foreign Stylesheet by its public, live, iterable `.Rules`. A plain
+// SheetObjectDef carrying a non-iterable `Rules` data key is correctly rejected.
+function _isIterable(x: unknown): boolean
+{
+    return x !== null && typeof x === 'object'
+        && typeof (x as { [Symbol.iterator]?: unknown })[Symbol.iterator] === 'function';
+}
+
 // ── Sheet class ───────────────────────────────────────────────────────────────
 
 export class Stylesheet
 {
+    /**
+     * Resolve a `box-shadow` value for Real/Virtual `.shadow()` (IoC entry point).
+     * `close` → 'none'; a Rule/Stylesheet contributes its own box-shadow; an array
+     * of ShadowLayers is joined; otherwise the named preset (Rule.boxShadowPreset).
+     */
+    static boxShadow(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop', opts: ShadowOptions = {}): string
+    {
+        if (state === 'close') return 'none';
+        if (mode instanceof Rule) { const v = mode.Properties['boxShadow'] ?? mode.Properties['box-shadow']; return v ?? Rule.boxShadowPreset('drop', opts); }
+        if (mode instanceof Stylesheet) { for (const r of mode.Rules) { const v = r.Properties['boxShadow'] ?? r.Properties['box-shadow']; if (v) return v; } return Rule.boxShadowPreset('drop', opts); }
+        if (Array.isArray(mode)) return mode.map(l => Rule.boxShadowLayer(l)).join(', ');
+        return Rule.boxShadowPreset(mode, opts);
+    }
+
 
     // ── Private fields ─────────────────────────────────────────────────────────
     #head    : HTMLHeadElement | HTMLElement;
@@ -210,9 +242,33 @@ export class Stylesheet
                     this.#rules = [input];
                 } else if (Array.isArray(input))
                 {
-                    this.#rules = input.map(r =>
-                        r instanceof Rule ? r : new Rule(r as CSSRule)
-                    );
+                    this.#rules = input.map(r => _adoptRule(r));
+                } else if (_isIterable((input as { Rules?: unknown }).Rules))
+                {
+                    // Foreign Stylesheet (instanceof fails under bundle duplication):
+                    // adopt its rules STRUCTURALLY through the public iterable .Rules.
+                    // This preserves each rule's :host selector, which the .Text /
+                    // #parseText fallback below would DROP when re-parsed inside a
+                    // non-shadow <style> (the browser discards :host there).
+                    this.#rules = [...(input as unknown as { Rules: Iterable<unknown> }).Rules].map(r => _adoptRule(r));
+                } else if (typeof (input as { Selector?: unknown }).Selector === 'string'
+                           && (input as { Properties?: unknown }).Properties !== null
+                           && typeof (input as { Properties?: unknown }).Properties === 'object')
+                {
+                    // Foreign Rule (instanceof fails): duck-typed by a string .Selector
+                    // plus an object .Properties. Adopt it structurally via _adoptRule
+                    // (which rebuilds `new Rule(.Selector, .Properties)`) rather than the
+                    // .Text/#parseText fallback — same :host-dropping reason as above.
+                    this.#rules = [_adoptRule(input)];
+                } else if (typeof (input as unknown as { Text?: unknown }).Text === 'string'
+                           && (input as unknown as { Text: string }).Text.trim())
+                {
+                    // Last resort: a cross-module object that exposes only a serialized
+                    // public `.Text` (neither iterable .Rules nor .Selector/.Properties).
+                    // Parse that instead of falling through to #parseObject, which would
+                    // read ZERO enumerable keys off a foreign instance (private fields)
+                    // and yield an empty stylesheet → no styles.
+                    this.#parseText((input as unknown as { Text: string }).Text);
                 } else
                 {
                     this.#parseObject(input as SheetObjectDef);
@@ -282,6 +338,24 @@ export class Stylesheet
      */
     #preprocess(text: string): string
     {
+        // Skip the Less pass entirely for plain CSS. Running a Less parser over
+        // standard CSS can mis-tokenize selectors such as `:host` (the shadow-DOM
+        // host selector) — turning `:host{ … }` into a selector-less or malformed
+        // rule that then fails to apply. This is exactly why STRING styles
+        // (`style: ':host{…}'`, e.g. the @Component decorator) lost their CSS while
+        // OBJECT styles (which never touch Less) rendered fine.
+        //
+        // Only invoke parseLess when Less-specific syntax is actually present:
+        //   • variable declarations   @name: value
+        //   • the parent selector     &
+        //   • line comments           // …
+        // (`@media`, `@font-face`, `@import`, … are NOT matched — no `@ident:`.)
+        const looksLess =
+            /@[\w-]+\s*:/.test(text)
+            || /(^|[\s{;,>+~])&/.test(text)
+            || /\/\//.test(text);
+        if (!looksLess) return text;
+
         try
         {
             // parseLess is imported at the top of this file when the default
@@ -368,7 +442,18 @@ export class Stylesheet
         // (e.g. ::-moz-selection on Chrome) don't advance the index, so
         // using `i` causes IndexSizeError cascade.
         this.#rules.forEach((r) => {
-            try { this.#sheet!.insertRule(r.Text, this.#sheet!.cssRules.length); }
+            // An empty rule text — e.g. a Rule built from an empty selector or a
+            // stripped @-rule — makes insertRule('') throw. Skip it silently rather
+            // than spamming the console; there is nothing to insert.
+            const text = r.Text;
+            if (!text || !text.trim()) return;
+            // A *style* rule with no selector serializes to "{ … }" (non-empty, but
+            // no selector), which insertRule also rejects. That is invalid CSS and
+            // cannot be inserted — skip it instead of throwing. At-rules
+            // (@font-face, @page, …) legitimately have no element selector.
+            const sel = (r.Selector ?? '').trim();
+            if (!sel && !text.trim().startsWith('@')) return;
+            try { this.#sheet!.insertRule(text, this.#sheet!.cssRules.length); }
             catch (e) { console.warn(`Sheet: could not insert rule "${r.Selector}":`, e); }
         });
     }

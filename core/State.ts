@@ -28,10 +28,10 @@
 
 import {
     Observable,
-    signal, signalMono, sinkText, effect, computed, batch, untrack, uuid,
+    signal, signalMono, sinkText, effect, computed, batch, untrack,
     type ChangeEvent, type Signal, type SignalMono, type ReadonlySignal, type AriannAEvent,
 } from './Observable.ts';
-
+import { UUID } from './Core.ts'
 export type { Signal, SignalMono, ReadonlySignal };
 
 

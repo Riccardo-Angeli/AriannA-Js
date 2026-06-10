@@ -45,7 +45,7 @@
  */
 
 import type { AriannAEvent } from './Observable.ts';
-import { uuid } from './Observable.ts';
+import Core, { toKebab, toCamel } from './Core.ts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -105,17 +105,6 @@ const PAGE_MARGIN_BOXES = new Set([
 
 // ── CSS normalizers ───────────────────────────────────────────────────────────
 
-function toKebab(s: string): string
-{
-    return s.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`);
-}
-
-function toCamel(s: string): string
-{
-    const lc = s.charAt(0).toLowerCase() + s.slice(1);
-    return lc.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
-}
-
 function trimVal(v: string): string { return v.trim().replace(/;$/, ''); }
 
 function parseDeclarations(text: string): CSSProperties
@@ -141,6 +130,10 @@ function serializeDeclarations(props: CSSProperties): string
 function normaliseProps(raw: CSSProperties): CSSProperties
 {
     const out: CSSProperties = {};
+    // Guard: a missing/garbage argument must never throw. Object.entries(undefined)
+    // is the "can't convert undefined to object" crash seen when CssState is called
+    // with a shifted/legacy signature. Degrade to an empty rule instead.
+    if (!raw || typeof raw !== 'object') return out;
     for (const [k, v] of Object.entries(raw))
         out[toCamel(k)] = String(v).trim();
     return out;
@@ -326,6 +319,18 @@ function buildNestedRules(rulesMap: Record<string, RuleDefinition | CSSPropertie
 
 // ── Rule ──────────────────────────────────────────────────────────────────────
 
+// ── Box-shadow CSS model — the deduplicated home. Real/Virtual delegate here
+//    (IoC); Stylesheet.boxShadow resolves Rule/Stylesheet sources on top. ─────────
+
+/** Whether a `.shadow()` style is applied (`open`) or cleared (`close`). */
+export type ShadowState = 'open' | 'close';
+/** Built-in box-shadow presets. */
+export type ShadowMode  = 'drop' | 'inset' | 'glow' | 'layered';
+/** Tunable parameters for a box-shadow preset. */
+export interface ShadowOptions { color?: string; blur?: number; spread?: number; x?: number; y?: number; }
+/** A single layer in a multi-layer box-shadow stack. */
+export interface ShadowLayer extends ShadowOptions { inset?: boolean; }
+
 export class Rule
 {
 
@@ -347,7 +352,7 @@ export class Rule
         arg1?: string | CSSProperties,
     )
     {
-        this.#id = uuid();
+        this.#id = Core.UUID();
 
         if (arg0 instanceof CSSRule)
         {
@@ -595,6 +600,36 @@ export class Rule
     }
 
     static From(cssRule: CSSRule): Rule { return new Rule(cssRule); }
+
+    // ── Box-shadow primitives (deduplicated; Real/Virtual + Stylesheet use these) ──
+
+    /** Re-express any CSS color as `rgba(r,g,b,a)` with the given alpha (best-effort). */
+    private static _alpha(color: string, a: number): string
+    {
+        const rgba = color.match(/rgba?\(([^)]+)\)/);
+        if (rgba) { const p = rgba[1].split(',').map(s => s.trim()); if (p.length >= 3) return `rgba(${p[0]},${p[1]},${p[2]},${a})`; }
+        const hex = color.match(/^#([0-9a-fA-F]{3,8})$/);
+        if (hex) { const h = hex[1]; const r = parseInt(h.length >= 6 ? h.slice(0,2) : h[0]+h[0], 16); const g = parseInt(h.length >= 6 ? h.slice(2,4) : h[1]+h[1], 16); const b = parseInt(h.length >= 6 ? h.slice(4,6) : h[2]+h[2], 16); return `rgba(${r},${g},${b},${a})`; }
+        return color;
+    }
+
+    /** Build the `box-shadow` CSS for a named preset (`drop`/`inset`/`glow`/`layered`). */
+    static boxShadowPreset(mode: ShadowMode, o: ShadowOptions = {}): string
+    {
+        const color = o.color ?? 'rgba(0,0,0,0.25)', blur = o.blur ?? 8, spread = o.spread ?? 0, x = o.x ?? 0;
+        switch (mode) {
+            case 'drop':    return `${x}px ${o.y ?? 4}px ${blur}px ${spread}px ${color}`;
+            case 'inset':   return `inset ${x}px ${o.y ?? 0}px ${blur}px ${spread}px ${color}`;
+            case 'glow':    return `0 0 ${blur}px ${spread+2}px ${color}, 0 0 ${blur*2}px ${spread}px ${Rule._alpha(color, 0.5)}`;
+            case 'layered': { const y = o.y ?? 4; return `${x}px ${y}px ${blur}px ${color}, ${x}px ${y*2}px ${blur*2}px ${Rule._alpha(color, 0.15)}`; }
+        }
+    }
+
+    /** Build the `box-shadow` CSS for one explicit ShadowLayer. */
+    static boxShadowLayer(l: ShadowLayer): string
+    {
+        return `${l.inset ? 'inset ' : ''}${l.x ?? 0}px ${l.y ?? 4}px ${l.blur ?? 8}px ${l.spread ?? 0}px ${l.color ?? 'rgba(0,0,0,0.25)'}`;
+    }
 
     // ── Golem static API ──────────────────────────────────────────────────────
 
@@ -1108,6 +1143,9 @@ export class CssState
     #keyframes   : Rule | null = null;
     action       : ((e: Event) => void) | null;
 
+    /** Warn at most once about non-string eventName misuse — avoids console spam. */
+    static #warnedBadEvent = false;
+
     constructor(
         element    : Element,
         eventName  : string,
@@ -1119,9 +1157,36 @@ export class CssState
     )
     {
         this.#element    = element;
-        this.#eventName  = eventName.toLowerCase().replace(/^mouse/, 'mouse');
+
+        // Robustness: tolerate a legacy / mis-ordered call where the CSS props object
+        // landed in the `eventName` slot — e.g. `new CssState(el, { Background: '…' })`
+        // (props where the event name should be, no stateProps). There is then no DOM
+        // event: treat the object as the state props and bind nothing. This is exactly
+        // what produced the "eventName should be a string" warning followed by
+        // `normaliseProps(undefined)` → "can't convert undefined to object".
+        let _eventName: unknown        = eventName;
+        let _stateProps: CSSProperties = stateProps;
+        const eventIsObject = _eventName !== null && typeof _eventName === 'object';
+        if (eventIsObject
+            && !('type' in (_eventName as object))                 // not an Event
+            && (_stateProps === undefined || _stateProps === null))
+        {
+            _stateProps = _eventName as CSSProperties;             // recover the misplaced props
+            _eventName  = '';
+        }
+
+        const _ev = typeof _eventName === 'string'
+            ? _eventName
+            : String((_eventName as { type?: unknown } | null | undefined)?.type ?? '');
+        if (typeof eventName !== 'string' && !CssState.#warnedBadEvent)
+        {
+            CssState.#warnedBadEvent = true;
+            console.warn('[arianna] CssState: non-string eventName — recovered as state props; check the call site (warned once).');
+        }
+
+        this.#eventName  = _ev.toLowerCase().replace(/^mouse/, 'mouse');
         this.#baseRule   = baseRule;
-        this.#stateProps = normaliseProps(stateProps);
+        this.#stateProps = normaliseProps(_stateProps);
         this.action      = action ?? null;
 
         if (keyframeSelector && keyframeContents)
@@ -1137,13 +1202,19 @@ export class CssState
             document.head.appendChild(style);
         }
 
-        // Map Golem-style event names to DOM event names
-        const domEvent = this.#mapEvent(eventName);
-        element.addEventListener(domEvent, (e) =>
+        // Map Golem-style event names to DOM event names. Only bind when we have a real
+        // event name AND a base rule AND a real EventTarget — a recovered/garbage call
+        // leaves _ev='' (domEvent='') and must not register a dead listener or later
+        // call merge() on an undefined base rule.
+        const domEvent = this.#mapEvent(_ev);
+        if (domEvent && this.#baseRule && element && typeof element.addEventListener === 'function')
         {
-            this.#baseRule.merge(this.#stateProps);
-            this.action?.(e);
-        });
+            element.addEventListener(domEvent, (e) =>
+            {
+                this.#baseRule.merge(this.#stateProps);
+                this.action?.(e);
+            });
+        }
     }
 
     #mapEvent(name: string): string
@@ -1164,31 +1235,31 @@ export class CssState
     }
 
     get Keyframes(): Rule | null { return this.#keyframes; }
-}
 
-// ── Window registration ───────────────────────────────────────────────────────
+    /** Pin the constructor name (bundler renames the colliding local to `_Rule`)
+     *  and expose `window.Rule` + the `window.Css` namespace. Runs once at class-eval. */
+    static #Build(): void
+    {
+        try { Object.defineProperty(this, 'name', { value: 'Rule', configurable: true }); } catch { /* frozen */ }
+        if (typeof window === 'undefined') return;
+        if (!Object.prototype.hasOwnProperty.call(window, 'Rule'))
+            Object.defineProperty(window, 'Rule', { enumerable: true, configurable: false, writable: false, value: this });
+        // Css namespace — mirrors Golem's static Css.GetSelector / GetType / etc.
+        if (!('Css' in window))
+            Object.defineProperty(window, 'Css', {
+                enumerable: true, configurable: true, writable: true,
+                value: {
+                    GetSelector : (def: RuleDefinition) => Rule.GetSelector(def),
+                    GetType     : (def: RuleDefinition) => Rule.GetType(def),
+                    GetContents : (def: RuleDefinition) => Rule.GetContents(def),
+                    GetText     : (def: RuleDefinition) => Rule.GetText(def),
+                    GetObject   : (cssText: string)     => Rule.GetObject(cssText),
+                    State       : CssState,
+                },
+            });
+    }
 
-if (typeof window !== 'undefined')
-{
-    Object.defineProperty(window, 'Rule', {
-        enumerable: true, configurable: false, writable: false, value: Rule,
-    });
-
-    // Css namespace — mirrors Golem's static Css.GetSelector / GetType / etc.
-    const CssNamespace = {
-        GetSelector : (def: RuleDefinition) => Rule.GetSelector(def),
-        GetType     : (def: RuleDefinition) => Rule.GetType(def),
-        GetContents : (def: RuleDefinition) => Rule.GetContents(def),
-        GetText     : (def: RuleDefinition) => Rule.GetText(def),
-        GetObject   : (cssText: string)     => Rule.GetObject(cssText),
-        State       : CssState,
-    };
-
-    // Register as window.Css if not already defined
-    if (!('Css' in window))
-        Object.defineProperty(window, 'Css', {
-            enumerable: true, configurable: true, writable: true, value: CssNamespace,
-        });
+    static { this.#Build(); }
 }
 
 export { CssState as State };

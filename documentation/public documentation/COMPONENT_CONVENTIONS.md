@@ -1,3 +1,31 @@
+<!-- ════════════════════════════════════════════════════════════════════════
+     CANONICAL MODEL BANNER — read ARCHITECTURE.md FIRST.
+     This conventions doc still contains v1 phrasings where a Component is
+     treated as the element. The BINDING model is the 4-layer one:
+
+       Core.Create   →  Element (Layer 0, DOM only)
+       Real/Virtual  →  Element + fluent API (Layer 1)  — Real=Lit, Virtual=React/Vue
+       Component     →  super-layer over a Real + a Virtual (Layer 2):
+                        owns reactivity/lifecycle/observers, syncs both facets,
+                        is NOT a DOM node, NEVER leaks the node. Reach the DOM
+                        ONLY via  component.Real  /  component.Virtual.
+       Directives    →  fire at the BASE, independent of the Component (Layer 3)
+
+     RULE OF THUMB while reading below:
+       • `extends Component(...)` / `@Component` / `new Component(...)` / `new MyClass()`
+         → you get a COMPONENT (not a node). Append via .Real / .Virtual.
+       • `document.createElement('arianna-x')` / markup
+         → you get a NODE (a Real, dressed by a Component). Append directly;
+           get its Component via Component(node).
+       • Inside a Component class, `this` is the COMPONENT, not the element.
+         DOM ops go through this.Real / delegated sugar (this.set/get/sub,
+         this.attrSignal, this.fire, this.RenderRoot).
+
+     Where this file's prose says "the component IS the element" or shows
+     `appendChild(componentInstance)` / `this.setAttribute(...)`, treat it as
+     SUPERSEDED by ARCHITECTURE.md until the full conformance pass lands.
+     ════════════════════════════════════════════════════════════════════════ -->
+
 # AriannA — Component Conventions
 
 **Purpose**: the single canonical specification for defining and instantiating components in the AriannA framework. Every one of the 140+ components in `components/*` must follow this spec. This document supersedes any previous convention file.

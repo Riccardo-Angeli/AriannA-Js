@@ -8,7 +8,8 @@
  * Signal integrati — ctx.asSignal() reagisce automaticamente a ctx.update().
  */
 
-import { uuid, signal } from './Observable.ts';
+import {  signal } from './Observable.ts';
+import {  UUID } from './Core.ts';
 import type { Signal } from './Observable.ts';
 
 export interface ContextEvent<T = unknown>
@@ -112,7 +113,7 @@ export class Context<T = unknown>
     static consume<T>(key: string, element: Element): ConsumerHandle<T>
     {
         const rec = _get<T>(key);
-        const cr: ConsumerRecord<T> = { id: uuid(), element, events: new Map() };
+        const cr: ConsumerRecord<T> = { id: UUID(), element, events: new Map() };
         rec.consumers.add(cr);
 
         let resolved = false;

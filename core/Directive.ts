@@ -59,7 +59,7 @@ import Core from './Core.ts';
  *   </div>
  *
  * ── TYPESCRIPT DECORATORS ─────────────────────────────────────────────────────
- *   @Component({ tag, template, style })   — defines a Custom Element
+ *   @ComponentDecorator({ tag, template, style })   — defines a Custom Element
  *   @Prop()                                — reactive property
  *   @Watch('propName')                     — watch a prop for changes
  *   @Emit('event-name')                    — fires CustomEvent on return
@@ -782,6 +782,17 @@ export class Directive
     {
         return Directive._registry.get(name);
     }
+
+    /** Pin the constructor name (bundler renames the colliding local to `_Directive`)
+     *  and expose the class on `window`. Runs once at class-eval. */
+    static #Build(): void
+    {
+        try { Object.defineProperty(this, 'name', { value: 'Directive', configurable: true }); } catch { /* frozen */ }
+        if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Directive'))
+            Object.defineProperty(window, 'Directive', { enumerable: true, configurable: false, writable: false, value: this });
+    }
+
+    static { this.#Build(); }
 }
 
 /**
@@ -801,7 +812,7 @@ export interface CustomDirectiveHooks
 
 // ── TypeScript Decorators ──────────────────────────────────────────────────────
 
-/** Metadata for @Component decorator. */
+/** Metadata for @ComponentDecorator decorator. */
 export interface ComponentMeta
 {
     /** Custom element tag name (must contain a hyphen). */
@@ -817,17 +828,17 @@ export interface ComponentMeta
 /**
  * Class decorator — defines and registers a Custom Element.
  *
- * Two call forms, both supported (mirrors the Component(...) constructor):
+ * Two call forms, both supported (mirrors the ComponentDecorator(...) constructor):
  *
  *  • Positional (same as the constructor):
- *      @Component('dec-card', Rule | Stylesheet | object | cssString, options?)
+ *      @ComponentDecorator('dec-card', Rule | Stylesheet | object | cssString, options?)
  *      class DecCard extends HTMLElement {}
  *
  *  • Object:
- *      @Component({ tag: 'dec-card', template: '<slot></slot>', style: '…', shadow: 'open' })
+ *      @ComponentDecorator({ tag: 'dec-card', template: '<slot></slot>', style: '…', shadow: 'open' })
  *      class DecCard extends HTMLElement {}
  */
-export function Component(
+export function ComponentDecorator(
     arg0: ComponentMeta | string,
     style?: unknown,
     options?: { shadow?: 'open' | 'closed' | false; template?: string },
@@ -836,7 +847,7 @@ export function Component(
     // ── Normalize both call forms into a single ComponentMeta ──────────────
     let meta: ComponentMeta;
     if (typeof arg0 === 'string') {
-        // Positional form: @Component('tag', style, options)
+        // Positional form: @ComponentDecorator('tag', style, options)
         // `style` may be a Rule, Stylesheet, plain object, or CSS string. We
         // serialize to a CSS string for the decorator's <style> injection.
         let styleStr: string | undefined;
@@ -860,14 +871,14 @@ export function Component(
             shadow  : options?.shadow ?? 'closed',
         };
     } else {
-        // Object form: @Component({ tag, template, style, shadow })
+        // Object form: @ComponentDecorator({ tag, template, style, shadow })
         meta = arg0;
     }
 
     return function <T extends typeof HTMLElement>(Base: T): T
     {
         // Legacy decorator compatibility, routed through AriannA's registry.
-        // No customElements.define(): Component registration belongs to Core/Namespace.
+        // No customElements.define(): ComponentDecorator registration belongs to Core/Namespace.
         const rendered = new WeakSet<HTMLElement>();
         const roots    = new WeakMap<HTMLElement, ShadowRoot>();
         const proto    = Base.prototype as unknown as {
@@ -932,7 +943,7 @@ export function Component(
  * When the property changes, the component's update() method is called if present.
  *
  * @example
- *   @Component({ tag: 'my-count' })
+ *   @ComponentDecorator({ tag: 'my-count' })
  *   class MyCount extends HTMLElement {
  *     @Prop() count = 0;
  *   }
@@ -1023,12 +1034,5 @@ export function Ref(selector?: string)
         });
     };
 }
-
-// ── Window registration ───────────────────────────────────────────────────────
-
-if (typeof window !== 'undefined')
-    Object.defineProperty(window, 'Directive', {
-        enumerable: true, configurable: false, writable: false, value: Directive,
-    });
 
 export default Directive;

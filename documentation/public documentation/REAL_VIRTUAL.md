@@ -1,5 +1,36 @@
 # Real & Virtual — DOM strategies
 
+> **READ FIRST → [`ARCHITECTURE.md`](ARCHITECTURE.md) is canonical.** This file
+> describes Layer 1 only. If anything here seems to contradict the layered model,
+> `ARCHITECTURE.md` wins.
+
+## Layer position (binding)
+
+`Real` and `Virtual` are **Layer 1**: they take the bare element produced by
+**`Core.Create`** (Layer 0) and add **only the fluent API**. They are
+`Core.Create` element **+ ergonomics** — nothing more.
+
+* **`Real`** behaves like a **Lit** component — eager, live DOM now.
+* **`Virtual`** behaves like **React/Vue** — lazy, materialises only at the end.
+
+**What `Real`/`Virtual` are NOT:**
+
+* They are **not** components. They have **no** reactivity-as-component,
+  **no** lifecycle hooks, **no** observers, **no** two-facet sync. That is
+  Layer 2 (`Component`).
+* The element they produce has a prototype chain that **never contains
+  `Component`** — `[UserSubclass?, HTMLXxxElement, HTMLElement, Element, Node,
+  EventTarget, Object]`.
+* A `Component` sits ABOVE a `Real` and a `Virtual` and reaches the DOM through
+  them (`component.Real` / `component.Virtual`); a `Real`/`Virtual` never reaches
+  up to a `Component`.
+
+Both facets must source their element from **`Core.Create`** (`Virtual` does so
+at `render()` time) so the two are byte-identical.
+
+---
+
+
 **Purpose**: explain the two DOM construction strategies that every AriannA component, JSX expression, or imperative builder ultimately uses. Read this once before writing components.
 
 ---

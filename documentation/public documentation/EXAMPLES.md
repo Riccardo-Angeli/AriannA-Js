@@ -1,6 +1,12 @@
 # Complete Worked Examples
 
-**Purpose**: end-to-end examples a reader can copy, paste, and run. Each example exercises multiple parts of the framework so the pieces are seen working together.
+> **Model reminder (binding).** See [`ARCHITECTURE.md`](ARCHITECTURE.md). Inside a
+> `Component` class, **`this` is the Component**, *not* the DOM node. Touch the
+> live element through **`this.Real`** (eager facet) or **`this.Virtual`** (lazy
+> facet), or through the Component's delegated sugar (`this.set/get/sub`,
+> `this.attrSignal`, `this.fire`, `this.RenderRoot`, lifecycle hooks). A Component
+> instance is **never** appendable — `appendChild(component)` is invalid; use
+> `component.Real.append(p)` or `component.Virtual.render().append(p)`.
 
 ---
 
@@ -13,10 +19,10 @@ A single component that demonstrates:
 - Vue-style `template` class property
 - Internal signal state
 - `attrSignal` for reactive attribute
-- 4 template directives: `{{ }}`, `@click`, `:attr`, `a-class`
+- 4 template directives: `{{ }}`, `@click`, `?attr`, `a-class`
 - 2 lifecycle hooks (`onMount`, `onUnmount`)
 - Subclass inheriting and customising `Sheet.Default`
-- Usage from HTML, Real, Virtual, JSX, `new Component()`, `new MyClass()`, `document.createElement`
+- Usage from **Family A** (returns a Component) and **Family B** (returns a node)
 
 ### Source
 
@@ -46,57 +52,27 @@ export class CounterCard extends Component(
             fontFamily   : 'system-ui, sans-serif',
         },
         ':host([variant="primary"])': {
-            background: 'var(--arianna-primary, #e40c88)',
-            color     : '#fff',
+            background : 'var(--arianna-primary, #e40c88)',
+            color      : '#fff',
             borderColor: 'transparent',
         },
-        '.label': {
-            fontSize  : '14px',
-            fontWeight: '600',
-            opacity   : '0.85',
-        },
-        '.count-row': {
-            display    : 'flex',
-            alignItems : 'center',
-            gap        : '8px',
-        },
-        '.count': {
-            fontSize  : '32px',
-            fontWeight: '700',
-            minWidth  : '60px',
-            textAlign : 'center',
-            transition: 'color 200ms',
-        },
-        '.count.zero': {
-            opacity: '0.4',
-        },
-        '.count.over-ten': {
-            color: 'var(--arianna-success, #2ea043)',
-        },
-        'button': {
-            width        : '36px',
-            height       : '36px',
-            border       : 'none',
-            borderRadius : '50%',
-            cursor       : 'pointer',
-            fontSize     : '18px',
-            background   : 'rgba(0, 0, 0, 0.08)',
-            transition   : 'transform 80ms',
-        },
-        'button:hover': {
-            transform: 'scale(1.1)',
-        },
-        'button:disabled': {
-            opacity : '0.3',
-            cursor  : 'not-allowed',
-        },
+        '.label'    : { fontSize: '14px', fontWeight: '600', opacity: '0.85' },
+        '.count-row': { display: 'flex', alignItems: 'center', gap: '8px' },
+        '.count'    : { fontSize: '32px', fontWeight: '700', minWidth: '60px', textAlign: 'center', transition: 'color 200ms' },
+        '.count.zero'    : { opacity: '0.4' },
+        '.count.over-ten': { color: 'var(--arianna-success, #2ea043)' },
+        'button'         : { width: '36px', height: '36px', border: 'none', borderRadius: '50%', cursor: 'pointer', fontSize: '18px', background: 'rgba(0,0,0,0.08)', transition: 'transform 80ms' },
+        'button:hover'   : { transform: 'scale(1.1)' },
+        'button:disabled': { opacity: '0.3', cursor: 'not-allowed' },
     },
     {
         attrs : ['variant', 'initial'],
         shadow: 'closed',
     }
 ) {
-    // ── Vue-style template (Approach A) ────────────────────────────────────
+    // ── Vue-style template ─────────────────────────────────────────────────
+    //  Directives bind at the BASE (the Real/Virtual element), independently of
+    //  this Component. @click is wired on the live element, not on `this`.
     template = `
         <div class="label">{{ this.label.get() }}</div>
         <div class="count-row">
@@ -109,34 +85,34 @@ export class CounterCard extends Component(
         </div>
     `;
 
-    // ── Reactive state ─────────────────────────────────────────────────────
+    // ── Reactive state (owned by the Component, Layer 2) ───────────────────
     count = signal(0);
     label = signal('Counter');
     atMin = () => this.count() <= 0;
 
-    // ── Build (called once after template + sheet are attached) ────────────
+    // ── build(): runs once after template + sheet attach ───────────────────
     build(opts: CounterCardOptions = {}) {
-        // 1. Sync the 'initial' attribute → count signal
+        // attrSignal is a Component-owned bridge (attr ↔ signal ↔ DOM).
         const initialAttr = this.attrSignal('initial');
         const start = parseInt(initialAttr.get() ?? '0', 10) || (opts.initial ?? 0);
         this.count.set(start);
 
-        // 2. Apply opts.label if provided (otherwise default 'Counter')
         if (opts.label) this.label.set(opts.label);
 
-        // 3. Side effect: persist count in sessionStorage every time it changes
+        // this.id reads through the Component's delegated getter (→ base attr).
         effect(() => {
-            sessionStorage.setItem('counter-' + (this.id || 'default'), String(this.count()));
+            sessionStorage.setItem('counter-' + (this.get('id') || 'default'), String(this.count()));
         });
     }
 
-    // ── Handlers (arrow functions to preserve `this`) ──────────────────────
+    // ── Handlers (arrow properties to preserve `this` = the Component) ─────
     inc = () => this.count.set(this.count() + 1);
     dec = () => this.count.set(Math.max(0, this.count() - 1));
 
-    // ── Lifecycle ──────────────────────────────────────────────────────────
+    // ── Lifecycle (fired by the Component, not the element) ────────────────
     onMount() {
-        // Optional keyboard shortcut while element is in DOM
+        // A document-level listener: bind through the eager facet for symmetry,
+        // or directly on window for non-element targets.
         window.addEventListener('keydown', this.onKey);
         console.log('[counter] mounted');
     }
@@ -151,25 +127,23 @@ export class CounterCard extends Component(
         if (e.key === 'ArrowDown') this.dec();
     };
 
-    // ── Public API surface ─────────────────────────────────────────────────
-    get variant(): string  { return this.getAttribute('variant') ?? 'default'; }
-    set variant(v: string) { this.setAttribute('variant', v); }
+    // ── Public API surface — attribute access via delegated sugar ──────────
+    get variant(): string  { return (this.get('variant') as string) ?? 'default'; }
+    set variant(v: string) { this.set('variant', v); }
 
-    // Imperative API for parents that want to mutate count externally
+    // Imperative API for parents that want to mutate count externally.
     reset() { this.count.set(0); }
-}
-
-// ── Optional: window bridge so devtools console can do `new CounterCard()` ─
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'CounterCard', {
-        value: CounterCard, writable: false, enumerable: false, configurable: false,
-    });
 }
 
 export default CounterCard;
 ```
 
-### Subclass inheriting and customising Sheet.Default
+> `this.get('variant')` / `this.set('variant', v)` are the Component's delegated
+> fluent sugar; they forward to the base element. They are **not** the native
+> `getAttribute`/`setAttribute` on `this` — `this` is the Component, which is not
+> a node.
+
+### Subclass inheriting and customising `Sheet.Default`
 
 ```typescript
 // FuchsiaCounter.ts — Way A (static initialiser block)
@@ -178,130 +152,98 @@ import { Rule, Stylesheet } from 'arianna';
 
 export class FuchsiaCounter extends CounterCard {
     static {
+        // Re-extending an already-extended Component: the Real base chain is
+        // RE-SPLICED automatically (eager facet renders now). The Virtual facet
+        // only updates its descriptor and re-chains at render() time.
         FuchsiaCounter.Sheet.Default = new Stylesheet([
-            ...CounterCard.Sheet.Default.Rules,           // inherit parent rules
-            new Rule(':host', {                           // override host bg
-                background: '#e40c88',
-                color: '#fff',
+            ...CounterCard.Sheet.Default.Rules,
+            new Rule(':host', {
+                background: '#e40c88', color: '#fff',
                 boxShadow: '0 4px 16px rgba(228, 12, 136, 0.3)',
             }),
-            new Rule('.count', {
-                color: '#fff',
-                textShadow: '0 1px 2px rgba(0,0,0,0.3)',
-            }),
+            new Rule('.count', { color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.3)' }),
         ]);
     }
 }
 
-// Way C — equivalent, using the factory
+// Way C — equivalent, using the factory (also returns a Component class)
 class FuchsiaCounterB extends Component('arianna-fuchsia-counter', CounterCard, {
     ':host': { background: '#e40c88', color: '#fff' },
     '.count': { color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.3)' },
 }) {}
 ```
 
-### Usage — all six instantiation forms produce identical output
+### Usage — the two families (this is the part people get wrong)
 
 ```typescript
-// ──────────────────────────────────────────────────────────────────────────
-// FORM 1 — HTML markup (declarative)
-// ──────────────────────────────────────────────────────────────────────────
-```
-```html
-<arianna-counter-card initial="5" variant="primary"></arianna-counter-card>
-```
-```typescript
-// ──────────────────────────────────────────────────────────────────────────
-// FORM 2 — Real fluent (eager, live DOM)
-// ──────────────────────────────────────────────────────────────────────────
-import { Real } from 'arianna';
+// ══════════════════════════════════════════════════════════════════════════
+//  FAMILY A — you get a COMPONENT (super-layer object, NOT a node).
+//             Reach the DOM only via .Real / .Virtual.
+// ══════════════════════════════════════════════════════════════════════════
 
-const a = new Real('arianna-counter-card')
-    .set('initial', '5')
-    .set('variant', 'primary')
-    .append('#app');
-
-// ──────────────────────────────────────────────────────────────────────────
-// FORM 3 — Virtual (lazy, declarative)
-// ──────────────────────────────────────────────────────────────────────────
-import { Virtual } from 'arianna';
-
-const b = new Virtual('arianna-counter-card')
-    .set('initial', '5')
-    .set('variant', 'primary');
-b.append('#app');           // materialises now
-
-// ──────────────────────────────────────────────────────────────────────────
-// FORM 4 — Component wrapper SUM (Real + Virtual via one handle)
-// ──────────────────────────────────────────────────────────────────────────
+// A1 — new Component(tag, opts?)  →  Component
 import { Component } from 'arianna';
-
 const c = new Component('arianna-counter-card', { initial: 5, variant: 'primary' });
-c.Real.append('#app');      // uses the Real wrapper
+//  ❌ document.body.appendChild(c);     // INVALID — c is not a node
+c.Real.append('#app');                   // ✅ eager (Lit-like), live now
 //   or
-c.Virtual.append('#app');   // same underlying element, Virtual wrapper
+c.Virtual.render().append('#app');       // ✅ lazy (React/Vue-like), commit now
 
-// ──────────────────────────────────────────────────────────────────────────
-// FORM 5 — Class direct (named import, full TypeScript types)
-// ──────────────────────────────────────────────────────────────────────────
+// A2 — new MyClass(props)  →  Component (typed)
 import { CounterCard } from './CounterCard';
-
 const d = new CounterCard({ initial: 5, label: 'Score' });
-d.setAttribute('variant', 'primary');
-document.body.appendChild(d);
-
-// d.reset();          // typed imperative API
+d.Real.append('#app');                   // ✅ NOT appendChild(d)
+// d.reset();                            // typed imperative API on the Component
 // d.count.subscribe(n => console.log('count is', n));
 
-// ──────────────────────────────────────────────────────────────────────────
-// FORM 6 — document.createElement (browser-native)
-// ──────────────────────────────────────────────────────────────────────────
+// A3 — new Component(existingElement)  →  Component dressing that element
+const bare = document.createElement('div');
+const wrapped = new Component(bare);     // a <div> with the decorator on top
+wrapped.Real.append('#app');             // ✅ only now does the <div> enter the DOM
+
+
+// ══════════════════════════════════════════════════════════════════════════
+//  FAMILY B — you get a live ELEMENT (a Real's node, dressed by a Component).
+//             It IS a node ⇒ appendable. Directives hit the base.
+// ══════════════════════════════════════════════════════════════════════════
+
+// B1 — HTML markup (declarative): upgraded on parse → a node in the DOM already
+//   <arianna-counter-card initial="5" variant="primary"></arianna-counter-card>
+
+// B2 — document.createElement → a node (a Real, dressed by a Component)
 const e = document.createElement('arianna-counter-card');
 e.setAttribute('initial', '5');
 e.setAttribute('variant', 'primary');
-document.body.appendChild(e);
+document.body.appendChild(e);            // ✅ valid — e is a node
+//  To reach the Component dressing this node:
+const eComponent = Component(e);         // ✅ returns the Component for this element
 
-// ──────────────────────────────────────────────────────────────────────────
-// FORM (bonus) — JSX
-// ──────────────────────────────────────────────────────────────────────────
-/* @jsxImportSource arianna */
-import { CounterCard } from './CounterCard';
-
-function App() {
-    return (
-        <div id="app">
-            <CounterCard initial={5} variant="primary" />
-            <CounterCard initial={0} />
-            <FuchsiaCounter initial={42} />
-        </div>
-    );
-}
+// B3 — new Real / new Virtual over the tag (Layer 1 directly, no Component handle)
+import { Real, Virtual } from 'arianna';
+new Real('arianna-counter-card').set('initial','5').set('variant','primary').append('#app');
+const v = new Virtual('arianna-counter-card').set('initial','5');
+v.append('#app');                        // materialises now
 ```
 
-All six forms register a working `<arianna-counter-card>` with the same shadow DOM, the same template, the same `Sheet.Default`, and the same lifecycle. The "default imperative" rule is satisfied: zero manual configuration needed.
+**The single rule:** constructor / decorator / `extends` (Family A) hand you a
+**Component** → go through `.Real` / `.Virtual`. Markup / `createElement`
+(Family B) hand you a **node** → append it directly; get its Component via
+`Component(node)`.
 
 ---
 
 ## Example 2: `<arianna-tabs>` — parent/child via `bus`
-
-Demonstrates the `bus` mechanism for parent-child component coordination.
 
 ```typescript
 import { Component, signal } from 'arianna';
 
 // ── Child: registers with parent via def.bus ──────────────────────────────
 class Tab extends Component('arianna-tab', HTMLElement, {
-    ':host': {
-        display: 'block', padding: '8px 16px', cursor: 'pointer',
-        borderBottom: '2px solid transparent',
-    },
-    ':host([active])': {
-        borderBottomColor: 'var(--arianna-primary, #e40c88)',
-        fontWeight: '600',
-    },
+    ':host': { display: 'block', padding: '8px 16px', cursor: 'pointer', borderBottom: '2px solid transparent' },
+    ':host([active])': { borderBottomColor: 'var(--arianna-primary, #e40c88)', fontWeight: '600' },
 }, {
     attrs: ['label', 'active'],
-    bus  : 'arianna-tabs',   // ← registers as child of nearest <arianna-tabs>
+    bus  : 'arianna-tabs',
 }) {
     template = `<slot>{{ this.label.get() }}</slot>`;
     label = signal('Tab');
@@ -312,25 +254,21 @@ class Tabs extends Component('arianna-tabs', HTMLElement, {
     ':host': { display: 'flex', gap: '0', borderBottom: '1px solid #ddd' },
 }) {
     template = `<slot></slot>`;
-
     activeIndex = signal(0);
 
     onMount() {
-        // _children is populated by the bus mechanism
+        // _children holds the CHILD COMPONENTS (Family A objects), not raw nodes.
         const children = this._children as Tab[];
 
         children.forEach((tab, i) => {
-            tab.addEventListener('click', () => {
+            // Bind on the child's eager facet — directives/events live at the base.
+            tab.Real.on('click', () => {
                 this.activeIndex.set(i);
-                children.forEach((t, j) => {
-                    if (j === i) t.setAttribute('active', '');
-                    else t.removeAttribute('active');
-                });
+                children.forEach((t, j) => t.set('active', j === i ? '' : null));
             });
         });
 
-        // Activate first by default
-        children[0]?.setAttribute('active', '');
+        children[0]?.set('active', '');   // delegated sugar → base attribute
     }
 }
 ```
@@ -343,23 +281,22 @@ class Tabs extends Component('arianna-tabs', HTMLElement, {
 </arianna-tabs>
 ```
 
-Each `<arianna-tabs>` on the page gets its own isolated `_children` registry. Two `<arianna-tabs>` on the same page do not see each other's tabs.
+Each `<arianna-tabs>` gets its own isolated `_children` registry.
 
 ---
 
 ## Example 3: standalone — `Directive.bootstrap` without components
 
-When you don't need shadow DOM, lifecycle, or custom elements, you can bootstrap directives directly on existing markup.
+Directives operate on the base independently of any Component — so they work on
+plain markup with no component at all.
 
 ```html
 <div id="app">
     <input a-model="user.name" placeholder="Name">
     <p>Hello, <span>{{ user.name }}</span>!</p>
-
     <ul>
         <li a-for="item, i in items">{{ i + 1 }}. {{ item }}</li>
     </ul>
-
     <button a-on="click:addItem">Add</button>
 </div>
 ```
@@ -371,21 +308,20 @@ const scope = new State({
     user : { name: 'Riccardo' },
     items: ['Apple', 'Banana', 'Cherry'],
     addItem: () => {
-        scope.State.items = [
-            ...scope.State.items,
-            'Item ' + (scope.State.items.length + 1),
-        ];
+        scope.State.items = [...scope.State.items, 'Item ' + (scope.State.items.length + 1)];
     },
 });
 
 Directive.bootstrap(document.getElementById('app')!, scope);
 ```
 
-No components, no shadow DOM, no build step. Just declarative DOM + a state object.
+No components, no shadow DOM, no build step.
 
 ---
 
 ## Example 4: JSX with reactive subscriptions
+
+JSX produces a `Virtual` (lazy facet) — it commits to the DOM on `.append()`.
 
 ```tsx
 /* @jsxImportSource arianna */
@@ -401,30 +337,20 @@ function TodoApp() {
         todos.set([...todos(), { text: newTxt(), done: false }]);
         newTxt.set('');
     };
-
-    const toggle = (i: number) => {
+    const toggle = (i: number) =>
         todos.set(todos().map((t, j) => j === i ? { ...t, done: !t.done } : t));
-    };
 
     return (
         <div class="todo-app">
             <h1>Todos</h1>
             <p>{() => `${remain()} remaining`}</p>
-
-            <input
-                value={() => newTxt()}
-                $input={(e: any) => newTxt.set(e.target.value)}
-                placeholder="Add a todo…"
-            />
+            <input value={() => newTxt()} $input={(e: any) => newTxt.set(e.target.value)} placeholder="Add a todo…" />
             <button onClick={add}>Add</button>
-
             <ul>
                 {() => todos().map((t, i) => (
                     <li>
                         <input type="checkbox" .checked={t.done} $change={() => toggle(i)} />
-                        <span style={t.done ? 'text-decoration: line-through' : ''}>
-                            {t.text}
-                        </span>
+                        <span style={t.done ? 'text-decoration: line-through' : ''}>{t.text}</span>
                     </li>
                 ))}
             </ul>
@@ -432,82 +358,56 @@ function TodoApp() {
     );
 }
 
-TodoApp().append(document.body);
+TodoApp().append(document.body);   // the returned Virtual materialises here
 ```
 
-Notice: `{() => remain()}` keeps the subscription live. Bare `{remain()}` would read once at render time.
+`{() => remain()}` keeps the subscription live; bare `{remain()}` reads once.
 
 ---
 
 ## Example 5: Inheritance chain
 
-A real-world pattern: base class with shared logic, two specialised subclasses.
-
 ```typescript
-// BaseButton — provides shared behaviour, NOT a custom element itself
+import { Component, Core, Rule, Stylesheet } from 'arianna';
+
+// BaseButton — shared behaviour. `this` is the Component; events bind at the base.
 class BaseButton extends Component('arianna-base-button', HTMLElement, {
-    ':host': {
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        gap: '6px', padding: '8px 14px', cursor: 'pointer',
-        borderRadius: 'var(--arianna-radius, 6px)',
-        border: 'none', fontWeight: '600',
-        transition: 'background 120ms',
-    },
+    ':host': { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '8px 14px', cursor: 'pointer', borderRadius: 'var(--arianna-radius, 6px)', border: 'none', fontWeight: '600', transition: 'background 120ms' },
     ':host([disabled])': { opacity: '0.5', cursor: 'not-allowed' },
 }, {
     attrs: ['disabled', 'loading'],
 }) {
+    // @click on the template binds to the base element, independent of `this`.
     template = `
         <span a-if="this.attrSignal('loading').get() !== null">⏳</span>
-        <slot></slot>
+        <slot @click="this.onClick"></slot>
     `;
 
-    onMount() {
-        this.addEventListener('click', this.onClick);
-    }
-
-    onUnmount() {
-        this.removeEventListener('click', this.onClick);
-    }
-
     onClick = (e: Event) => {
-        if (this.hasAttribute('disabled') || this.hasAttribute('loading')) {
+        if (this.get('disabled') !== null || this.get('loading') !== null) {
             e.stopImmediatePropagation();
-            return;
         }
     };
 }
 
-// PrimaryButton — extends BaseButton, adds colour theme
+// PrimaryButton — re-extends BaseButton (Real chain re-spliced; Virtual re-chains at render).
 class PrimaryButton extends BaseButton {
     static {
         PrimaryButton.Sheet.Default = new Stylesheet([
             ...BaseButton.Sheet.Default.Rules,
-            new Rule(':host', {
-                background: 'var(--arianna-primary, #e40c88)',
-                color: '#fff',
-            }),
-            new Rule(':host(:hover):not([disabled]):not([loading])', {
-                background: 'var(--arianna-primary-hover, #c00673)',
-            }),
+            new Rule(':host', { background: 'var(--arianna-primary, #e40c88)', color: '#fff' }),
+            new Rule(':host(:hover):not([disabled]):not([loading])', { background: 'var(--arianna-primary-hover, #c00673)' }),
         ]);
     }
 }
 Core.Define('arianna-primary-button', PrimaryButton);
 
-// GhostButton — alternative theme
 class GhostButton extends BaseButton {
     static {
         GhostButton.Sheet.Default = new Stylesheet([
             ...BaseButton.Sheet.Default.Rules,
-            new Rule(':host', {
-                background: 'transparent',
-                border: '1px solid var(--arianna-border, #ddd)',
-                color: 'var(--arianna-text, #1f2328)',
-            }),
-            new Rule(':host(:hover):not([disabled]):not([loading])', {
-                background: 'var(--arianna-bg-3, #f3f3f3)',
-            }),
+            new Rule(':host', { background: 'transparent', border: '1px solid var(--arianna-border, #ddd)', color: 'var(--arianna-text, #1f2328)' }),
+            new Rule(':host(:hover):not([disabled]):not([loading])', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
         ]);
     }
 }
@@ -518,10 +418,10 @@ Core.Define('arianna-ghost-button', GhostButton);
 <arianna-primary-button>Save</arianna-primary-button>
 <arianna-primary-button loading>Saving…</arianna-primary-button>
 <arianna-ghost-button>Cancel</arianna-ghost-button>
-<arianna-primary-button disabled>Disabled</arianna-primary-button>
 ```
 
-All three subclasses share `onClick` debouncing, the loading indicator template, and the disabled-state styling — but layer their own colours on top via `Sheet.Default` override.
+(Markup usage is Family B — the page gets nodes; each is a Real dressed by its
+Component.)
 
 ---
 
@@ -529,11 +429,15 @@ All three subclasses share `onClick` debouncing, the loading indicator template,
 
 | Pitfall | Fix |
 |---------|-----|
-| `{{ this.count }}` prints `[object Object]` | Invoke the signal: `{{ this.count() }}` |
-| Handler arrow functions: `this` is undefined | Use class property arrows (`fn = () => {...}`), not method syntax (`fn() {...}`) |
-| Local variables in `build()` not visible in template | Templates can't see closures — promote to `this.something` |
-| `onMount` not firing | Element is not yet in the DOM. Use `connectedCallback` semantics — append the element first |
-| `Sheet.Default` change has no effect on existing instances | `Sheet.Default` seeds new instances. For live mutation, write to `instance.Sheet.Current` |
-| `a-else` not working | Must be immediate next-sibling element of `a-if` (no text nodes between) |
-| `a-for` doesn't update on array push | Signals are by reference. Use `arr.set([...arr(), newItem])`, not `arr().push()` |
-| JSX `{count()}` not reactive | Wrap in arrow: `{() => count()}` |
+| `appendChild(myComponent)` does nothing / throws | A Component is not a node. Use `myComponent.Real.append(p)` or `myComponent.Virtual.render().append(p)`. |
+| `new MyClass()` then `appendChild(it)` | `new MyClass()` is **Family A** → a Component. Append via `.Real`/`.Virtual`. |
+| `this.addEventListener(...)` inside a component | `this` is the Component, not the node. Use `this.Real.on(...)` or a template `@event`. |
+| `this.getAttribute(...)` / `this.setAttribute(...)` | Use the delegated sugar `this.get(name)` / `this.set(name, v)`, or `this.Real.get/set`. |
+| Can't find the Component for a `createElement` node | `Component(node)` returns the Component dressing it. |
+| `{{ this.count }}` prints `[object Object]` | Invoke the signal: `{{ this.count() }}`. |
+| Handler `this` is undefined | Use class-property arrows (`fn = () => {…}`), not method syntax. |
+| Local vars in `build()` not visible in template | Templates can't see closures — promote to `this.something`. |
+| `Sheet.Default` change has no effect on existing instances | `Sheet.Default` seeds new instances; for live mutation write to `instance.Sheet`. |
+| `a-else` not working | Must be the immediate next-sibling element of `a-if` (no text nodes between). |
+| `a-for` doesn't update on `arr().push()` | Replace the reference: `arr.set([...arr(), item])`. |
+| JSX `{count()}` not reactive | Wrap in arrow: `{() => count()}`. |

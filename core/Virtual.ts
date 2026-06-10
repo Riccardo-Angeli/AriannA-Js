@@ -44,7 +44,7 @@
  *
  *     new VirtualNode('div', { class: 'hero' }, child1, child2);   // tag, attrs, children
  *     new VirtualNode({ Tag: 'div', Attributes: {...}, ... });     // VNodeDef object
- *     new VirtualNode(AriannATemplate);                             // pre-cloned template
+ *     new VirtualNode(Template);                             // pre-cloned template
  *
  * Render is lazy: `render()` materialises into a real DOM Element on demand.
  * Sinks queued before render are flushed at render time; effects queued
@@ -54,19 +54,19 @@
 import Core, { type TypeDescriptor }                from './Core.ts';
 import {
     signal, signalMono, sinkText, effect, computed, batch, untrack,
-    AriannATemplate,
     type Signal, type SignalMono, type ReadonlySignal,
 }                                                    from './Observable.ts';
-import Rule                                          from './Rule.ts';
+import Rule, { type ShadowState, type ShadowMode, type ShadowOptions, type ShadowLayer } from './Rule.ts';
 import { Stylesheet }                                from './Stylesheet.ts';
-import {
-    readDottedPath, writeDottedPath, makeSubAccessor,
-    type SubAccessor,
-}                                                    from './Real.ts';
+import { Template }                                  from './Template.ts';
+
+/** Fluent sub-accessor returned by `VirtualNode.sub` (inline; no shared SubAccessor type). */
+type Sub = { set(key: string, value: unknown): Sub; get(key: string): unknown; sub(key: string): Sub; unwrap(): unknown; end<T = unknown>(): T; };
+
 
 
 // ─── Re-exports ──────────────────────────────────────────────────────────────
-export type { SubAccessor };
+
 export type { Signal, SignalMono, ReadonlySignal };
 
 
@@ -91,134 +91,8 @@ export interface VNodeDef
     Parent?     : VirtualNode | null;
 }
 
-/** Shadow visibility state. */
-export type ShadowState = 'open' | 'close';
-
-/** Shadow preset modes (rendered to `box-shadow` CSS). */
-export type ShadowMode  = 'drop' | 'inset' | 'glow' | 'layered';
-
-/** Numeric tuning for shadow presets. */
-export interface ShadowOptions
-{
-    color?  : string;
-    blur?   : number;
-    spread? : number;
-    x?      : number;
-    y?      : number;
-}
-
-/** A single shadow layer (can be composed into multi-layer `box-shadow`). */
-export interface ShadowLayer extends ShadowOptions
-{
-    inset? : boolean;
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Shadow CSS helpers (pure functions)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Convert a CSS color (hex 3/4/6/8 digits, rgb(), rgba(), or named) to
- * `rgba(r,g,b,a)` with the given alpha. Named colors are passed through
- * unchanged (browser will resolve them in context).
- */
-function _alpha(color: string, a: number): string
-{
-    const rgba = color.match(/rgba?\(([^)]+)\)/);
-    if (rgba)
-    {
-        const parts = rgba[1].split(',').map(s => s.trim());
-        if (parts.length >= 3) return `rgba(${parts[0]},${parts[1]},${parts[2]},${a})`;
-    }
-    const hex = color.match(/^#([0-9a-fA-F]{3,8})$/);
-    if (hex)
-    {
-        const h = hex[1];
-        const r = parseInt(h.length >= 6 ? h.slice(0, 2) : h[0] + h[0], 16);
-        const g = parseInt(h.length >= 6 ? h.slice(2, 4) : h[1] + h[1], 16);
-        const b = parseInt(h.length >= 6 ? h.slice(4, 6) : h[2] + h[2], 16);
-        return `rgba(${r},${g},${b},${a})`;
-    }
-    return color;
-}
-
-/**
- * Compose a CSS `box-shadow` value from a named preset and tuning options.
- */
-function _preset(mode: ShadowMode, o: ShadowOptions): string
-{
-    const color  = o.color  ?? 'rgba(0,0,0,0.25)';
-    const blur   = o.blur   ?? 8;
-    const spread = o.spread ?? 0;
-    const x      = o.x      ?? 0;
-    switch (mode)
-    {
-        case 'drop':
-            return `${x}px ${o.y ?? 4}px ${blur}px ${spread}px ${color}`;
-        case 'inset':
-            return `inset ${x}px ${o.y ?? 0}px ${blur}px ${spread}px ${color}`;
-        case 'glow':
-            return `0 0 ${blur}px ${spread + 2}px ${color}, 0 0 ${blur * 2}px ${spread}px ${_alpha(color, 0.5)}`;
-        case 'layered':
-        {
-            const y = o.y ?? 4;
-            return `${x}px ${y}px ${blur}px ${color}, ${x}px ${y * 2}px ${blur * 2}px ${_alpha(color, 0.15)}`;
-        }
-    }
-}
-
-/**
- * Render a single `ShadowLayer` as one `box-shadow` term.
- */
-function _layerCSS(l: ShadowLayer): string
-{
-    const inset  = l.inset ? 'inset ' : '';
-    const x      = l.x      ?? 0;
-    const y      = l.y      ?? 4;
-    const blur   = l.blur   ?? 8;
-    const spread = l.spread ?? 0;
-    const color  = l.color  ?? 'rgba(0,0,0,0.25)';
-    return `${inset}${x}px ${y}px ${blur}px ${spread}px ${color}`;
-}
-
-/**
- * Top-level shadow CSS dispatcher.
- *
- *   _shadowCSS('close')                            → 'none'
- *   _shadowCSS('open', 'drop',  { blur: 12 })      → '0px 4px 12px 0px rgba(0,0,0,0.25)'
- *   _shadowCSS('open', [{ y: 2 }, { y: 8 }])       → '0px 2px 8px 0px ..., 0px 8px 8px 0px ...'
- *   _shadowCSS('open', new Rule('.x', { boxShadow: '...' })) → reads from Rule
- *   _shadowCSS('open', new Stylesheet([...]))      → first matching Rule wins
- */
-function _shadowCSS(
-    state : ShadowState,
-    mode  : ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop',
-    opts  : ShadowOptions = {},
-): string
-{
-    if (state === 'close') return 'none';
-
-    if (mode instanceof Rule)
-    {
-        const v = mode.Properties['boxShadow'] ?? mode.Properties['box-shadow'];
-        return v ?? _preset('drop', opts);
-    }
-    if (mode instanceof Stylesheet)
-    {
-        for (const r of mode.Rules)
-        {
-            const v = r.Properties['boxShadow'] ?? r.Properties['box-shadow'];
-            if (v) return v;
-        }
-        return _preset('drop', opts);
-    }
-    if (Array.isArray(mode))
-    {
-        return mode.map(_layerCSS).join(', ');
-    }
-    return _preset(mode, opts);
-}
+// Box-shadow model lives in Rule (dedup, IoC); re-exported for the public surface.
+export type { ShadowState, ShadowMode, ShadowOptions, ShadowLayer } from './Rule.ts';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,12 +110,6 @@ interface QueuedListener
 /** Generic getter for reactive sinks. */
 type Getter<T> = () => T;
 
-// Accept a getter OR a static value (mirrors Real.asGetter). Non-function
-// arguments to text/attr/cls/prop/style are wrapped so a static value works
-// in both the immediate and deferred-sink paths instead of throwing.
-function asGetter<T>(g: Getter<T> | T): Getter<T> {
-    return typeof g === 'function' ? (g as Getter<T>) : () => g;
-}
 
 /** Reactive binding queued before render(). Flushed by #applySinks. */
 interface PendingSink
@@ -258,35 +126,6 @@ interface PendingSink
 }
 
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  UID generator + child normalisation
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Monotonic counter, prefixed with random suffix for non-trivial uniqueness. */
-let _counter = 0;
-
-/** Global registry of VirtualNodes by Id, used by tools and the inspector. */
-const _nodes: Record<string, VirtualNode> = {};
-
-/** Mint a fresh, collision-resistant Id for a new VirtualNode. */
-function uid(): string
-{
-    return `vn-${++_counter}-${Math.random().toString(36).slice(2, 6)}`;
-}
-
-/**
- * Coerce a `VChild` into a real VirtualNode.
- *   - VirtualNode → returned as-is
- *   - primitive   → wrapped in a `<span>` with the value as textContent
- *   - null/undef  → wrapped in an empty `<span>`
- */
-function normalizeChild(c: VChild): VirtualNode
-{
-    if (c instanceof VirtualNode) return c;
-    const n = new VirtualNode('span');
-    n.set('textContent', c == null ? '' : String(c));
-    return n;
-}
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -310,6 +149,30 @@ function normalizeChild(c: VChild): VirtualNode
  */
 export class VirtualNode
 {
+    // ─── Static node registry + helpers (encapsulated — §5.1, no loose module state) ───
+
+    /** Monotonic Id counter (hard-private; only _uid mutates it). */
+    static #counter = 0;
+    /** Registry of VirtualNodes by Id (for tools/inspector). */
+    static #nodes: Record<string, VirtualNode> = {};
+    /** Read-only view of the node registry, for tools/inspector. */
+    static get Nodes(): Readonly<Record<string, VirtualNode>> { return VirtualNode.#nodes; }
+
+    /** Mint a fresh, collision-resistant Id for a new VirtualNode. */
+    private static _uid(): string { return `vn-${++VirtualNode.#counter}-${Math.random().toString(36).slice(2, 6)}`; }
+
+    /** Coerce a value-or-getter into a getter (binding methods accept both forms). */
+    private static _asGetter<T>(g: Getter<T> | T): Getter<T> { return typeof g === 'function' ? (g as Getter<T>) : () => g; }
+
+    /** Coerce a VChild into a VirtualNode: nodes pass through; primitives/null wrap in a span. */
+    private static _normalizeChild(c: VChild): VirtualNode
+    {
+        if (c instanceof VirtualNode) return c;
+        const n = new VirtualNode('span');
+        n.set('textContent', c == null ? '' : String(c));
+        return n;
+    }
+
     // ─── Private fields ──────────────────────────────────────────────────
     #id          : string;
     #tag         : string;
@@ -387,11 +250,11 @@ export class VirtualNode
      *   new VirtualNode({ Tag: 'div', Attributes: {...}, Children: [...] });
      *       — full descriptor form
      *
-     *   new VirtualNode(AriannATemplate.from('<div/>'));
+     *   new VirtualNode(new Template('<div/>'));
      *       — clone from a pre-parsed template (zero rebuild cost)
      */
     constructor(
-        def       : VNodeDef | string | AriannATemplate,
+        def       : VNodeDef | string | Template,
         attrs?    : VAttrs,
         ...children : VChild[]
     )
@@ -410,8 +273,8 @@ export class VirtualNode
             this.#attrs    = {};
             this.#children = [];
             this.#text     = '';
-            this.#id       = uid();
-            _nodes[this.#id] = this;
+            this.#id       = VirtualNode._uid();
+            VirtualNode.#nodes[this.#id] = this;
             VirtualNode.Instances.push(this);
             return;
         }
@@ -420,17 +283,17 @@ export class VirtualNode
         // The template already produced a real Element; we wrap it and skip
         // attribute/child rebuilding. Used for high-throughput list
         // virtualisation.
-        if (def instanceof AriannATemplate)
+        if (def instanceof Template)
         {
-            const el       = def.clone();
+            const el       = (def.Node.content.cloneNode(true) as DocumentFragment).firstElementChild as Element;
             this.#tag      = el.tagName.toLowerCase();
             this.#attrs    = {};
             this.#children = [];
             this.#text     = '';
-            this.#id       = uid();
+            this.#id       = VirtualNode._uid();
             this.#dom      = el;
             this.#rendered = true;
-            _nodes[this.#id] = this;
+            VirtualNode.#nodes[this.#id] = this;
             VirtualNode.Instances.push(this);
             return;
         }
@@ -440,7 +303,7 @@ export class VirtualNode
         {
             this.#tag      = def.toLowerCase();
             this.#attrs    = { ...(attrs ?? {}) };
-            this.#children = children.map(normalizeChild);
+            this.#children = children.map(c => VirtualNode._normalizeChild(c));
             this.#text     = '';
         }
         // ── VNodeDef object path ─────────────────────────────────────────
@@ -448,13 +311,13 @@ export class VirtualNode
         {
             this.#tag      = (def.Tag ?? 'div').toLowerCase();
             this.#attrs    = { ...(def.Attributes ?? {}) };
-            this.#children = (def.Children ?? []).map(normalizeChild);
+            this.#children = (def.Children ?? []).map(c => VirtualNode._normalizeChild(c));
             this.#text     = def.Text ?? '';
             this.#parent   = def.Parent ?? null;
         }
 
-        this.#id = uid();
-        _nodes[this.#id] = this;
+        this.#id = VirtualNode._uid();
+        VirtualNode.#nodes[this.#id] = this;
         VirtualNode.Instances.push(this);
 
         // Establish parent-child relationship for children passed via
@@ -647,8 +510,14 @@ export class VirtualNode
                 Namespace?: { functions?: { create?(tag: string): Element | false } };
             }) | false;
 
-        this.#dom = (d && d.Namespace?.functions?.create)
-            ? d.Namespace.functions.create(this.#tag) as Element
+        // FIX: source the element from Core.Create — the SINGLE upgrade entry
+        // point (the same one Real uses) — so a custom tag is materialised
+        // ALREADY UPGRADED (prototype spliced + Namespace.Update run), instead of
+        // a bare createElement / functions.create that skips the upgrade and
+        // leaves the node as HTMLUnknownElement. Falls back to createElement for
+        // unknown / native tags.
+        this.#dom = (d && (d as { Custom?: boolean }).Custom && typeof Core.Create === 'function')
+            ? ((Core.Create(this.#tag) as Element) ?? document.createElement(this.#tag))
             : document.createElement(this.#tag);
 
         // Flush attribute buffer
@@ -776,7 +645,7 @@ export class VirtualNode
                 case 'shadow':
                 {
                     const mode = sink.shadowModeRule ?? sink.shadowMode ?? 'drop';
-                    (this.#dom as HTMLElement).style.boxShadow = _shadowCSS(
+                    (this.#dom as HTMLElement).style.boxShadow = Stylesheet.boxShadow(
                         'open',
                         mode as ShadowMode | ShadowLayer[] | Rule | Stylesheet,
                         sink.shadowOpts ?? {},
@@ -796,7 +665,7 @@ export class VirtualNode
     /** Implicit coercion: `valueOf()` returns the rendered Element. */
     valueOf(): Element { return this.render(); }
 
-    /** Log the current state to console. Returns `this` for chaining. */
+    /** Log.txt the current state to console. Returns `this` for chaining. */
     log(v?: unknown): this
     {
         console.log(v ?? this.#dom ?? `[VirtualNode <${this.#tag}> unmounted]`);
@@ -925,7 +794,7 @@ export class VirtualNode
         const last  = args[args.length - 1];
         const items = typeof last === 'number' ? args.slice(0, -1) : args;
         const index = typeof last === 'number' ? last : this.#children.length;
-        const vnodes = (items as VChild[]).map(normalizeChild);
+        const vnodes = (items as VChild[]).map(c => VirtualNode._normalizeChild(c));
 
         this.#children.splice(index, 0, ...vnodes);
         for (const vn of vnodes) vn.#parent = this;
@@ -1026,13 +895,13 @@ export class VirtualNode
      * Read an attribute (or dotted-path sub-property). Pre-render reads
      * from the attrs buffer; post-render from the live DOM (and arbitrary
      * properties via the dotted path).
-     */
+     */ //Riscrivi senza Path! E fai inline! TUTTO! anche SubAccessor che non esiste piu!
     get(name: string): string | undefined
     {
         if (name.indexOf('.') !== -1)
         {
             const root = (this.#dom ?? this.#attrs) as unknown as Record<string, unknown>;
-            const v = readDottedPath(root, name);
+            let v: unknown = root; for (const p of name.split('.')) { if (v == null) { v = undefined; break; } v = (v as Record<string, unknown>)[p]; }
             return v === undefined
                 ? undefined
                 : (typeof v === 'string' ? v : String(v));
@@ -1048,7 +917,7 @@ export class VirtualNode
      * render writes go into the attrs buffer; post-render they go into
      * the DOM directly (property assignment when the name is a known
      * property, otherwise setAttribute / removeAttribute).
-     */
+     *///Riscrivi senza Path! E fai inline! TUTTO! anche SubAccessor che non esiste piu!
     set(
         name  : string,
         value : string | number | boolean | null | unknown,
@@ -1056,20 +925,18 @@ export class VirtualNode
     {
         if (name.indexOf('.') !== -1)
         {
-            if (this.#dom)
-            {
-                writeDottedPath(
-                    this.#dom as unknown as Record<string, unknown>,
-                    name, value,
-                );
+            const root  = (this.#dom ?? this.#attrs) as unknown as Record<string, unknown>;
+            const parts = name.split('.');
+            let cur = root;
+            for (let i = 0; i < parts.length - 1; i++) {
+                const k = parts[i]; const nx = cur[k];
+                if (nx == null || typeof nx !== 'object') {
+                    if (nx === undefined) { const o: Record<string, unknown> = {}; cur[k] = o; cur = o; continue; }
+                    return this;
+                }
+                cur = nx as Record<string, unknown>;
             }
-            else
-            {
-                writeDottedPath(
-                    this.#attrs as unknown as Record<string, unknown>,
-                    name, value,
-                );
-            }
+            cur[parts[parts.length - 1]] = value;
             return this;
         }
 
@@ -1101,11 +968,21 @@ export class VirtualNode
      * after, into the live DOM element.
      *
      *   new VirtualNode('div').sub('style').set('background', 'orange');
-     */
-    sub(path: string): SubAccessor
+     *///Riscrivi senza Path! E fai inline! TUTTO! anche SubAccessor che non esiste piu!
+    sub(path: string): Sub
     {
-        const root = (this.#dom ?? this.#attrs) as unknown as Record<string, unknown>;
-        return makeSubAccessor(root, path, this);
+        const root  = (this.#dom ?? this.#attrs) as unknown as Record<string, unknown>;
+        const owner = this;
+        const read  = (pth: string): unknown => { let c: unknown = root; for (const k of pth.split('.')) { if (c == null) return undefined; c = (c as Record<string, unknown>)[k]; } return c; };
+        const write = (pth: string, v: unknown): void => { const ps = pth.split('.'); let c = root; for (let i = 0; i < ps.length - 1; i++) { const k = ps[i]; const nx = c[k]; if (nx == null || typeof nx !== 'object') { if (nx === undefined) { const o: Record<string, unknown> = {}; c[k] = o; c = o; continue; } return; } c = nx as Record<string, unknown>; } c[ps[ps.length - 1]] = v; };
+        const make  = (base: string): Sub => ({
+            set(key, value) { write(base + '.' + key, value); return make(base); },
+            get(key)        { return read(base + '.' + key); },
+            sub(key)        { return make(base + '.' + key); },
+            unwrap()        { return read(base); },
+            end<T = unknown>(): T { return owner as unknown as T; },
+        });
+        return make(path);
     }
 
 
@@ -1154,7 +1031,7 @@ export class VirtualNode
     {
         if (this.#dom)
         {
-            (this.#dom as HTMLElement).style.boxShadow = _shadowCSS(state, mode, opts);
+            (this.#dom as HTMLElement).style.boxShadow = Stylesheet.boxShadow(state, mode, opts);
         }
         else if (state === 'close')
         {
@@ -1219,7 +1096,7 @@ export class VirtualNode
      */
     text(getter: Getter<string> | string): this
     {
-        const g: Getter<string> = asGetter(getter);
+        const g: Getter<string> = VirtualNode._asGetter(getter);
         if (this.#dom)
         {
             const n = document.createTextNode(g());
@@ -1257,7 +1134,7 @@ export class VirtualNode
     /** Bind an attribute reactively; `null` removes the attribute. */
     attr(name: string, getter: Getter<string | null> | string | null): this
     {
-        const g: Getter<string | null> = asGetter(getter);
+        const g: Getter<string | null> = VirtualNode._asGetter(getter);
         if (this.#dom)
         {
             const el = this.#dom;
@@ -1277,7 +1154,7 @@ export class VirtualNode
     /** Toggle a class reactively (`true` adds, `false` removes). */
     cls(name: string, getter: Getter<boolean> | boolean): this
     {
-        const g: Getter<boolean> = asGetter(getter);
+        const g: Getter<boolean> = VirtualNode._asGetter(getter);
         if (this.#dom)
         {
             const el = this.#dom;
@@ -1310,7 +1187,7 @@ export class VirtualNode
     /** Bind a DOM property reactively. */
     prop(name: string, getter: Getter<unknown> | unknown): this
     {
-        const g: Getter<unknown> = asGetter(getter);
+        const g: Getter<unknown> = VirtualNode._asGetter(getter);
         if (this.#dom)
         {
             const rec = this.#dom as unknown as Record<string, unknown>;
@@ -1342,7 +1219,7 @@ export class VirtualNode
         // Form 1: reactive (prop, getter) — also accept a static value.
         if (typeof propOrThing === 'string' && typeof getter !== 'undefined')
         {
-            const g = asGetter(getter);
+            const g = VirtualNode._asGetter(getter);
             if (this.#dom)
             {
                 const el = this.#dom as HTMLElement;
@@ -1624,8 +1501,8 @@ export class VirtualNode
     static computed   = computed;
     static batch      = batch;
     static untrack    = untrack;
-    static tpl        = (html: string) => new AriannATemplate(html);
-    static template   = (html: string) => new AriannATemplate(html);
+    static tpl        = (html: string) => new Template(html);
+    static template   = (html: string) => new Template(html);
 }
 
 

@@ -1,142 +1,75 @@
-import Core, { type TypeDescriptor } from './Core.ts';
-import { VirtualNode } from './Virtual.ts';
-import { signal, signalMono, sinkText, effect, computed, batch, untrack, AriannATemplate, type Signal, type SignalMono, type ReadonlySignal } from './Observable.ts';
-import Rule from './Rule.ts';
-import { Stylesheet } from './Stylesheet.ts';
-
-export type { Signal, SignalMono, ReadonlySignal };
-
-// ─── Dotted-path access helpers ──────────────────────────────────────────
-// Shared between Real, Virtual and Component.
-// Supports paths like "style.background", "dataset.foo", "classList.0", etc.
-// Auto-creates intermediate object literals when writing nested paths into
-// plain dictionaries. Refuses to overwrite DOM ancestors with literals.
-
-export function readDottedPath(target: Record<string, unknown>, path: string): unknown {
-    const parts = path.split('.');
-    let cur: unknown = target;
-    for (const p of parts) {
-        if (cur === null || cur === undefined) return undefined;
-        cur = (cur as Record<string, unknown>)[p];
-    }
-    return cur;
-}
-
-export function writeDottedPath(target: Record<string, unknown>, path: string, value: unknown): void {
-    const parts = path.split('.');
-    let cur: Record<string, unknown> = target;
-    for (let i = 0; i < parts.length - 1; i++) {
-        const p = parts[i];
-        const next = cur[p];
-        if (next === null || next === undefined || typeof next !== 'object') {
-            // Auto-create only on plain dictionaries; never overwrite a non-object DOM ancestor with `{}`.
-            if (next === undefined) {
-                const o: Record<string, unknown> = {};
-                cur[p] = o;
-                cur = o;
-                continue;
-            }
-            // Non-object existing value (e.g. number, string). Cannot descend.
-            return;
-        }
-        cur = next as Record<string, unknown>;
-    }
-    cur[parts[parts.length - 1]] = value;
-}
-
 /**
- * Fluent accessor for a nested object on a target. Returned by `.sub(path)`.
+ * Real.ts — eager, fluent wrapper over a live DOM Element.
+ *
+ * `Real` is the imperative half of AriannA's DOM API (the lazy half is
+ * `Virtual`). Every method mutates a real Element *immediately* and returns
+ * `this` for chaining. Reactive binding methods (`text`, `attr`, `cls`,
+ * `prop`, `style`) accept a getter that runs inside an `effect`, so reads of
+ * signals subscribe automatically; a static value works too (it's wrapped via
+ * `asGetter`). See `REAL_VIRTUAL.md` for the conceptual overview.
  */
-export interface SubAccessor {
-    /** Set a key (or dotted sub-key) on this sub-object. */
-    set(key: string, value: unknown): SubAccessor;
-    /** Get a key (or dotted sub-key) from this sub-object. */
-    get(key: string): unknown;
-    /** Descend further into a nested key — returns a sub-accessor for it. */
-    sub(key: string): SubAccessor;
-    /** The underlying object at this path (or undefined if it's a primitive). */
-    unwrap(): unknown;
-    /** Return the original owner (Real / VirtualNode / Element) for chaining. */
-    end<T = unknown>(): T;
-}
+import Core, { type TypeDescriptor, type SubAccessor } from './Core.ts';
+import { VirtualNode } from './Virtual.ts';
+import { signal, signalMono, sinkText, effect, type Signal, type SignalMono, type ReadonlySignal } from './Observable.ts';
+import Rule, { type ShadowState, type ShadowMode, type ShadowOptions, type ShadowLayer } from './Rule.ts';
+import { Stylesheet } from './Stylesheet.ts';
+/** Shadow value types re-exported from Rule (their canonical home). */
+export type { ShadowState, ShadowMode, ShadowOptions, ShadowLayer } from './Rule.ts';
+export type { Signal, SignalMono, ReadonlySignal };
+// SubAccessor's canonical home is Core; re-exported here for the barrel.
+// (Dotted-path get/set/sub is inlined in the methods below — no shared helper.)
+export type { SubAccessor } from './Core.ts';
 
-export function makeSubAccessor(rootTarget: Record<string, unknown>, basePath: string, owner: unknown): SubAccessor {
-    const accessor: SubAccessor = {
-        set(key: string, value: unknown): SubAccessor {
-            writeDottedPath(rootTarget, basePath + '.' + key, value);
-            return accessor;
-        },
-        get(key: string): unknown {
-            return readDottedPath(rootTarget, basePath + '.' + key);
-        },
-        sub(key: string): SubAccessor {
-            return makeSubAccessor(rootTarget, basePath + '.' + key, owner);
-        },
-        unwrap(): unknown {
-            return readDottedPath(rootTarget, basePath);
-        },
-        end<T = unknown>(): T {
-            return owner as T;
-        },
-    };
-    return accessor;
-}
-
-export type ShadowState = 'open' | 'close';
-export type ShadowMode  = 'drop' | 'inset' | 'glow' | 'layered';
-export interface ShadowOptions { color?: string; blur?: number; spread?: number; x?: number; y?: number; }
-export interface ShadowLayer extends ShadowOptions { inset?: boolean; }
-function _alpha(color: string, a: number): string {
-    const rgba = color.match(/rgba?\(([^)]+)\)/); if (rgba) { const p = rgba[1].split(',').map(s => s.trim()); if (p.length >= 3) return `rgba(${p[0]},${p[1]},${p[2]},${a})`; }
-    const hex = color.match(/^#([0-9a-fA-F]{3,8})$/); if (hex) { const h = hex[1]; const r = parseInt(h.length >= 6 ? h.slice(0,2) : h[0]+h[0], 16); const g = parseInt(h.length >= 6 ? h.slice(2,4) : h[1]+h[1], 16); const b = parseInt(h.length >= 6 ? h.slice(4,6) : h[2]+h[2], 16); return `rgba(${r},${g},${b},${a})`; }
-    return color;
-}
-function _preset(mode: ShadowMode, o: ShadowOptions): string {
-    const color = o.color ?? 'rgba(0,0,0,0.25)', blur = o.blur ?? 8, spread = o.spread ?? 0, x = o.x ?? 0;
-    switch (mode) {
-        case 'drop':    return `${x}px ${o.y ?? 4}px ${blur}px ${spread}px ${color}`;
-        case 'inset':   return `inset ${x}px ${o.y ?? 0}px ${blur}px ${spread}px ${color}`;
-        case 'glow':    return `0 0 ${blur}px ${spread+2}px ${color}, 0 0 ${blur*2}px ${spread}px ${_alpha(color, 0.5)}`;
-        case 'layered': { const y = o.y ?? 4; return `${x}px ${y}px ${blur}px ${color}, ${x}px ${y*2}px ${blur*2}px ${_alpha(color, 0.15)}`; }
-    }
-}
-function _layerCSS(l: ShadowLayer): string { return `${l.inset ? 'inset ' : ''}${l.x ?? 0}px ${l.y ?? 4}px ${l.blur ?? 8}px ${l.spread ?? 0}px ${l.color ?? 'rgba(0,0,0,0.25)'}`; }
-function _shadowCSS(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop', opts: ShadowOptions = {}): string {
-    if (state === 'close') return 'none';
-    if (mode instanceof Rule)  { const v = mode.Properties['boxShadow'] ?? mode.Properties['box-shadow']; return v ?? _preset('drop', opts); }
-    if (mode instanceof Stylesheet) { for (const r of mode.Rules) { const v = r.Properties['boxShadow'] ?? r.Properties['box-shadow']; if (v) return v; } return _preset('drop', opts); }
-    if (Array.isArray(mode)) return mode.map(_layerCSS).join(', ');
-    return _preset(mode, opts);
-}
-export type RealTarget = string | Element | AriannATemplate | (new (...a: unknown[]) => Element) | VirtualNode | RealDef | Real;
+//---------------------------- Questo Blocco va rimosso! Trova il modo, namespace o meglio embed private in Real class-----------------------------------------
+/** Anything `new Real(...)` accepts: selector, Element, constructor, VirtualNode, plain def, or another Real. */
+export type RealTarget = string | Element | (new (...a: unknown[]) => Element) | VirtualNode | RealDef | Real;
+/** Plain object element definition: `{ Tag, Attributes, Style }`. */
 export interface RealDef { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string>; }
 type Getter<T> = () => T;
 
-// Accept a getter OR a static value. The fluent binding methods (text, attr,
-// cls, prop, style) run their argument inside an effect; a non-function value
-// (e.g. .text("XYZ")) used to throw "getter is not a function". Wrap statics so
-// both forms work: .text(() => name())  AND  .text("Hello").
-function asGetter<T>(g: Getter<T> | T): Getter<T> {
-    return typeof g === 'function' ? (g as Getter<T>) : () => g;
-}
-type NodeInput = RealTarget | string | Element | Node | VirtualNode | Real | null;
-function toNodes(items: NodeInput[]): Node[] {
-    return items.flatMap(item => {
-        if (!item) return [];
-        if (item instanceof Node) return [item];
-        if (item instanceof Real) return [item.render()];
-        if (item instanceof VirtualNode) return [item.render()];
-        if (item instanceof AriannATemplate) return [item.clone()];
-        if (typeof item === 'string') { const t = document.createElement('template'); t.innerHTML = item; return Array.from(t.content.childNodes); }
-        if (typeof item === 'object' && 'Tag' in item) { const el = document.createElement((item as RealDef).Tag ?? 'div'); if ((item as RealDef).Attributes) for (const [k,v] of Object.entries((item as RealDef).Attributes!)) el.setAttribute(k,v); return [el]; }
-        return [];
-    });
-}
-export class Real {
+type NodeInput = RealTarget | Node | null;  // RealTarget already covers string/Element/VirtualNode/Real/def
+//---------------------------------------------------------------------
+
+/**
+ * Eager, fluent wrapper around a single live DOM Element.
+ *
+ * Constructed with `new`, it creates/wraps an Element immediately and offers a
+ * chainable API for tree mutation (`append/add/remove/...`), attribute &
+ * property access (`set/get/sub`), reactive bindings (`text/attr/cls/prop/style`),
+ * events (`on/off/fire`), visibility (`show/hide`), and scoped CSS (`Sheet`).
+ */
+export class Real
+{
     #el: Element; #mode: boolean; #descriptor: TypeDescriptor | false; #value: unknown; #effects: Array<() => void> = [];
     #sheet: Stylesheet | null = null; #styleNode: HTMLStyleElement | null = null; #instanceId: string = ''; #sheetSync: (() => void) | null = null;
+    /** Every `new Real(...)` instance, in creation order (used for auto-id allocation). */
     static readonly Instances: Real[] = [];
+    /** The Core namespace registry (passthrough to `Core.Namespaces`). */
     static get Namespaces() { return Core.Namespaces; }
+
+    /** Coerce a value-or-getter into a getter, so binding methods accept both forms. */
+    private static _asGetter<T>(g: Getter<T> | T): Getter<T> { return typeof g === 'function' ? (g as Getter<T>) : () => g; }
+
+    /** Normalise a mixed list of child inputs into concrete DOM Nodes. */
+    private static _toNodes(items: NodeInput[]): Node[] {
+        return items.flatMap(item => {
+            if (!item) return [];
+            if (item instanceof Node) return [item];
+            if (item instanceof Real) return [item.render()];
+            if (item instanceof VirtualNode) return [item.render()];
+            if (typeof item === 'string') { const t = document.createElement('template'); t.innerHTML = item; return Array.from(t.content.childNodes); }
+            if (typeof item === 'object' && 'Tag' in item) { const el = document.createElement((item as RealDef).Tag ?? 'div'); if ((item as RealDef).Attributes) for (const [k,v] of Object.entries((item as RealDef).Attributes!)) el.setAttribute(k,v); return [el]; }
+            return [];
+        });
+    }
+
+    /**
+     * Create (or wrap) an Element. When called with `new` and a string tag,
+     * the element is created (and, for a registered Custom tag, upgraded) and
+     * auto-assigned an id + matching class. Other inputs (Element, Real,
+     * VirtualNode, template, `{Tag,...}` def) are wrapped/materialised. See
+     * {@link Real.#init} for the per-input behaviour.
+     */
     constructor(arg0: RealTarget, arg1?: Record<string, unknown> | (new (...a: unknown[]) => Element), arg2?: new (...a: unknown[]) => Element) {
         this.#mode = new.target !== undefined; this.#el = document.createElement('div'); this.#descriptor = false; this.#value = this;
         this.#init(arg0, arg1, arg2);
@@ -144,10 +77,25 @@ export class Real {
         // read-only SVGAnimatedString — we can only mutate the class via
         // setAttribute('class', …), which is also the universally correct
         // form for HTML. So we always use setAttribute here.
-        if (this.#mode) { Real.Instances.push(this); if (!this.#el.id) { const autoId = `Real-Instance-${Real.Instances.length}`; this.#el.id = autoId; this.#el.setAttribute('class', autoId); } }
+        if (this.#mode)
+        {
+            Real.Instances.push(this); if (!this.#el.id)
+            {
+                const autoId = `Real-Instance-${Real.Instances.length}`;
+                this.#el.id = autoId; this.#el.setAttribute('class', autoId);
+            }
+        }
     }
+
+    /**
+     * Resolve the constructor arguments into `#el`/`#descriptor`/`#value`.
+     * Non-`new` (call) mode is a lookup/registration helper; `new` mode
+     * actually creates or wraps the element. For a registered Custom string
+     * tag it delegates to `Core.Create`, which runs the namespace Update
+     * synchronously (prototype splice + `build()`), so the returned element is
+     * live and upgraded — not a bare, un-upgraded node.
+     */
     #init(arg0: RealTarget, arg1?: Record<string, unknown> | (new (...a: unknown[]) => Element), arg2?: new (...a: unknown[]) => Element): void {
-        if (arg0 instanceof AriannATemplate) { this.#el = arg0.clone(); this.#mode = true; return; }
         if (!this.#mode) {
             if (typeof arg0 === 'string') { if (arg1 && typeof arg1 === 'function') { Core.Define(arg0, arg1 as new () => Element, (arg2 ?? HTMLElement) as new () => Element); this.#value = arg1; return; } const d = Core.GetDescriptor(arg0); if (d) { this.#descriptor = d; this.#value = d.Constructor ?? d.Interface; return; } const el = document.querySelector(arg0); if (el) { this.#el = el; this.#descriptor = Core.GetDescriptor(el); this.#value = new Real(el); } return; }
             if (typeof arg0 === 'function') { const d = Core.GetDescriptor(arg0 as new () => Element); if (d) { this.#descriptor = d; this.#value = d.Interface ?? arg0; } return; }
@@ -155,7 +103,7 @@ export class Real {
             return;
         }
         if (typeof arg0 === 'string') {
-            // Single line: namespace.Create() — via functions.create — handles
+            // Single line: d.Namespace.Create() (direct on the descriptor) — handles
             // every case (CLASS via Reflect.construct, FUNCTION via createElement
             // + Update, plain native tags). Real has no upgrade logic of its
             // own; it asks Core to create an UPGRADED element. For a registered
@@ -167,8 +115,8 @@ export class Real {
             if (d && (d as { Custom?: boolean }).Custom && typeof Core.Create === 'function') {
                 this.#el = (Core.Create(arg0) as Element) ?? document.createElement(arg0);
             } else {
-                this.#el = (d && d.Namespace?.functions?.create)
-                    ? d.Namespace.functions.create(arg0) as Element
+                this.#el = (d && typeof d.Namespace?.Create === 'function')
+                    ? (d.Namespace.Create(arg0) ?? document.createElement(arg0))
                     : document.createElement(arg0);
             }
             if (d) this.#descriptor = d;
@@ -179,21 +127,50 @@ export class Real {
         else if (typeof arg0 === 'object' && 'Tag' in (arg0 as object)) { const def = arg0 as RealDef; this.#el = document.createElement(def.Tag ?? 'div'); if (def.Attributes) for (const [k,v] of Object.entries(def.Attributes)) this.#el.setAttribute(k,v); }
         if (arg1 && typeof arg1 === 'object' && typeof arg1 !== 'function') { const opts = arg1 as Record<string, unknown>; if (opts.id) this.#el.id = String(opts.id); if (opts.class || opts.className) this.#el.setAttribute('class', String(opts.class ?? opts.className)); }
     }
+
+    /** The underlying live Element. */
     render(): Element { return this.#el; }
+    /** Coercion hook — returns the underlying Element (so `el == real` etc. work). */
     valueOf(): Element { return this.#el; }
+    /** `console.log` the given value (or the element) and return `this` for chaining. */
     log(v?: unknown): this { console.log(v ?? this.#el); return this; }
+
+    /** Add an event listener (`addEventListener`). */
     on(type: string, cb: EventListener, opts?: AddEventListenerOptions | boolean): this { this.#el.addEventListener(type, cb, opts); return this; }
+    /** Remove an event listener (`removeEventListener`). */
     off(type: string, cb: EventListener, opts?: EventListenerOptions | boolean): this { this.#el.removeEventListener(type, cb, opts); return this; }
+    /** Dispatch an Event, or a CustomEvent built from a string name + init. */
     fire(event: Event | string, init?: CustomEventInit): this { this.#el.dispatchEvent(typeof event === 'string' ? new CustomEvent(event, init) : event); return this; }
+
+    /** Append THIS element as a child of `parent` (selector / Element / Real / VirtualNode). */
     append(parent: string | Element | Real | VirtualNode | null): this { const p = typeof parent === 'string' ? document.querySelector(parent) : parent instanceof Real ? parent.render() : parent instanceof VirtualNode ? parent.render() : parent; if (p) p.appendChild(this.#el); return this; }
-    add(...args: (NodeInput | number)[]): this { const last = args[args.length-1]; const items = typeof last === 'number' ? args.slice(0,-1) as NodeInput[] : args as NodeInput[]; const index = typeof last === 'number' ? last : this.#el.childNodes.length; const nodes = toNodes(items); const ref = this.#el.childNodes[index] ?? null; const frag = document.createDocumentFragment(); nodes.forEach(n => frag.appendChild(n)); this.#el.insertBefore(frag, ref); return this; }
+    /** Insert children at an index (trailing number = index; default = end). Mixed inputs are normalised via {@link toNodes}. */
+    add(...args: (NodeInput | number)[]): this { const last = args[args.length-1]; const items = typeof last === 'number' ? args.slice(0,-1) as NodeInput[] : args as NodeInput[]; const index = typeof last === 'number' ? last : this.#el.childNodes.length; const nodes = Real._toNodes(items); const ref = this.#el.childNodes[index] ?? null; const frag = document.createDocumentFragment(); nodes.forEach(n => frag.appendChild(n)); this.#el.insertBefore(frag, ref); return this; }
+    /** Append children to the end (alias of {@link add} with no index). */
     push(...nodes: NodeInput[]): this    { return this.add(...nodes); }
+    /** Prepend children to the start (alias of {@link add} at index 0). */
     unshift(...nodes: NodeInput[]): this { return this.add(...nodes, 0); }
+    /** Remove specific children by index, selector, Real, or Node. */
     remove(...targets: (string | Node | Real | number)[]): this { for (const t of targets) { let node: Node | null = null; if (typeof t === 'number') node = this.#el.childNodes[t] ?? null; else if (typeof t === 'string') node = this.#el.querySelector(t); else if (t instanceof Real) node = t.render(); else if (t instanceof Node) node = t; if (node && this.#el.contains(node)) this.#el.removeChild(node); } return this; }
+    /** Remove `n` children from the front (default 1). */
     shift(n = 1): this { for (let i = 0; i < n && this.#el.firstChild; i++) this.#el.removeChild(this.#el.firstChild); return this; }
+    /** Remove `n` children from the end (default 1). */
     pop(n = 1): this   { for (let i = 0; i < n && this.#el.lastChild;  i++) this.#el.removeChild(this.#el.lastChild);  return this; }
-    get(name: string): string | undefined { if (name.indexOf('.') !== -1) { const v = readDottedPath(this.#el as unknown as Record<string, unknown>, name); return v === undefined ? undefined : (typeof v === 'string' ? v : String(v)); } const u = name.toUpperCase(); for (let i = 0; i < this.#el.attributes.length; i++) { const a = this.#el.attributes.item(i)!; if (a.name.toUpperCase() === u) return a.value; } const rec = this.#el as unknown as Record<string, unknown>; for (const k of Object.keys(rec)) if (k.toUpperCase() === u) return String(rec[k]); return undefined; }
-    set(name: string, value: unknown): this { if (name.indexOf('.') !== -1) { writeDottedPath(this.#el as unknown as Record<string, unknown>, name, value); return this; } const u = name.toUpperCase(); for (let i = 0; i < this.#el.attributes.length; i++) { const a = this.#el.attributes.item(i)!; if (a.name.toUpperCase() === u) { this.#el.setAttribute(a.name, String(value)); return this; } } const rec = this.#el as unknown as Record<string, unknown>; for (const k of Object.keys(rec)) if (k.toUpperCase() === u) { rec[k] = value; return this; } this.#el.setAttribute(name.toLowerCase(), String(value)); return this; }
+
+    /**
+     * Read an attribute or property by name (case-insensitive). Supports a
+     * dotted path (e.g. `"dataset.id"`). Returns the value as a string, or
+     * `undefined` when absent.
+     */
+    get(name: string): string | undefined { if (name.indexOf('.') !== -1) { let cur: unknown = this.#el; for (const p of name.split('.')) { if (cur == null) return undefined; cur = (cur as Record<string, unknown>)[p]; } return cur === undefined ? undefined : (typeof cur === 'string' ? cur : String(cur)); } const u = name.toUpperCase(); for (let i = 0; i < this.#el.attributes.length; i++) { const a = this.#el.attributes.item(i)!; if (a.name.toUpperCase() === u) return a.value; } const rec = this.#el as unknown as Record<string, unknown>; for (const k of Object.keys(rec)) if (k.toUpperCase() === u) return String(rec[k]); return undefined; }
+
+    /**
+     * Set an attribute or property (smart routing, case-insensitive): an
+     * existing attribute → `setAttribute`; else an existing property → assign;
+     * else `setAttribute(name.toLowerCase(), …)`. Dotted paths
+     * (e.g. `"dataset.id"`) traverse/create nested objects inline.
+     */
+    set(name: string, value: unknown): this { if (name.indexOf('.') !== -1) { const parts = name.split('.'); let cur = this.#el as unknown as Record<string, unknown>; for (let i = 0; i < parts.length - 1; i++) { const k = parts[i]; const nx = cur[k]; if (nx == null || typeof nx !== 'object') { if (nx === undefined) { const o: Record<string, unknown> = {}; cur[k] = o; cur = o; continue; } return this; } cur = nx as Record<string, unknown>; } cur[parts[parts.length - 1]] = value; return this; } const u = name.toUpperCase(); for (let i = 0; i < this.#el.attributes.length; i++) { const a = this.#el.attributes.item(i)!; if (a.name.toUpperCase() === u) { this.#el.setAttribute(a.name, String(value)); return this; } } const rec = this.#el as unknown as Record<string, unknown>; for (const k of Object.keys(rec)) if (k.toUpperCase() === u) { rec[k] = value; return this; } this.#el.setAttribute(name.toLowerCase(), String(value)); return this; }
 
     /**
      * Returns a fluent sub-property accessor for a nested object on this element.
@@ -205,25 +182,58 @@ export class Real {
      * The returned object exposes `.set(key, value)`, `.get(key)`, `.sub(key)`,
      * `.unwrap()` (the underlying object) and `.end()` (back to the Real).
      */
-    sub(path: string): SubAccessor { return makeSubAccessor(this.#el as unknown as Record<string, unknown>, path, this); }
+    sub(path: string): SubAccessor {
+        const root = this.#el as unknown as Record<string, unknown>;
+        const owner = this;
+        const read = (pth: string): unknown => { let c: unknown = root; for (const k of pth.split('.')) { if (c == null) return undefined; c = (c as Record<string, unknown>)[k]; } return c; };
+        const write = (pth: string, v: unknown): void => { const ps = pth.split('.'); let c = root; for (let i = 0; i < ps.length - 1; i++) { const k = ps[i]; const nx = c[k]; if (nx == null || typeof nx !== 'object') { if (nx === undefined) { const o: Record<string, unknown> = {}; c[k] = o; c = o; continue; } return; } c = nx as Record<string, unknown>; } c[ps[ps.length - 1]] = v; };
+        const make = (base: string): SubAccessor => ({
+            set(key, value) { write(base + '.' + key, value); return make(base); },
+            get(key)        { return read(base + '.' + key); },
+            sub(key)        { return make(base + '.' + key); },
+            unwrap()        { return read(base); },
+            end<T = unknown>(): T { return owner as unknown as T; },
+        });
+        return make(path);
+    }
 
+    /** Show the element (`display = ''`). */
     show(): this { (this.#el as HTMLElement).style.display = ''; return this; }
+    /** Hide the element (`display = 'none'`). */
     hide(): this { (this.#el as HTMLElement).style.display = 'none'; return this; }
+    /** True if ALL given nodes (Node / Real / selector) are descendants of this element. */
     contains(...nodes: (Node | Real | string)[]): boolean { for (const n of nodes) { const el = typeof n === 'string' ? this.#el.querySelector(n) : n instanceof Real ? n.render() : n; if (!el || !this.#el.contains(el)) return false; } return true; }
+    /** Walk a path of child indices: `child([0,2,1])` → `childNodes[0].childNodes[2].childNodes[1]`. */
     child(path: number[]): Node { let n: Node = this.#el; for (const i of path) n = n.childNodes[i]!; return n; }
-    shadow(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop', opts: ShadowOptions = {}): this { (this.#el as HTMLElement).style.boxShadow = _shadowCSS(state, mode, opts); return this; }
+    /** Apply a `box-shadow` from a preset / layer array / Rule / Stylesheet, or clear it (`state==='close'`). */
+    shadow(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop', opts: ShadowOptions = {}): this { (this.#el as HTMLElement).style.boxShadow = Stylesheet.boxShadow(state, mode, opts); return this; }
+
+    /** Create a writable {@link Signal} (convenience passthrough to `signal`). */
     signal<T>(value: T): Signal<T>         { return signal(value); }
+    /** Create an allocation-light single-subscriber {@link SignalMono}. */
     signalMono<T>(value: T): SignalMono<T> { return signalMono(value); }
+    /** Register an `effect` whose disposer is tracked and cleaned up by {@link destroy}. */
     effect(fn: () => void): this { this.#effects.push(effect(fn)); return this; }
+    /** Derived read-only signal: re-runs `fn` in a tracked effect; disposer tracked by {@link destroy}. */
     computed<T>(fn: () => T): ReadonlySignal<T> { const s = signal<T>(undefined as T); this.#effects.push(effect(() => s.set(fn()))); return s.readonly(); }
-    text(getter: Getter<string> | string): this { const g = asGetter(getter); const node = document.createTextNode(g()); this.#el.appendChild(node); this.#effects.push(effect(() => { node.nodeValue = g(); })); return this; }
+
+    /** Append a reactive text node bound to `getter` (or a static string). Re-runs on signal change. */
+    text(getter: Getter<string> | string): this { const g = Real._asGetter(getter); const node = document.createTextNode(g()); this.#el.appendChild(node); this.#effects.push(effect(() => { node.nodeValue = g(); })); return this; }
+    /** Bind a {@link SignalMono} to a Text node via the zero-alloc `sinkText` fast path (creating the node if omitted). */
     textMono(s: SignalMono<string>, node?: Text): this { if (!node) { node = document.createTextNode(s.peek()); this.#el.appendChild(node); } sinkText(s, node); return this; }
-    attr(name: string, getter: Getter<string | null> | string | null): this { const g = asGetter(getter); const el = this.#el; this.#effects.push(effect(() => { const v = g(); if (v === null) el.removeAttribute(name); else el.setAttribute(name, v); })); return this; }
-    cls(name: string, getter: Getter<boolean> | boolean): this { const g = asGetter(getter); const el = this.#el; this.#effects.push(effect(() => { if (g()) el.classList.add(name); else el.classList.remove(name); })); return this; }
+    /** Reactively bind an attribute; `null` removes it. Re-runs on signal change. */
+    attr(name: string, getter: Getter<string | null> | string | null): this { const g = Real._asGetter(getter); const el = this.#el; this.#effects.push(effect(() => { const v = g(); if (v === null) el.removeAttribute(name); else el.setAttribute(name, v); })); return this; }
+    /** Reactively toggle a class on/off from a boolean getter. */
+    cls(name: string, getter: Getter<boolean> | boolean): this { const g = Real._asGetter(getter); const el = this.#el; this.#effects.push(effect(() => { if (g()) el.classList.add(name); else el.classList.remove(name); })); return this; }
+    /** Return a plain toggler `(on: boolean) => void` for a class — no effect, no tracking. */
     clsMono(name: string): (v: boolean) => void { const el = this.#el; return (v: boolean) => { if (v) el.classList.add(name); else el.classList.remove(name); }; }
-    prop(name: string, getter: Getter<unknown> | unknown): this { const g = asGetter(getter); const rec = this.#el as unknown as Record<string, unknown>; this.#effects.push(effect(() => { rec[name] = g(); })); return this; }
-    style(prop: string, getter: Getter<string> | string): this { const g = asGetter(getter); const el = this.#el as HTMLElement; const cssProp = prop.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`); this.#effects.push(effect(() => { el.style.setProperty(cssProp, g()); })); return this; }
+    /** Reactively assign a JS property on the element from `getter`. */
+    prop(name: string, getter: Getter<unknown> | unknown): this { const g = Real._asGetter(getter); const rec = this.#el as unknown as Record<string, unknown>; this.#effects.push(effect(() => { rec[name] = g(); })); return this; }
+    /** Reactively set one inline style property (camelCase accepted, normalised to kebab-case). */
+    style(prop: string, getter: Getter<string> | string): this { const g = Real._asGetter(getter); const el = this.#el as HTMLElement; const cssProp = prop.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`); this.#effects.push(effect(() => { el.style.setProperty(cssProp, g()); })); return this; }
+    /** Two-way bind the element's `value`: reactive read from `getter`, optional write-back on `input`. */
     bind(getter: Getter<string>, setter?: (v: string) => void): this { this.prop('value', getter); if (setter) this.#el.addEventListener('input', e => setter((e.target as HTMLInputElement).value)); return this; }
+    /** Dispose all tracked effects and detach the scoped Sheet. Call when discarding the Real. */
     destroy(): this { this.#effects.forEach(s => s()); this.#effects = []; this.Sheet = null; return this; }
 
     /**
@@ -295,22 +305,21 @@ export class Real {
         next.on('Sheet-Changed', apply);
     }
 
-    static tpl(html: string): AriannATemplate { return new AriannATemplate(html); }
-    static Define(tag: string, ctor: new (...a: unknown[]) => Element, base: new (...a: unknown[]) => Element = HTMLElement, style: Record<string, string> = {}): new (...a: unknown[]) => Element { return Core.Define(tag, ctor, base, style); }
-    static GetDescriptor = Core.GetDescriptor;
-    static Render(obj: RealDef | VirtualNode | Element | Real | AriannATemplate): Element | null { if (obj instanceof Element) return obj; if (obj instanceof Real) return obj.render(); if (obj instanceof VirtualNode) return obj.render(); if (obj instanceof AriannATemplate) return obj.clone(); if (typeof obj === 'object' && 'Tag' in obj) { const el = document.createElement((obj as RealDef).Tag ?? 'div'); if ((obj as RealDef).Attributes) for (const [k,v] of Object.entries((obj as RealDef).Attributes!)) el.setAttribute(k,v); return el; } return null; }
-    static signal     = signal;
-    static signalMono = signalMono;
-    static sinkText   = sinkText;
-    static effect     = effect;
-    static computed   = computed;
-    static batch      = batch;
-    static untrack    = untrack;
-    static template   = (html: string) => new AriannATemplate(html);
+    // ── Global registration ───────────────────────────────────────────────
+    // Pin the constructor name and expose the class on `window`. The bundler
+    // renames the local binding (e.g. `_Real`) to dodge the global, so
+    // `constructor.name` / GetPrototypeChain would report the mangled name —
+    // Build() forces it back. Runs once at class-eval via the static block
+    // below; uses `this` so it survives any bundler rename.
+    static #Build(): void
+    {
+        try { Object.defineProperty(this, 'name', { value: 'Real', configurable: true }); } catch { /* frozen */ }
+        if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Real'))
+            Object.defineProperty(window, 'Real', { enumerable: true, configurable: false, writable: false, value: this });
+    }
+
+    static { this.#Build(); }
+
 }
-// Pin the constructor name: the bundler renames the local binding to `_Real`
-// to avoid colliding with the global `Real` defined just below, which makes
-// `constructor.name` (and GetPrototypeChain) report `_Real`. Force it back.
-try { Object.defineProperty(Real, 'name', { value: 'Real', configurable: true }); } catch { /* frozen */ }
-if (typeof window !== 'undefined') Object.defineProperty(window, 'Real', { enumerable: true, configurable: false, writable: false, value: Real });
+
 export default Real;

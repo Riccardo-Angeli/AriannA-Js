@@ -894,4 +894,19 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
 // EXPLICITLY and safely, without `new`:
 Component.Define('arianna-code-editor', CodeEditor);
 
+// ── Prototype-splice resolution for the markup-upgrade path ───────────────
+// Namespace.Update resolves the user subclass for a tag in this order:
+//   (1) descriptor.Class  (captured by the first `new Sub()` via new.target);
+//   (2) the global window[PascalCase(tag)]  — for 'arianna-code-editor' that
+//       name is exactly 'CodeEditor'.
+// Path (1) never fires here: this element is HTMLElement-based and is NOT
+// registered through native customElements, so `new CodeEditor()` throws
+// "Illegal constructor" and the lazy capture leaves descriptor.Class null.
+// Without a fallback, the upgrade splices the empty Component(...) BASE
+// prototype onto the node — build()/Value/value never reach it, the editor
+// reports "missing API", and the chain shows [HTMLElement, HTMLElement, …].
+// Exposing the class globally under that exact name makes path (2) succeed, so
+// the upgrade splices CodeEditor.prototype and build() runs.
+(globalThis as unknown as Record<string, unknown>).CodeEditor = CodeEditor;
+
 export default CodeEditor;

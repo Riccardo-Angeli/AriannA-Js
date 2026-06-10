@@ -6,7 +6,7 @@
  *
  *   §1  AriannA native       — re-export of the built-in h()/jsx runtime.
  *   §2  Snabbdom-compatible  — h(sel, data, children) + patch(old, new).
- *   §3  React-compatible     — class Component { render/state/props/setState } + createRoot.
+ *   §3  React-compatible     — class ReactComponent { render/state/props/setState } + createRoot.
  *
  * All three render to real DOM. §2/§3 are self-contained (own vnode + diff /
  * own component base) so they do not depend on AriannA internals that may move.
@@ -14,20 +14,438 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import Real                     from './Real.ts';
+import Virtual, { VirtualNode } from './Virtual.ts';
+import Core                     from './Core.ts';
+import type { VAttrs }          from './Virtual.ts';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // §1 — AriannA native JSX runtime (re-export)
 // ─────────────────────────────────────────────────────────────────────────────
 // The native factory: h(tag, props, ...children) → Real | VirtualNode.
 // Props become attributes via .set(); events via $x / onX; children via .add().
-export {
-    h            as hAriannA,
-    jsx,
-    jsxs,
-    Fragment,
-    setDefaultRuntime,
-    getDefaultRuntime,
-} from './jsx/jsx-runtime.ts';
-export type { JSXNode, JSXProps, JSXRuntime } from './jsx/jsx-runtime.ts';
+// Merged in from the former ./jsx/jsx-runtime.ts (folder eliminated). The native
+// hyperscript is `hyperscript`; the public Snabbdom `h` is defined in §2 below.
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+/** Props passed to a JSX element. */
+export type JSXProps = Record<string, unknown> & {
+    children?: JSXNode | JSXNode[];
+};
+
+/**
+ * A node returned by h() — either a Real instance, a VirtualNode,
+ * a Fragment, a primitive, or null/undefined (both are silently skipped).
+ */
+export type JSXNode =
+    | Real
+    | VirtualNode
+    | AriannAFragment
+    | string
+    | number
+    | boolean
+    | null
+    | undefined;
+
+/** A fragment in Virtual mode — wraps children without a real DOM tag. */
+export interface AriannAFragment
+{
+    readonly __arianna_fragment : true;
+    readonly children           : JSXNode[];
+}
+
+/** Intrinsic element map — all HTML/SVG tags are valid JSX elements. */
+export interface IntrinsicElements
+{
+    [tag: string]: JSXProps;
+}
+
+// ── Runtime mode ──────────────────────────────────────────────────────────────
+
+/** Runtime mode — controlled by arianna.config.ts or a per-file pragma. */
+export type JSXRuntime = 'real' | 'virtual';
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+const EVENT_DOLLAR = /^\$/;         // $click, $mouseenter
+const EVENT_ON     = /^on([A-Z])/;  // onClick, onMouseenter
+const FRAGMENT_TAG = Symbol('AriannAFragment');
+
+/**
+ * Determine whether a prop name encodes an event listener.
+ * Returns the lowercase event type string, or `null` for plain attributes.
+ *
+ * @param key - Prop name to inspect.
+ * @internal
+ */
+function resolveEventType(key: string): string | null
+{
+    if (EVENT_DOLLAR.test(key)) return key.slice(1).toLowerCase();
+    const m = EVENT_ON.exec(key);
+    if (m) return (m[1].toLowerCase() + key.slice(m[0].length)).toLowerCase();
+    return null;
+}
+
+/**
+ * Resolve a JSX type to a lowercase tag string.
+ *
+ * - `string`         → used as-is (`'div'`, `'my-card'`)
+ * - `function/class` → looked up in `Core.GetDescriptor` → `Tags[0]`
+ * - fallback         → kebab-case of the constructor name
+ *
+ * @param type - JSX element type.
+ * @internal
+ */
+function resolveTag(type: string | (new (...a: unknown[]) => unknown)): string
+{
+    if (typeof type === 'string') return type;
+
+    const d = Core.GetDescriptor(type as never);
+    if (d && d.Tags?.length) return d.Tags[0];
+
+    // Fallback: convert PascalCase class/function name to kebab-case
+    const name = (type as { name?: string }).name ?? 'div';
+    return name
+        .replace(/([A-Z])/g, (c, i) => (i > 0 ? '-' : '') + c.toLowerCase())
+        .replace(/^-/, '');
+}
+
+/**
+ * Flatten a mixed children array — handles nested arrays, AriannAFragments,
+ * and plain primitives. Filters `null`, `undefined`, and `false`.
+ *
+ * @param children - Raw children array from JSX props or positional args.
+ * @internal
+ */
+function flattenChildren(children: unknown[]): JSXNode[]
+{
+    const out: JSXNode[] = [];
+
+    for (const c of children)
+    {
+        if (c === null || c === undefined || c === false) continue;
+
+        if (Array.isArray(c))
+        {
+            out.push(...flattenChildren(c));
+        }
+        else if (typeof c === 'object' && (c as AriannAFragment).__arianna_fragment)
+        {
+            out.push(...flattenChildren((c as AriannAFragment).children));
+        }
+        else
+        {
+            out.push(c as JSXNode);
+        }
+    }
+
+    return out;
+}
+
+// ── Real-mode factory ──────────────────────────────────────────────────────────
+
+/**
+ * Create a `Real` instance from JSX.
+ *
+ * - Props → `.set()` for attributes, `.on()` for events (`$x` or `onX`).
+ * - `$` event props take precedence over `on`-prefix duplicates.
+ * - Children → `.add()` for strings/nodes.
+ *
+ * @param type  - Tag string or component constructor.
+ * @param props - Merged props object (attributes + events + children).
+ * @param args  - Additional positional children.
+ * @internal
+ */
+function hReal(
+    type    : string | (new (...a: unknown[]) => unknown),
+    props   : JSXProps | null,
+    ...args : unknown[]
+): Real | AriannAFragment | DocumentFragment
+{
+    // ── Fragment ───────────────────────────────────────────────────────────────
+    if ((type as unknown) === FRAGMENT_TAG || type === '')
+    {
+        const frag = document.createDocumentFragment();
+
+        for (const child of flattenChildren(args))
+        {
+            if      (child instanceof Real)   frag.appendChild(child.render());
+            else if (child instanceof Node)   frag.appendChild(child);
+            else if (typeof child === 'string' || typeof child === 'number')
+                frag.appendChild(document.createTextNode(String(child)));
+        }
+
+        return frag as unknown as AriannAFragment;
+    }
+
+    // ── Element ────────────────────────────────────────────────────────────────
+    const tag    = resolveTag(type);
+    const r      = new Real(tag);
+    const events = new Map<string, EventListener>();
+    const attrs  = new Map<string, string>();
+
+    // $ props first — they take precedence over on-prefix duplicates
+    const entries     = Object.entries(props ?? {});
+    const dollarFirst = [
+        ...entries.filter(([k]) =>  EVENT_DOLLAR.test(k)),
+        ...entries.filter(([k]) => !EVENT_DOLLAR.test(k)),
+    ];
+
+    for (const [key, val] of dollarFirst)
+    {
+        if (key === 'children') continue;
+
+        const evType = resolveEventType(key);
+        if (evType)
+        {
+            if (!events.has(evType))
+                events.set(evType, val as EventListener);
+        }
+        else
+        {
+            attrs.set(key, val == null ? '' : String(val));
+        }
+    }
+
+    // Apply attributes then events
+    for (const [k, v] of attrs)   r.set(k, v);
+    for (const [t, fn] of events) r.on(t, fn);
+
+    // Apply children
+    const kids = flattenChildren([
+        ...(props?.children !== undefined ? [props.children] : []),
+        ...args,
+    ]);
+
+    for (const child of kids)
+    {
+        if      (child instanceof Real)        r.add(child.render());
+        else if (child instanceof VirtualNode) r.add(child.render());
+        else if (child instanceof Node)        r.add(child);
+        else if (typeof child === 'string' || typeof child === 'number')
+            r.add(String(child));
+    }
+
+    return r;
+}
+
+// ── Virtual-mode factory ───────────────────────────────────────────────────────
+
+/**
+ * Create a `VirtualNode` from JSX.
+ *
+ * - Attributes → plain `VAttrs` object passed to `Virtual.Create()`.
+ * - Events (`$x` / `onX`) → registered via `.on()` after node creation.
+ * - Children → `VirtualNode` children or text strings.
+ *
+ * @param type  - Tag string or component constructor.
+ * @param props - Merged props object (attributes + events + children).
+ * @param args  - Additional positional children.
+ * @internal
+ */
+function hVirtual(
+    type    : string | (new (...a: unknown[]) => unknown),
+    props   : JSXProps | null,
+    ...args : unknown[]
+): VirtualNode | AriannAFragment
+{
+    // ── Fragment ───────────────────────────────────────────────────────────────
+    if ((type as unknown) === FRAGMENT_TAG || type === '')
+    {
+        return {
+            __arianna_fragment : true,
+            children           : flattenChildren(args),
+        } as AriannAFragment;
+    }
+
+    // ── Element ────────────────────────────────────────────────────────────────
+    const tag        = resolveTag(type);
+    const vAttrs     : VAttrs                           = {};
+    const events     = new Map<string, (e: Event) => void>();
+
+    // $ props first — they take precedence over on-prefix duplicates
+    const entries     = Object.entries(props ?? {});
+    const dollarFirst = [
+        ...entries.filter(([k]) =>  EVENT_DOLLAR.test(k)),
+        ...entries.filter(([k]) => !EVENT_DOLLAR.test(k)),
+    ];
+
+    for (const [key, val] of dollarFirst)
+    {
+        if (key === 'children') continue;
+
+        const evType = resolveEventType(key);
+        if (evType)
+        {
+            if (!events.has(evType))
+                events.set(evType, val as (e: Event) => void);
+        }
+        else
+        {
+            vAttrs[key] = val as string | number | boolean | null;
+        }
+    }
+
+    // Build children list
+    const kids = flattenChildren([
+        ...(props?.children !== undefined ? [props.children] : []),
+        ...args,
+    ]);
+
+    const vChildren = kids.map(child =>
+    {
+        if      (child instanceof VirtualNode)                        return child;
+        if      (child instanceof Real)                               return child.render();  // bridge Real → DOM
+        if      (typeof child === 'string' || typeof child === 'number') return String(child);
+        return String(child);
+    });
+
+    const node = new VirtualNode(tag, vAttrs as Record<string,string>, ...(vChildren as never[])) as VirtualNode;
+
+    // Register event listeners — fired via Observable when node is mounted
+    for (const [evType, fn] of events) node.on(evType, fn as never);
+
+    return node;
+}
+
+// ── Global default runtime ────────────────────────────────────────────────────
+
+/**
+ * Global default JSX runtime mode.
+ * Can be overridden per-file via the `@dom-render` pragma,
+ * or set globally in `arianna.config.ts`.
+ *
+ * @internal
+ */
+let _defaultRuntime: JSXRuntime = 'real';
+
+/**
+ * Set the global default JSX runtime.
+ * Called by the AriannA bundler or `arianna.config.ts` at build time.
+ *
+ * @param mode - Runtime mode: `'real'` or `'virtual'`.
+ *
+ * @example
+ *   // arianna.config.ts
+ *   setDefaultRuntime('virtual');
+ */
+export function setDefaultRuntime(mode: JSXRuntime): void
+{
+    _defaultRuntime = mode;
+}
+
+/**
+ * Get the current global default JSX runtime.
+ *
+ * @returns The active runtime mode.
+ */
+export function getDefaultRuntime(): JSXRuntime
+{
+    return _defaultRuntime;
+}
+
+// ── h() — public JSX factory ───────────────────────────────────────────────────
+
+/**
+ * AriannA JSX element factory.
+ *
+ * TypeScript / esbuild call this for every JSX element.
+ * The runtime (`real` | `virtual`) is determined by:
+ *   1. Per-call `_runtime` prop (internal — set by the build transform).
+ *   2. Global default set via `setDefaultRuntime()`.
+ *
+ * @param type  - Tag string (`'div'`) or component constructor (`MyCard`).
+ * @param props - Props object — attributes + events (`$x` / `onX`) + children.
+ * @param args  - Additional positional children.
+ *
+ * @example
+ *   // Implicit real mode
+ *   const el = h('div', { class: 'box' }, 'Hello');
+ *
+ * @example
+ *   // Explicit virtual mode via internal prop
+ *   const el = h('div', { class: 'box', _runtime: 'virtual' }, 'Hello');
+ */
+export function hyperscript(
+    type    : string | (new (...a: unknown[]) => unknown),
+    props   : JSXProps | null,
+    ...args : unknown[]
+): JSXNode
+{
+    const mode: JSXRuntime =
+        (props as { _runtime?: JSXRuntime } | null)?._runtime ?? _defaultRuntime;
+
+    // Strip internal prop before forwarding to mode factories
+    if (props && '_runtime' in props)
+    {
+        const { _runtime: _, ...rest } = props as { _runtime?: JSXRuntime } & JSXProps;
+        props = rest;
+    }
+
+    return (mode === 'virtual'
+        ? hVirtual(type, props, ...args)
+        : hReal(type, props, ...args)) as unknown as JSXNode;
+}
+
+// ── Fragment ───────────────────────────────────────────────────────────────────
+
+/**
+ * JSX Fragment symbol — `<>...</>` syntax.
+ *
+ * - Real mode    → `DocumentFragment`
+ * - Virtual mode → `AriannAFragment` (array wrapper)
+ */
+export const Fragment = FRAGMENT_TAG as unknown as string;
+
+// ── react-jsx compat exports ───────────────────────────────────────────────────
+
+/**
+ * `jsx()` — called by the TypeScript compiler for single-child elements.
+ * Alias of `h()` — provided for `react-jsx` compatibility.
+ */
+export const jsx = hyperscript;
+
+/**
+ * `jsxs()` — called by the TypeScript compiler for multi-child elements.
+ * Alias of `h()` — provided for `react-jsx` compatibility.
+ */
+export const jsxs = hyperscript;
+
+/**
+ * `jsxDEV()` — called in development builds with extra source-location info.
+ * Drops the extra debug arguments and delegates to `h()`.
+ *
+ * @param type      - Tag string or constructor.
+ * @param props     - Props object.
+ * @param _key      - React-compat key (unused).
+ * @param _isStatic - React-compat static flag (unused).
+ * @param _source   - Babel source-location object (unused).
+ * @param _self     - Babel self reference (unused).
+ */
+export function jsxDEV(
+    type       : string | (new (...a: unknown[]) => unknown),
+    props      : JSXProps | null,
+    _key?      : string,
+    _isStatic? : boolean,
+    _source?   : unknown,
+    _self?     : unknown,
+): JSXNode
+{
+    return hyperscript(type, props);
+}
+
+// ── Window registration ────────────────────────────────────────────────────────
+
+if (typeof window !== 'undefined')
+{
+    Object.defineProperty(window, 'AriannAJSX', {
+        value       : { h: hyperscript, jsx, jsxs, jsxDEV, Fragment, setDefaultRuntime, getDefaultRuntime },
+        writable    : false,
+        enumerable  : true,
+        configurable: false,
+    });
+}
 
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -258,7 +676,7 @@ export function patch(oldVnodeOrElm: VNode | Element, vnode: VNode): VNode {
 // ═════════════════════════════════════════════════════════════════════════════
 // A minimal React-class surface backed by the §2 vnode + patch engine:
 //
-//   class Clock extends Component {
+//   class Clock extends ReactComponent {
 //       constructor(props){ super(props); this.state = { date: new Date() }; }
 //       componentDidMount(){ this.timer = setInterval(()=>this.tick(),1000); }
 //       componentWillUnmount(){ clearInterval(this.timer); }
@@ -273,7 +691,7 @@ export function patch(oldVnodeOrElm: VNode | Element, vnode: VNode): VNode {
 // through the vnode engine and re-renders on setState (componentDidUpdate fires).
 
 export interface ReactElement {
-    type     : string | (new (props: any) => Component<any, any>);
+    type     : string | (new (props: any) => ReactComponent<any, any>);
     props    : Record<string, any>;
     children : Array<ReactElement | string>;
     key      : string | number | null;
@@ -284,7 +702,7 @@ const isReactEl = (x: unknown): x is ReactElement =>
 
 /** React.createElement(type, props, ...children). */
 export function createElement(
-    type: string | (new (props: any) => Component<any, any>),
+    type: string | (new (props: any) => ReactComponent<any, any>),
     props: Record<string, any> | null,
     ...children: Array<ReactElement | string | number | null | undefined>
 ): ReactElement {
@@ -319,7 +737,7 @@ export function createElement(
 }
 
 /** React-compatible base component. */
-export class Component<P = Record<string, any>, S = Record<string, any>> {
+export class ReactComponent<P = Record<string, any>, S = Record<string, any>> {
     props : P;
     state : S;
     // wiring filled in by the renderer:
@@ -353,8 +771,8 @@ export class Component<P = Record<string, any>, S = Record<string, any>> {
 /** Convert a React element (or component) tree into a §2 vnode. */
 function reactToVNode(
     node: ReactElement | string | null,
-    instances: Component[],
-    cache: Map<string, Component>,
+    instances: ReactComponent[],
+    cache: Map<string, ReactComponent>,
     path: string,
 ): VNode | string | null {
     if (node == null) return null;
@@ -363,7 +781,7 @@ function reactToVNode(
     // Class component → REUSE the instance for this path if present (so state
     // survives re-renders, like React), else instantiate. Then render + recurse.
     if (typeof node.type === 'function') {
-        const Ctor = node.type as new (p: any) => Component;
+        const Ctor = node.type as new (p: any) => ReactComponent;
         const key = path + '/' + (Ctor.name || 'C') + (node.key != null ? '#' + node.key : '');
         let inst = cache.get(key);
         if (inst instanceof Ctor) {
@@ -411,14 +829,14 @@ export interface Root {
 /** ReactDOM.createRoot(container). */
 export function createRoot(container: Element): Root {
     let currentVNode: VNode | null = null;
-    let mountedInstances: Component[] = [];
+    let mountedInstances: ReactComponent[] = [];
     // Persistent instance cache keyed by render-path — lets setState accumulate
     // across re-renders instead of re-instantiating (and resetting) each time.
-    const cache = new Map<string, Component>();
+    const cache = new Map<string, ReactComponent>();
 
     function doRender(element: ReactElement) {
         const prevInstances = mountedInstances;
-        const instances: Component[] = [];
+        const instances: ReactComponent[] = [];
         const v = reactToVNode(element, instances, cache, 'root');
         mountedInstances = instances;
 
@@ -465,5 +883,5 @@ export function createRoot(container: Element): Root {
     };
 }
 
-// React namespace convenience (so `React.createElement` / `React.Component` work).
-export const React = { createElement, Component, createRoot };
+// React namespace convenience (so `React.createElement` / `React.ReactComponent` work).
+export const React = { createElement, Component: ReactComponent, createRoot };

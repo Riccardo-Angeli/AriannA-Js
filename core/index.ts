@@ -23,6 +23,7 @@
 
 // ── Default class exports as named bindings ─────────────────────────────────
 export { default as Core }       from './Core.ts';
+export { Initialize, Bootstrap, Ready, AriannA } from './Core.ts';    // boot entry points (single-line <head> boot)
 export { default as Observable } from './Observable.ts';
 export { default as State }      from './State.ts';
 export { default as Real }       from './Real.ts';
@@ -37,12 +38,11 @@ export { default as Namespace }  from './Namespace.ts';
 export { VirtualNode } from './Virtual.ts';
 
 // ── v2 — Dotted-path / SubAccessor helpers (shared by Real, Virtual, Component)
-export { readDottedPath, writeDottedPath, makeSubAccessor } from './Real.ts';
+export { readDottedPath, writeDottedPath, makeSubAccessor, UUID } from './Core.ts';
 
 // ── Reactive primitives ─────────────────────────────────────────────────────
 export {
-    signal, signalMono, effect, computed, batch, untrack, uuid,
-    AriannATemplate,
+    signal, signalMono, effect, computed, batch, untrack,
 } from './Observable.ts';
 
 // ── Rule system ─────────────────────────────────────────────────────────────
@@ -53,27 +53,32 @@ export { html, css }                  from './Template.ts';
 export { Template, TemplateInstance } from './Template.ts';
 
 // ── Namespace objects (aliased to avoid conflict with Template.html) ────────
-export {
-    html   as htmlNamespace,
-    svg    as svgNamespace,
-    mathML as mathMLNamespace,
-} from './Namespace.ts';
+// The built-ins are created + registered by Namespace.Install() — no module-load
+// side-effect and no named consts. Capture the instances here for the public API
+// (Install() also creates+registers x3d). Boot order:
+//   Core.Initialize() (auto on Core import)  →  this Install()  →  Core.Bootstrap().
+import NamespaceModule from './Namespace.ts';
+export const {
+    html:   htmlNamespace,
+    svg:    svgNamespace,
+    mathML: mathMLNamespace,
+} = NamespaceModule.Install();
 
 // ── Directive.Component decorator (aliased) ─────────────────────────────────
 export {
-    Component as ComponentDecorator,
+    ComponentDecorator,
     Prop,
 } from './Directive.ts';
 
 // ── JSX.ts — unified hyperscript / component interfaces ─────────────────────
 // One module, three interfaces:
-//   • AriannA native runtime: hAriannA / jsx / jsxs / Fragment / setDefaultRuntime
+//   • AriannA native runtime: hyperscript / jsx / jsxs / Fragment / setDefaultRuntime
 //   • Snabbdom-compatible:    h (selector + {on,props,attrs,style,class}) + patch
 //   • React-compatible:       createElement / Component / createRoot / React
 // The public `h` and `patch` are the Snabbdom pair (what the docs example uses).
 export {
     // AriannA native
-    hAriannA,
+    hyperscript,
     jsx,
     jsxs,
     Fragment,
@@ -84,13 +89,13 @@ export {
     patch,
     // React-compatible
     createElement,
-    Component as ReactComponent,
+    ReactComponent,
     createRoot,
     React,
 } from './Jsx.ts';
 export type { JSXNode, JSXProps, JSXRuntime } from './Jsx.ts';
 export type { VNode, SnabbdomData, ReactElement, Root } from './Jsx.ts';
-export { jsxDEV } from './jsx/jsx-dev-runtime.ts';
+export { jsxDEV } from './Jsx.ts';
 
 // ── SSR + Workers utilities ─────────────────────────────────────────────────
 export { escapeHtml, renderToString, hydrate, Island, SSR } from './SSR.ts';
@@ -100,7 +105,7 @@ export { WorkerPool, Workers }                              from './Workers.ts';
 export type {
     Signal, SignalMono, ReadonlySignal, AriannAEvent, ListenerOptions,
 } from './Observable.ts';
-export type { TypeDescriptor, NamespaceDescriptor }                from './Core.ts';
+export type { TypeDescriptor, NamespaceDescriptor, BootSpec }      from './Core.ts';
 export type { StateEvent }                                         from './State.ts';
 export type { RealTarget, RealDef, SubAccessor }                   from './Real.ts';
 export type { VAttrs, VChild }                                     from './Virtual.ts';

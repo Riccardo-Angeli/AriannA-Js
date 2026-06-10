@@ -35,10 +35,9 @@
  *
  * # API surface preserved from v1
  *
- *   - signal, signalMono, sinkText, sinkClass, effect, computed, batch, untrack, uuid
+ *   - signal, signalMono, sinkText, sinkClass, effect, computed, batch, untrack
  *   - Signal, SignalMono, ReadonlySignal, AriannAEvent types
  *   - class Observable with .value (alias of .Value)
- *   - class AriannATemplate (untouched)
  *   - events 'change-before' / 'change-after' / '<key>-change-before' / '<key>-change-after'
  */
 
@@ -46,12 +45,16 @@
 //  Type definitions (preserved from v1)
 // ─────────────────────────────────────────────────────────────────────────────
 
+//Rimuovi, Core Events e l'unica Source Of Trust.
+import { UUID } from './Core.ts';
+
 export interface AriannAEvent
 {
     Type: string;
     [k: string]: unknown;
 }
 
+//Rimuovi, Core Events e l'unica Source Of Trust.
 export interface ListenerOptions
 {
     Passive? : boolean;
@@ -61,18 +64,21 @@ export interface ListenerOptions
     Phase?   : 'bubble' | 'capture';
 }
 
+//Rimuovi, Core Events e l'unica Source Of Trust.
 export interface DomEventTypeDescriptor
 {
     Name      : string;
     Interface : abstract new (...a: never[]) => Event;
 }
 
+//Rimuovi, Core Events e l'unica Source Of Trust.
 export interface DomEventInterfaceDescriptor
 {
     Name  : string;
     Types : Record<string, DomEventTypeDescriptor>;
 }
 
+//Rimuovi, Core Events e l'unica Source Of Trust.
 export interface ListenerRecord
 {
     Id      : string;
@@ -82,6 +88,7 @@ export interface ListenerRecord
     Options : ListenerOptions;
 }
 
+//Rimuovi, Core Events e l'unica Source Of Trust.
 export interface ChangeEvent extends AriannAEvent
 {
     Target : object;
@@ -91,20 +98,6 @@ export interface ChangeEvent extends AriannAEvent
     New    : unknown;
     Kind   : 'set' | 'delete' | 'mutate';
 }
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  uuid — small RFC4122-like v4 generator
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function uuid(): string
-{
-    const b: string[] = [];
-    for (let i = 0; i < 9; i++)
-        b.push((Math.floor(1 + Math.random() * 0x10000)).toString(16).slice(1));
-    return `${b[1]}${b[2]}-${b[3]}-${b[4]}-${b[5]}-${b[6]}${b[7]}${b[8]}`;
-}
-
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  THE DEPENDENCY GRAPH — single source of truth for reactivity
@@ -787,67 +780,6 @@ export function deepWatch<T extends object>(
 }
 
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  AriannATemplate — HTMLTemplateElement engine (preserved untouched)
-// ═════════════════════════════════════════════════════════════════════════════
-
-/**
- * AriannATemplate — clone-based template engine, zero JSX, zero runtime parser.
- *
- *   1. new AriannATemplate(html) → browser parses HTML once into <template>.content
- *   2. tpl.clone()                → cloneNode O(1), C++ native, zero JS parsing
- *   3. tpl.walk(el, [0,0])        → O(1) descend via childNodes[i] chain
- *
- * Equivalent to Vue's hoisted vnodes or Solid's compiled templates, but with
- * an explicit walk API instead of compiler-generated refs.
- *
- * @example
- *   const tpl = new AriannATemplate(
- *     '<tr data-id=""><td class="col-md-1"></td>' +
- *     '<td class="col-md-4"><a class="lbl"></a></td>' +
- *     '<td class="col-md-6"></td></tr>'
- *   );
- *   const tr       = tpl.clone() as HTMLTableRowElement;
- *   const idTxt    = tpl.walk(tr, [0, 0]) as Text;
- *   const labelTxt = tpl.walk(tr, [1, 0, 0]) as Text;
- *   const $label = signalMono('hello'); sinkText($label, labelTxt);
- */
-export class AriannATemplate
-{
-    readonly #tpl: HTMLTemplateElement;
-
-    constructor(html: string)
-    {
-        this.#tpl           = document.createElement('template');
-        this.#tpl.innerHTML = html;
-    }
-
-    /** Clone the first root element of the template — O(1) in C++. */
-    clone(): Element
-    {
-        return this.#tpl.content.firstElementChild!.cloneNode(true) as Element;
-    }
-
-    /** Clone the entire content as a DocumentFragment (multi-root templates). */
-    cloneAll(): DocumentFragment
-    {
-        return this.#tpl.content.cloneNode(true) as DocumentFragment;
-    }
-
-    /** O(1) descent via childNodes index path.  Avoids querySelector. */
-    walk(root: Node, path: number[]): Node
-    {
-        let n: Node = root;
-        for (const i of path) n = n.childNodes[i];
-        return n;
-    }
-
-    /** Batch walk — descend to multiple nodes in one call. */
-    walkAll(root: Node, ...paths: number[][]): Node[]
-    {
-        return paths.map(p => this.walk(root, p));
-    }
-}
 
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -862,6 +794,7 @@ export interface ObservableOptions
     historyLimit?: number;
 }
 
+//Rimuovi, Core Events e l'unica Source Of Trust.
 interface InstanceListener
 {
     Id      : string;
@@ -925,7 +858,7 @@ export class Observable<T extends object = object>
     /** Register an event listener.  Types space/comma/pipe separated. */
     on(types: string, cb: (e: ChangeEvent) => void): this
     {
-        const ls: InstanceListener = { Id: uuid(), Handler: cb, Target: this };
+        const ls: InstanceListener = { Id: UUID(), Handler: cb, Target: this };
         types.split(/[\s,|]+/g).filter(Boolean).forEach(t => {
             const b = this.#listeners.get(t) ?? new Set<InstanceListener>();
             b.add(ls); this.#listeners.set(t, b);
@@ -994,17 +927,23 @@ export class Observable<T extends object = object>
             if (this.#history.length > limit) this.#history.splice(0, this.#history.length - limit);
         }
     }
+
+
+    /** Pin the constructor name (bundler renames the colliding local to `_Observable`)
+     *  and expose the class on `window`. Runs once at class-eval. */
+    static #Build(): void
+    {
+        try { Object.defineProperty(this, 'name', { value: 'Observable', configurable: true }); } catch { /* frozen */ }
+        if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Observable'))
+            Object.defineProperty(window, 'Observable', { enumerable: true, configurable: false, writable: false, value: this });
+    }
+
+    static { this.#Build(); }
 }
 
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  Module side-effects + default export
 // ═════════════════════════════════════════════════════════════════════════════
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Observable', {
-        enumerable: true, configurable: false, writable: false, value: Observable,
-    });
-}
 
 export default Observable;
