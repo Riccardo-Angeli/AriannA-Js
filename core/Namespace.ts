@@ -80,79 +80,83 @@ import Core, { type NamespaceDescriptor, type TypeDescriptor } from './Core.ts';
  * registered interface) — `super()` on a raw, unregistered native still throws
  * "Illegal constructor". Prototype members are copied so methods survive.
  */
-/**
- * @module    core/Component
- * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- *
- * Component Wrapper Factory — Risolve il vincolo nativo delle classi ES6.
- */
-
-export function createDynamicWrapper(customConstructor: any, baseInterface: new (...args: any[]) => any): any
+function createDynamicWrapper(
+    customConstructor: Function,
+    baseClass        : new (...args: unknown[]) => Element,
+): new (...args: unknown[]) => Element
 {
-    // Generiamo una classe reale che eredita legalmente dall'interfaccia nativa del DOM
-    const DynamicWrapper = class extends baseInterface
+    const src     = (() => { try { return Function.prototype.toString.call(customConstructor); } catch { return ''; } })();
+    const isClass = /^class[\s{]/.test(src);
+    const name    = customConstructor.name || '_AriannaAnon';
+
+    // Free-standing, super-less constructor body. Used in TWO places:
+    //   • inside the genuine class below, applied on `this` right after super() — so the
+    //     create path's `Reflect.construct(thisClass, args, newTarget)` runs it on the
+    //     real element;
+    //   • exposed as __ariannaBody for the markup-upgrade path (Update), applied on the
+    //     live node where neither `new` nor `super()` is callable.
+    let bodyFn: ((this: Element, ...a: unknown[]) => void) | null = null;
+    if (isClass)
     {
-        constructor(...args: any[])
+        const _cm = /\bconstructor\s*\(([^)]*)\)\s*\{/.exec(src);
+        if (_cm)
         {
-            // 1. Alloca immediatamente l'elemento HTML nativo con tutte le sue proprietà (style, textContent, ecc.)
-            super();
-
-            // Verifica se customConstructor è una classe ES6 nativa o una funzione classica
-            const isClass = typeof customConstructor === "function" &&
-                /^\s*class\s+/.test(customConstructor.toString());
-
-            if (isClass)
+            let _i = _cm.index + _cm[0].length;
+            let _depth = 1;
+            const _start = _i;
+            for (; _i < src.length && _depth > 0; _i++)
             {
-                // 2a. Se è una classe, esegue il costruttore tramite 'new' per generare le proprietà
-                const instance = new customConstructor(...args);
-
-                // Fusione atomica dei contesti: trasferisce le proprietà istanziate sul nodo DOM reale 'this'
-                Object.assign(this, instance);
+                const _ch = src[_i];
+                if (_ch === '{') { _depth++; }
+                else if (_ch === '}') { _depth--; }
             }
-            else
-            {
-                // 2b. Se è una funzione vecchio stile, applica il contesto direttamente su 'this'
-                customConstructor.apply(this, args);
-            }
+            const _body = src.slice(_start, _i - 1);
+            try { bodyFn = new Function(_cm[1], _body) as (this: Element, ...a: unknown[]) => void; }
+            catch { /* private fields / CSP — no free-standing body */ }
+        }
+    }
 
-            // 3. Esegue la funzione di inizializzazione build canonica di AriannA se presente
-            if (typeof (this as any).build === "function")
+    // EMULATE EXTENDS: a GENUINE `class extends <interface>` (interface captured as a
+    // closure variable — NO `new Function` for the structure, CSP-safe). `super(...)`
+    // therefore ALWAYS runs and lets the interface build a REAL element with the native
+    // internal slots, so `this.style` is accessible — exactly the third-argument /
+    // Reflect.construct shape the old model used. The original constructor body then runs
+    // on that real element right after super(). `new.target` propagates through super(),
+    // so constructing this class with a subclass as the third argument lands the element
+    // on the subclass prototype.
+    const Wrapper = class extends (baseClass as new (...a: unknown[]) => Element)
+    {
+        constructor(...args: unknown[])
+        {
+            super(...args);
+            if (bodyFn)
             {
-                (this as any).build();
+                try { bodyFn.apply(this as unknown as Element, args); }
+                catch (e) { console.warn(`[arianna] <${name}> body failed:`, e); }
             }
         }
-    };
+    } as unknown as new (...args: unknown[]) => Element;
 
-    // Allineamento formale del nome della classe per l'ispezione dei prototipi
-    Object.defineProperty
-    (
-        DynamicWrapper,
-        "name",
+    try { Object.defineProperty(Wrapper, 'name', { value: name, configurable: true }); } catch { /* resists */ }
+
+    if (bodyFn)
+    {
+        try { Object.defineProperty(Wrapper, '__ariannaBody', { value: bodyFn, configurable: true }); } catch { /* resists */ }
+    }
+
+    // Carry the original class's prototype methods onto the genuine derived class (the
+    // `extends` only inherits the interface's prototype otherwise).
+    const propertyNames = Object.getOwnPropertyNames(customConstructor.prototype);
+    for (const prop of propertyNames)
+    {
+        if (prop !== 'constructor')
         {
-            value: customConstructor.name,
-            configurable: true
+            const descriptor = Object.getOwnPropertyDescriptor(customConstructor.prototype, prop);
+            if (descriptor) { try { Object.defineProperty(Wrapper.prototype, prop, descriptor); } catch { /* read-only */ } }
         }
-    );
+    }
 
-    // Esegue il mirroring completo dei metodi e delle proprietà del prototipo custom sul wrapper
-    const methods = Object.getOwnPropertyNames(customConstructor.prototype);
-    methods.forEach
-    (
-        (method) =>
-        {
-            if (method !== "constructor")
-            {
-                const descriptor = Object.getOwnPropertyDescriptor(customConstructor.prototype, method);
-                if (descriptor)
-                {
-                    Object.defineProperty(DynamicWrapper.prototype, method, descriptor);
-                }
-            }
-        }
-    );
-
-    return DynamicWrapper;
+    return Wrapper;
 }
 
 /**
@@ -864,6 +868,46 @@ export namespace Namespace
                 ? createDynamicWrapper(ctor as unknown as Function, _interface as new (...a: unknown[]) => Element)
                 : (ctor as unknown as new (...a: unknown[]) => Element);
 
+            // ── EXTENDS-class upgrade body ───────────────────────────────────────
+            // A no-extends class gets its __ariannaBody from createDynamicWrapper. An
+            // EXTENDS class (`class X extends HTMLDivElement { constructor(){ super(); … } }`)
+            // does NOT pass through that adapter, so on the markup-upgrade path — where the
+            // node already exists and neither `new` nor `super()` is callable — its
+            // constructor setup would never run (only the create path, via Reflect.construct,
+            // ran it). Extract the constructor body MINUS its leading `super(...)` call as a
+            // free-standing function and stash it as __ariannaBody, so Namespace.Update can
+            // apply it on the live node exactly like a no-extends class. Best-effort: private
+            // fields / a non-leading super / CSP simply leave no upgrade body (create path
+            // still runs it).
+            if (isClass && !_isNoExtendsClass
+                && !(_RealClass as { __ariannaBody?: unknown }).__ariannaBody)
+            {
+                try
+                {
+                    const _src = ctor.toString();
+                    const _cm  = /\bconstructor\s*\(([^)]*)\)\s*\{/.exec(_src);
+                    if (_cm)
+                    {
+                        let _i = _cm.index + _cm[0].length;
+                        let _depth = 1;
+                        const _start = _i;
+                        for (; _i < _src.length && _depth > 0; _i++)
+                        {
+                            const _ch = _src[_i];
+                            if (_ch === '{') { _depth++; }
+                            else if (_ch === '}') { _depth--; }
+                        }
+                        let _body = _src.slice(_start, _i - 1);
+                        // Strip the leading super(...) call — a free-standing function may not
+                        // contain `super`. Only the first occurrence (the constructor's chain-up).
+                        _body = _body.replace(/\bsuper\s*\([^)]*\)\s*;?/, '');
+                        const _bodyFn = new Function(_cm[1], _body);
+                        Object.defineProperty(_RealClass, '__ariannaBody', { value: _bodyFn, configurable: true });
+                    }
+                }
+                catch { /* private fields / nested super / CSP — no upgrade body */ }
+            }
+
             // ── Prototype chain: the legacy Component.js model ───────────────────
             // The OLD Component.js Define NEVER touches the user constructor's
             // prototype. It builds a fresh factory (window[Class.name]) and chains
@@ -954,50 +998,105 @@ export namespace Namespace
                 //     registered custom tag, splices the prototype, and returns it.
                 //     The constructor body then runs with `this = that element`
                 //     exactly as the class author intended.
+                // DUAL-CALLABLE (Context-Aware): a `new`/Create() call (new.target set)
+                // CREATES a fresh element; calling `factory.apply(existingNode)` — no
+                // new.target, `this` already an Element — UPGRADES that node in place.
+                // `new.target` is the discriminator: `this instanceof Element` alone is
+                // ambiguous, because under `new` the fresh `this` already chains to the
+                // interface prototype (→ Element). The shared dressing below (Component
+                // facilities, default style, FUNCTION body, build()) then runs for BOTH
+                // routes, so an Observer/markup upgrade and a programmatic create
+                // converge on the identical element shape.
+                const _isUpgrade = !(new.target) && (this instanceof Element);
                 let el: Element;
 
-                if (isClass) {
-                    // Construct the (possibly wrapped) class: for a no-extends class
-                    // _RealClass is the createDynamicWrapper adaptation (extends
-                    // <interface>, super() + body); for an extends class it is the
-                    // original ctor with its own super chain. Reflect.construct runs
-                    // the user body natively. newTarget = the class itself so the
-                    // patched native resolves the custom tag.
-                    //
-                    // If the interface is NOT constructable in this realm (a raw,
-                    // unpatched native → super() throws "Illegal constructor"), we do
-                    // not crash: we create the real element and splice the user-class
-                    // prototype (body simply doesn't run — same as the original
-                    // Component.js Define, which never runs class bodies at all).
-                    try {
-                        el = Reflect.construct(_RealClass, args, _RealClass);
-                    } catch (e) {
-                        console.warn(`[arianna] <${_tag}>: construct failed (interface not constructable?) — element created without running the class body:`, e);
-                        el = _URI
-                            ? document.createElementNS(_URI, _tag)
-                            : document.createElement(_tag);
-                        const _cp = (ctor as { prototype?: object }).prototype;
-                        const _ip = (_interface as { prototype?: object }).prototype;
-                        if (_cp && _ip && _cp !== _ip && Object.getPrototypeOf(_cp) === Object.prototype) {
-                            try { Object.setPrototypeOf(_cp, _ip); } catch { /* non-extensible */ }
+                if (_isUpgrade) {
+                    el = this as Element;
+
+                    // Idempotent: a node already dressed by this factory is left alone
+                    // (re-installing the fragile proxy / re-running the body would be
+                    // wrong). build() stays guarded by __isBuilt below regardless.
+                    if ((el as Element & { __ariannaUpgraded?: boolean }).__ariannaUpgraded) {
+                        return el;
+                    }
+
+                    // Splice the correct prototype onto the pre-existing node: the user
+                    // CLASS prototype (via _RealClass) for a class, the factory prototype
+                    // for a function. A CLASS constructor body cannot be invoked on a
+                    // live node, so a class's per-instance setup must live in build()
+                    // (run below) — the AriannA authoring rule. A FUNCTION body is run on
+                    // the node by the shared `ctor.apply(el)` step below.
+                    const _wantProto = isClass
+                        ? (_RealClass as { prototype: object }).prototype
+                        : (_factory   as { prototype: object }).prototype;
+                    if (Object.getPrototypeOf(el) !== _wantProto) {
+                        try { Object.setPrototypeOf(el, _wantProto); }
+                        catch { /* non-extensible — leave as-is */ }
+                    }
+                }
+                else if (isClass) {
+                    // CREATE (class) — Reflect.construct(TARGET, args, newTarget). The TARGET
+                    // is whatever actually builds a real DOM node; newTarget only supplies the
+                    // prototype. `_ntC` is the ACTUAL ctor under construction — `new.target`
+                    // when a subclass reached the factory via super(), else the registered
+                    // class — so the element lands on the right prototype ([Y, <Name>, …]).
+                    const _ntC = (new.target && (new.target as unknown) !== (_factory as unknown))
+                        ? (new.target as unknown as new (...a: unknown[]) => Element)
+                        : _RealClass;
+
+                    if (_isNoExtendsClass) {
+                        // Emulated extends: _RealClass is a GENUINE `class extends _interface`.
+                        // Reflect.construct(_RealClass, args, _ntC) → super(_interface) builds a
+                        // REAL element (style accessible) on `_ntC`'s prototype (the THIRD arg:
+                        // the subclass under construction, else the class), and the constructor
+                        // body runs on it right after super(). If `super` is rejected (raw native
+                        // not constructable with an unregistered newTarget → "Illegal
+                        // constructor"), fall back to a real createElement + splice + body.
+                        try {
+                            el = Reflect.construct(_RealClass, args, _ntC);
+                        } catch (e) {
+                            console.warn(`[arianna] <${_tag}>: emulated-extends construct fell back to createElement:`, e);
+                            el = _URI
+                                ? document.createElementNS(_URI, _tag)
+                                : document.createElement(_tag);
+                            try { Object.setPrototypeOf(el, (_ntC as { prototype: object }).prototype); }
+                            catch { /* non-extensible */ }
+                            const _body = (_RealClass as { __ariannaBody?: (this: Element, ...a: unknown[]) => void }).__ariannaBody;
+                            if (typeof _body === 'function') {
+                                try { _body.apply(el, args); }
+                                catch (e2) { console.warn(`[arianna] <${_tag}> body failed:`, e2); }
+                            }
                         }
-                        try { Object.setPrototypeOf(el, _cp as object); } catch { /* non-extensible */ }
+                    } else {
+                        // Extends class: HERE _RealClass's own [[Prototype]] IS the
+                        // `HTML[Something]Element` (it literally `extends` it), so _RealClass is
+                        // the legitimate TARGET — super() reaches the native and the class's
+                        // own body runs. newTarget = the subclass, for its prototype.
+                        try {
+                            el = Reflect.construct(_RealClass, args, _ntC);
+                        } catch (e) {
+                            console.warn(`[arianna] <${_tag}>: construct failed (interface not constructable?) — element created without running the class body:`, e);
+                            el = _URI
+                                ? document.createElementNS(_URI, _tag)
+                                : document.createElement(_tag);
+                            try { Object.setPrototypeOf(el, (_ntC as { prototype: object }).prototype); }
+                            catch { /* non-extensible */ }
+                        }
                     }
                 } else {
-                    // Function form — we own element creation. Always create through the
-                    // namespace URI when one exists, so the element is born in the correct
-                    // namespace (html → XHTML URI, svg, mathML, x3d) and is a genuine member
-                    // of that interface family — not only for NS:true namespaces. The tag is
-                    // the descriptor tag (_tag === descriptor.Tags[0]). createElement is the
-                    // fallback only for a URI-less namespace.
+                    // CREATE (function) — we own element creation. Splice the prototype of
+                    // the ACTUAL ctor under construction: a subclass `class Y extends
+                    // window.<Name>` (=== the factory for FUNCTION form) reaches here via
+                    // super() with new.target=Y → splice Y.prototype ([Y, <Name>, Interface,
+                    // …]); a direct create (new.target === the factory) splices the factory
+                    // prototype. This is the upstream subclass fix for the FUNCTION path.
+                    const _ntProto = (new.target && (new.target as unknown) !== (_factory as unknown))
+                        ? (new.target as { prototype: object }).prototype
+                        : (_factory as { prototype: object }).prototype;
                     el = _URI
                         ? document.createElementNS(_URI, _tag)
                         : document.createElement(_tag);
-                    // Splice the FACTORY prototype on (legacy model): it is a fresh
-                    // object already chained to the interface prototype (see the two
-                    // setPrototypeOf calls right after this factory), so the element
-                    // inherits the native API without ever mutating ctor.prototype.
-                    try { Object.setPrototypeOf(el, (_factory as { prototype: object }).prototype); }
+                    try { Object.setPrototypeOf(el, _ntProto); }
                     catch { /* native non-extensible — fall through */ }
                 }
 
@@ -1109,7 +1208,9 @@ export namespace Namespace
                 Namespace   : legacyDesc,
                 Constructor : _RealClass  as TypeDescriptor['Constructor'],
                 Interface   : _interface as TypeDescriptor['Interface'],
-                Prototype   : (_factory as { prototype: object }).prototype,
+                Prototype   : (isClass
+                    ? (_RealClass as { prototype: object }).prototype
+                    : (_factory   as { prototype: object }).prototype),
                 Supported   : true,
                 Defined     : true,
                 Declaration : isClass ? 'CLASS' : 'FUNCTION',
@@ -1211,25 +1312,41 @@ export namespace Namespace
                 }));
             }
 
-            // ── Legacy parity (Component.js Define/Extends ~6100): for the FUNCTION
-            // form, install the factory as the GLOBAL binding under the ctor name —
-            // `window[Sub.name] = factory`. A constructor that RETURNS an object makes
-            // `new` yield that object, so when `CustomElement` resolves to this global,
-            // `new CustomElement()` builds a REAL element (createElement + ctor body),
-            // instead of a plain object whose `this.style` throws "called on an object
-            // that does not implement interface HTMLElement". The factory is Safari-safe
-            // by construction (no Reflect.construct on a raw native; createElement +
-            // splice). CLASS form is NOT installed here: `new` on a class extending the
-            // patched native super already allocates a real element via super(). Skipped
-            // for the clean form (ctor === interface) so a native interface global
-            // (HTMLElement, HTMLDivElement, …) is never clobbered. Resolution note: this
-            // only takes effect where `CustomElement` resolves to the global binding —
-            // i.e. code evaluated at GLOBAL scope (as the legacy examples were); a
-            // function declared inside a local scope shadows the global, so `new` there
-            // uses the local plain function. Capturing the return also works regardless.
-            if (!isClass && (ctor as unknown) !== (_interface as unknown) && ctor.name)
+            // ── Legacy parity (Component.js Define/Extends ~6100): install the
+            // constructor as the GLOBAL binding under the ctor name —
+            // `window[Class.name] = …`. For a FUNCTION it's the factory (createElement
+            // + body); for a CLASS it's `_RealClass` (the createDynamicWrapper — super()
+            // allocates a real element, the body runs on it). With this, where
+            // `CustomElement` resolves to the global, `new CustomElement()` builds a
+            // REAL element instead of a plain object whose `this.style` throws.
+            //
+            // RESOLUTION CAVEAT (ES scoping, NOT a framework choice): this only takes
+            // effect where `CustomElement` resolves to the GLOBAL binding — code at
+            // global scope, or `new window.CustomElement()`. A `class CustomElement {}`
+            // (or a function) declared in a local/eval scope creates a LEXICAL binding
+            // that SHADOWS the global, so `new CustomElement()` there still hits the
+            // lexical declaration. The robust pattern is to capture the return
+            // (`const CustomElement = Core.Define(…)`) or use Core.Create('custom').
+            //
+            // Skipped for the clean form (ctor === interface) so a native interface
+            // global (HTMLElement, HTMLDivElement, …) is never clobbered.
+            if ((ctor as unknown) !== (_interface as unknown) && ctor.name)
             {
                 const _win = (typeof window !== 'undefined' ? window : globalThis) as Record<string, unknown>;
+                // UNIFORM (the upstream fix): install the dual-callable FACTORY for BOTH
+                // functions and classes. Then EVERY construction route converges on the
+                // factory's correct-order build:
+                //   • `new window.<Name>()`            → factory (new.target = factory)
+                //   • `class Y extends window.<Name>`  → super() → factory (new.target = Y)
+                //     → the factory splices Y's prototype, so the subclass is in the chain
+                //       ([Y, <Name>, Interface, …]) — for functions AND classes alike.
+                // A no-extends class's _RealClass is NOT a constructable element factory
+                // (it has no real super()), so installing IT here would make `new
+                // window.<Name>()` build an empty {} — the factory must front it.
+                // The Update repoint stays correct: it re-points only to a candidate whose
+                // prototype chain actually contains desc.Constructor, and the factory's
+                // prototype (chained straight to the interface) fails that test, so it is
+                // never mistaken for the user class.
                 try { _win[ctor.name] = _factory; }
                 catch { /* frozen / non-writable global — leave as-is */ }
             }
@@ -1346,10 +1463,21 @@ export namespace Namespace
                 // prototype chain via desc.Prototype without needing a real native
                 // element. Coercing them to <canvas>/<button>/… would create a
                 // replacement and orphan the original markup node (so a reference
-                // taken before upgrade — e.g. querySelector('#id') — would still
-                // point at the un-upgraded element). Only CLASS forms that truly
-                // need native internals are coerced.
-                if (desc.Declaration !== 'FUNCTION'
+                // taken before upgrade — e.g. querySelector('#id') or a stashed
+                // createElement('custom') — would still point at the un-upgraded
+                // element, reading as HTMLUnknownElement). Only CLASS forms whose
+                // interface TRULY needs native internals — the FRAGILE interfaces
+                // (HTMLInputElement, HTMLCanvasElement, HTMLVideoElement, …) — are
+                // coerced to a real native element. A generic base like
+                // HTMLDivElement needs no native internals: splicing its prototype
+                // onto the existing <custom> node gives the full chain in place
+                // WITHOUT orphaning the caller's reference. The fragility gate below
+                // is the check this condition was missing (the comment always said
+                // "only forms that truly need native internals", but the test never
+                // enforced it — so every class on a non-HTMLElement base was being
+                // replaced, breaking markup/Observer upgrade for the common case).
+                const fragile = !!Namespace._FRAGILE_PROXY_SPEC[ifaceName];
+                if (desc.Declaration !== 'FUNCTION' && fragile
                     && !matchesInterface && baseTag && ifaceName !== 'HTMLElement' && node.tagName.toLowerCase() !== baseTag) {
                     const replacement = this.NS && this.URI
                         ? document.createElementNS(this.URI, baseTag) as unknown as Element
@@ -1697,14 +1825,25 @@ export namespace Namespace
                 try {
                     const userCtor = this.constructor as { name?: string; prototype?: object };
                     if (userCtor && userCtor !== (wrapped as unknown as { constructor: unknown })) {
-                        const custom = self.GetDescriptor(userCtor as new () => Element);
-                        if (custom && custom.Custom && custom.Tags && custom.Tags[0]) {
-                            // Only use the custom tag as nodeName for HTML namespace.
-                            // SVG/MathML/X3D need the native base tag for the engine
-                            // to actually render the element.
-                            if (!useNS) {
-                                tagToCreate = custom.Tags[0];
+                        // Walk UP the constructor chain to the nearest registered Custom in
+                        // this NS. The most-derived ctor of a subclass — e.g.
+                        // `class Y extends CustomElement {}` — is itself unregistered, so a
+                        // direct GetDescriptor(Y) misses and the element would be built under
+                        // the native interface tag ('div'). Its registered ancestor
+                        // (CustomElement) carries the real custom tag, so we climb until we
+                        // find it and create under THAT tag.
+                        let c: unknown = userCtor;
+                        while (c && typeof c === 'function'
+                            && c !== (wrapped as unknown) && c !== (native as unknown)) {
+                            const custom = self.GetDescriptor(c as new () => Element);
+                            if (custom && custom.Custom && custom.Tags && custom.Tags[0]) {
+                                // Only use the custom tag as nodeName for HTML namespace.
+                                // SVG/MathML/X3D need the native base tag for the engine
+                                // to actually render the element.
+                                if (!useNS) tagToCreate = custom.Tags[0];
+                                break;
                             }
+                            c = Object.getPrototypeOf(c);
                         }
                         if (userCtor.prototype) userProto = userCtor.prototype;
                     }
@@ -1770,6 +1909,14 @@ export namespace Namespace
                 const el = useNS && URI
                     ? document.createElementNS(URI, tagToCreate) as unknown as Element
                     : document.createElement(tagToCreate);
+
+                // Rename nodeName to the resolved tag (Component.js parity): for a
+                // subclass built above under its registered ancestor's custom tag, the
+                // node must report that custom tag, not the native interface's.
+                if (!useNS && tagToCreate !== baseTag) {
+                    try { Object.defineProperty(el, 'nodeName', { value: tagToCreate.toUpperCase(), configurable: true }); }
+                    catch { /* read-only in this engine — leave as-is */ }
+                }
 
                 // 3. Splice the user prototype onto the element
                 return Object.setPrototypeOf(el, userProto);

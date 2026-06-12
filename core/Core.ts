@@ -447,12 +447,40 @@ export function Define(
         console.warn(`Core.Define: base '${(base as { name?: string } | null | undefined)?.name ?? 'undefined'}' not found in any namespace — defaulting to html.`);
     }
 
+    // ── Core.Define's responsibility: hand the ctor to the namespace UNWRAPPED ──
+    // The namespace owns construction. It adapts a no-extends CLASS (createDynamicWrapper:
+    // re-home its prototype onto the interface + expose its constructor body) and builds
+    // the real element via the CORRECT Reflect.construct order — interface as the target,
+    // the user class as newTarget — so `this` is a real element, never an empty {}. We do
+    // NOT pre-wrap here (that double-wrapped) and we must NOT re-parent a no-extends class
+    // before delegating: it has to reach Namespace.Define still rooted at Function.prototype
+    // so `_isNoExtendsClass` detects it and the adapter runs. A FUNCTION or an own-super
+    // CLASS (native / registered-custom super) is re-parented onto the base so the chain is
+    // right — that path already worked and is untouched.
+    const isClass   = /^class[\s{]/.test(constructor.toString());
+    const noExtends = isClass && Object.getPrototypeOf(constructor) === Function.prototype;
+
+    const toDefine: new (...args: unknown[]) => Element = constructor;
+
+    if (!noExtends
+        && toDefine && (toDefine as { prototype?: object }).prototype
+        && Object.getPrototypeOf(toDefine) !== base)
+    {
+        try
+        {
+            Object.setPrototypeOf(toDefine, base);
+            const _cp = (toDefine as { prototype?: object }).prototype;
+            const _bp = (base as { prototype?: object }).prototype;
+            if (_cp && _bp && Object.getPrototypeOf(_cp) !== _bp) Object.setPrototypeOf(_cp, _bp);
+        }
+        catch { /* frozen / cyclic — leave as authored */ }
+    }
+
     // Delegate to the namespace's own Define.
-    if (ns && typeof ns.Define === 'function') return ns.Define(ct, constructor, base, style);
+    if (ns && typeof ns.Define === 'function') return ns.Define(ct, toDefine, base, style);
 
     // Fallback: minimal descriptor (robustness — shouldn't happen in practice).
     console.warn(`Core.Define: namespace '${ns.name}' has no Define() — using fallback.`);
-    const isClass = /^class[\s{]/.test(constructor.toString());
     // Capture the constructor prototype chain (name → constructor) so every
     // TypeDescriptor — defined or fallback — carries a consistent Chain Map.
     const chain = new Map<string, unknown>();
@@ -467,7 +495,7 @@ export function Define(
         Prototype   : constructor.prototype,
         Supported   : true,
         Defined     : true,
-        Declaration : isClass ? 'CLASS' : 'FUNCTION',
+        Declaration : /^class[\s{]/.test(constructor.toString()) ? 'CLASS' : 'FUNCTION',
         Type        : 'CUSTOM',
         Standard    : false,
         Custom      : true,
@@ -1570,6 +1598,92 @@ export function Extends(...classes: unknown[]): unknown
         } catch { /* native built-ins may resist — skip */ }
     }
     return classes[0];
+}
+
+/**
+ * Build a GENUINE derived class `class <name> extends Base { constructor(){ super();
+ * …original body } }` from a no-extends class, and RETURN it (the `CreaClasseEstesa`
+ * pattern). This is the ONE place AriannA evaluates a class source — isolated here so
+ * Core.Define can simulate `extends` for a class that doesn't declare one: super()
+ * builds the real element (Namespace.Create → createElementNS for SVG/MathML/X3D) and
+ * the original constructor body runs on it. A class that already extends, or a
+ * function, never reaches here (Core.Define re-parents those instead). If the source
+ * has no `constructor(){}`, the default derived constructor already calls super().
+ */
+export function ExtendClass(
+    Base : new (...a: unknown[]) => Element,
+    Source : new (...a: unknown[]) => Element,
+): new (...a: unknown[]) => Element
+{
+    const name = Source.name || 'AriannaExtended';
+
+    // Extract the original constructor body ONCE as a free-standing, super-less
+    // function. Used in two places: (1) here, applied on `this` right after super()
+    // builds the element on construction; (2) the markup-upgrade path (Update),
+    // applied on the live node. Best-effort: if it can't be parsed (private fields /
+    // strict CSP on Function), the element is still built by super() — no crash, and
+    // setup falls to build().
+    let bodyFn: ((this: Element, ...a: unknown[]) => void) | null = null;
+    try
+    {
+        const orig = Source.toString();
+        const cm   = /\bconstructor\s*\(([^)]*)\)\s*\{/.exec(orig);
+        if (cm)
+        {
+            let i = cm.index + cm[0].length;
+            let depth = 1;
+            const start = i;
+            for (; i < orig.length && depth > 0; i++)
+            {
+                const ch = orig[i];
+                if (ch === '{') depth++;
+                else if (ch === '}') depth--;
+            }
+            bodyFn = new Function(cm[1], orig.slice(start, i - 1)) as (this: Element, ...a: unknown[]) => void;
+        }
+    }
+    catch { /* private fields / super / CSP — no free-standing body */ }
+
+    // GENUINE derived class — `Base` is a closure variable, so `super()` ALWAYS runs
+    // and lets the namespace build the real element (Namespace.Create / patched native
+    // → createElementNS for SVG/MathML/X3D). No Function-string evaluation for the
+    // class itself, so this works even under a strict CSP. The original body then runs
+    // on `this` (the real element) — "Core.Define must also call super()", satisfied.
+    const Dynamic = class extends (Base as new (...a: unknown[]) => Element)
+    {
+        constructor(...args: unknown[])
+        {
+            super(...args);
+            if (bodyFn)
+            {
+                try { bodyFn.apply(this as unknown as Element, args); }
+                catch (e) { console.warn(`Core.ExtendClass: <${name}> body failed:`, e); }
+            }
+        }
+    } as unknown as new (...a: unknown[]) => Element;
+
+    try { Object.defineProperty(Dynamic, 'name', { value: name, configurable: true }); } catch { /* resists */ }
+
+    // Carry the original class's prototype methods onto the derived class so instances
+    // keep their API (the genuine `extends` only inherits Base's prototype otherwise).
+    try
+    {
+        for (const k of Object.getOwnPropertyNames(Source.prototype))
+        {
+            if (k === 'constructor') continue;
+            const d = Object.getOwnPropertyDescriptor(Source.prototype, k);
+            if (d) { try { Object.defineProperty((Dynamic as { prototype: object }).prototype, k, d); } catch { /* read-only */ } }
+        }
+    }
+    catch { /* non-enumerable host proto */ }
+
+    // Expose the body for the markup-upgrade path (Update applies it on the live node).
+    if (bodyFn)
+    {
+        try { Object.defineProperty(Dynamic, '__ariannaBody', { value: bodyFn, configurable: true }); } catch { /* resists */ }
+    }
+
+    return Dynamic;
 }
 
 // ── Property — enhanced reactive property descriptor ──────────────────────────

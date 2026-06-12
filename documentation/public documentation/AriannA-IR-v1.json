@@ -1,0 +1,663 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "AriannA v2 Master Unified IR Schema",
+    "description": "Schema JSON unico, semplificato e definitivo per l'Intermediate Representation (IR) di AriannA v2 secondo le specifiche strutturali di ridenominazione singola.",
+    "type": "object",
+    "properties": {
+        "Type": {
+            "$ref": "#/$defs/Type"
+        },
+        "Virtual": {
+            "$ref": "#/$defs/Virtual"
+        },
+        "Namespace": {
+            "$ref": "#/$defs/Namespace"
+        },
+        "Reactive": {
+            "$ref": "#/$defs/Reactive"
+        },
+        "Directive": {
+            "$ref": "#/$defs/Directive"
+        }
+    },
+    "required": [
+        "Type",
+        "Virtual",
+        "Namespace"
+    ],
+    "$defs": {
+        "Style": {
+            "type": "object",
+            "description": "Albero AST CSS unificato di AriannA con chiavi capitalizzate, pseudo-classi, keyframes e at-rules condizionali sotto un unico blocco.",
+            "properties": {
+                "Display": {
+                    "type": "string"
+                },
+                "Position": {
+                    "type": "string",
+                    "enum": [
+                        "static",
+                        "relative",
+                        "absolute",
+                        "fixed",
+                        "sticky"
+                    ]
+                },
+                "Top": {
+                    "type": "string"
+                },
+                "Right": {
+                    "type": "string"
+                },
+                "Bottom": {
+                    "type": "string"
+                },
+                "Left": {
+                    "type": "string"
+                },
+                "ZIndex": {
+                    "type": [
+                        "string",
+                        "integer"
+                    ]
+                },
+                "Float": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "left",
+                        "right"
+                    ]
+                },
+                "Clear": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "left",
+                        "right",
+                        "both"
+                    ]
+                },
+                "Visibility": {
+                    "type": "string",
+                    "enum": [
+                        "visible",
+                        "hidden",
+                        "collapse"
+                    ]
+                },
+                "Overflow": {
+                    "type": "string"
+                },
+                "OverflowX": {
+                    "type": "string"
+                },
+                "OverflowY": {
+                    "type": "string"
+                },
+                "Width": {
+                    "type": "string"
+                },
+                "Height": {
+                    "type": "string"
+                },
+                "MinWidth": {
+                    "type": "string"
+                },
+                "MinHeight": {
+                    "type": "string"
+                },
+                "MaxWidth": {
+                    "type": "string"
+                },
+                "MaxHeight": {
+                    "type": "string"
+                },
+                "Margin": {
+                    "type": "string"
+                },
+                "MarginTop": {
+                    "type": "string"
+                },
+                "MarginRight": {
+                    "type": "string"
+                },
+                "MarginBottom": {
+                    "type": "string"
+                },
+                "MarginLeft": {
+                    "type": "string"
+                },
+                "Padding": {
+                    "type": "string"
+                },
+                "PaddingTop": {
+                    "type": "string"
+                },
+                "PaddingRight": {
+                    "type": "string"
+                },
+                "PaddingBottom": {
+                    "type": "string"
+                },
+                "PaddingLeft": {
+                    "type": "string"
+                },
+                "Border": {
+                    "type": "string"
+                },
+                "BorderRadius": {
+                    "type": "string"
+                },
+                "BoxSizing": {
+                    "type": "string",
+                    "enum": [
+                        "content-box",
+                        "border-box"
+                    ]
+                },
+                "Flex": {
+                    "type": "string"
+                },
+                "FlexDirection": {
+                    "type": "string",
+                    "enum": [
+                        "row",
+                        "row-reverse",
+                        "column",
+                        "column-reverse"
+                    ]
+                },
+                "FlexWrap": {
+                    "type": "string",
+                    "enum": [
+                        "nowrap",
+                        "wrap",
+                        "wrap-reverse"
+                    ]
+                },
+                "FlexGrow": {
+                    "type": [
+                        "string",
+                        "number"
+                    ]
+                },
+                "FlexShrink": {
+                    "type": [
+                        "string",
+                        "number"
+                    ]
+                },
+                "FlexBasis": {
+                    "type": "string"
+                },
+                "JustifyContent": {
+                    "type": "string"
+                },
+                "AlignItems": {
+                    "type": "string"
+                },
+                "Gap": {
+                    "type": "string"
+                },
+                "GridTemplateColumns": {
+                    "type": "string"
+                },
+                "GridTemplateRows": {
+                    "type": "string"
+                },
+                "Color": {
+                    "type": "string"
+                },
+                "FontFamily": {
+                    "type": "string"
+                },
+                "FontSize": {
+                    "type": "string"
+                },
+                "FontWeight": {
+                    "type": "string"
+                },
+                "LineHeight": {
+                    "type": "string"
+                },
+                "TextAlign": {
+                    "type": "string"
+                },
+                "TextDecoration": {
+                    "type": "string"
+                },
+                "TextTransform": {
+                    "type": "string"
+                },
+                "Background": {
+                    "type": "string"
+                },
+                "BackgroundColor": {
+                    "type": "string"
+                },
+                "BackgroundLinearGradient": {
+                    "type": "string"
+                },
+                "Opacity": {
+                    "type": "string"
+                },
+                "BoxShadow": {
+                    "type": "string"
+                },
+                "Transform": {
+                    "type": "string"
+                },
+                "Transition": {
+                    "type": "string"
+                },
+                "Animation": {
+                    "type": "string"
+                },
+                "Charset": {
+                    "type": "string"
+                },
+                "Imports": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "Url": {
+                                "type": "string"
+                            },
+                            "Media": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "Url"
+                        ]
+                    }
+                },
+                "Pseudos": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "Type": {
+                                "type": "string",
+                                "enum": [
+                                    "pseudo-class",
+                                    "pseudo-element"
+                                ]
+                            },
+                            "Name": {
+                                "type": "string"
+                            }
+                        },
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "Keyframes": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "Media": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "Query": {
+                                "type": "string"
+                            },
+                            "Rules": {
+                                "type": "object",
+                                "additionalProperties": {
+                                    "$ref": "#/$defs/Style"
+                                }
+                            }
+                        },
+                        "required": [
+                            "Query",
+                            "Rules"
+                        ]
+                    }
+                },
+                "Supports": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "Condition": {
+                                "type": "string"
+                            },
+                            "Rules": {
+                                "type": "object",
+                                "additionalProperties": {
+                                    "$ref": "#/$defs/Style"
+                                }
+                            }
+                        },
+                        "required": [
+                            "Condition",
+                            "Rules"
+                        ]
+                    }
+                }
+            },
+            "additionalProperties": true
+        },
+        "Type": {
+            "type": "object",
+            "properties": {
+                "Name": {
+                    "type": "string"
+                },
+                "Tag": {
+                    "type": "string"
+                },
+                "Constructor": {
+                    "type": "string"
+                },
+                "Interface": {
+                    "type": "string",
+                    "enum": [
+                        "HTMLElement",
+                        "SVGElement",
+                        "MathMLElement"
+                    ]
+                },
+                "Template": {
+                    "type": "string"
+                },
+                "Css": {
+                    "$ref": "#/$defs/Style"
+                },
+                "Metadata": {
+                    "type": "object",
+                    "properties": {
+                        "IsCustomElement": {
+                            "type": "boolean"
+                        },
+                        "IsShadowSealed": {
+                            "type": "boolean"
+                        },
+                        "ObservedAttrs": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "required": [
+                        "IsCustomElement",
+                        "IsShadowSealed",
+                        "ObservedAttrs"
+                    ]
+                }
+            },
+            "required": [
+                "Name",
+                "Tag",
+                "Interface",
+                "Template",
+                "Css",
+                "Metadata"
+            ]
+        },
+        "Virtual": {
+            "type": "object",
+            "description": "Struttura Fiber lineare ed atomica del Virtual Node.",
+            "properties": {
+                "Id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "Type": {
+                    "type": "integer",
+                    "enum": [
+                        1,
+                        3
+                    ]
+                },
+                "Tag": {
+                    "type": "string"
+                },
+                "Text": {
+                    "type": "string"
+                },
+                "Attributes": {
+                    "type": "object"
+                },
+                "Properties": {
+                    "type": "object"
+                },
+                "Events": {
+                    "type": "object"
+                },
+                "Return": {
+                    "oneOf": [
+                        {
+                            "type": "null"
+                        },
+                        {
+                            "$ref": "#/$defs/Virtual"
+                        }
+                    ]
+                },
+                "Child": {
+                    "oneOf": [
+                        {
+                            "type": "null"
+                        },
+                        {
+                            "$ref": "#/$defs/Virtual"
+                        }
+                    ]
+                },
+                "Sibling": {
+                    "oneOf": [
+                        {
+                            "type": "null"
+                        },
+                        {
+                            "$ref": "#/$defs/Virtual"
+                        }
+                    ]
+                },
+                "Alternate": {
+                    "oneOf": [
+                        {
+                            "type": "null"
+                        },
+                        {
+                            "$ref": "#/$defs/Virtual"
+                        }
+                    ]
+                },
+                "EffectTag": {
+                    "type": "integer"
+                },
+                "MemoizedProps": {
+                    "type": "object"
+                },
+                "MemoizedState": {
+                    "type": "object"
+                },
+                "StateNode": {
+                    "type": "object"
+                },
+                "State": {
+                    "type": "object"
+                },
+                "States": {
+                    "type": "object"
+                },
+                "History": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "at": {
+                                "type": "integer"
+                            },
+                            "state": {
+                                "type": "object"
+                            }
+                        },
+                        "required": [
+                            "at",
+                            "state"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "Id",
+                "Type",
+                "Attributes",
+                "Properties"
+            ]
+        },
+        "Namespace": {
+            "type": "object",
+            "properties": {
+                "URI": {
+                    "type": "string",
+                    "format": "uri"
+                },
+                "NS": {
+                    "type": "boolean"
+                },
+                "Base": {
+                    "type": "string"
+                },
+                "Schema": {
+                    "type": "string"
+                },
+                "Documentation": {
+                    "type": "object",
+                    "properties": {
+                        "W3C": {
+                            "type": "string",
+                            "format": "uri"
+                        }
+                    },
+                    "required": [
+                        "W3C"
+                    ]
+                },
+                "Standard": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "Tags": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "required": [
+                            "Tags"
+                        ]
+                    }
+                },
+                "Custom": {
+                    "type": "object",
+                    "properties": {
+                        "Interfaces": {
+                            "type": "object"
+                        },
+                        "Tags": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "Interfaces",
+                        "Tags"
+                    ]
+                }
+            },
+            "required": [
+                "URI",
+                "NS",
+                "Base",
+                "Custom"
+            ]
+        },
+        "Reactive": {
+            "type": "object",
+            "properties": {
+                "SignalKey": {
+                    "type": "string"
+                },
+                "Sinks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "TargetNodeId": {
+                                "type": "string"
+                            },
+                            "TargetEffect": {
+                                "type": "string",
+                                "enum": [
+                                    "text",
+                                    "attribute",
+                                    "class",
+                                    "style"
+                                ]
+                            },
+                            "Expression": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "TargetNodeId",
+                            "TargetEffect",
+                            "Expression"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "SignalKey",
+                "Sinks"
+            ]
+        },
+        "Directive": {
+            "type": "object",
+            "properties": {
+                "Type": {
+                    "type": "string",
+                    "enum": [
+                        "if",
+                        "for",
+                        "model"
+                    ]
+                },
+                "Expression": {
+                    "type": "string"
+                },
+                "IterName": {
+                    "type": "string"
+                },
+                "AnchorId": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Type",
+                "Expression",
+                "AnchorId"
+            ]
+        }
+    }
+}
