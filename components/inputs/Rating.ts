@@ -13,7 +13,7 @@
  * Attrs:  max, value, readonly, disabled, icon, empty-icon
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -42,17 +42,17 @@ export class Rating extends Component('arianna-rating', HTMLElement, {}, {
 {
     build(_opts: RatingOptions = {})
     {
-        const max   = this.attrSignal('max');
-        const value = this.attrSignal('value');
-        const icon  = this.attrSignal('icon');
-        const emptyIcon = this.attrSignal('empty-icon');
+        const max   = this.attributeSignal('max');
+        const value = this.attributeSignal('value');
+        const icon  = this.attributeSignal('icon');
+        const emptyIcon = this.attributeSignal('empty-icon');
 
-        this.maxVal      = () => parseInt(max.get() ?? '5', 10) || 5;
-        this.currentVal  = () => parseFloat(value.get() ?? '0') || 0;
+        this.maxVal      = () => parseInt(max.Get() ?? '5', 10) || 5;
+        this.currentVal  = () => parseFloat(value.Get() ?? '0') || 0;
         this.isReadonly  = () => this.hasAttribute('readonly');
         this.isDisabled  = () => this.hasAttribute('disabled');
-        this.fullIcon    = () => icon.get() ?? '★';
-        this.unfilledIcon = () => emptyIcon.get() ?? '☆';
+        this.fullIcon    = () => icon.Get() ?? '★';
+        this.unfilledIcon = () => emptyIcon.Get() ?? '☆';
 
         this.stars = (): Star[] => {
             const m = this.maxVal();

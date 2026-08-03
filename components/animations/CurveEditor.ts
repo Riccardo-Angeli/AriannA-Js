@@ -22,7 +22,7 @@
  * embedded inside KeyframeEditor in 'split' mode.
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -78,14 +78,14 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
     build(): void {
         const self = this as unknown as {
             render(): HTMLElement;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('svg')) return;
 
-        const w = parseInt(self.attrSignal('width')?.peek()  ?? '720', 10) || 720;
-        const h = parseInt(self.attrSignal('height')?.peek() ?? '260', 10) || 260;
+        const w = parseInt(self.attributeSignal('width')?.Peek()  ?? '720', 10) || 720;
+        const h = parseInt(self.attributeSignal('height')?.Peek() ?? '260', 10) || 260;
         const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
         svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
         svg.setAttribute('width',  String(w));

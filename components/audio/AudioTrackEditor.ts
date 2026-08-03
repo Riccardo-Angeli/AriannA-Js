@@ -43,7 +43,7 @@
  *   arianna:editor-playhead  { beat }
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -102,7 +102,7 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const el = self.render();
@@ -115,24 +115,24 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
         el.appendChild(label);
         el.appendChild(grip);
 
-        const sStart  = self.attrSignal('start');
-        const sLen    = self.attrSignal('length');
-        const sLabel  = self.attrSignal('label');
-        const sColor  = self.attrSignal('color');
+        const sStart  = self.attributeSignal('start');
+        const sLen    = self.attributeSignal('length');
+        const sLabel  = self.attributeSignal('label');
+        const sColor  = self.attributeSignal('color');
 
         effect(() => {
-            const v = sStart?.get();
+            const v = sStart?.Get();
             if (v != null) this.start$.Set(parseFloat(v) || 0);
             el.style.left = `calc(${this.start$.Get()} * var(--beat-px, ${BEAT_PX_DEFAULT}px))`;
         });
         effect(() => {
-            const v = sLen?.get();
+            const v = sLen?.Get();
             if (v != null) this.length$.Set(parseFloat(v) || 1);
             el.style.width = `calc(${this.length$.Get()} * var(--beat-px, ${BEAT_PX_DEFAULT}px))`;
         });
-        effect(() => { label.textContent = sLabel?.get() ?? ''; });
+        effect(() => { label.textContent = sLabel?.Get() ?? ''; });
         effect(() => {
-            const c = sColor?.get() ?? this.color$.Get();
+            const c = sColor?.Get() ?? this.color$.Get();
             el.style.background = c || 'var(--ar-primary, #7eb8f7)';
         });
 
@@ -246,7 +246,7 @@ export class AudioTrack extends Component('arianna-audio-track', HTMLElement, {}
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const el = self.render();
@@ -258,8 +258,8 @@ export class AudioTrack extends Component('arianna-audio-track', HTMLElement, {}
 
         const name = document.createElement('span');
         name.className = 'at-name';
-        const sName = self.attrSignal('name');
-        effect(() => { name.textContent = sName?.get() ?? 'Track'; });
+        const sName = self.attributeSignal('name');
+        effect(() => { name.textContent = sName?.Get() ?? 'Track'; });
 
         const btnMute = document.createElement('button');
         btnMute.type = 'button'; btnMute.className = 'at-btn at-mute'; btnMute.textContent = 'M';
@@ -384,15 +384,15 @@ export class AudioTrackEditor extends Component('arianna-audio-track-editor', HT
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.ate-ruler')) return;
 
-        this.#bars        = parseInt(self.attrSignal('bars')?.peek()          ?? '16', 10) || 16;
-        this.#beatsPerBar = parseInt(self.attrSignal('beats-per-bar')?.peek() ?? '4',  10) || 4;
-        this.#beatPx      = parseInt(self.attrSignal('beat-px')?.peek()       ?? String(BEAT_PX_DEFAULT), 10) || BEAT_PX_DEFAULT;
+        this.#bars        = parseInt(self.attributeSignal('bars')?.Peek()          ?? '16', 10) || 16;
+        this.#beatsPerBar = parseInt(self.attributeSignal('beats-per-bar')?.Peek() ?? '4',  10) || 4;
+        this.#beatPx      = parseInt(self.attributeSignal('beat-px')?.Peek()       ?? String(BEAT_PX_DEFAULT), 10) || BEAT_PX_DEFAULT;
         root.style.setProperty('--beat-px', this.#beatPx + 'px');
 
         // Ruler (top bar with bar numbers)

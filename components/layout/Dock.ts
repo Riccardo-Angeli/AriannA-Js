@@ -32,7 +32,7 @@
  * Attrs:  style ('macos' | 'windows'), magnify, position ('bottom'|'left'|'right'), start-label
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -98,13 +98,13 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
 
     build(_opts: DockOptions = {})
     {
-        const styleAttr = this.attrSignal('variant');
-        const startLabel = this.attrSignal('start-label');
+        const styleAttr = this.attributeSignal('variant');
+        const startLabel = this.attributeSignal('start-label');
 
-        this.dockStyle    = () => (styleAttr.get() ?? 'macos') as DockStyle;
+        this.dockStyle    = () => (styleAttr.Get() ?? 'macos') as DockStyle;
         this.isMacOS      = () => this.dockStyle() === 'macos';
         this.isWindows    = () => this.dockStyle() === 'windows';
-        this.startBtnLabel = () => startLabel.get() ?? '';
+        this.startBtnLabel = () => startLabel.Get() ?? '';
 
         this.allItems = () => this.items$.Get();
         this.trayItems = () => this.tray$.Get();

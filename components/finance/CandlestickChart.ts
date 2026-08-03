@@ -23,7 +23,7 @@
  * Attrs: width, height, bull, bear
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -59,19 +59,19 @@ export class CandlestickChart extends Component('arianna-candlestick-chart', HTM
 
     build(_opts: CandlestickChartOptions = {})
     {
-        const wAttr = this.attrSignal('width');
-        const hAttr = this.attrSignal('height');
-        const bull  = this.attrSignal('bull');
-        const bear  = this.attrSignal('bear');
+        const wAttr = this.attributeSignal('width');
+        const hAttr = this.attributeSignal('height');
+        const bull  = this.attributeSignal('bull');
+        const bear  = this.attributeSignal('bear');
 
         this.svgHtml = (): string => {
             const data = this.data$.Get();
             if (!data.length) return '';
 
-            const w = parseInt(wAttr.get() ?? '600', 10) || 600;
-            const h = parseInt(hAttr.get() ?? '320', 10) || 320;
-            const bullColor = bull.get() || 'var(--arianna-bull, #26a69a)';
-            const bearColor = bear.get() || 'var(--arianna-bear, #ef5350)';
+            const w = parseInt(wAttr.Get() ?? '600', 10) || 600;
+            const h = parseInt(hAttr.Get() ?? '320', 10) || 320;
+            const bullColor = bull.Get() || 'var(--arianna-bull, #26a69a)';
+            const bearColor = bear.Get() || 'var(--arianna-bear, #ef5350)';
 
             const hi = Math.max(...data.map(d => d.h));
             const lo = Math.min(...data.map(d => d.l));

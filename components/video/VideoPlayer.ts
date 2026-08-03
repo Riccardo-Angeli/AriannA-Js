@@ -42,7 +42,7 @@
  *        show-controls, aspect-ratio, twitch-parent
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -176,13 +176,13 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
 
     build(_opts: VideoPlayerOptions = {})
     {
-        const sourceAttr = this.attrSignal('source');
-        const legacySrcAttr = this.attrSignal('src');
-        const posterAttr = this.attrSignal('poster');
-        const aspectAttr = this.attrSignal('aspect-ratio');
+        const sourceAttr = this.attributeSignal('source');
+        const legacySrcAttr = this.attributeSignal('src');
+        const posterAttr = this.attributeSignal('poster');
+        const aspectAttr = this.attributeSignal('aspect-ratio');
 
         this.stageStyle = () => {
-            const ar = aspectAttr.get() ?? '16/9';
+            const ar = aspectAttr.Get() ?? '16/9';
             return `aspect-ratio: ${ar}`;
         };
 
@@ -190,7 +190,7 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
         this.isEmbed   = () => this.provider$.Get() !== 'native';
         this.embedSrc  = () => this.#embed;
         this.nativeSrc = () => this.#source;
-        this.posterSrc = () => posterAttr.get() ?? '';
+        this.posterSrc = () => posterAttr.Get() ?? '';
 
         this.timeLabel = () => VideoPlayer.#formatTime(this.curTime$.Get());
         this.durLabel  = () => VideoPlayer.#formatTime(this.duration$.Get());
@@ -220,15 +220,15 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
         this.onFullscreen = () => { void this.toggleFullscreen(); };
 
         // Source signal: re-detect provider on attr change. effect() runs
-        // whenever any signal it reads (.get()) changes — we read both
+        // whenever any signal it reads (.Get()) changes — we read both
         // primary `source` and legacy `src`.
         effect(() => {
-            const v = sourceAttr.get();
+            const v = sourceAttr.Get();
             if (v) this.setSource(v);
         });
         effect(() => {
-            const v = legacySrcAttr.get();
-            if (v && !sourceAttr.peek()) this.setSource(v);
+            const v = legacySrcAttr.Get();
+            if (v && !sourceAttr.Peek()) this.setSource(v);
         });
 
         this.template = html`

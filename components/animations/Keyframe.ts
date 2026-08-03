@@ -23,7 +23,7 @@
  *   arianna:keyframe-move   { keyframe, frame, value }
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -85,7 +85,7 @@ export class Keyframe extends Component('arianna-keyframe', HTMLElement, {}, {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const el = self.render();
@@ -95,20 +95,20 @@ export class Keyframe extends Component('arianna-keyframe', HTMLElement, {}, {
         diamond.className = 'kf-diamond';
         el.appendChild(diamond);
 
-        const sFrame = self.attrSignal('frame');
-        const sValue = self.attrSignal('value');
-        const sInterp = self.attrSignal('interpolation');
+        const sFrame = self.attributeSignal('frame');
+        const sValue = self.attributeSignal('value');
+        const sInterp = self.attributeSignal('interpolation');
 
         effect(() => {
-            const v = sFrame?.get();
+            const v = sFrame?.Get();
             if (v != null) this.frame$.Set(parseFloat(v) || 0);
         });
         effect(() => {
-            const v = sValue?.get();
+            const v = sValue?.Get();
             if (v != null) this.value$.Set(parseFloat(v) || 0);
         });
         effect(() => {
-            const v = sInterp?.get();
+            const v = sInterp?.Get();
             if (v) this.interpolation$.Set(v as KeyframeInterpolation);
         });
 

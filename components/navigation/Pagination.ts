@@ -24,7 +24,7 @@
  * Attrs:  total, page-size, page, siblings
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -55,17 +55,17 @@ export class Pagination extends Component('arianna-pagination', HTMLElement, {},
         this.setAttribute('role', 'navigation');
         this.setAttribute('aria-label', 'Pagination');
 
-        const total    = this.attrSignal('total');
-        const pageSize = this.attrSignal('page-size');
-        const page     = this.attrSignal('page');
-        const siblings = this.attrSignal('siblings');
+        const total    = this.attributeSignal('total');
+        const pageSize = this.attributeSignal('page-size');
+        const page     = this.attributeSignal('page');
+        const siblings = this.attributeSignal('siblings');
 
         const totalPages = (): number => Math.ceil(
-            (parseInt(total.get() ?? '0', 10) || 0) /
-            (parseInt(pageSize.get() ?? '10', 10) || 10),
+            (parseInt(total.Get() ?? '0', 10) || 0) /
+            (parseInt(pageSize.Get() ?? '10', 10) || 10),
         );
-        const currentPage = (): number => Math.max(1, parseInt(page.get() ?? '1', 10) || 1);
-        const sibs       = (): number => parseInt(siblings.get() ?? '1', 10) || 1;
+        const currentPage = (): number => Math.max(1, parseInt(page.Get() ?? '1', 10) || 1);
+        const sibs       = (): number => parseInt(siblings.Get() ?? '1', 10) || 1;
 
         this.hasPages = () => totalPages() > 1;
         this.entries  = () => {

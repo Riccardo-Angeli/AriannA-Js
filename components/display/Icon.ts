@@ -22,7 +22,7 @@
  * Attrs:  src, size, color
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -43,13 +43,13 @@ export class Icon extends Component('arianna-icon', HTMLElement, {}, {
     {
         this.setAttribute('aria-hidden', 'true');
 
-        const src   = this.attrSignal('src');
-        const size  = this.attrSignal('size');
-        const color = this.attrSignal('color');
+        const src   = this.attributeSignal('src');
+        const size  = this.attributeSignal('size');
+        const color = this.attributeSignal('color');
 
         // Sizing + color reflected on host inline style
         const applyStyle = () => {
-            const s = parseInt(size.get() ?? '', 10);
+            const s = parseInt(size.Get() ?? '', 10);
             if (Number.isFinite(s) && s > 0) {
                 this.style.fontSize = s + 'px';
                 this.style.width    = s + 'px';
@@ -59,18 +59,18 @@ export class Icon extends Component('arianna-icon', HTMLElement, {}, {
                 this.style.width    = '';
                 this.style.height   = '';
             }
-            const c = color.get();
+            const c = color.Get();
             this.style.color = c ?? '';
         };
         applyStyle();
         this.addEventListener('arianna:attr-size',  applyStyle);
         this.addEventListener('arianna:attr-color', applyStyle);
 
-        this.isSvg    = () => (src.get() ?? '').trimStart().startsWith('<');
-        this.isText   = () => !!src.get() && !this.isSvg();
-        this.isSlotted = () => !src.get();
-        this.svgHtml  = () => src.get() ?? '';
-        this.textGlyph = () => src.get() ?? '';
+        this.isSvg    = () => (src.Get() ?? '').trimStart().startsWith('<');
+        this.isText   = () => !!src.Get() && !this.isSvg();
+        this.isSlotted = () => !src.Get();
+        this.svgHtml  = () => src.Get() ?? '';
+        this.textGlyph = () => src.Get() ?? '';
 
         this.template = html`
             <span a-if="this.isSvg()" a-html="this.svgHtml()"></span>

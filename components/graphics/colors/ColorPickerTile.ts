@@ -20,7 +20,7 @@
  * Attrs:  palette, color, show-recent, recent-max, show-input, columns, tile-size
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { html }      from '../../../core/Template.ts';
 import { Reactivity } from '../../../core/Reactive.ts';
 
@@ -91,11 +91,11 @@ export class ColorPickerTile extends Component('arianna-color-picker-tile', HTML
 
     build(_opts: ColorPickerTileOptions = {})
     {
-        const colsAttr = this.attrSignal('columns');
-        const tileSizeAttr = this.attrSignal('tile-size');
+        const colsAttr = this.attributeSignal('columns');
+        const tileSizeAttr = this.attributeSignal('tile-size');
 
-        this.cols = () => parseInt(colsAttr.get() ?? '8', 10) || 8;
-        this.size = () => parseInt(tileSizeAttr.get() ?? '28', 10) || 28;
+        this.cols = () => parseInt(colsAttr.Get() ?? '8', 10) || 8;
+        this.size = () => parseInt(tileSizeAttr.Get() ?? '28', 10) || 28;
         this.showRecent = () => this.getAttribute('show-recent') !== 'false';
         this.showInput  = () => this.getAttribute('show-input')  !== 'false';
 

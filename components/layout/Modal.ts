@@ -30,7 +30,7 @@
  * Attrs:  title, open, size, dismissable
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -50,10 +50,10 @@ export class Modal extends Component('arianna-modal', HTMLElement, {}, {
 {
     build(_opts: ModalOptions = {})
     {
-        const title = this.attrSignal('title');
+        const title = this.attributeSignal('title');
 
-        this.hasTitle      = () => !!title.get();
-        this.titleText     = () => title.get() ?? '';
+        this.hasTitle      = () => !!title.Get();
+        this.titleText     = () => title.Get() ?? '';
         this.onBackdrop    = () => {
             if (this.getAttribute('dismissable') !== 'false') this.close();
         };

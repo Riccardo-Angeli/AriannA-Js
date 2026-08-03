@@ -25,7 +25,7 @@
  *   arianna:track-hidden { track, value }
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -79,7 +79,7 @@ export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, 
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const el = self.render();
@@ -91,8 +91,8 @@ export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, 
 
         const name = document.createElement('span');
         name.className = 'at-name';
-        const sName = self.attrSignal('name');
-        effect(() => { name.textContent = sName?.get() ?? 'Channel'; });
+        const sName = self.attributeSignal('name');
+        effect(() => { name.textContent = sName?.Get() ?? 'Channel'; });
 
         const btnMute = document.createElement('button');
         btnMute.type = 'button'; btnMute.className = 'at-icon at-mute';
@@ -128,9 +128,9 @@ export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, 
         el.appendChild(lane);
 
         // Reactive group-class
-        const sGroup = self.attrSignal('group');
+        const sGroup = self.attributeSignal('group');
         effect(() => {
-            const g = sGroup?.get() ?? 'custom';
+            const g = sGroup?.Get() ?? 'custom';
             el.dataset.group = g;
         });
 

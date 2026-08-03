@@ -41,10 +41,10 @@ export class Header extends Component('arianna-header', HTMLElement, {}, {
 {
     build(_opts: HeaderOptions = {})
     {
-        const title = this.attrSignal('title');
+        const title = this.attributeSignal('title');
 
-        this.hasTitle  = () => !!title.get();
-        this.titleText = () => title.get() ?? '';
+        this.hasTitle  = () => !!title.Get();
+        this.titleText = () => title.Get() ?? '';
 
         this.template = html`
             <div class="ar-header__inner">

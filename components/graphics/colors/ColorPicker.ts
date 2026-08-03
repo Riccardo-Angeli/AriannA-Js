@@ -20,7 +20,7 @@
  * Attrs:  color, alpha, show-hex, show-rgb, show-hsl
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { html }      from '../../../core/Template.ts';
 import { Reactivity } from '../../../core/Reactive.ts';
 

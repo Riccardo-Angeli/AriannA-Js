@@ -13,7 +13,7 @@
  * Attrs: text, sublabel, level ('neutral' | 'info' | 'warning' | 'danger')
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -34,12 +34,12 @@ export class AlertBadge extends Component('arianna-alert-badge', HTMLElement, {}
 {
     build(_opts: AlertBadgeOptions = {})
     {
-        const text     = this.attrSignal('text');
-        const sublabel = this.attrSignal('sublabel');
+        const text     = this.attributeSignal('text');
+        const sublabel = this.attributeSignal('sublabel');
 
-        this.textVal     = () => text.get() ?? '';
-        this.subVal      = () => sublabel.get() ?? '';
-        this.hasSub      = () => !!sublabel.get();
+        this.textVal     = () => text.Get() ?? '';
+        this.subVal      = () => sublabel.Get() ?? '';
+        this.hasSub      = () => !!sublabel.Get();
 
         this.template = html`
             <span class="ar-alert__main">{{ this.textVal() }}</span>

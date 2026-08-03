@@ -19,7 +19,7 @@
  * Attrs:  width, height
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { Css } from '../../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
@@ -68,11 +68,11 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
 
     build(_opts: ShapeGradientEditorOptions = {})
     {
-        const wAttr = this.attrSignal('width');
-        const hAttr = this.attrSignal('height');
+        const wAttr = this.attributeSignal('width');
+        const hAttr = this.attributeSignal('height');
 
-        const w = () => parseInt(wAttr.get() ?? '320', 10) || 320;
-        const h = () => parseInt(hAttr.get() ?? '240', 10) || 240;
+        const w = () => parseInt(wAttr.Get() ?? '320', 10) || 320;
+        const h = () => parseInt(hAttr.Get() ?? '240', 10) || 240;
 
         this.canvasStyle = () => `width: ${w()}px; height: ${h()}px; position: relative; display: block`;
         this.dimW = () => String(w());

@@ -28,7 +28,7 @@
  */
 
 import { AudioComponent, type AudioComponentOptions } from './AudioComponent.ts';
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -94,7 +94,7 @@ export class ChannelStrip extends AudioComponent {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
@@ -106,8 +106,8 @@ export class ChannelStrip extends AudioComponent {
         // Label
         const label = document.createElement('div');
         label.className = 'cs-label';
-        const sName = self.attrSignal('name');
-        effect(() => { label.textContent = sName?.get() ?? 'Channel'; });
+        const sName = self.attributeSignal('name');
+        effect(() => { label.textContent = sName?.Get() ?? 'Channel'; });
 
         // VU meter (stereo, vertical)
         const meter = document.createElement('div');

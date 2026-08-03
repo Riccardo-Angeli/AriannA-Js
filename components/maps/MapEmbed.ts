@@ -42,7 +42,7 @@
  *   <arianna-apple-map center-lat="40.7128" center-lng="-74.0060"></arianna-apple-map>
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -86,18 +86,18 @@ export abstract class MapEmbed extends _mapEmbedBase('arianna-map-embed')
 {
     build(_opts: MapEmbedOptions = {})
     {
-        const centerLat   = this.attrSignal('center-lat');
-        const centerLng   = this.attrSignal('center-lng');
-        const zoom        = this.attrSignal('zoom');
-        const aspectRatio = this.attrSignal('aspect-ratio');
+        const centerLat   = this.attributeSignal('center-lat');
+        const centerLng   = this.attributeSignal('center-lng');
+        const zoom        = this.attributeSignal('zoom');
+        const aspectRatio = this.attributeSignal('aspect-ratio');
 
-        this.centerLatNum = () => parseFloat(centerLat.get() ?? String(DEFAULT_CENTER.lat));
-        this.centerLngNum = () => parseFloat(centerLng.get() ?? String(DEFAULT_CENTER.lng));
-        this.zoomNum      = () => parseInt(zoom.get() ?? '13', 10) || 13;
+        this.centerLatNum = () => parseFloat(centerLat.Get() ?? String(DEFAULT_CENTER.lat));
+        this.centerLngNum = () => parseFloat(centerLng.Get() ?? String(DEFAULT_CENTER.lng));
+        this.zoomNum      = () => parseInt(zoom.Get() ?? '13', 10) || 13;
         this.hasMarker    = () => this.getAttribute('marker') !== 'false';
 
         this.stageStyle = () => {
-            const ar = aspectRatio.get() ?? '16/9';
+            const ar = aspectRatio.Get() ?? '16/9';
             return `aspect-ratio: ${ar}`;
         };
 

@@ -26,7 +26,7 @@
  * Attrs:  value, min, max, locale, first-day, show-week-numbers, disabled
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -119,10 +119,10 @@ export class Calendar extends Component('arianna-calendar', HTMLElement, {}, {
 
     build(_opts: CalendarOptions = {})
     {
-        const value = this.attrSignal('value');
+        const value = this.attributeSignal('value');
 
         // Sync cursor to selected value on first build
-        const selected = parseDate(value.get());
+        const selected = parseDate(value.Get());
         if (selected) {
             this.cursor$.Set({ year: selected.getFullYear(), month: selected.getMonth() });
         }
@@ -157,7 +157,7 @@ export class Calendar extends Component('arianna-calendar', HTMLElement, {}, {
             const first = this.firstDayN();
             const min = parseDate(this.getAttribute('min'));
             const max = parseDate(this.getAttribute('max'));
-            const sel = parseDate(value.get());
+            const sel = parseDate(value.Get());
             const today = new Date();
 
             const firstOfMonth = new Date(c.year, c.month, 1);

@@ -100,19 +100,19 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
 
     build(_opts: CameraViewer3DOptions = {})
     {
-        const wAttr = this.attrSignal('width');
-        const hAttr = this.attrSignal('height');
-        const activeAttr  = this.attrSignal('active-pane');
-        const maxAttr     = this.attrSignal('maximized-pane');
+        const wAttr = this.attributeSignal('width');
+        const hAttr = this.attributeSignal('height');
+        const activeAttr  = this.attributeSignal('active-pane');
+        const maxAttr     = this.attributeSignal('maximized-pane');
 
         this.hostStyle = () => {
-            const w = wAttr.get() ?? '100%';
-            const h = hAttr.get() ?? '600px';
+            const w = wAttr.Get() ?? '100%';
+            const h = hAttr.Get() ?? '600px';
             return `width: ${w}; height: ${h}`;
         };
 
         this.gridCls = () => {
-            const m = maxAttr.get();
+            const m = maxAttr.Get();
             return 'ar-cv3d__grid' + (m ? ' ar-cv3d__grid--maximized ar-cv3d__grid--max-' + m : '');
         };
 
@@ -120,8 +120,8 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
         this.showLabels = () => this.getAttribute('show-labels') !== 'false';
 
         this.panes = (): Array<{ id: PaneId; label: string; cls: string; camLabel: string }> => {
-            const active = activeAttr.get();
-            const max    = maxAttr.get();
+            const active = activeAttr.Get();
+            const max    = maxAttr.Get();
             const cams = this.cameras$.Get();
             return PANE_INFO.map(p => ({
                 id: p.id,

@@ -29,7 +29,7 @@
  *        gateway, gateway-merchant-id, environment, button-color, button-type
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -81,17 +81,17 @@ export class GooglePay extends Component('arianna-google-pay', HTMLElement, {}, 
 
     build(_opts: GooglePayOptions = {} as GooglePayOptions)
     {
-        const colorAttr = this.attrSignal('button-color');
-        const typeAttr  = this.attrSignal('button-type');
+        const colorAttr = this.attributeSignal('button-color');
+        const typeAttr  = this.attributeSignal('button-type');
 
         this.btnCls = () => {
-            const color = colorAttr.get() ?? 'default';
-            const kind  = typeAttr.get()  ?? 'pay';
+            const color = colorAttr.Get() ?? 'default';
+            const kind  = typeAttr.Get()  ?? 'pay';
             return `ar-gpay__btn ar-gpay__btn--${color} ar-gpay__btn--${kind}`
                 + (this.busy$.Get() ? ' ar-gpay__btn--busy' : '');
         };
         this.btnLabel = () => {
-            const kind = typeAttr.get() ?? 'pay';
+            const kind = typeAttr.Get() ?? 'pay';
             switch (kind) {
                 case 'buy':       return 'Buy with';
                 case 'book':      return 'Book with';

@@ -36,7 +36,7 @@
  * Attrs: tracking-number, carrier (force), show-input, locale
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -97,27 +97,27 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
 
     build(_opts: TrackingMultiOptions = {})
     {
-        const numberAttr  = this.attrSignal('tracking-number');
-        const carrierAttr = this.attrSignal('carrier');
+        const numberAttr  = this.attributeSignal('tracking-number');
+        const carrierAttr = this.attributeSignal('carrier');
 
         this.showInput = () => this.getAttribute('show-input') !== 'false';
-        this.inputVal  = () => numberAttr.get() ?? '';
+        this.inputVal  = () => numberAttr.Get() ?? '';
 
         this.hasMultiple = () => {
             const cands = this.candidates$.Get();
-            const forced = carrierAttr.get();
+            const forced = carrierAttr.Get();
             return cands.length > 1 && !forced;
         };
 
         this.candidatesList = (): Array<{ id: CarrierId; name: string; selected: boolean }> => {
-            const sel = carrierAttr.get();
+            const sel = carrierAttr.Get();
             return this.candidates$.Get().map(id => ({
                 id, name: CARRIERS.find(c => c.id === id)!.name,
                 selected: sel === id,
             }));
         };
 
-        this.activeCarrier = () => carrierAttr.get() as CarrierId | null;
+        this.activeCarrier = () => carrierAttr.Get() as CarrierId | null;
 
         // ── Handlers ────────────────────────────────────────────────────
         this.onInput = (e: Event) => {

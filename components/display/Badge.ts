@@ -20,7 +20,7 @@
  * Attrs:  variant, dot, label
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -39,13 +39,13 @@ export class Badge extends Component('arianna-badge', HTMLElement, {}, {
 {
     build(_opts: BadgeOptions = {})
     {
-        const label = this.attrSignal('label');
-        const dot   = this.attrSignal('dot');
+        const label = this.attributeSignal('label');
+        const dot   = this.attributeSignal('dot');
 
-        this.isDot      = () => dot.get() !== null && dot.get() !== undefined;
-        this.labelText  = () => label.get() ?? '';
-        this.hasLabel   = () => !this.isDot() && !!label.get();
-        this.hasSlotted = () => !this.isDot() && !label.get();
+        this.isDot      = () => dot.Get() !== null && dot.Get() !== undefined;
+        this.labelText  = () => label.Get() ?? '';
+        this.hasLabel   = () => !this.isDot() && !!label.Get();
+        this.hasSlotted = () => !this.isDot() && !label.Get();
 
         this.template = html`
             <span a-if="this.hasLabel()">{{ this.labelText() }}</span>

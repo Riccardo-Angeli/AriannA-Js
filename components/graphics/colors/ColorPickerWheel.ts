@@ -14,7 +14,7 @@
  * Attrs:  value, size
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { html }      from '../../../core/Template.ts';
 import { Reactivity } from '../../../core/Reactive.ts';
 
@@ -45,9 +45,9 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
 
     build(_opts: ColorPickerWheelOptions = {})
     {
-        const sizeAttr = this.attrSignal('size');
+        const sizeAttr = this.attributeSignal('size');
 
-        this.dim = () => parseInt(sizeAttr.get() ?? '200', 10) || 200;
+        this.dim = () => parseInt(sizeAttr.Get() ?? '200', 10) || 200;
         this.viewBox = () => `0 0 ${this.dim()} ${this.dim()}`;
         this.dimStr  = () => String(this.dim());
 

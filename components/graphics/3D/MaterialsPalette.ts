@@ -26,7 +26,7 @@
  * Attrs:  kind
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { html }      from '../../../core/Template.ts';
 import { Reactivity } from '../../../core/Reactive.ts';
 
@@ -95,10 +95,10 @@ export class MaterialsPalette extends Component('arianna-materials-palette', HTM
 
     build(_opts: MaterialsPaletteOptions = {})
     {
-        const kindAttr = this.attrSignal('kind');
+        const kindAttr = this.attributeSignal('kind');
 
         this.kinds = () => {
-            const cur = kindAttr.get() ?? 'standard';
+            const cur = kindAttr.Get() ?? 'standard';
             return KIND_INFO.map(k => ({
                 kind: k.kind,
                 label: k.label,
@@ -107,7 +107,7 @@ export class MaterialsPalette extends Component('arianna-materials-palette', HTM
             }));
         };
 
-        this.curKind = (): MaterialKind => (kindAttr.get() as MaterialKind) ?? 'standard';
+        this.curKind = (): MaterialKind => (kindAttr.Get() as MaterialKind) ?? 'standard';
         this.hasColor      = () => !['normal'].includes(this.curKind());
         this.hasEmissive   = () => ['lambert', 'phong', 'standard', 'physical', 'toon'].includes(this.curKind());
         this.hasMetalness  = () => ['standard', 'physical'].includes(this.curKind());

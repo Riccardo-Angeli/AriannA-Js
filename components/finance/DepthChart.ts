@@ -20,7 +20,7 @@
  * Attrs: width, height
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -55,16 +55,16 @@ export class DepthChart extends Component('arianna-depth-chart', HTMLElement, {}
 
     build(_opts: DepthChartOptions = {})
     {
-        const wAttr = this.attrSignal('width');
-        const hAttr = this.attrSignal('height');
+        const wAttr = this.attributeSignal('width');
+        const hAttr = this.attributeSignal('height');
 
         this.svgHtml = (): string => {
             const bids = this.bids$.Get();
             const asks = this.asks$.Get();
             if (!bids.length || !asks.length) return '';
 
-            const w = parseInt(wAttr.get() ?? '600', 10) || 600;
-            const h = parseInt(hAttr.get() ?? '300', 10) || 300;
+            const w = parseInt(wAttr.Get() ?? '600', 10) || 600;
+            const h = parseInt(hAttr.Get() ?? '300', 10) || 300;
 
             const pad = { l: 60, r: 20, t: 20, b: 30 };
             const W = w - pad.l - pad.r;

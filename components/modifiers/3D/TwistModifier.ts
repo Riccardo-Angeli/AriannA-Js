@@ -18,7 +18,7 @@
  * Attrs (declarative): for, angle, axis, enabled
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { Modifier3D, Modifier3DElement, _cloneGeom, _recomputeNormals, type MeshLike } from './Base.ts';
 
 export class TwistModifier extends Modifier3D {

@@ -51,28 +51,28 @@ export class Splitter extends Component('arianna-splitter', HTMLElement, {}, {
 {
     build(_opts: SplitterOptions = {})
     {
-        const direction = this.attrSignal('direction');
-        const ratio     = this.attrSignal('ratio');
+        const direction = this.attributeSignal('direction');
+        const ratio     = this.attributeSignal('ratio');
 
         const clampedRatio = (): number => {
-            const r = parseFloat(ratio.get() ?? '0.5');
+            const r = parseFloat(ratio.Get() ?? '0.5');
             return Math.max(0.05, Math.min(0.95, Number.isFinite(r) ? r : 0.5));
         };
 
         this.paneAStyle = (): Record<string, string> => {
             const r   = clampedRatio() * 100;
-            const dir = direction.get() ?? 'horizontal';
+            const dir = direction.Get() ?? 'horizontal';
             return dir === 'horizontal' ? { width: r + '%' } : { height: r + '%' };
         };
         this.paneBStyle = (): Record<string, string> => {
             const r   = (1 - clampedRatio()) * 100;
-            const dir = direction.get() ?? 'horizontal';
+            const dir = direction.Get() ?? 'horizontal';
             return dir === 'horizontal' ? { width: r + '%' } : { height: r + '%' };
         };
 
         this.onHandleDown = (e: MouseEvent) => {
             e.preventDefault();
-            const isH  = (direction.get() ?? 'horizontal') === 'horizontal';
+            const isH  = (direction.Get() ?? 'horizontal') === 'horizontal';
             const rect = this.getBoundingClientRect();
             const minA = parseInt(this.getAttribute('min-a') ?? '60', 10) || 60;
             const minB = parseInt(this.getAttribute('min-b') ?? '60', 10) || 60;

@@ -18,7 +18,7 @@
  * Attrs: width, height, color
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -51,16 +51,16 @@ export class Sparkline extends Component('arianna-sparkline', HTMLElement, {}, {
 
     build(_opts: SparklineOptions = {})
     {
-        const w = this.attrSignal('width');
-        const h = this.attrSignal('height');
-        const c = this.attrSignal('color');
+        const w = this.attributeSignal('width');
+        const h = this.attributeSignal('height');
+        const c = this.attributeSignal('color');
 
         this.svgHtml = (): string => {
             const data = this.data$.Get();
             if (!data.length) return '';
-            const W = parseInt(w.get() ?? '100', 10) || 100;
-            const H = parseInt(h.get() ?? '30', 10)  || 30;
-            const explicit = c.get();
+            const W = parseInt(w.Get() ?? '100', 10) || 100;
+            const H = parseInt(h.Get() ?? '30', 10)  || 30;
+            const explicit = c.Get();
             const auto = data[data.length - 1] >= data[0]
                 ? 'var(--arianna-bull, #26a69a)'
                 : 'var(--arianna-bear, #ef5350)';

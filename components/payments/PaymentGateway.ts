@@ -52,7 +52,7 @@
  * Attrs: amount, currency, title
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -132,9 +132,9 @@ export class PaymentGateway extends Component('arianna-payment-gateway', HTMLEle
 
     build(_opts: PaymentGatewayOptions = {} as PaymentGatewayOptions)
     {
-        const titleAttr = this.attrSignal('title');
+        const titleAttr = this.attributeSignal('title');
 
-        this.headerTitle = () => titleAttr.get() ?? 'Choose how to pay';
+        this.headerTitle = () => titleAttr.Get() ?? 'Choose how to pay';
 
         this.methodList = (): Array<{ id: PaymentMethodId; label: string; icon: string; cls: string; selected: boolean }> => {
             const cfg = this.methods$.Get();

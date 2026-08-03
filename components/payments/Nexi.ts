@@ -20,7 +20,7 @@
  * Attrs: redirect-url, amount, currency, target
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -40,12 +40,12 @@ export class Nexi extends Component('arianna-nexi', HTMLElement, {}, {
 {
     build(_opts: NexiOptions = {} as NexiOptions)
     {
-        const amountAttr = this.attrSignal('amount');
-        const currencyAttr = this.attrSignal('currency');
+        const amountAttr = this.attributeSignal('amount');
+        const currencyAttr = this.attributeSignal('currency');
 
         this.btnLabel = () => {
-            const a = parseFloat(amountAttr.get() ?? '0') || 0;
-            const c = currencyAttr.get() ?? 'EUR';
+            const a = parseFloat(amountAttr.Get() ?? '0') || 0;
+            const c = currencyAttr.Get() ?? 'EUR';
             return `Pay ${c} ${a.toFixed(2)} with Nexi`;
         };
 

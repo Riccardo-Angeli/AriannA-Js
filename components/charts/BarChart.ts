@@ -21,7 +21,7 @@
  *   arianna:chart-bar-click { datum, index }
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -85,14 +85,14 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
     build(): void {
         const self = this as unknown as {
             render(): HTMLElement;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('svg')) return;
 
-        const w = parseInt(self.attrSignal('width')?.peek()  ?? '480', 10) || 480;
-        const h = parseInt(self.attrSignal('height')?.peek() ?? '280', 10) || 280;
+        const w = parseInt(self.attributeSignal('width')?.Peek()  ?? '480', 10) || 480;
+        const h = parseInt(self.attributeSignal('height')?.Peek() ?? '280', 10) || 280;
         const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
         svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
         svg.setAttribute('width',  String(w));
@@ -113,7 +113,7 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
         };
         const svg = this.#svg;
         if (!svg) return;
@@ -125,17 +125,17 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
         const data = this.data$.Peek();
         if (!data.length) return;
 
-        const showGrid   = self.attrSignal('show-grid')?.peek() !== 'false';
-        const showValues = self.attrSignal('show-values')?.peek() === 'true';
-        const barColor   = self.attrSignal('bar-color')?.peek() ?? '';
+        const showGrid   = self.attributeSignal('show-grid')?.Peek() !== 'false';
+        const showValues = self.attributeSignal('show-values')?.Peek() === 'true';
+        const barColor   = self.attributeSignal('bar-color')?.Peek() ?? '';
         const cssBarColor = barColor || (getComputedStyle(root).getPropertyValue('--ar-primary').trim() || '#7eb8f7');
 
         const padL = 40, padR = 12, padT = 12, padB = 28;
         const plotW = w - padL - padR;
         const plotH = h - padT - padB;
 
-        const userMin = parseFloat(self.attrSignal('y-min')?.peek() ?? '');
-        const userMax = parseFloat(self.attrSignal('y-max')?.peek() ?? '');
+        const userMin = parseFloat(self.attributeSignal('y-min')?.Peek() ?? '');
+        const userMax = parseFloat(self.attributeSignal('y-max')?.Peek() ?? '');
         const dataMax = Math.max(...data.map(d => d.value));
         const dataMin = Math.min(...data.map(d => d.value));
         const yMax = isFinite(userMax) ? userMax : Math.max(0, dataMax) * 1.1;

@@ -19,7 +19,7 @@
  * Attrs:  color, alpha, size
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { html }      from '../../../core/Template.ts';
 import { Reactivity } from '../../../core/Reactive.ts';
 
@@ -93,9 +93,9 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
 
     build(_opts: ColorPickerSquareOptions = {})
     {
-        const sizeAttr = this.attrSignal('size');
+        const sizeAttr = this.attributeSignal('size');
 
-        this.dim = () => parseInt(sizeAttr.get() ?? '220', 10) || 220;
+        this.dim = () => parseInt(sizeAttr.Get() ?? '220', 10) || 220;
         this.dimStyle = () => `width:${this.dim()}px; height:${this.dim()}px`;
         this.hueDimStyle = () => `height:${this.dim()}px`;
         this.showAlpha = () => this.hasAttribute('alpha');

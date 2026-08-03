@@ -22,7 +22,7 @@
  *   <arianna-transport-bar duration="217" current="42"></arianna-transport-bar>
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -91,7 +91,7 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
@@ -144,18 +144,18 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
         vol.value = '1000';
 
         // Visibility controls
-        const sShowVol  = self.attrSignal('show-volume');
-        const sShowStop = self.attrSignal('show-stop');
-        const sShowSkip = self.attrSignal('show-skip');
+        const sShowVol  = self.attributeSignal('show-volume');
+        const sShowStop = self.attributeSignal('show-stop');
+        const sShowSkip = self.attributeSignal('show-skip');
         effect(() => {
-            btnSkipBack.style.display = (sShowSkip?.get() != null) ? '' : 'none';
-            btnSkipFwd .style.display = (sShowSkip?.get() != null) ? '' : 'none';
+            btnSkipBack.style.display = (sShowSkip?.Get() != null) ? '' : 'none';
+            btnSkipFwd .style.display = (sShowSkip?.Get() != null) ? '' : 'none';
         });
         effect(() => {
-            btnStop.style.display = (sShowStop?.get() === 'false') ? 'none' : '';
+            btnStop.style.display = (sShowStop?.Get() === 'false') ? 'none' : '';
         });
         effect(() => {
-            vol.style.display = (sShowVol?.get() === 'false') ? 'none' : '';
+            vol.style.display = (sShowVol?.Get() === 'false') ? 'none' : '';
         });
 
         // Reactive bindings

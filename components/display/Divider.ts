@@ -20,7 +20,7 @@
  * Attrs:  orientation, variant, label
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -40,10 +40,10 @@ export class Divider extends Component('arianna-divider', HTMLElement, {}, {
     build(_opts: DividerOptions = {})
     {
         this.setAttribute('role', 'separator');
-        const label = this.attrSignal('label');
+        const label = this.attributeSignal('label');
 
-        this.hasLabel  = () => !!label.get();
-        this.labelText = () => label.get() ?? '';
+        this.hasLabel  = () => !!label.Get();
+        this.labelText = () => label.Get() ?? '';
 
         this.template = html`
             <span class="ar-divider__line"></span>

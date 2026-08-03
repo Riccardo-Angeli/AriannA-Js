@@ -47,17 +47,17 @@ export class Chip extends Component('arianna-chip', HTMLElement, {}, {
 {
     build(_opts: ChipOptions = {})
     {
-        const label     = this.attrSignal('label');
-        const icon      = this.attrSignal('icon');
-        const avatar    = this.attrSignal('avatar');
+        const label     = this.attributeSignal('label');
+        const icon      = this.attributeSignal('icon');
+        const avatar    = this.attributeSignal('avatar');
 
-        this.hasAvatar = () => !!avatar.get();
-        this.hasIcon   = () => !!icon.get() && !avatar.get();
-        this.hasLabel  = () => !!label.get();
+        this.hasAvatar = () => !!avatar.Get();
+        this.hasIcon   = () => !!icon.Get() && !avatar.Get();
+        this.hasLabel  = () => !!label.Get();
         this.isDeletable = () => this.hasAttribute('deletable');
-        this.avatarText  = () => (avatar.get() ?? '').slice(0, 2).toUpperCase();
-        this.iconText    = () => icon.get() ?? '';
-        this.labelText   = () => label.get() ?? '';
+        this.avatarText  = () => (avatar.Get() ?? '').slice(0, 2).toUpperCase();
+        this.iconText    = () => icon.Get() ?? '';
+        this.labelText   = () => label.Get() ?? '';
 
         this.onDelete = (e: Event) => {
             e.stopPropagation();

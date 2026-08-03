@@ -33,13 +33,13 @@ export class Switch extends Component('arianna-switch', HTMLElement, {}, {
 {
     build(_opts: SwitchOptions = {})
     {
-        const label = this.attrSignal('label');
-        const pos   = this.attrSignal('label-position');
+        const label = this.attributeSignal('label');
+        const pos   = this.attributeSignal('label-position');
 
-        this.hasLabel    = () => !!label.get();
-        this.labelText   = () => label.get() ?? '';
-        this.labelLeft   = () => pos.get() === 'left' && !!label.get();
-        this.labelRight  = () => pos.get() !== 'left' && !!label.get();
+        this.hasLabel    = () => !!label.Get();
+        this.labelText   = () => label.Get() ?? '';
+        this.labelLeft   = () => pos.Get() === 'left' && !!label.Get();
+        this.labelRight  = () => pos.Get() !== 'left' && !!label.Get();
         this.isChecked   = () => this.hasAttribute('checked');
         this.isDisabled  = () => this.hasAttribute('disabled');
 

@@ -12,7 +12,7 @@
  * Attrs (declarative): for, pos-grid, rot-grid-deg, enabled
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { Modifier3D, Modifier3DElement, type MeshLike } from './Base.ts';
 
 export class SnapModifier extends Modifier3D {

@@ -43,15 +43,15 @@ export class ProgressCircular extends Component('arianna-progress-circular', HTM
 {
     build(_opts: ProgressCircularOptions = {})
     {
-        const size    = this.attrSignal('size');
-        const sw      = this.attrSignal('stroke-width');
-        const value   = this.attrSignal('value');
-        const variant = this.attrSignal('variant');
+        const size    = this.attributeSignal('size');
+        const sw      = this.attributeSignal('stroke-width');
+        const value   = this.attributeSignal('value');
+        const variant = this.attributeSignal('variant');
 
-        const sizePx      = () => parseInt(size.get() ?? '48', 10) || 48;
-        const strokePx    = () => parseInt(sw.get()   ?? '4',  10) || 4;
+        const sizePx      = () => parseInt(size.Get() ?? '48', 10) || 48;
+        const strokePx    = () => parseInt(sw.Get()   ?? '4',  10) || 4;
         const valueNum    = () => {
-            const n = parseFloat(value.get() ?? '0');
+            const n = parseFloat(value.Get() ?? '0');
             return Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0));
         };
         const radius      = () => (sizePx() - strokePx()) / 2;
@@ -65,7 +65,7 @@ export class ProgressCircular extends Component('arianna-progress-circular', HTM
                 warning: 'var(--arianna-warning, #d29922)',
                 danger : 'var(--arianna-danger,  #cf222e)',
             };
-            return m[variant.get() ?? 'default'] ?? m.default;
+            return m[variant.Get() ?? 'default'] ?? m.default;
         };
 
         this.isIndet     = () => this.hasAttribute('indeterminate');

@@ -44,7 +44,7 @@
  *         Tabs   → active
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -65,10 +65,10 @@ export class Tab extends Component('arianna-tab', HTMLElement, {}, {
 {
     build(_opts: TabOptions = {})
     {
-        const label = this.attrSignal('label');
+        const label = this.attributeSignal('label');
 
-        this.labelText = () => label.get() ?? '';
-        this.hasLabel  = () => !!label.get();
+        this.labelText = () => label.Get() ?? '';
+        this.hasLabel  = () => !!label.Get();
         this.onClick   = () => {
             if (this.hasAttribute('disabled')) return;
             this.dispatchEvent(new CustomEvent('arianna:tab-select', {

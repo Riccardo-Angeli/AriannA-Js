@@ -32,7 +32,7 @@
  * Attrs:  message, variant, duration, position, action
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -95,15 +95,15 @@ export class Snackbar extends Component('arianna-snackbar', HTMLElement, {}, {
 
     build(_opts: SnackbarOptions = {})
     {
-        const message = this.attrSignal('message');
-        const action  = this.attrSignal('action');
+        const message = this.attributeSignal('message');
+        const action  = this.attributeSignal('action');
 
         this.style.display = 'none';
 
-        this.messageText = () => message.get() ?? '';
-        this.hasMessage  = () => !!message.get();
-        this.actionText  = () => action.get() ?? '';
-        this.hasAction   = () => !!action.get();
+        this.messageText = () => message.Get() ?? '';
+        this.hasMessage  = () => !!message.Get();
+        this.actionText  = () => action.Get() ?? '';
+        this.hasAction   = () => !!action.Get();
 
         this.onActionClick = () => {
             this.dispatchEvent(new CustomEvent('arianna:action', { bubbles: true, detail: {} }));

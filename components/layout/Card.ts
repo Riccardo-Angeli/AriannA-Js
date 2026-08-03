@@ -53,10 +53,10 @@ export class Card extends Component('arianna-card', HTMLElement, {}, {
 {
     build(_opts: CardOptions = {})
     {
-        const title = this.attrSignal('title');
+        const title = this.attributeSignal('title');
 
-        this.hasTitle      = () => !!title.get();
-        this.titleText     = () => title.get() ?? '';
+        this.hasTitle      = () => !!title.Get();
+        this.titleText     = () => title.Get() ?? '';
         this.isInteractive = () => this.hasAttribute('interactive');
         this.onCardClick   = () => {
             if (!this.isInteractive()) return;

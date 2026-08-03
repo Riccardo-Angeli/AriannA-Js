@@ -28,7 +28,7 @@
  *   shipments/    — shipment trackers
  *   video/        — VideoPlayer
  *
- * The AriannA component surface (`attrSignal`, `fire`, `render`, `Sheet`,
+ * The AriannA component surface (`attributeSignal`, `fire`, `render`, `Sheet`,
  * `template`, lifecycle hooks) is declared by the `AriannaElement` interface
  * in `core/Components.ts` itself — the factory's return type uses it, so
  * subclasses inherit the surface automatically with no separate ambient
@@ -117,4 +117,4 @@ export {
 } from './graphics/index.ts';
 
 // Re-export the colour utility functions (not classes)
-export { parseHex, rgbToHex, rgbToHsl, hslToRgb } from './graphics/colors/ColorPicker.ts';
+export { parseHexRgba, rgbToHex, rgbToHsl, hslToRgb } from './graphics/colors/ColorPicker.ts';

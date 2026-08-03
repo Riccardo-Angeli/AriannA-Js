@@ -216,26 +216,26 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.rte-wrap')) return;
 
         // Re-read attrs (may override constructor opts if set via markup)
-        const sPlaceholder = self.attrSignal('placeholder');
-        const sMinH        = self.attrSignal('min-height');
-        const sMaxH        = self.attrSignal('max-height');
-        const sSpell       = self.attrSignal('spellcheck');
-        const sMd          = self.attrSignal('markdown');
-        const sValue       = self.attrSignal('value');
+        const sPlaceholder = self.attributeSignal('placeholder');
+        const sMinH        = self.attributeSignal('min-height');
+        const sMaxH        = self.attributeSignal('max-height');
+        const sSpell       = self.attributeSignal('spellcheck');
+        const sMd          = self.attributeSignal('markdown');
+        const sValue       = self.attributeSignal('value');
 
-        if (sPlaceholder?.peek()) this.#opts.placeholder = sPlaceholder.peek() ?? this.#opts.placeholder;
-        if (sMinH?.peek())        this.#opts.minHeight = parseInt(sMinH.peek() ?? '150', 10) || 150;
-        if (sMaxH?.peek())        this.#opts.maxHeight = parseInt(sMaxH.peek() ?? '0', 10) || Number.POSITIVE_INFINITY;
-        if (sSpell?.peek() === 'false') this.#opts.spellcheck = false;
-        if (sMd?.peek()    === 'false') this.#opts.markdown   = false;
-        if (sValue?.peek()) this.#opts.value = sValue.peek() ?? '';
+        if (sPlaceholder?.Peek()) this.#opts.placeholder = sPlaceholder.Peek() ?? this.#opts.placeholder;
+        if (sMinH?.Peek())        this.#opts.minHeight = parseInt(sMinH.Peek() ?? '150', 10) || 150;
+        if (sMaxH?.Peek())        this.#opts.maxHeight = parseInt(sMaxH.Peek() ?? '0', 10) || Number.POSITIVE_INFINITY;
+        if (sSpell?.Peek() === 'false') this.#opts.spellcheck = false;
+        if (sMd?.Peek()    === 'false') this.#opts.markdown   = false;
+        if (sValue?.Peek()) this.#opts.value = sValue.Peek() ?? '';
 
         const wrap = document.createElement('div');
         wrap.className = 'rte-wrap';

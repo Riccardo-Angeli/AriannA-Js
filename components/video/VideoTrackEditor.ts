@@ -42,7 +42,7 @@
  * Attrs: duration, time, tracks (count), pixels-per-second, snap-ms
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -102,13 +102,13 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
 
     build(_opts: object = {})
     {
-        const durAttr = this.attrSignal('duration');
-        const tracksAttr = this.attrSignal('tracks');
-        const ppsAttr = this.attrSignal('pixels-per-second');
+        const durAttr = this.attributeSignal('duration');
+        const tracksAttr = this.attributeSignal('tracks');
+        const ppsAttr = this.attributeSignal('pixels-per-second');
 
-        this.duration = () => parseFloat(durAttr.get() ?? '60') || 60;
-        this.trackCount = () => parseInt(tracksAttr.get() ?? '2', 10) || 2;
-        this.pps = () => parseFloat(ppsAttr.get() ?? '20') || 20;
+        this.duration = () => parseFloat(durAttr.Get() ?? '60') || 60;
+        this.trackCount = () => parseInt(tracksAttr.Get() ?? '2', 10) || 2;
+        this.pps = () => parseFloat(ppsAttr.Get() ?? '20') || 20;
         this.snapMs = () => parseInt(this.getAttribute('snap-ms') ?? '100', 10) || 100;
 
         this.totalWidth = () => `${this.duration() * this.pps()}px`;

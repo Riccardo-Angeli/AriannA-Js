@@ -18,7 +18,7 @@
  *   arianna:chart-point-hover { series, point, index }
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -82,14 +82,14 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
     build(): void {
         const self = this as unknown as {
             render(): HTMLElement;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('svg')) return;
 
-        const w = parseInt(self.attrSignal('width')?.peek()  ?? '480', 10) || 480;
-        const h = parseInt(self.attrSignal('height')?.peek() ?? '240', 10) || 240;
+        const w = parseInt(self.attributeSignal('width')?.Peek()  ?? '480', 10) || 480;
+        const h = parseInt(self.attributeSignal('height')?.Peek() ?? '240', 10) || 240;
         const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
         svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
         svg.setAttribute('width',  String(w));
@@ -110,7 +110,7 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
         };
         const svg = this.#svg;
         if (!svg) return;
@@ -122,8 +122,8 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
         const series = this.series$.Peek();
         if (!series.length) return;
 
-        const showGrid = self.attrSignal('show-grid')?.peek() !== 'false';
-        const showDots = self.attrSignal('show-dots')?.peek() != null;
+        const showGrid = self.attributeSignal('show-grid')?.Peek() !== 'false';
+        const showDots = self.attributeSignal('show-dots')?.Peek() != null;
         const fillArea = root.hasAttribute('area');
         const smooth   = root.hasAttribute('smooth');
 

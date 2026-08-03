@@ -57,15 +57,15 @@ export class PnLChart extends Component('arianna-pnl-chart', HTMLElement, {}, {
 
     build(_opts: PnLChartOptions = {})
     {
-        const wAttr = this.attrSignal('width');
-        const hAttr = this.attrSignal('height');
+        const wAttr = this.attributeSignal('width');
+        const hAttr = this.attributeSignal('height');
 
         this.svgHtml = (): string => {
             const data = this.data$.Get();
             if (!data.length) return '';
 
-            const w = parseInt(wAttr.get() ?? '500', 10) || 500;
-            const h = parseInt(hAttr.get() ?? '250', 10) || 250;
+            const w = parseInt(wAttr.Get() ?? '500', 10) || 500;
+            const h = parseInt(hAttr.Get() ?? '250', 10) || 250;
 
             const pad = { l: 70, r: 20, t: 20, b: 40 };
             const W = w - pad.l - pad.r;

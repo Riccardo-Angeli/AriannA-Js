@@ -69,15 +69,15 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
 
     build(_opts: LineChartOptions = {})
     {
-        const wAttr = this.attrSignal('width');
-        const hAttr = this.attrSignal('height');
+        const wAttr = this.attributeSignal('width');
+        const hAttr = this.attributeSignal('height');
 
         this.svgHtml = (): string => {
             const series = this.series$.Get();
             if (!series.length) return '';
 
-            const w = parseInt(wAttr.get() ?? '600', 10) || 600;
-            const h = parseInt(hAttr.get() ?? '300', 10) || 300;
+            const w = parseInt(wAttr.Get() ?? '600', 10) || 600;
+            const h = parseInt(hAttr.Get() ?? '300', 10) || 300;
 
             const pad = { l: 55, r: 20, t: 20, b: 36 };
             const W = w - pad.l - pad.r;

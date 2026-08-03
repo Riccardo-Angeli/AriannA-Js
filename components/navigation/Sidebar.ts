@@ -47,7 +47,7 @@
  *   persist, storage-key, active, aria-label
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -126,9 +126,9 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
             this.setAttribute('aria-label', 'Site navigation');
         }
 
-        const orientation = this.attrSignal('orientation');
-        const collapsed   = this.attrSignal('collapsed');
-        const active      = this.attrSignal('active');
+        const orientation = this.attributeSignal('orientation');
+        const collapsed   = this.attributeSignal('collapsed');
+        const active      = this.attributeSignal('active');
 
         // Restore persisted width on first mount if `persist` is set
         if (this.hasAttribute('persist')) {
@@ -141,7 +141,7 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
 
         // Apply width style reactively
         const applyWidth = () => {
-            const isCollapsed = collapsed.get() !== null && this.getAttribute('collapsed') !== null;
+            const isCollapsed = collapsed.Get() !== null && this.getAttribute('collapsed') !== null;
             const w = isCollapsed
                 ? parseInt(this.getAttribute('collapsed-width') ?? '48', 10) || 48
                 : parseInt(this.getAttribute('width') ?? '260', 10) || 260;
@@ -168,7 +168,7 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
         // Re-render section list when sections / open / query change is
         // automatic via the Signal reads inside template helpers.
 
-        this.orient      = () => orientation.get() ?? 'left';
+        this.orient      = () => orientation.Get() ?? 'left';
         this.isCollapsed = () => this.hasAttribute('collapsed');
         this.isCollapsible = () => this.hasAttribute('collapsible') || !this.hasAttribute('collapsible'); // defaults true
         this.showToggleBtn = () => {
@@ -222,7 +222,7 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
         };
 
         this.itemClass = (item: SidebarItem): string => {
-            const isActive = item.id === (active.get() ?? '');
+            const isActive = item.id === (active.Get() ?? '');
             const parts = ['ar-sidebar__item'];
             if (isActive)      parts.push('ar-sidebar__item--active');
             if (item.disabled) parts.push('ar-sidebar__item--disabled');

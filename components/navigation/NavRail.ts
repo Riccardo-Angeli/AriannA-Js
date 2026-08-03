@@ -27,7 +27,7 @@
  * Attrs:  collapsed, active
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -65,13 +65,13 @@ export class NavRail extends Component('arianna-nav-rail', HTMLElement, {}, {
 
     build(_opts: NavRailOptions = {})
     {
-        const active = this.attrSignal('active');
+        const active = this.attributeSignal('active');
 
         this.allItems   = () => this.items$.Get();
         this.isCollapsed = () => this.hasAttribute('collapsed');
         this.toggleIcon  = () => this.isCollapsed() ? '▸' : '◂';
         this.itemClass   = (item: NavRailItem) => {
-            const isActive = item.id === (active.get() ?? '');
+            const isActive = item.id === (active.Get() ?? '');
             return 'ar-navrail__item' + (isActive ? ' ar-navrail__item--active' : '');
         };
 

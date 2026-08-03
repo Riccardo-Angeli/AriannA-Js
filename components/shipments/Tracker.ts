@@ -58,7 +58,7 @@
  * Attrs: tracking-number, carrier, locale
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -162,12 +162,12 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
 
     build(_opts: TrackerOptions = {})
     {
-        const numberAttr = this.attrSignal('tracking-number');
-        const localeAttr = this.attrSignal('locale');
+        const numberAttr = this.attributeSignal('tracking-number');
+        const localeAttr = this.attributeSignal('locale');
 
         this.headerTitle = () => {
             const c = this.carrier$.Get();
-            const n = numberAttr.get();
+            const n = numberAttr.Get();
             if (!c && !n) return 'Shipment tracker';
             const parts: string[] = [];
             if (c?.name) parts.push(c.name);
@@ -185,7 +185,7 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
         this.hasEvents = () => this.events$.Get().length > 0;
         this.hasCarrierLink = () => {
             const c = this.carrier$.Get();
-            const n = numberAttr.get();
+            const n = numberAttr.Get();
             return !!(c?.publicUrl && n);
         };
 
@@ -195,7 +195,7 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
         };
 
         this.eventList = (): Array<{ icon: string; label: string; raw: string; location: string; date: string; cls: string }> => {
-            const locale = localeAttr.get() ?? 'en';
+            const locale = localeAttr.Get() ?? 'en';
             // Sort descending by `at` (most recent first)
             return [...this.events$.Get()].sort((a, b) => b.at - a.at).map(e => ({
                 icon    : KIND_ICONS[e.kind] ?? KIND_ICONS.unknown,
@@ -210,7 +210,7 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
 
         this.onPortalClick = () => {
             const c = this.carrier$.Get();
-            const n = numberAttr.get();
+            const n = numberAttr.Get();
             if (!c?.publicUrl || !n) return;
             const url = c.publicUrl.replace('{n}', encodeURIComponent(n));
             this.dispatchEvent(new CustomEvent('arianna:tracking-portal', {

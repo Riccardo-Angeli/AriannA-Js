@@ -71,13 +71,13 @@ export class PortfolioDonut extends Component('arianna-portfolio-donut', HTMLEle
 
     build(_opts: PortfolioDonutOptions = {})
     {
-        const sizeAttr = this.attrSignal('size');
+        const sizeAttr = this.attributeSignal('size');
 
         this.svgHtml = (): string => {
             const segments = this.segments$.Get();
             if (!segments.length) return '';
 
-            const s = parseInt(sizeAttr.get() ?? '300', 10) || 300;
+            const s = parseInt(sizeAttr.Get() ?? '300', 10) || 300;
             const total = segments.reduce((a, x) => a + x.value, 0);
             if (total <= 0) return '';
 

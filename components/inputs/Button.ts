@@ -11,7 +11,7 @@
  * Attrs : variant, size, disabled, icon, icon-right, label
  */
 
-import { Component, type ComponentStyleMap } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html } from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -27,7 +27,7 @@ export interface ButtonOptions {
     label?    : string;
 }
 
-export const ButtonStyleMap: ComponentStyleMap = Object.freeze({
+export const ButtonStyleMap = Object.freeze({
     self    : ':host',
     button  : '.ar-btn__native',
     native  : '.ar-btn__native',
@@ -142,16 +142,16 @@ export class Button extends Component(
     {
         this.applyOptions(opts);
 
-        const icon  = this.attrSignal('icon');
-        const iconR = this.attrSignal('icon-right');
-        const label = this.attrSignal('label');
+        const icon  = this.attributeSignal('icon');
+        const iconR = this.attributeSignal('icon-right');
+        const label = this.attributeSignal('label');
 
-        this.hasIcon   = () => !!icon?.get();
-        this.hasIconR  = () => !!iconR?.get();
-        this.hasLabel  = () => !!label?.get();
-        this.iconText  = () => icon?.get() ?? '';
-        this.iconRText = () => iconR?.get() ?? '';
-        this.labelText = () => label?.get() ?? '';
+        this.hasIcon   = () => !!icon?.Get();
+        this.hasIconR  = () => !!iconR?.Get();
+        this.hasLabel  = () => !!label?.Get();
+        this.iconText  = () => icon?.Get() ?? '';
+        this.iconRText = () => iconR?.Get() ?? '';
+        this.labelText = () => label?.Get() ?? '';
         this.isDisabled = () => this.hasAttribute('disabled');
 
         this.onClick = (e: Event) => {

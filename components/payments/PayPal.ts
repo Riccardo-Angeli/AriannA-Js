@@ -26,7 +26,7 @@
  * Attrs: client-id, amount, currency, intent, redirect-url, button-style, button-color, button-shape
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 

@@ -30,7 +30,7 @@
  * Attrs: mode, redirect-url, qr-url, amount, currency, target
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -56,21 +56,21 @@ export class AliPay extends Component('arianna-alipay', HTMLElement, {}, {
 {
     build(_opts: AliPayOptions = {} as AliPayOptions)
     {
-        const modeAttr = this.attrSignal('mode');
-        const amountAttr = this.attrSignal('amount');
-        const currencyAttr = this.attrSignal('currency');
-        const qrUrlAttr = this.attrSignal('qr-url');
+        const modeAttr = this.attributeSignal('mode');
+        const amountAttr = this.attributeSignal('amount');
+        const currencyAttr = this.attributeSignal('currency');
+        const qrUrlAttr = this.attributeSignal('qr-url');
 
-        this.isQrMode = () => modeAttr.get() === 'qr-code';
+        this.isQrMode = () => modeAttr.Get() === 'qr-code';
 
         this.btnLabel = () => {
-            const a = parseFloat(amountAttr.get() ?? '0') || 0;
-            const c = currencyAttr.get() ?? 'CNY';
+            const a = parseFloat(amountAttr.Get() ?? '0') || 0;
+            const c = currencyAttr.Get() ?? 'CNY';
             return `Pay ${c} ${a.toFixed(2)} with Alipay`;
         };
 
         this.qrImgSrc = () => {
-            const url = qrUrlAttr.get() ?? '';
+            const url = qrUrlAttr.Get() ?? '';
             // Use Google Chart API to render QR if URL doesn't point to an image
             if (/\.(png|jpe?g|gif|svg)(\?|$)/i.test(url)) return url;
             return url

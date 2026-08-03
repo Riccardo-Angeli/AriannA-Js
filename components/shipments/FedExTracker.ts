@@ -16,7 +16,7 @@
  * Attrs:  tracking-number, locale
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Tracker, type CarrierConfig, type TrackingEvent } from './Tracker.ts';
 

@@ -36,17 +36,17 @@ export class RangeSlider extends Component('arianna-range-slider', HTMLElement, 
 {
     build(_opts: RangeSliderOptions = {})
     {
-        const label = this.attrSignal('label');
-        const value = this.attrSignal('value');
+        const label = this.attributeSignal('label');
+        const value = this.attributeSignal('value');
 
-        this.hasLabel  = () => !!label.get();
-        this.labelText = () => label.get() ?? '';
+        this.hasLabel  = () => !!label.Get();
+        this.labelText = () => label.Get() ?? '';
         this.inpMin    = () => this.getAttribute('min')  ?? '0';
         this.inpMax    = () => this.getAttribute('max')  ?? '100';
         this.inpStep   = () => this.getAttribute('step') ?? '1';
-        this.inpValue  = () => value.get() ?? '0';
+        this.inpValue  = () => value.Get() ?? '0';
         this.showVal   = () => this.getAttribute('show-value') !== 'false';
-        this.valText   = () => value.get() ?? '0';
+        this.valText   = () => value.Get() ?? '0';
         this.isDisabled = () => this.hasAttribute('disabled');
 
         this.onInput = (e: Event) => {

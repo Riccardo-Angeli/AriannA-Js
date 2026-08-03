@@ -36,7 +36,7 @@
  *   arianna:keyframe-editor-pause
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -114,17 +114,17 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.kfe-toolbar')) return;
 
-        const frameStart  = parseInt(self.attrSignal('frame-start')?.peek()  ?? '0',   10) || 0;
-        const frameEnd    = parseInt(self.attrSignal('frame-end')?.peek()    ?? '100', 10) || 100;
-        const framePx     = parseInt(self.attrSignal('frame-px')?.peek()     ?? '14',  10) || 14;
-        const frameStep   = parseInt(self.attrSignal('frame-step')?.peek()   ?? '5',   10) || 5;
-        const trackHeight = parseInt(self.attrSignal('track-height')?.peek() ?? '22',  10) || 22;
+        const frameStart  = parseInt(self.attributeSignal('frame-start')?.Peek()  ?? '0',   10) || 0;
+        const frameEnd    = parseInt(self.attributeSignal('frame-end')?.Peek()    ?? '100', 10) || 100;
+        const framePx     = parseInt(self.attributeSignal('frame-px')?.Peek()     ?? '14',  10) || 14;
+        const frameStep   = parseInt(self.attributeSignal('frame-step')?.Peek()   ?? '5',   10) || 5;
+        const trackHeight = parseInt(self.attributeSignal('track-height')?.Peek() ?? '22',  10) || 22;
 
         root.style.setProperty('--frame-px',       framePx + 'px');
         root.style.setProperty('--frame-step-px',  (framePx * frameStep) + 'px');
@@ -266,10 +266,10 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
         };
-        const start = parseInt(self.attrSignal('frame-start')?.peek() ?? '0',  10) || 0;
-        const end   = parseInt(self.attrSignal('frame-end')?.peek()   ?? '100',10) || 100;
+        const start = parseInt(self.attributeSignal('frame-start')?.Peek() ?? '0',  10) || 0;
+        const end   = parseInt(self.attributeSignal('frame-end')?.Peek()   ?? '100',10) || 100;
         const cl    = Math.max(start, Math.min(end, Math.round(f)));
         this.current$.Set(cl);
         self.render().setAttribute('current', String(cl));
@@ -292,8 +292,8 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
             this.#lastTime = now;
             const dFrames = dt * this.#fps;
             const next = this.current$.Peek() + dFrames;
-            const end = parseInt(((this as unknown as { attrSignal(name: string): Signal<string | null> | undefined }).attrSignal('frame-end')?.peek()) ?? '100', 10) || 100;
-            const start = parseInt(((this as unknown as { attrSignal(name: string): Signal<string | null> | undefined }).attrSignal('frame-start')?.peek()) ?? '0', 10) || 0;
+            const end = parseInt(((this as unknown as { attributeSignal(name: string): Signal<string | null> | undefined }).attributeSignal('frame-end')?.Peek()) ?? '100', 10) || 100;
+            const start = parseInt(((this as unknown as { attributeSignal(name: string): Signal<string | null> | undefined }).attributeSignal('frame-start')?.Peek()) ?? '0', 10) || 0;
             if (next > end) this.setFrame(start);
             else            this.setFrame(next);
             this.#rafId = requestAnimationFrame(tick);

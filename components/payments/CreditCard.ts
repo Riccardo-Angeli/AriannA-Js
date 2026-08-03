@@ -28,7 +28,7 @@
  * Attrs: amount, currency, save-option, holder-name-required
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -133,8 +133,8 @@ export class CreditCard extends Component('arianna-credit-card', HTMLElement, {}
 
     build(_opts: CreditCardOptions = {} as CreditCardOptions)
     {
-        const amountAttr = this.attrSignal('amount');
-        const currencyAttr = this.attrSignal('currency');
+        const amountAttr = this.attributeSignal('amount');
+        const currencyAttr = this.attributeSignal('currency');
 
         this.brandInfo = () => detectBrand(this.form$.Get().number);
         this.brand     = (): CardBrand => this.brandInfo().brand;
@@ -181,8 +181,8 @@ export class CreditCard extends Component('arianna-credit-card', HTMLElement, {}
         };
 
         this.payLabel = () => {
-            const a = parseFloat(amountAttr.get() ?? '0') || 0;
-            const c = currencyAttr.get() ?? 'EUR';
+            const a = parseFloat(amountAttr.Get() ?? '0') || 0;
+            const c = currencyAttr.Get() ?? 'EUR';
             return `Pay ${c} ${a.toFixed(2)}`;
         };
 

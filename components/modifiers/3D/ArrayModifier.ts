@@ -22,7 +22,7 @@
  * Attrs (declarative): for, count, type, offset-x, offset-y, offset-z, radius, axis, enabled
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import {
     Modifier3D, Modifier3DElement,
     _v3,

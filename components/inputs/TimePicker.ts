@@ -14,7 +14,7 @@
  * Attrs:  label, value, seconds, min, max, disabled
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -36,12 +36,12 @@ export class TimePicker extends Component('arianna-time-picker', HTMLElement, {}
 {
     build(_opts: TimePickerOptions = {})
     {
-        const label = this.attrSignal('label');
-        const value = this.attrSignal('value');
+        const label = this.attributeSignal('label');
+        const value = this.attributeSignal('value');
 
-        this.hasLabel  = () => !!label.get();
-        this.labelText = () => label.get() ?? '';
-        this.inpValue  = () => value.get() ?? '';
+        this.hasLabel  = () => !!label.Get();
+        this.labelText = () => label.Get() ?? '';
+        this.inpValue  = () => value.Get() ?? '';
         this.inpMin    = () => this.getAttribute('min') ?? '';
         this.inpMax    = () => this.getAttribute('max') ?? '';
         this.inpStep   = () => this.hasAttribute('seconds') ? '1' : '60';

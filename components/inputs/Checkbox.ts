@@ -13,7 +13,7 @@
  * Attrs:  label, checked, indeterminate, disabled
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -33,10 +33,10 @@ export class Checkbox extends Component('arianna-checkbox', HTMLElement, {}, {
 {
     build(_opts: CheckboxOptions = {})
     {
-        const label = this.attrSignal('label');
+        const label = this.attributeSignal('label');
 
-        this.hasLabel    = () => !!label.get();
-        this.labelText   = () => label.get() ?? '';
+        this.hasLabel    = () => !!label.Get();
+        this.labelText   = () => label.Get() ?? '';
         this.isChecked   = () => this.hasAttribute('checked');
         this.isDisabled  = () => this.hasAttribute('disabled');
         this.isIndet     = () => this.hasAttribute('indeterminate');

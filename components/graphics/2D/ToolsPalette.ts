@@ -19,7 +19,7 @@
  * Attrs: active-tool, layout, show-shortcuts
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { html }      from '../../../core/Template.ts';
 import { Reactivity } from '../../../core/Reactive.ts';
 
@@ -71,10 +71,10 @@ export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement
 
     build(_opts: ToolsPaletteOptions = {})
     {
-        const layoutAttr = this.attrSignal('layout');
-        const activeAttr = this.attrSignal('active-tool');
+        const layoutAttr = this.attributeSignal('layout');
+        const activeAttr = this.attributeSignal('active-tool');
 
-        this.layoutCls = () => 'ar-tp ar-tp--' + (layoutAttr.get() ?? 'vertical');
+        this.layoutCls = () => 'ar-tp ar-tp--' + (layoutAttr.Get() ?? 'vertical');
         this.showShortcuts = () => this.getAttribute('show-shortcuts') !== 'false';
 
         this.buttons = () => this.tools$.Get().map(t => ({
@@ -83,7 +83,7 @@ export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement
             title: this.showShortcuts() && t.shortcut ? `${t.label} (${t.shortcut})` : t.label,
             behaviour: t.behaviour,
             cls: 'ar-tp__btn'
-                + (activeAttr.get() === t.id && t.behaviour === 'tool' ? ' ar-tp__btn--active' : ''),
+                + (activeAttr.Get() === t.id && t.behaviour === 'tool' ? ' ar-tp__btn--active' : ''),
         }));
 
         this.onBtnClick = (e: Event) => {

@@ -24,7 +24,7 @@
  * snapshot via setSnapshotProvider().
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -79,16 +79,16 @@ export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}
     build(): void {
         const self = this as unknown as {
             render(): HTMLElement;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.os-host')) return;
 
-        const sW = self.attrSignal('width');
-        const sH = self.attrSignal('height');
-        const w = parseInt(sW?.peek() ?? '420', 10) || 420;
-        const h = parseInt(sH?.peek() ?? '300', 10) || 300;
+        const sW = self.attributeSignal('width');
+        const sH = self.attributeSignal('height');
+        const w = parseInt(sW?.Peek() ?? '420', 10) || 420;
+        const h = parseInt(sH?.Peek() ?? '300', 10) || 300;
         root.style.width  = w + 'px';
         root.style.height = h + 'px';
 
@@ -118,21 +118,21 @@ export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}
 
     /** Public: total ghost count (before + after). */
     get ghostCount(): number {
-        const self = this as unknown as { attrSignal(name: string): Signal<string | null> | undefined };
-        const b = parseInt(self.attrSignal('before')?.peek() ?? '2', 10) || 0;
-        const a = parseInt(self.attrSignal('after')?.peek()  ?? '2', 10) || 0;
+        const self = this as unknown as { attributeSignal(name: string): Signal<string | null> | undefined };
+        const b = parseInt(self.attributeSignal('before')?.Peek() ?? '2', 10) || 0;
+        const a = parseInt(self.attributeSignal('after')?.Peek()  ?? '2', 10) || 0;
         return b + a;
     }
 
     #repaint(): void {
-        const self = this as unknown as { attrSignal(name: string): Signal<string | null> | undefined };
+        const self = this as unknown as { attributeSignal(name: string): Signal<string | null> | undefined };
         const host = this.#host;
         if (!host || !this.#provider) return;
         while (host.firstChild) host.removeChild(host.firstChild);
 
-        const before = parseInt(self.attrSignal('before')?.peek() ?? '2', 10) || 0;
-        const after  = parseInt(self.attrSignal('after')?.peek()  ?? '2', 10) || 0;
-        const step   = parseInt(self.attrSignal('step')?.peek()   ?? '1', 10) || 1;
+        const before = parseInt(self.attributeSignal('before')?.Peek() ?? '2', 10) || 0;
+        const after  = parseInt(self.attributeSignal('after')?.Peek()  ?? '2', 10) || 0;
+        const step   = parseInt(self.attributeSignal('step')?.Peek()   ?? '1', 10) || 1;
         const live   = this.frame$.Peek();
 
         // Past ghosts (deepest first so live ends up on top)

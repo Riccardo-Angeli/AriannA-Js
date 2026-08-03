@@ -16,7 +16,7 @@
  * Attrs:  accept, multiple, label, hint, disabled
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -55,16 +55,16 @@ export class FileUpload extends Component('arianna-file-upload', HTMLElement, {}
 
     build(_opts: FileUploadOptions = {})
     {
-        const accept = this.attrSignal('accept');
-        const label  = this.attrSignal('label');
-        const hint   = this.attrSignal('hint');
+        const accept = this.attributeSignal('accept');
+        const label  = this.attributeSignal('label');
+        const hint   = this.attributeSignal('hint');
 
-        this.acceptVal  = () => accept.get() ?? '';
+        this.acceptVal  = () => accept.Get() ?? '';
         this.isMultiple = () => this.hasAttribute('multiple');
         this.isDisabled = () => this.hasAttribute('disabled');
-        this.labelText  = () => label.get() ?? 'Drop files here or click to browse';
-        this.hintText   = () => hint.get() ?? '';
-        this.hasHint    = () => !!hint.get();
+        this.labelText  = () => label.Get() ?? 'Drop files here or click to browse';
+        this.hintText   = () => hint.Get() ?? '';
+        this.hasHint    = () => !!hint.Get();
         this.zoneClass  = () => 'ar-fileupload__zone'
             + (this.dragging$.Get() ? ' ar-fileupload__zone--over' : '');
 

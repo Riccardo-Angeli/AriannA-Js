@@ -22,7 +22,7 @@
  *   disabled
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { Modifier2D } from './Base.ts';
 
 export interface SkewerOptions {

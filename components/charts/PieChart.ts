@@ -21,7 +21,7 @@
  *   arianna:chart-slice-click { datum, index, percent }
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
@@ -104,13 +104,13 @@ export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
     build(): void {
         const self = this as unknown as {
             render(): HTMLElement;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.pc-wrap')) return;
 
-        const size = parseInt(self.attrSignal('size')?.peek() ?? '280', 10) || 280;
+        const size = parseInt(self.attributeSignal('size')?.Peek() ?? '280', 10) || 280;
         const wrap = document.createElement('div');
         wrap.className = 'pc-wrap';
 
@@ -140,7 +140,7 @@ export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
     #redraw(): void {
         const self = this as unknown as {
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
         };
         const svg = this.#svg;
         const legend = this.#legend;
@@ -154,12 +154,12 @@ export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
         const size = parseInt(svg.getAttribute('width') ?? '280', 10);
         const cx = size / 2, cy = size / 2;
         const rOuter = size / 2 - 6;
-        const donut  = parseFloat(self.attrSignal('donut')?.peek() ?? '0') || 0;
+        const donut  = parseFloat(self.attributeSignal('donut')?.Peek() ?? '0') || 0;
         const rInner = rOuter * Math.max(0, Math.min(0.9, donut));
-        let angle    = parseFloat(self.attrSignal('start-angle')?.peek() ?? String(-Math.PI / 2)) || -Math.PI / 2;
+        let angle    = parseFloat(self.attributeSignal('start-angle')?.Peek() ?? String(-Math.PI / 2)) || -Math.PI / 2;
         const total  = data.reduce((s, d) => s + d.value, 0) || 1;
-        const showLabels = self.attrSignal('show-labels')?.peek() != null;
-        const showLegend = self.attrSignal('show-legend')?.peek() !== 'false';
+        const showLabels = self.attributeSignal('show-labels')?.Peek() != null;
+        const showLegend = self.attributeSignal('show-legend')?.Peek() !== 'false';
 
         legend.style.display = showLegend ? '' : 'none';
 

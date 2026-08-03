@@ -14,7 +14,7 @@
  * Attrs:  placeholder, searchable, clearable, disabled, value
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -59,10 +59,10 @@ export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
 
     build(_opts: DropdownOptions = {})
     {
-        const value = this.attrSignal('value');
+        const value = this.attributeSignal('value');
 
         const selected = (): DropdownOption | undefined =>
-            this.options$.Get().find(o => o.value === (value.get() ?? ''));
+            this.options$.Get().find(o => o.value === (value.Get() ?? ''));
 
         this.placeholderText = () => this.getAttribute('placeholder') ?? 'Select…';
         this.isOpen          = () => this.open$.Get();
@@ -85,7 +85,7 @@ export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
         };
         this.optCls = (o: DropdownOption) =>
             'ar-dropdown__option'
-            + (o.value === (value.get() ?? '') ? ' ar-dropdown__option--active' : '')
+            + (o.value === (value.Get() ?? '') ? ' ar-dropdown__option--active' : '')
             + (o.disabled ? ' ar-dropdown__option--disabled' : '');
 
         this.onTriggerClick = (e: Event) => {

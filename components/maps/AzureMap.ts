@@ -40,7 +40,7 @@ import { MapEmbed, type MapProvider } from './MapEmbed.ts';
 import { Css } from '../../core/Css.ts';
 const { Stylesheet } = Css;
 type Stylesheet = Css.Stylesheet;
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 
 export class AzureMap extends (Component('arianna-azure-map', HTMLElement, {}, {
@@ -103,21 +103,21 @@ export class AzureMap extends (Component('arianna-azure-map', HTMLElement, {}, {
     /** Override build to render an <img> rather than an iframe. */
     build(_opts: object = {}): void
     {
-        const centerLat   = this.attrSignal('center-lat');
-        const centerLng   = this.attrSignal('center-lng');
-        const aspectRatio = this.attrSignal('aspect-ratio');
-        const apiKey      = this.attrSignal('api-key');
+        const centerLat   = this.attributeSignal('center-lat');
+        const centerLng   = this.attributeSignal('center-lng');
+        const aspectRatio = this.attributeSignal('aspect-ratio');
+        const apiKey      = this.attributeSignal('api-key');
 
-        this.centerLatNum  = () => parseFloat(centerLat.get() ?? '51.4779');
-        this.centerLngNum  = () => parseFloat(centerLng.get() ?? '-0.0015');
+        this.centerLatNum  = () => parseFloat(centerLat.Get() ?? '51.4779');
+        this.centerLngNum  = () => parseFloat(centerLng.Get() ?? '-0.0015');
         this.zoomNum       = () => parseInt(this.getAttribute('zoom') ?? '13', 10) || 13;
         this.hasMarker     = () => this.getAttribute('marker') !== 'false';
-        this.stageStyle    = () => `aspect-ratio: ${aspectRatio.get() ?? '16/9'}`;
+        this.stageStyle    = () => `aspect-ratio: ${aspectRatio.Get() ?? '16/9'}`;
         this.providerBadge = () => 'AZURE';
         this.openHref      = () => this.getOpenUrl();
 
-        this.hasApiKey = () => !!apiKey.get();
-        this.notHasApiKey = () => !apiKey.get();
+        this.hasApiKey = () => !!apiKey.Get();
+        this.notHasApiKey = () => !apiKey.Get();
         this.imgSrc    = () => this.#imageSrc();
 
         this.template = html`

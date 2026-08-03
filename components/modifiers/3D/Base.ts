@@ -49,7 +49,7 @@
  * to be wired up when `arianna-viewport-3d` is built.
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 
 // ── Three.ts-compatible structural type interfaces ──────────────────────────
 

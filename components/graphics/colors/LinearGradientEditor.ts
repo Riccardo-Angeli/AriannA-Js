@@ -48,12 +48,12 @@ export class LinearGradientEditor extends Component('arianna-linear-gradient-edi
 
     build(_opts: LinearGradientEditorOptions = {})
     {
-        const angleAttr  = this.attrSignal('angle');
-        const interpAttr = this.attrSignal('interp');
+        const angleAttr  = this.attributeSignal('angle');
+        const interpAttr = this.attributeSignal('interp');
 
-        const angle  = () => parseFloat(angleAttr.get()  ?? '90') || 0;
+        const angle  = () => parseFloat(angleAttr.Get()  ?? '90') || 0;
         const interp = (): GradientInterp =>
-            (interpAttr.get() as GradientInterp | null) ?? 'srgb';
+            (interpAttr.Get() as GradientInterp | null) ?? 'srgb';
 
         this.stripBg = () => `background: linear-gradient(to right, ${stopsToCss(this.state.stops$.Get())})`;
         this.previewBg = () => `background: ${this.toCSS()}`;

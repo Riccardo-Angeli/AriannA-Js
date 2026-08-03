@@ -82,10 +82,10 @@ export class LinesPalette2D extends Component('arianna-lines-palette-2d', HTMLEl
 
     build(_opts: LinesPalette2DOptions = {})
     {
-        const layoutAttr = this.attrSignal('layout');
-        const activeAttr = this.attrSignal('active-tool');
+        const layoutAttr = this.attributeSignal('layout');
+        const activeAttr = this.attributeSignal('active-tool');
 
-        this.layoutCls = () => 'ar-lp2d ar-lp2d--' + (layoutAttr.get() ?? 'vertical');
+        this.layoutCls = () => 'ar-lp2d ar-lp2d--' + (layoutAttr.Get() ?? 'vertical');
         this.showShortcuts = () => this.getAttribute('show-shortcuts') !== 'false';
 
         const renderGroup = (group: LineTool['group']) =>
@@ -95,7 +95,7 @@ export class LinesPalette2D extends Component('arianna-lines-palette-2d', HTMLEl
                 icon  : t.icon,
                 title : this.showShortcuts() && t.shortcut ? `${t.label} (${t.shortcut})` : t.label,
                 cls   : 'ar-lp2d__btn'
-                    + (activeAttr.get() === t.id && t.behaviour === 'tool' ? ' ar-lp2d__btn--active' : ''),
+                    + (activeAttr.Get() === t.id && t.behaviour === 'tool' ? ' ar-lp2d__btn--active' : ''),
                 behaviour: t.behaviour,
             }));
 

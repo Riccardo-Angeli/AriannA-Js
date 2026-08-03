@@ -34,12 +34,12 @@ export class SearchBar extends Component('arianna-search-bar', HTMLElement, {}, 
 
     build(_opts: SearchBarOptions = {})
     {
-        const ph  = this.attrSignal('placeholder');
-        const val = this.attrSignal('value');
+        const ph  = this.attributeSignal('placeholder');
+        const val = this.attributeSignal('value');
 
-        this.inpPlaceholder = () => ph.get() ?? 'Search…';
-        this.inpValue       = () => val.get() ?? '';
-        this.hasValue       = () => !!val.get();
+        this.inpPlaceholder = () => ph.Get() ?? 'Search…';
+        this.inpValue       = () => val.Get() ?? '';
+        this.hasValue       = () => !!val.Get();
 
         this.onInput = (e: Event) => {
             const inp = e.target as HTMLInputElement;

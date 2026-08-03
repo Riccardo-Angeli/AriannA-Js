@@ -36,7 +36,7 @@
  *        force-show, button-style, button-type
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -92,18 +92,18 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
 
     build(_opts: ApplePayOptions = {} as ApplePayOptions)
     {
-        const styleAttr = this.attrSignal('button-style');
-        const typeAttr  = this.attrSignal('button-type');
+        const styleAttr = this.attributeSignal('button-style');
+        const typeAttr  = this.attributeSignal('button-type');
 
         this.btnCls = () => {
-            const style = styleAttr.get() ?? 'black';
-            const kind  = typeAttr.get()  ?? 'plain';
+            const style = styleAttr.Get() ?? 'black';
+            const kind  = typeAttr.Get()  ?? 'plain';
             return `ar-applepay__btn ar-applepay__btn--${style} ar-applepay__btn--${kind}`
                 + (this.busy$.Get() ? ' ar-applepay__btn--busy' : '');
         };
 
         this.btnLabel = () => {
-            const kind = typeAttr.get() ?? 'plain';
+            const kind = typeAttr.Get() ?? 'plain';
             switch (kind) {
                 case 'buy':       return 'Buy with';
                 case 'donate':    return 'Donate with';

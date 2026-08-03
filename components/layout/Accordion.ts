@@ -59,7 +59,7 @@
  *   borderless, resizable, min-width, max-width
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -114,12 +114,12 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
 
     build(_opts: AccordionOptions = {})
     {
-        const icon = this.attrSignal('icon');
+        const icon = this.attributeSignal('icon');
 
         this.isMultiple    = () => this.hasAttribute('multiple');
         this.isAnimated    = () => this.getAttribute('animated') !== 'false';
         this.isResizable   = () => this.hasAttribute('resizable');
-        this.iconStyle     = () => (icon.get() ?? 'chevron') as AccordionIconStyle;
+        this.iconStyle     = () => (icon.Get() ?? 'chevron') as AccordionIconStyle;
         this.minW          = () => parseInt(this.getAttribute('min-width') ?? '180', 10) || 180;
         this.maxW          = () => parseInt(this.getAttribute('max-width') ?? '900', 10) || 900;
         this.resizerHandles = () => 'e';

@@ -46,10 +46,10 @@ export class Panel extends Component('arianna-panel', HTMLElement, {}, {
 {
     build(_opts: PanelOptions = {})
     {
-        const title = this.attrSignal('title');
+        const title = this.attributeSignal('title');
 
-        this.hasTitle      = () => !!title.get();
-        this.titleText     = () => title.get() ?? '';
+        this.hasTitle      = () => !!title.Get();
+        this.titleText     = () => title.Get() ?? '';
         this.isCollapsible = () => this.hasAttribute('collapsible');
         this.isCollapsed   = () => this.hasAttribute('collapsed');
         this.hasHeader     = () => this.hasTitle() || this.isCollapsible();

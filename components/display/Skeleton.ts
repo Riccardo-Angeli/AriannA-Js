@@ -23,7 +23,7 @@
  * Attrs:  variant, lines, avatar, width, height
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -44,29 +44,29 @@ export class Skeleton extends Component('arianna-skeleton', HTMLElement, {}, {
 {
     build(_opts: SkeletonOptions = {})
     {
-        const variant = this.attrSignal('variant');
-        const lines   = this.attrSignal('lines');
-        const width   = this.attrSignal('width');
-        const height  = this.attrSignal('height');
+        const variant = this.attributeSignal('variant');
+        const lines   = this.attributeSignal('lines');
+        const width   = this.attributeSignal('width');
+        const height  = this.attributeSignal('height');
 
-        this.variantIs   = (name: string) => (variant.get() ?? 'text') === name;
+        this.variantIs   = (name: string) => (variant.Get() ?? 'text') === name;
         this.hasAvatar   = () => this.hasAttribute('avatar');
         this.linesArr    = () => {
-            const n = parseInt(lines.get() ?? '3', 10) || 3;
+            const n = parseInt(lines.Get() ?? '3', 10) || 3;
             return Array.from({ length: n }, (_, i) => ({ index: i, last: i === n - 1 }));
         };
         this.lineStyle   = (last: boolean): Record<string, string> => last ? { width: '60%' } : {};
         this.circleStyle = (): Record<string, string> => {
-            const w = width.get();
-            const h = height.get() || w;
+            const w = width.Get();
+            const h = height.Get() || w;
             if (!w) return {};
             const out: Record<string, string> = { width: w };
             if (h) out.height = h;
             return out;
         };
         this.rectStyle = () => {
-            const w = width.get();
-            const h = height.get();
+            const w = width.Get();
+            const h = height.Get();
             const out: Record<string, string> = {};
             if (w) out.width = w;
             if (h) out.height = h;

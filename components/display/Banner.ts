@@ -27,7 +27,7 @@
  * Attrs:  variant, dismissible, icon, message, action
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -50,16 +50,16 @@ export class Banner extends Component('arianna-banner', HTMLElement, {}, {
     {
         this.setAttribute('role', 'alert');
 
-        const icon    = this.attrSignal('icon');
-        const message = this.attrSignal('message');
-        const action  = this.attrSignal('action');
+        const icon    = this.attributeSignal('icon');
+        const message = this.attributeSignal('message');
+        const action  = this.attributeSignal('action');
 
-        this.iconText      = () => icon.get() ?? '';
-        this.messageText   = () => message.get() ?? '';
-        this.actionText    = () => action.get() ?? '';
-        this.hasIcon       = () => !!icon.get();
-        this.hasMessage    = () => !!message.get();
-        this.hasAction     = () => !!action.get();
+        this.iconText      = () => icon.Get() ?? '';
+        this.messageText   = () => message.Get() ?? '';
+        this.actionText    = () => action.Get() ?? '';
+        this.hasIcon       = () => !!icon.Get();
+        this.hasMessage    = () => !!message.Get();
+        this.hasAction     = () => !!action.Get();
         this.isDismissible = () => this.getAttribute('dismissible') !== 'false';
 
         this.onAction = () => {

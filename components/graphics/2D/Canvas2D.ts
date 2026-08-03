@@ -81,20 +81,20 @@ export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
 
     build(_opts: Canvas2DOptions = {})
     {
-        const wAttr      = this.attrSignal('width');
-        const hAttr      = this.attrSignal('height');
-        const gridAttr   = this.attrSignal('grid-size');
+        const wAttr      = this.attributeSignal('width');
+        const hAttr      = this.attributeSignal('height');
+        const gridAttr   = this.attributeSignal('grid-size');
         const showRulers = () => this.getAttribute('show-rulers') === 'true' || this.hasAttribute('show-rulers');
         const showGrid   = () => this.getAttribute('show-grid')   !== 'false';
 
         this.hostStyle = () => {
-            const w = wAttr.get() ?? '100%';
-            const h = hAttr.get() ?? '600px';
+            const w = wAttr.Get() ?? '100%';
+            const h = hAttr.Get() ?? '600px';
             return `width: ${w}; height: ${h}`;
         };
         this.gridBgStyle = () => {
             if (!showGrid()) return '';
-            const gs = parseFloat(gridAttr.get() ?? '20') || 20;
+            const gs = parseFloat(gridAttr.Get() ?? '20') || 20;
             const z  = this.viewport$.Get().zoom;
             const pz = gs * z;
             const px = this.viewport$.Get().panX;

@@ -49,7 +49,7 @@ import { MapEmbed, type MapProvider } from './MapEmbed.ts';
 import { Css } from '../../core/Css.ts';
 const { Stylesheet } = Css;
 type Stylesheet = Css.Stylesheet;
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 
 /** MapKit JS global injected by the SDK once loaded. */
@@ -142,21 +142,21 @@ export class AppleMap extends (Component('arianna-apple-map', HTMLElement, {}, {
      */
     build(_opts: object = {}): void
     {
-        const centerLat   = this.attrSignal('center-lat');
-        const centerLng   = this.attrSignal('center-lng');
-        const aspectRatio = this.attrSignal('aspect-ratio');
-        const tokenSig    = this.attrSignal('mapkit-token');
+        const centerLat   = this.attributeSignal('center-lat');
+        const centerLng   = this.attributeSignal('center-lng');
+        const aspectRatio = this.attributeSignal('aspect-ratio');
+        const tokenSig    = this.attributeSignal('mapkit-token');
 
-        this.centerLatNum = () => parseFloat(centerLat.get() ?? '51.4779');
-        this.centerLngNum = () => parseFloat(centerLng.get() ?? '-0.0015');
+        this.centerLatNum = () => parseFloat(centerLat.Get() ?? '51.4779');
+        this.centerLngNum = () => parseFloat(centerLng.Get() ?? '-0.0015');
         this.zoomNum      = () => parseInt(this.getAttribute('zoom') ?? '13', 10) || 13;
         this.hasMarker    = () => this.getAttribute('marker') !== 'false';
 
-        this.stageStyle = () => `aspect-ratio: ${aspectRatio.get() ?? '16/9'}`;
+        this.stageStyle = () => `aspect-ratio: ${aspectRatio.Get() ?? '16/9'}`;
         this.providerBadge = () => 'APPLE';
         this.openHref      = () => this.getOpenUrl();
-        this.hasToken      = () => !!tokenSig.get();
-        this.notHasToken   = () => !tokenSig.get();
+        this.hasToken      = () => !!tokenSig.Get();
+        this.notHasToken   = () => !tokenSig.Get();
 
         this.openInAppleMapsHref = () => this.getOpenUrl();
 

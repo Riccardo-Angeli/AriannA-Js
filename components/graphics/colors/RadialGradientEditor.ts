@@ -15,7 +15,7 @@
  * Attrs:  shape, size, cx, cy, interp
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { Css } from '../../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
@@ -48,18 +48,18 @@ export class RadialGradientEditor extends Component('arianna-radial-gradient-edi
 
     build(_opts: RadialGradientEditorOptions = {})
     {
-        const shapeAttr = this.attrSignal('shape');
-        const sizeAttr  = this.attrSignal('size');
-        const cxAttr    = this.attrSignal('cx');
-        const cyAttr    = this.attrSignal('cy');
-        const interpAttr = this.attrSignal('interp');
+        const shapeAttr = this.attributeSignal('shape');
+        const sizeAttr  = this.attributeSignal('size');
+        const cxAttr    = this.attributeSignal('cx');
+        const cyAttr    = this.attributeSignal('cy');
+        const interpAttr = this.attributeSignal('interp');
 
-        const shape  = (): RadialShape => (shapeAttr.get() as RadialShape | null) ?? 'circle';
-        const size   = (): RadialSize  => (sizeAttr.get()  as RadialSize  | null) ?? 'farthest-corner';
-        const cx     = () => parseFloat(cxAttr.get() ?? '50') || 0;
-        const cy     = () => parseFloat(cyAttr.get() ?? '50') || 0;
+        const shape  = (): RadialShape => (shapeAttr.Get() as RadialShape | null) ?? 'circle';
+        const size   = (): RadialSize  => (sizeAttr.Get()  as RadialSize  | null) ?? 'farthest-corner';
+        const cx     = () => parseFloat(cxAttr.Get() ?? '50') || 0;
+        const cy     = () => parseFloat(cyAttr.Get() ?? '50') || 0;
         const interp = (): 'srgb' | 'oklab' | 'oklch' | 'hsl' =>
-            (interpAttr.get() as 'srgb' | 'oklab' | 'oklch' | 'hsl' | null) ?? 'srgb';
+            (interpAttr.Get() as 'srgb' | 'oklab' | 'oklch' | 'hsl' | null) ?? 'srgb';
 
         this.stripBg   = () => `background: linear-gradient(to right, ${stopsToCss(this.state.stops$.Get())})`;
         this.previewBg = () => `background: ${this.toCSS()}`;

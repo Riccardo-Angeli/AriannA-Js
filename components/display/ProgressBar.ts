@@ -43,19 +43,19 @@ export class ProgressBar extends Component('arianna-progress-bar', HTMLElement, 
 {
     build(_opts: ProgressBarOptions = {})
     {
-        const label  = this.attrSignal('label');
-        const value  = this.attrSignal('value');
-        const height = this.attrSignal('height');
-        const variant = this.attrSignal('variant');
+        const label  = this.attributeSignal('label');
+        const value  = this.attributeSignal('value');
+        const height = this.attributeSignal('height');
+        const variant = this.attributeSignal('variant');
 
         const clampedValue = () => {
-            const n = parseFloat(value.get() ?? '0');
+            const n = parseFloat(value.Get() ?? '0');
             if (!Number.isFinite(n)) return 0;
             return Math.max(0, Math.min(100, n));
         };
 
-        this.labelText   = () => label.get() ?? '';
-        this.hasLabel    = () => !!label.get();
+        this.labelText   = () => label.Get() ?? '';
+        this.hasLabel    = () => !!label.Get();
         this.hasShowVal  = () => this.hasAttribute('show-value');
         this.isIndet     = () => this.hasAttribute('indeterminate');
         this.valuePct    = () => clampedValue() + '%';
@@ -65,11 +65,11 @@ export class ProgressBar extends Component('arianna-progress-bar', HTMLElement, 
             return { width: w, height: '100%' };
         };
         this.trackStyleObj = () => {
-            const h = parseInt(height.get() ?? '6', 10) || 6;
+            const h = parseInt(height.Get() ?? '6', 10) || 6;
             return { height: h + 'px' };
         };
         this.barClassName = () => {
-            let c = 'ar-progress__bar ar-progress__bar--' + (variant.get() ?? 'default');
+            let c = 'ar-progress__bar ar-progress__bar--' + (variant.Get() ?? 'default');
             if (this.isIndet()) c += ' ar-progress__bar--indeterminate';
             return c;
         };

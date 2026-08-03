@@ -64,10 +64,10 @@ export class Breadcrumb extends Component('arianna-breadcrumb', HTMLElement, {},
         this.setAttribute('role', 'navigation');
         this.setAttribute('aria-label', 'Breadcrumb');
 
-        const sep = this.attrSignal('separator');
+        const sep = this.attributeSignal('separator');
 
         this.allItems   = () => this.items$.Get();
-        this.separator  = () => sep.get() ?? '/';
+        this.separator  = () => sep.Get() ?? '/';
         this.isLast     = (i: number) => i === this.items$.Get().length - 1;
         this.notLast    = (i: number) => i < this.items$.Get().length - 1;
         this.onItemClick = (item: BreadcrumbItem, e: Event) => {

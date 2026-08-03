@@ -25,7 +25,7 @@
  * Attrs:  src, name, icon, size, shape, status, class
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -48,16 +48,16 @@ export class Avatar extends Component('arianna-avatar', HTMLElement, {}, {
     build(_opts: AvatarOptions = {})
     {
         // Reactive attribute signals — re-read on every render
-        const src    = this.attrSignal('src');
-        const name   = this.attrSignal('name');
-        const icon   = this.attrSignal('icon');
-        const size   = this.attrSignal('size');
-        const shape  = this.attrSignal('shape');
-        const status = this.attrSignal('status');
+        const src    = this.attributeSignal('src');
+        const name   = this.attributeSignal('name');
+        const icon   = this.attributeSignal('icon');
+        const size   = this.attributeSignal('size');
+        const shape  = this.attributeSignal('shape');
+        const status = this.attributeSignal('status');
 
         // Sizing reflected as inline style on host
         const applySize = () => {
-            const s = parseInt(size.get() ?? '36', 10) || 36;
+            const s = parseInt(size.Get() ?? '36', 10) || 36;
             this.style.width    = s + 'px';
             this.style.height   = s + 'px';
             this.style.fontSize = Math.round(s * 0.38) + 'px';
@@ -68,17 +68,17 @@ export class Avatar extends Component('arianna-avatar', HTMLElement, {}, {
 
         // Helpers used inside template
         this.computedInitials = () => {
-            const n = name.get();
+            const n = name.Get();
             if (!n) return '';
             return n.trim().split(/\s+/).slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
         };
-        this.hasSrc    = () => !!src.get();
-        this.hasName   = () => !!name.get() && !src.get();
-        this.hasIcon   = () => !!icon.get() && !src.get() && !name.get();
-        this.hasStatus = () => !!status.get();
-        this._src      = () => src.get() ?? '';
-        this._icon     = () => icon.get() ?? '';
-        this._statusCls = () => 'ar-avatar__status ar-avatar__status--' + (status.get() ?? '');
+        this.hasSrc    = () => !!src.Get();
+        this.hasName   = () => !!name.Get() && !src.Get();
+        this.hasIcon   = () => !!icon.Get() && !src.Get() && !name.Get();
+        this.hasStatus = () => !!status.Get();
+        this._src      = () => src.Get() ?? '';
+        this._icon     = () => icon.Get() ?? '';
+        this._statusCls = () => 'ar-avatar__status ar-avatar__status--' + (status.Get() ?? '');
 
         this.template = html`
             <img class="ar-avatar__img" a-if="this.hasSrc()" :src="this._src()" :alt="this.getAttribute('name') ?? ''"/>

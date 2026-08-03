@@ -21,7 +21,7 @@
  * Attrs: width, height
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -55,16 +55,16 @@ export class HeatmapChart extends Component('arianna-heatmap-chart', HTMLElement
 
     build(_opts: HeatmapChartOptions = {})
     {
-        const wAttr = this.attrSignal('width');
-        const hAttr = this.attrSignal('height');
+        const wAttr = this.attributeSignal('width');
+        const hAttr = this.attributeSignal('height');
 
         this.svgHtml = (): string => {
             const labels = this.labels$.Get();
             const matrix = this.matrix$.Get();
             if (!labels.length || !matrix.length) return '';
 
-            const w = parseInt(wAttr.get() ?? '500', 10) || 500;
-            const h = parseInt(hAttr.get() ?? '500', 10) || 500;
+            const w = parseInt(wAttr.Get() ?? '500', 10) || 500;
+            const h = parseInt(hAttr.Get() ?? '500', 10) || 500;
 
             const n = labels.length;
             const pad   = 60;

@@ -64,9 +64,9 @@ export class OrderBook extends Component('arianna-order-book', HTMLElement, {}, 
 
     build(_opts: OrderBookOptions = {})
     {
-        const depth = this.attrSignal('depth');
+        const depth = this.attributeSignal('depth');
 
-        const depthN = () => parseInt(depth.get() ?? '10', 10) || 10;
+        const depthN = () => parseInt(depth.Get() ?? '10', 10) || 10;
 
         this.askRows = (): Row[] => {
             const n = depthN();

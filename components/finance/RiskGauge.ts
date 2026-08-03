@@ -20,7 +20,7 @@
  * Attrs: value, min, max, label, size
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -42,18 +42,18 @@ export class RiskGauge extends Component('arianna-risk-gauge', HTMLElement, {}, 
 {
     build(_opts: RiskGaugeOptions = {})
     {
-        const value = this.attrSignal('value');
-        const min   = this.attrSignal('min');
-        const max   = this.attrSignal('max');
-        const label = this.attrSignal('label');
-        const size  = this.attrSignal('size');
+        const value = this.attributeSignal('value');
+        const min   = this.attributeSignal('min');
+        const max   = this.attributeSignal('max');
+        const label = this.attributeSignal('label');
+        const size  = this.attributeSignal('size');
 
         this.svgHtml = (): string => {
-            const v   = parseFloat(value.get() ?? '0') || 0;
-            const mn  = parseFloat(min.get()   ?? '0') || 0;
-            const mx  = parseFloat(max.get()   ?? '100') || 100;
-            const lbl = label.get() ?? '';
-            const s   = parseInt(size.get() ?? '200', 10) || 200;
+            const v   = parseFloat(value.Get() ?? '0') || 0;
+            const mn  = parseFloat(min.Get()   ?? '0') || 0;
+            const mx  = parseFloat(max.Get()   ?? '100') || 100;
+            const lbl = label.Get() ?? '';
+            const s   = parseInt(size.Get() ?? '200', 10) || 200;
 
             const cx = s / 2;
             const cy = s * 0.6;

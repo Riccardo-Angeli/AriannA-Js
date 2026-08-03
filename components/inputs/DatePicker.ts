@@ -13,7 +13,7 @@
  * Attrs:  label, value, placeholder, min, max, locale, first-day, disabled
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -51,14 +51,14 @@ export class DatePicker extends Component('arianna-date-picker', HTMLElement, {}
 
     build(_opts: DatePickerOptions = {})
     {
-        const label = this.attrSignal('label');
-        const value = this.attrSignal('value');
-        const placeholder = this.attrSignal('placeholder');
+        const label = this.attributeSignal('label');
+        const value = this.attributeSignal('value');
+        const placeholder = this.attributeSignal('placeholder');
 
-        this.hasLabel    = () => !!label.get();
-        this.labelText   = () => label.get() ?? '';
-        this.inpValue    = () => value.get() ?? '';
-        this.inpPlaceholder = () => placeholder.get() ?? 'YYYY-MM-DD';
+        this.hasLabel    = () => !!label.Get();
+        this.labelText   = () => label.Get() ?? '';
+        this.inpValue    = () => value.Get() ?? '';
+        this.inpPlaceholder = () => placeholder.Get() ?? 'YYYY-MM-DD';
         this.isOpen      = () => this.open$.Get();
         this.isDisabled  = () => this.hasAttribute('disabled');
         this.calMin      = () => this.getAttribute('min') ?? '';

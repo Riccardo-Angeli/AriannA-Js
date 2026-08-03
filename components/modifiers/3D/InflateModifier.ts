@@ -12,7 +12,7 @@
  * Attrs (declarative): for, amount, enabled
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import {
     Modifier3D, Modifier3DElement,
     _cloneGeom, _recomputeNormals, _vAdd, _vScale, _v3,

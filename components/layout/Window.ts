@@ -49,7 +49,7 @@
  *   min-width, min-height, resizable, chrome, focused, maximized, minimized
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -98,8 +98,8 @@ export class WindowComponent extends Component('arianna-window', HTMLElement, {}
         if (!this.hasAttribute('height')) this.setAttribute('height', '320');
         if (!this.hasAttribute('style'))  this.setAttribute('style',  'macos');
 
-        const titleSig = this.attrSignal('title');
-        const styleAttr = this.attrSignal('variant');
+        const titleSig = this.attributeSignal('title');
+        const styleAttr = this.attributeSignal('variant');
 
         const applyGeometry = () => {
             const x = parseInt(this.getAttribute('x') ?? '', 10);
@@ -136,8 +136,8 @@ export class WindowComponent extends Component('arianna-window', HTMLElement, {}
         const onFocus = () => this.focus_();
         this.addEventListener('pointerdown', onFocus, true);
 
-        this.titleText = () => titleSig.get() ?? '';
-        this.dockStyle = () => (styleAttr.get() ?? 'macos') as WindowStyle;
+        this.titleText = () => titleSig.Get() ?? '';
+        this.dockStyle = () => (styleAttr.Get() ?? 'macos') as WindowStyle;
         this.isMacOS   = () => this.dockStyle() === 'macos';
         this.isWindows = () => this.dockStyle() === 'windows';
         this.hasChrome = () => this.getAttribute('chrome') !== 'false';

@@ -59,17 +59,17 @@ export class Radio extends Component('arianna-radio', HTMLElement, {}, {
 
     build(_opts: RadioOptions = {})
     {
-        const label = this.attrSignal('label');
-        const value = this.attrSignal('value');
+        const label = this.attributeSignal('label');
+        const value = this.attributeSignal('value');
 
-        this.hasLabel  = () => !!label.get();
-        this.labelText = () => label.get() ?? '';
+        this.hasLabel  = () => !!label.Get();
+        this.labelText = () => label.Get() ?? '';
         this.allOpts   = () => this.options$.Get();
         this.itemsCls = () => 'ar-radio-group__items ar-radio-group__items--' +
             (this.getAttribute('direction') ?? 'column');
         this.optCls = (o: RadioOption) =>
             'ar-radio' + (o.disabled ? ' ar-radio--disabled' : '');
-        this.isChecked = (o: RadioOption) => o.value === (value.get() ?? '');
+        this.isChecked = (o: RadioOption) => o.value === (value.Get() ?? '');
         this.groupName = () => this.#groupName;
 
         this.onChange = (opt: RadioOption, e: Event) => {

@@ -35,13 +35,13 @@ export class TextField extends Component('arianna-text-field', HTMLElement, {}, 
 {
     build(_opts: TextFieldOptions = {})
     {
-        const val = this.attrSignal('value');
-        const ph  = this.attrSignal('placeholder');
-        const ty  = this.attrSignal('type');
+        const val = this.attributeSignal('value');
+        const ph  = this.attributeSignal('placeholder');
+        const ty  = this.attributeSignal('type');
 
-        this.inpType        = () => ty.get() ?? 'text';
-        this.inpPlaceholder = () => ph.get() ?? '';
-        this.inpValue       = () => val.get() ?? '';
+        this.inpType        = () => ty.Get() ?? 'text';
+        this.inpPlaceholder = () => ph.Get() ?? '';
+        this.inpValue       = () => val.Get() ?? '';
         this.isDisabled     = () => this.hasAttribute('disabled');
         this.isReadonly     = () => this.hasAttribute('readonly');
 

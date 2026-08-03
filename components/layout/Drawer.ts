@@ -29,7 +29,7 @@
  * Attrs:  side, width, height, open, close-on-backdrop
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
@@ -50,17 +50,17 @@ export class Drawer extends Component('arianna-drawer', HTMLElement, {}, {
 {
     build(_opts: DrawerOptions = {})
     {
-        const side   = this.attrSignal('side');
-        const width  = this.attrSignal('width');
-        const height = this.attrSignal('height');
+        const side   = this.attributeSignal('side');
+        const width  = this.attributeSignal('width');
+        const height = this.attributeSignal('height');
 
         this.panelStyle = (): Record<string, string> => {
-            const s = side.get() ?? 'left';
+            const s = side.Get() ?? 'left';
             if (s === 'left' || s === 'right') {
-                const w = parseInt(width.get() ?? '280', 10) || 280;
+                const w = parseInt(width.Get() ?? '280', 10) || 280;
                 return { width: w + 'px' };
             } else {
-                const h = parseInt(height.get() ?? '240', 10) || 240;
+                const h = parseInt(height.Get() ?? '240', 10) || 240;
                 return { height: h + 'px' };
             }
         };

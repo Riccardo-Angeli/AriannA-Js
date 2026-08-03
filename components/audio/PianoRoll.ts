@@ -112,18 +112,18 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
         if (root.querySelector('.pr-wrap')) return;
 
-        this.#beats    = parseInt(self.attrSignal('beats')?.peek()      ?? '16', 10) || 16;
-        this.#pitchMin = parseInt(self.attrSignal('pitch-min')?.peek()  ?? '36', 10) || 36;
-        this.#pitchMax = parseInt(self.attrSignal('pitch-max')?.peek()  ?? '84', 10) || 84;
-        this.#cellW    = parseInt(self.attrSignal('cell-width')?.peek() ?? '28', 10) || 28;
-        this.#cellH    = parseInt(self.attrSignal('cell-height')?.peek()?? '14', 10) || 14;
-        this.#snap     = parseFloat(self.attrSignal('snap')?.peek()     ?? '0.25') || 0.25;
+        this.#beats    = parseInt(self.attributeSignal('beats')?.Peek()      ?? '16', 10) || 16;
+        this.#pitchMin = parseInt(self.attributeSignal('pitch-min')?.Peek()  ?? '36', 10) || 36;
+        this.#pitchMax = parseInt(self.attributeSignal('pitch-max')?.Peek()  ?? '84', 10) || 84;
+        this.#cellW    = parseInt(self.attributeSignal('cell-width')?.Peek() ?? '28', 10) || 28;
+        this.#cellH    = parseInt(self.attributeSignal('cell-height')?.Peek()?? '14', 10) || 14;
+        this.#snap     = parseFloat(self.attributeSignal('snap')?.Peek()     ?? '0.25') || 0.25;
 
         const wrap = document.createElement('div');
         wrap.className = 'pr-wrap';

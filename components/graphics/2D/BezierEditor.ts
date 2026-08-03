@@ -22,7 +22,7 @@
  * Attrs:  width, height, mode (pen|edit|delete), closed
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { html }      from '../../../core/Template.ts';
 import { Reactivity } from '../../../core/Reactive.ts';
 
@@ -69,8 +69,8 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
 
     build(_opts: BezierEditorOptions = {})
     {
-        const wAttr = this.attrSignal('width');
-        const hAttr = this.attrSignal('height');
+        const wAttr = this.attributeSignal('width');
+        const hAttr = this.attributeSignal('height');
 
         this.viewBox = () => `0 0 ${this.#w()} ${this.#h()}`;
         this.wStr    = () => String(this.#w());

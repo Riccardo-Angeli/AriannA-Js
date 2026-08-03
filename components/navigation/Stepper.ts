@@ -24,7 +24,7 @@
  * Attrs:  variant, current
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -67,9 +67,9 @@ export class Stepper extends Component('arianna-stepper', HTMLElement, {}, {
 
     build(_opts: StepperOptions = {})
     {
-        const current = this.attrSignal('current');
+        const current = this.attributeSignal('current');
 
-        const curNum = (): number => parseInt(current.get() ?? '0', 10) || 0;
+        const curNum = (): number => parseInt(current.Get() ?? '0', 10) || 0;
 
         this.entries = (): StepEntry[] => {
             const steps = this.steps$.Get();

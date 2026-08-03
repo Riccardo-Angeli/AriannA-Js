@@ -37,7 +37,7 @@
  */
 
 import { MapEmbed, type MapProvider } from './MapEmbed.ts';
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 
 export class GoogleMap extends (Component('arianna-google-map', HTMLElement, {}, {
     attrs : [

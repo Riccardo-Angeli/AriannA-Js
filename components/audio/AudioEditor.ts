@@ -92,7 +92,7 @@ export class AudioEditor extends AudioComponent {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
@@ -123,10 +123,10 @@ export class AudioEditor extends AudioComponent {
         // Canvas
         const canvas = document.createElement('canvas');
         canvas.className = 'ae-canvas';
-        const sW = self.attrSignal('width');
-        const sH = self.attrSignal('height');
-        const w = parseInt(sW?.peek() ?? '800', 10) || 800;
-        const h = parseInt(sH?.peek() ?? '160', 10) || 160;
+        const sW = self.attributeSignal('width');
+        const sH = self.attributeSignal('height');
+        const w = parseInt(sW?.Peek() ?? '800', 10) || 800;
+        const h = parseInt(sH?.Peek() ?? '160', 10) || 160;
         canvas.width = w;
         canvas.height = h;
         canvas.style.width  = w + 'px';
@@ -157,9 +157,9 @@ export class AudioEditor extends AudioComponent {
         effect(() => { this.samplesPerPx$.Get(); this.#redraw(); });
 
         // Source attribute reactive
-        const sSrc = self.attrSignal('src');
+        const sSrc = self.attributeSignal('src');
         effect(() => {
-            const v = sSrc?.get();
+            const v = sSrc?.Get();
             if (v) void this.setSource(v);
         });
 

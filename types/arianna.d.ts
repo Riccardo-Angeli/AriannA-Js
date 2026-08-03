@@ -151,7 +151,7 @@ declare global {
 
     const Calendar: typeof _Calendar;
     const Dock: typeof _Dock;
-    const Window: typeof _Window;
+    const WindowComponent: typeof _Window;
     const MapEmbed: typeof _MapEmbed;
     const GoogleMap: typeof _GoogleMap;
     const OpenStreetMap: typeof _OpenStreetMap;

@@ -84,7 +84,7 @@ export class AudioPlayer extends AudioComponent {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attrSignal(name: string): Signal<string | null> | undefined;
+            attributeSignal(name: string): Signal<string | null> | undefined;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
@@ -96,9 +96,9 @@ export class AudioPlayer extends AudioComponent {
         // Label (optional)
         const label = document.createElement('div');
         label.className = 'ap-label';
-        const sLabel = self.attrSignal('label');
+        const sLabel = self.attributeSignal('label');
         effect(() => {
-            const v = sLabel?.get() ?? this.label$.Get();
+            const v = sLabel?.Get() ?? this.label$.Get();
             label.textContent = v ?? '';
             label.style.display = v ? '' : 'none';
         });
@@ -121,9 +121,9 @@ export class AudioPlayer extends AudioComponent {
         root.appendChild(wrap);
 
         // Reactive src binding (attr OR signal)
-        const sSrc = self.attrSignal('src');
+        const sSrc = self.attributeSignal('src');
         effect(() => {
-            const v = sSrc?.get() ?? this.src$.Get();
+            const v = sSrc?.Get() ?? this.src$.Get();
             if (v && v !== audio.src) {
                 this.loading$.Set(true);
                 audio.src = v;

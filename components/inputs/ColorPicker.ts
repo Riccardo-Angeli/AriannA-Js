@@ -19,7 +19,7 @@
  * Attrs:  label, value, disabled
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
 import { Reactivity } from '../../core/Reactive.ts';
 
@@ -51,14 +51,14 @@ export class ColorPicker extends Component('arianna-color-picker', HTMLElement, 
 
     build(_opts: ColorPickerOptions = {})
     {
-        const label = this.attrSignal('label');
-        const value = this.attrSignal('value');
+        const label = this.attributeSignal('label');
+        const value = this.attributeSignal('value');
 
-        this.hasLabel    = () => !!label.get();
-        this.labelText   = () => label.get() ?? '';
-        this.currentVal  = () => value.get() ?? '#000000';
+        this.hasLabel    = () => !!label.Get();
+        this.labelText   = () => label.Get() ?? '';
+        this.currentVal  = () => value.Get() ?? '#000000';
         this.swatchStyle = () => `background: ${this.currentVal()}`;
-        this.hexText     = () => (value.get() ?? '#000000').toUpperCase();
+        this.hexText     = () => (value.Get() ?? '#000000').toUpperCase();
         this.isDisabled  = () => this.hasAttribute('disabled');
         this.allPresets  = () => this.presets$.Get();
         this.hasPresets  = () => this.presets$.Get().length > 0;
