@@ -44,10 +44,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface VideoClip {
     id      : string;
@@ -69,14 +79,6 @@ interface DragState {
     origIn       : number;
 }
 
-function formatTime(seconds: number): string {
-    if (!isFinite(seconds) || seconds < 0) return '0:00.0';
-    const s = Math.floor(seconds % 60);
-    const m = Math.floor(seconds / 60);
-    const tenths = Math.floor((seconds % 1) * 10);
-    return `${m}:${String(s).padStart(2, '0')}.${tenths}`;
-}
-
 export class VideoTrackEditor extends Component('arianna-video-track-editor', HTMLElement, {}, {
     attrs : ['duration', 'time', 'tracks', 'pixels-per-second', 'snap-ms'],
 })
@@ -88,6 +90,14 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
 
     #drag    : DragState | null = null;
     #rafTimer: number | null = null;
+
+    static #formatTime(seconds: number): string {
+        if (!isFinite(seconds) || seconds < 0) return '0:00.0';
+        const s = Math.floor(seconds % 60);
+        const m = Math.floor(seconds / 60);
+        const tenths = Math.floor((seconds % 1) * 10);
+        return `${m}:${String(s).padStart(2, '0')}.${tenths}`;
+    }
     #playStart: number = 0;
 
     build(_opts: object = {})
@@ -121,8 +131,8 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
 
         this.clipsForTrack = (idx: number): Array<VideoClip & { left: string; width: string; cls: string }> => {
             const pps = this.pps();
-            const sel = this.selected$.get();
-            return this.clips$.get()
+            const sel = this.selected$.Get();
+            return this.clips$.Get()
                 .filter(c => c.track === idx)
                 .map(c => ({
                     ...c,
@@ -132,19 +142,19 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
                 }));
         };
 
-        this.playheadStyle = () => `left: ${this.time$.get() * this.pps()}px`;
-        this.timeLabel = () => formatTime(this.time$.get());
-        this.durLabel = () => formatTime(this.duration());
-        this.playLabel = () => this.playing$.get() ? '❙❙' : '▶';
+        this.playheadStyle = () => `left: ${this.time$.Get() * this.pps()}px`;
+        this.timeLabel = () => VideoTrackEditor.#formatTime(this.time$.Get());
+        this.durLabel = () => VideoTrackEditor.#formatTime(this.duration());
+        this.playLabel = () => this.playing$.Get() ? '❙❙' : '▶';
 
         this.transportPct = () => {
             const d = this.duration();
-            return d > 0 ? String((this.time$.get() / d) * 100) : '0';
+            return d > 0 ? String((this.time$.Get() / d) * 100) : '0';
         };
 
         // ── Handlers ────────────────────────────────────────────────────
         this.onPlay = () => {
-            if (this.playing$.get()) this.pause();
+            if (this.playing$.Get()) this.pause();
             else this.play();
         };
         this.onStop = () => {
@@ -161,9 +171,9 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
             const target = ev.currentTarget as HTMLElement;
             const id = target.dataset.id;
             if (!id) return;
-            const clip = this.clips$.get().find(c => c.id === id);
+            const clip = this.clips$.Get().find(c => c.id === id);
             if (!clip) return;
-            this.selected$.set(id);
+            this.selected$.Set(id);
             this.dispatchEvent(new CustomEvent('arianna:editor-select', {
                 bubbles: true, detail: { clip: { ...clip } },
             }));
@@ -211,17 +221,17 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
         };
 
         this.onDeleteSelected = () => {
-            const sel = this.selected$.get();
+            const sel = this.selected$.Get();
             if (!sel) return;
-            this.clips$.set(this.clips$.get().filter(c => c.id !== sel));
-            this.selected$.set(null);
+            this.clips$.Set(this.clips$.Get().filter(c => c.id !== sel));
+            this.selected$.Set(null);
             this.#fireChange();
         };
 
         this.onSplitAtPlayhead = () => {
-            const sel = this.selected$.get();
-            const t = this.time$.get();
-            const clips = this.clips$.get();
+            const sel = this.selected$.Get();
+            const t = this.time$.Get();
+            const clips = this.clips$.Get();
             const c = clips.find(x => x.id === sel);
             if (!c) return;
             if (t <= c.start || t >= c.start + c.duration) return;
@@ -236,7 +246,7 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
                 duration: c.duration - cutOffset,
                 sourceIn: (c.sourceIn ?? 0) + cutOffset,
             };
-            this.clips$.set([...clips.filter(x => x.id !== sel), left, right]);
+            this.clips$.Set([...clips.filter(x => x.id !== sel), left, right]);
             this.#fireChange();
         };
 
@@ -289,40 +299,40 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
     // ── Public API ───────────────────────────────────────────────────────────
 
     setClips(clips: VideoClip[]): this {
-        this.clips$.set(clips.map(c => ({ ...c })));
+        this.clips$.Set(clips.map(c => ({ ...c })));
         this.#fireChange();
         return this;
     }
-    getClips(): VideoClip[] { return this.clips$.get().map(c => ({ ...c })); }
+    getClips(): VideoClip[] { return this.clips$.Get().map(c => ({ ...c })); }
 
     addClip(clip: VideoClip): this {
-        this.clips$.set([...this.clips$.get(), { ...clip }]);
+        this.clips$.Set([...this.clips$.Get(), { ...clip }]);
         this.#fireChange();
         return this;
     }
     removeClip(id: string): this {
-        this.clips$.set(this.clips$.get().filter(c => c.id !== id));
-        if (this.selected$.get() === id) this.selected$.set(null);
+        this.clips$.Set(this.clips$.Get().filter(c => c.id !== id));
+        if (this.selected$.Get() === id) this.selected$.Set(null);
         this.#fireChange();
         return this;
     }
 
     seek(time: number): this {
         const clamped = Math.max(0, Math.min(this.duration(), time));
-        this.time$.set(clamped);
+        this.time$.Set(clamped);
         this.dispatchEvent(new CustomEvent('arianna:editor-time', {
             bubbles: true, detail: { time: clamped },
         }));
         return this;
     }
-    getTime(): number { return this.time$.get(); }
+    getTime(): number { return this.time$.Get(); }
 
     play(): this {
-        if (this.playing$.get()) return this;
-        this.playing$.set(true);
-        this.#playStart = performance.now() - this.time$.get() * 1000;
+        if (this.playing$.Get()) return this;
+        this.playing$.Set(true);
+        this.#playStart = performance.now() - this.time$.Get() * 1000;
         const tick = () => {
-            if (!this.playing$.get()) return;
+            if (!this.playing$.Get()) return;
             const elapsed = (performance.now() - this.#playStart) / 1000;
             if (elapsed >= this.duration()) {
                 this.seek(this.duration());
@@ -336,7 +346,7 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
         return this;
     }
     pause(): this {
-        this.playing$.set(false);
+        this.playing$.Set(false);
         if (this.#rafTimer != null) {
             cancelAnimationFrame(this.#rafTimer);
             this.#rafTimer = null;
@@ -349,7 +359,7 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
     #applyDrag(snappedDt: number): void {
         if (!this.#drag) return;
         const d = this.#drag;
-        const clips = this.clips$.get();
+        const clips = this.clips$.Get();
         const idx = clips.findIndex(c => c.id === d.clipId);
         if (idx < 0) return;
         const c = clips[idx]!;
@@ -382,7 +392,7 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
         }
         const out = clips.slice();
         out[idx] = next;
-        this.clips$.set(out);
+        this.clips$.Set(out);
     }
 
     #fireChange(): void {

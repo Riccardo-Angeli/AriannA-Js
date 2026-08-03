@@ -31,7 +31,7 @@ class Cuore extends Component
             Background: 'crimson',
             Color: 'white',
             Padding: '12px',
-            BorderRadius: '12px'
+            BorderRadius: '12px',
         }
     },
     { shadow: { mode: 'closed', css: true } }
@@ -75,7 +75,73 @@ If your code does not look like this, your code does not look like AriannA v2.
 
 ---
 
-## 2. The eight rules, in order of priority
+## 1.1 The Namespace constructor reference
+
+Cuore covers braces and stanzas. The kernel `Namespace` constructor covers the
+**alignment and line-break** details — operator alignment, the `a capo` after
+`=` for multiline right-hand sides, and trailing commas. It is as canonical as
+Cuore for those points.
+
+```ts
+constructor(name: string, options: Partial<Core.Descriptors.Namespace> = {})
+{
+    this.Name           = name;
+    this.Uri            = options.Uri    ?? '';
+    this.NS             = options.NS     ?? false;
+    this.Base           = options.Base   ?? HTMLElement;
+    this.Schema         = options.Schema ?? options.Uri ?? '';
+    this.Documentation  = options.Documentation ?? {};
+    this.Types          =
+    {
+        Standard : { Interfaces: {}, Tags: {} },
+        Custom   : { Interfaces: {}, Tags: {} },
+    };
+
+    if (options.Types?.Standard)
+    {
+        for (const type of Object.keys(options.Types.Standard))
+        {
+            const tags = Object.freeze(options.Types.Standard[type].Tags ?? []) as string[];
+            this.Types.Standard.Interfaces[type] =
+            {
+                Name        : type,
+                Tags        : tags,
+                Namespace   : this.Name,
+                Constructor : null,
+                Interface   : null,
+                Prototype   : null,
+                Supported   : false,
+                Defined     : false,
+                Declaration : 'FUNCTION',
+                Type        : 'STANDARD',
+                Standard    : true,
+                Custom      : false,
+                Style       : {},
+                Native      : false,
+                Chain       : new Map<string, unknown>(),
+                State       : 'Success',
+            };
+        }
+    }
+
+    namespaces[this.Name] = this.Descriptor;
+    this.Initialize();
+}
+```
+
+It exercises:
+
+- **`=` aligned** down a contiguous block of `this.X = …` assignments (Rule 9).
+- **`??` aligned** within those right-hand sides (Rule 9).
+- **`:` aligned** down a vertically-committed object literal (Rule 9).
+- **`a capo` after `=`** when the RHS is a multiline object: the `=` ends its
+  line, the `{` opens on the next (Rule 6).
+- **Trailing comma on every multiline entry, including the last** (Rule 7).
+- A blank line between the field-init stanza and the loop stanza (Rule 8).
+
+---
+
+## 2. The nine rules, in order of priority
 
 ### Rule 1 — Indent is **4 spaces**. No tabs. No exceptions.
 
@@ -224,7 +290,7 @@ Capitalized keys to the corresponding CSS properties:
     Width: '100px',             // → width
     BorderRadius: '12px',       // → border-radius
     BackgroundColor: '#fce4f0', // → background-color
-    ZIndex: 1000                // → z-index
+    ZIndex: 1000,               // → z-index
 }
 ```
 
@@ -289,7 +355,30 @@ The exception (again): single-line value-objects under ~70 cols inline as
 usual. The trigger is *vertical commitment*: the moment you put one key on
 its own line, all sibling keys do too, and `{` is on its own line.
 
-### Rule 7 — No trailing commas on the **last** entry of an inline object.
+**Assignment right-hand side follows the same rule.** When the RHS of an `=`
+is a multiline object, the `=` **ends its line** (`a capo`) and the `{` opens
+on the **next** line, at the indent of the statement — never hanging on the
+`=` line:
+
+```ts
+// CORRECT
+this.Types =
+{
+    Standard : { Interfaces: {}, Tags: {} },
+    Custom   : { Interfaces: {}, Tags: {} },
+};
+
+// WRONG — brace hangs on the `=` line (K&R)
+this.Types = {
+    Standard : { Interfaces: {}, Tags: {} },
+};
+```
+
+A short RHS object still inlines: `const p = { x: 0, y: 0 };`.
+
+### Rule 7 — Trailing commas: **required** multiline, **forbidden** inline.
+
+**Inline** objects: no trailing comma on the last entry.
 
 ```ts
 // CORRECT
@@ -300,24 +389,24 @@ its own line, all sibling keys do too, and `{` is on its own line.
 { x: 1, y: 2, z: 3, }
 ```
 
-For multiline objects: trailing comma **encouraged** on entries that are
-not the last, **forbidden** on the last entry. This matches how the
-formatter renders diff-friendly multiline blocks while keeping inline
-objects clean.
+**Multiline** objects (and arrays): **every** entry ends with a comma,
+**including the last**. Adding or reordering a sibling then never touches a
+neighbouring line — minimal diffs — and it matches the canonical constructor
+in §1.1.
 
 ```ts
 // CORRECT
 {
-    Display: 'block',
-    Width: '100px',
-    Height: '100px'
+    Name        : type,
+    Tags        : tags,
+    State       : 'Success',
 }
 
-// WRONG — trailing comma after Height
+// WRONG — last entry missing its comma
 {
-    Display: 'block',
-    Width: '100px',
-    Height: '100px',
+    Name        : type,
+    Tags        : tags,
+    State       : 'Success'
 }
 ```
 
@@ -347,6 +436,56 @@ This is not whitespace abuse; it's a structural signal. A reviewer scanning
 
 Rule of thumb: **one stanza = one responsibility**. If you can't describe
 the stanza in a 3-word noun phrase, it's not a stanza yet.
+
+### Rule 9 — Vertical alignment of `=`, `??` and `:` within a block.
+
+Inside a **contiguous block** of assignments, or a **vertically-committed**
+object literal, align the separator into a column so the values form a
+readable second column. Padding is spaces (never tabs); align to the longest
+left-hand side in the block.
+
+**Assignment blocks** — align `=`, and align any `??` that follow:
+
+```ts
+// CORRECT
+this.Name           = name;
+this.Uri            = options.Uri    ?? '';
+this.NS             = options.NS     ?? false;
+this.Schema         = options.Schema ?? options.Uri ?? '';
+
+// WRONG — ragged, no alignment
+this.Name = name;
+this.Uri = options.Uri ?? '';
+this.NS = options.NS ?? false;
+```
+
+**Object literals** — align the `:` of every key:
+
+```ts
+// CORRECT
+{
+    Name        : type,
+    Tags        : tags,
+    Declaration : 'FUNCTION',
+    State       : 'Success',
+}
+
+// WRONG — single space after key, no column
+{
+    Name: type,
+    Tags: tags,
+    Declaration: 'FUNCTION',
+    State: 'Success',
+}
+```
+
+A blank line **breaks the block**: alignment is recomputed per stanza, not
+across the whole method. The column is local to the run of lines it serves.
+
+**Scope.** This applies to assignment blocks and to data / descriptor / def
+object literals. CSS Stylesheet DSL objects (Rule 5) are exempt — they keep
+the compact `Key: value` form, since the value column there carries no extra
+meaning and the keys are already visually marked by capitalization.
 
 ---
 
@@ -500,7 +639,7 @@ mechanically. Until it ships:
 
 - Reviews block PRs that violate Rule 1 (indent) or Rule 5 (CSS keys).
 - Reviews suggest changes for Rule 2/3/4 violations but won't block.
-- Rules 6/7/8 are aesthetic and reviewer-judgment.
+- Rules 6/7/8/9 are aesthetic and reviewer-judgment.
 
 Authors are expected to copy the Cuore template, modify it, and verify the
 result still *looks like* Cuore. If it doesn't, the indent is wrong.
@@ -516,7 +655,9 @@ ARGS            One per line when call spans >70 cols
 CALLBACKS       Split call parens to own lines for multiline bodies
 CSS KEYS        Capitalized (Display, BorderRadius)
 NESTED OBJ      `{` on own line at depth of parent key
-TRAILING ,      Never on last entry (inline or multiline)
+RHS OBJ         `=` ends the line; multiline `{` on the next line
+ALIGN           Align =, ?? and : into a column per block (not CSS DSL)
+TRAILING ,      Inline: never on last. Multiline: ALWAYS, incl. last
 STANZAS         Blank line between conceptual units
 ```
 

@@ -51,7 +51,7 @@
  *   bubble naturally up through the parent (window/accordion/etc).
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 
 export interface ModifierContext
 {

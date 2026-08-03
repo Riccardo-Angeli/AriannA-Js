@@ -6,8 +6,8 @@
  *
  * Virtual — AriannA Virtual Node. ♡ Arianna.
  *
- * A `VirtualNode` is the framework-side representation of an Element or Text
- * Node in the AriannA virtual tree. Every VirtualNode is described by the
+ * A `Virtual` is the framework-side representation of an Element or Text
+ * Node in the AriannA virtual tree. Every Virtual is described by the
  * following canonical shape (the "virtualNode descriptor", v2):
  *
  *     const virtualNode =
@@ -21,7 +21,7 @@
  *         Attributes : <Array>,          - Key/value pairs of attributes.
  *         Children   : <Array<Virtual>>, - Ordered child virtualNodes.
  *         Siblings   : <Array<Virtual>>, - Sibling virtualNodes (same Parent).
- *         Events     : <Array>,          - Wired event listeners.
+ *         Events     : <Array>,          - Events Descriptors (See Events.ts).
  *         State      : <Object>,         - Current state snapshot.
  *         States     : <Object>,         - Named state variants (state machine).
  *         Descriptor : <Object>,         - Type descriptor (Core.GetDescriptor).
@@ -42,104 +42,83 @@
  *
  * Two construction modes are supported:
  *
- *     new VirtualNode('div', { class: 'hero' }, child1, child2);   // tag, attrs, children
- *     new VirtualNode({ Tag: 'div', Attributes: {...}, ... });     // VNodeDef object
- *     new VirtualNode(Template);                             // pre-cloned template
+ *     new Virtual('div', { class: 'hero' }, child1, child2);   // tag, attrs, children
+ *     new Virtual({ Tag: 'div', Attributes: {...}, ... });     // { Tag?: string; Text?: string; Attributes?: Record<string, string | number | boolean | null>; Children?: (Virtual | string | number | boolean | null | undefined)[]; Root?: Element | null; Parent?: Virtual | null } object
+ *     new Virtual(Template);                             // pre-cloned template
  *
  * Render is lazy: `render()` materialises into a real DOM Element on demand.
  * Sinks queued before render are flushed at render time; effects queued
  * after are wired immediately. Mount/unmount manages DOM parentage.
  */
 
-import Core, { type TypeDescriptor }                from './Core.ts';
-import {
-    signal, signalMono, sinkText, effect, computed, batch, untrack,
-    type Signal, type SignalMono, type ReadonlySignal,
-}                                                    from './Observable.ts';
-import Rule, { type ShadowState, type ShadowMode, type ShadowOptions, type ShadowLayer } from './Rule.ts';
-import { Stylesheet }                                from './Stylesheet.ts';
-import { Template }                                  from './Template.ts';
+import { Core } from './Core.ts';
+import { Namespaces } from './Namespaces.ts';
+import { Events } from './Events.ts';
+import { Reactivity } from './Reactive.ts';
+import { Template } from './Template.ts';
+import { Css } from './Css.ts';
+import Mono = Reactivity.Mono;
 
-/** Fluent sub-accessor returned by `VirtualNode.sub` (inline; no shared SubAccessor type). */
-type Sub = { set(key: string, value: unknown): Sub; get(key: string): unknown; sub(key: string): Sub; unwrap(): unknown; end<T = unknown>(): T; };
+/*
+ * Minimal compatibility bridge from the former Observables functional API
+ * to the new Reactivity nominal API. Keeping these aliases local avoids
+ * touching every existing Virtual call-site during the module split.
+ */
+const signal =
+    <T>
+    (
+        value: T
+    ): Reactivity.Signal<T> =>
+        new Reactivity.Signal(value);
 
+const signalMono =
+    <T>
+    (
+        value: T
+    ): Reactivity.Mono<T> =>
+        new Reactivity.Mono(value);
 
+const effect =
+    (
+        run: () => void
+    ): (() => void) =>
+    {
+        const instance =
+            new Reactivity.Effect(run);
 
-// ─── Re-exports ──────────────────────────────────────────────────────────────
+        return () =>
+            instance.Dispose();
+    };
 
-export type { Signal, SignalMono, ReadonlySignal };
+const computed =
+    <T>
+    (
+        derive: () => T
+    ): Reactivity.Memo<T> =>
+        new Reactivity.Memo(derive);
 
+const batch =
+    Reactivity.API.Runtime.RunBatch;
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Public types
-// ─────────────────────────────────────────────────────────────────────────────
+const untrack =
+    Reactivity.Untrack;
 
-/** Attribute map: key → string | number | boolean | null. */
-export type VAttrs = Record<string, string | number | boolean | null>;
+const { Rule, Stylesheet } = Css;
 
-/** A child of a VirtualNode: another VirtualNode, or a primitive auto-wrapped. */
-export type VChild = VirtualNode | string | number | boolean | null | undefined;
-
-/** Object-form constructor input. */
-export interface VNodeDef
-{
-    Tag?        : string;
-    Text?       : string;
-    Attributes? : VAttrs;
-    Children?   : VChild[];
-    Root?       : Element | null;
-    Parent?     : VirtualNode | null;
-}
-
-// Box-shadow model lives in Rule (dedup, IoC); re-exported for the public surface.
-export type { ShadowState, ShadowMode, ShadowOptions, ShadowLayer } from './Rule.ts';
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Private sink / listener queueing types
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Event listener queued before render(). Flushed at render time. */
-interface QueuedListener
-{
-    type  : string;
-    cb    : EventListener;
-    opts? : AddEventListenerOptions | boolean;
-}
-
-/** Generic getter for reactive sinks. */
-type Getter<T> = () => T;
-
-
-/** Reactive binding queued before render(). Flushed by #applySinks. */
-interface PendingSink
-{
-    type            : 'text' | 'textMono' | 'attr' | 'cls' | 'prop' | 'style' | 'bind' | 'shadow';
-    getter          : Getter<unknown>;
-    setter?         : (v: string) => void;
-    name?           : string;
-    mono?           : SignalMono<string>;
-    node?           : Text;
-    shadowMode?     : ShadowMode | ShadowLayer[];
-    shadowModeRule? : Rule | Stylesheet;
-    shadowOpts?     : ShadowOptions;
-}
-
-
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Class — VirtualNode
-// ─────────────────────────────────────────────────────────────────────────────
+type Signal<T>         = Reactivity.Signal<T>;
+type SignalMono<T>     = Reactivity.Mono<T>;
+type ReadonlySignal<T> = Reactivity.ReadonlySignal<T>;
+type Rule         = Css.Rule;
+type Stylesheet   = Css.Stylesheet;
 
 /**
- * `VirtualNode` — framework-side representation of an Element or Text Node
+ * `Virtual` — framework-side representation of an Element or Text Node
  * in the AriannA virtual tree. See file header for the canonical descriptor
  * shape (Root, Id, Type, Parent, Tag, ...).
  *
  * Lifecycle:
  *
- *      new VirtualNode('div', { class: 'hero' })   →  Created
+ *      new Virtual('div', { class: 'hero' })   →  Created
  *      vn.append(parent)                            →  Connected + Mounted + Rendered
  *      vn.unmount()                                 →  Mounted = false
  *      vn.destroy()                                 →  effects disposed, sheet cleared
@@ -147,28 +126,58 @@ interface PendingSink
  * Render is lazy and idempotent. Sinks queued before render are flushed at
  * render time; effects queued after run immediately.
  */
-export class VirtualNode
+export class Virtual
 {
+    static
+    {
+        if (typeof window !== 'undefined')
+        {
+            Object.defineProperty(window, 'Virtual', {
+                value        : Virtual,
+                writable     : false,
+                enumerable   : false,
+                configurable : false,
+            });
+        }
+
+        /** @name        virtualService
+         *  @private
+         *  @description Registers the 'virtual' service: build a Virtual from a tag/element/def, so
+         *               consumers reach Virtual through the kernel registry instead of importing it.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        const Service = new Core.Services.Service
+        (
+            'virtual',
+            {
+                /** Build a Virtual from any supported input (tag, element, def). */
+                make(arg: unknown): Virtual
+                { return new (Virtual as new (a: unknown) => Virtual)(arg);}
+            }
+        );
+    }
     // ─── Static node registry + helpers (encapsulated — §5.1, no loose module state) ───
 
     /** Monotonic Id counter (hard-private; only _uid mutates it). */
     static #counter = 0;
     /** Registry of VirtualNodes by Id (for tools/inspector). */
-    static #nodes: Record<string, VirtualNode> = {};
+    static #nodes: Record<string, Virtual> = {};
     /** Read-only view of the node registry, for tools/inspector. */
-    static get Nodes(): Readonly<Record<string, VirtualNode>> { return VirtualNode.#nodes; }
+    static get Nodes(): Readonly<Record<string, Virtual>> { return Virtual.#nodes; }
 
-    /** Mint a fresh, collision-resistant Id for a new VirtualNode. */
-    private static _uid(): string { return `vn-${++VirtualNode.#counter}-${Math.random().toString(36).slice(2, 6)}`; }
+    /** Mint a fresh, collision-resistant Id for a new Virtual. */
+    static #Uid(): string { return `vn-${++Virtual.#counter}-${Math.random().toString(36).slice(2, 6)}`; }
 
     /** Coerce a value-or-getter into a getter (binding methods accept both forms). */
-    private static _asGetter<T>(g: Getter<T> | T): Getter<T> { return typeof g === 'function' ? (g as Getter<T>) : () => g; }
+    static #AsGetter<T>(g: (() => T) | T): (() => T) { return typeof g === 'function' ? (g as (() => T)) : () => g; }
 
-    /** Coerce a VChild into a VirtualNode: nodes pass through; primitives/null wrap in a span. */
-    private static _normalizeChild(c: VChild): VirtualNode
+    /** Coerce a (Virtual | string | number | boolean | null | undefined) into a Virtual: nodes pass through; primitives/null wrap in a span. */
+    static #NormalizeChild(c: (Virtual | string | number | boolean | null | undefined)): Virtual
     {
-        if (c instanceof VirtualNode) return c;
-        const n = new VirtualNode('span');
+        if (c instanceof Virtual) return c;
+        const n = new Virtual('span');
         n.set('textContent', c == null ? '' : String(c));
         return n;
     }
@@ -176,11 +185,11 @@ export class VirtualNode
     // ─── Private fields ──────────────────────────────────────────────────
     #id          : string;
     #tag         : string;
-    #attrs       : VAttrs;
-    #children    : VirtualNode[];
+    #attrs       : Record<string, string | number | boolean | null>;
+    #children    : Virtual[];
     #text        : string;
     #dom         : Element | null = null;
-    #parent      : VirtualNode | null = null;
+    #parent      : Virtual | null = null;
 
     /** Lifecycle flags — track virtualNode state transitions. */
     #created     = true;
@@ -192,13 +201,13 @@ export class VirtualNode
     #rendered    = false;
 
     /** Pending DOM-event listeners, flushed at render() time. */
-    #domQueue    : QueuedListener[] = [];
+    #domQueue    : { type: string; cb: EventListener; opts?: AddEventListenerOptions | boolean }[] = [];
 
     /** Active effect-disposer functions, called on destroy(). */
     #effects     : Array<() => void> = [];
 
     /** Reactive sinks queued pre-render, flushed by #applySinks(). */
-    #sinks       : PendingSink[] = [];
+    #sinks       : { type: 'text' | 'textMono' | 'attr' | 'cls' | 'prop' | 'style' | 'bind' | 'shadow'; getter: (() => unknown); setter?: (v: string) => void; name?: string; mono?: SignalMono<string>; node?: Text; shadowMode?: 'open' | 'closed'; shadowOpts?: Record<string, unknown> }[] = [];
 
     /** Wired event-listener records (Events facet of the descriptor). */
     #events      : Array<{ type: string; cb: EventListener; opts?: AddEventListenerOptions | boolean }> = [];
@@ -229,40 +238,40 @@ export class VirtualNode
     // ─── Static — global instance registry ───────────────────────────────
 
     /**
-     * Every VirtualNode constructed during the application's lifetime is
+     * Every Virtual constructed during the application's lifetime is
      * pushed here. Useful for inspector tools, devtools, and bulk
      * operations. Not a leak source: nodes are weakly held by callers, the
      * array is intended for foreground use only.
      */
-    static readonly Instances: VirtualNode[] = [];
+    static readonly Instances: Virtual[] = [];
 
 
     // ─── Constructor ─────────────────────────────────────────────────────
 
     /**
-     * Construct a new VirtualNode.
+     * Construct a new Virtual.
      *
      * Three overloads, dispatched on the type of the first argument:
      *
-     *   new VirtualNode('div', { class: 'hero' }, child1, child2);
+     *   new Virtual('div', { class: 'hero' }, child1, child2);
      *       — tag, attrs, ...children (legacy / convenience form)
      *
-     *   new VirtualNode({ Tag: 'div', Attributes: {...}, Children: [...] });
+     *   new Virtual({ Tag: 'div', Attributes: {...}, Children: [...] });
      *       — full descriptor form
      *
-     *   new VirtualNode(new Template('<div/>'));
+     *   new Virtual(new Template('<div/>'));
      *       — clone from a pre-parsed template (zero rebuild cost)
      */
     constructor(
-        def       : VNodeDef | string | Template,
-        attrs?    : VAttrs,
-        ...children : VChild[]
+        def       : { Tag?: string; Text?: string; Attributes?: Record<string, string | number | boolean | null>; Children?: (Virtual | string | number | boolean | null | undefined)[]; Root?: Element | null; Parent?: Virtual | null } | string | Template,
+        attrs?    : Record<string, string | number | boolean | null>,
+        ...children : (Virtual | string | number | boolean | null | undefined)[]
     )
     {
         // ── Deferred-mount path (Jsx.ts Snabbdom vnode / React element) ──────
         // Jsx.ts h()/createElement results carry a non-enumerable
         // __ariannaMount(container) closure. When one is passed to
-        // `new Virtual(vnode)`, we don't rebuild it as a native VirtualNode —
+        // `new Virtual(vnode)`, we don't rebuild it as a native Virtual —
         // we stash the closure and run it on .append()/.mount(). This makes
         // Virtual the single entry point for AriannA, Snabbdom and React, with
         // identical syntax: new Virtual(x).append(container).
@@ -273,9 +282,9 @@ export class VirtualNode
             this.#attrs    = {};
             this.#children = [];
             this.#text     = '';
-            this.#id       = VirtualNode._uid();
-            VirtualNode.#nodes[this.#id] = this;
-            VirtualNode.Instances.push(this);
+            this.#id       = Virtual.#Uid();
+            Virtual.#nodes[this.#id] = this;
+            Virtual.Instances.push(this);
             return;
         }
 
@@ -290,11 +299,11 @@ export class VirtualNode
             this.#attrs    = {};
             this.#children = [];
             this.#text     = '';
-            this.#id       = VirtualNode._uid();
+            this.#id       = Virtual.#Uid();
             this.#dom      = el;
             this.#rendered = true;
-            VirtualNode.#nodes[this.#id] = this;
-            VirtualNode.Instances.push(this);
+            Virtual.#nodes[this.#id] = this;
+            Virtual.Instances.push(this);
             return;
         }
 
@@ -303,22 +312,22 @@ export class VirtualNode
         {
             this.#tag      = def.toLowerCase();
             this.#attrs    = { ...(attrs ?? {}) };
-            this.#children = children.map(c => VirtualNode._normalizeChild(c));
+            this.#children = children.map(c => Virtual.#NormalizeChild(c));
             this.#text     = '';
         }
-        // ── VNodeDef object path ─────────────────────────────────────────
+        // ── { Tag?: string; Text?: string; Attributes?: Record<string, string | number | boolean | null>; Children?: (Virtual | string | number | boolean | null | undefined)[]; Root?: Element | null; Parent?: Virtual | null } object path ─────────────────────────────────────────
         else
         {
             this.#tag      = (def.Tag ?? 'div').toLowerCase();
             this.#attrs    = { ...(def.Attributes ?? {}) };
-            this.#children = (def.Children ?? []).map(c => VirtualNode._normalizeChild(c));
+            this.#children = (def.Children ?? []).map(c => Virtual.#NormalizeChild(c));
             this.#text     = def.Text ?? '';
             this.#parent   = def.Parent ?? null;
         }
 
-        this.#id = VirtualNode._uid();
-        VirtualNode.#nodes[this.#id] = this;
-        VirtualNode.Instances.push(this);
+        this.#id = Virtual.#Uid();
+        Virtual.#nodes[this.#id] = this;
+        Virtual.Instances.push(this);
 
         // Establish parent-child relationship for children passed via
         // either form — the children must know who their Parent is, so
@@ -335,10 +344,10 @@ export class VirtualNode
     //  the public surface for tooling, inspection, and serialisation.
     // ─────────────────────────────────────────────────────────────────────
 
-    /** Root VirtualNode of this subtree (walks up via Parent until null). */
-    get Root(): VirtualNode
+    /** Root Virtual of this subtree (walks up via Parent until null). */
+    get Root(): Virtual
     {
-        let cur: VirtualNode = this;
+        let cur: Virtual = this;
         while (cur.#parent) cur = cur.#parent;
         return cur;
     }
@@ -354,8 +363,8 @@ export class VirtualNode
         return 1;
     }
 
-    /** Parent VirtualNode (null at the Root). */
-    get Parent(): VirtualNode | null { return this.#parent; }
+    /** Parent Virtual (null at the Root). */
+    get Parent(): Virtual | null { return this.#parent; }
 
     /** Registered DOM tag name. */
     get Tag(): string { return this.#tag; }
@@ -368,16 +377,16 @@ export class VirtualNode
     }
 
     /** Attribute key/value pairs, plain-object form. */
-    get Attributes(): VAttrs { return { ...this.#attrs }; }
+    get Attributes(): Record<string, string | number | boolean | null> { return { ...this.#attrs }; }
 
     /** Child VirtualNodes, in declared order. */
-    get Children(): VirtualNode[] { return this.#children.slice(); }
+    get Children(): Virtual[] { return this.#children.slice(); }
 
     /**
      * Sibling VirtualNodes — every node sharing this Parent, excluding
      * `this`. Computed; mutation does not affect ordering.
      */
-    get Siblings(): VirtualNode[]
+    get Siblings(): Virtual[]
     {
         if (!this.#parent) return [];
         return this.#parent.#children.filter(c => c !== this);
@@ -401,7 +410,7 @@ export class VirtualNode
     }
 
     /** Type descriptor (Core.GetDescriptor) for this node's tag, if any. */
-    get Descriptor(): TypeDescriptor | false { return Core.GetDescriptor(this.#tag); }
+    get Descriptor(): Core.Descriptors.Type | false { return Namespaces.Namespace.Resolve(this.#tag); }
 
     /** True if the constructor has run (always true once an instance exists). */
     get Created(): boolean { return this.#created; }
@@ -463,7 +472,7 @@ export class VirtualNode
     {
         if (this.#path !== null) return this.#path;
         const segments: number[] = [];
-        let cur: VirtualNode | null = this;
+        let cur: Virtual | null = this;
         while (cur && cur.#parent)
         {
             segments.unshift(cur.Breadth);
@@ -505,8 +514,8 @@ export class VirtualNode
     {
         if (this.#dom) return this.#dom;
 
-        const d = Core.GetDescriptor(this.#tag) as
-            (TypeDescriptor & {
+        const d = Namespaces.Namespace.Resolve(this.#tag) as
+            (Core.Descriptors.Type & {
                 Namespace?: { functions?: { create?(tag: string): Element | false } };
             }) | false;
 
@@ -516,8 +525,8 @@ export class VirtualNode
         // a bare createElement / functions.create that skips the upgrade and
         // leaves the node as HTMLUnknownElement. Falls back to createElement for
         // unknown / native tags.
-        this.#dom = (d && (d as { Custom?: boolean }).Custom && typeof Core.Create === 'function')
-            ? ((Core.Create(this.#tag) as Element) ?? document.createElement(this.#tag))
+        this.#dom = (d && (d as { Custom?: boolean }).Custom && typeof Namespaces.Namespace.Create === 'function')
+            ? ((Namespaces.Namespace.Create(this.#tag) as Element) ?? document.createElement(this.#tag))
             : document.createElement(this.#tag);
 
         // Flush attribute buffer
@@ -541,7 +550,7 @@ export class VirtualNode
         // Wire queued event listeners
         for (const { type, cb, opts } of this.#domQueue)
         {
-            this.#dom.addEventListener(type, cb, opts);
+            Events.Event.On(this.#dom, type, cb, typeof opts === 'boolean' ? { capture: opts } : opts);
             this.#events.push({ type, cb, opts });
         }
         this.#domQueue = [];
@@ -577,26 +586,26 @@ export class VirtualNode
                 case 'text':
                 {
                     const node = document.createTextNode(
-                        String((sink.getter as Getter<string>)()),
+                        String((sink.getter as (() => string))()),
                     );
                     this.#dom.appendChild(node);
                     this.#effects.push(effect(() => {
-                        node.nodeValue = (sink.getter as Getter<string>)();
+                        node.nodeValue = (sink.getter as (() => string))();
                     }));
                     break;
                 }
                 case 'textMono':
                 {
-                    const node = sink.node ?? document.createTextNode(sink.mono!.peek());
+                    const node = sink.node ?? document.createTextNode(sink.mono!.Peek());
                     if (!sink.node) this.#dom.appendChild(node);
-                    sinkText(sink.mono!, node);
+                    sink.mono!.BindText(node);
                     break;
                 }
                 case 'attr':
                 {
                     const el = this.#dom;
                     this.#effects.push(effect(() => {
-                        const v = (sink.getter as Getter<string | null>)();
+                        const v = (sink.getter as (() => string | null))();
                         if (v === null) el.removeAttribute(sink.name!);
                         else            el.setAttribute(sink.name!, v);
                     }));
@@ -606,7 +615,7 @@ export class VirtualNode
                 {
                     const el = this.#dom;
                     this.#effects.push(effect(() => {
-                        if ((sink.getter as Getter<boolean>)()) el.classList.add(sink.name!);
+                        if ((sink.getter as (() => boolean))()) el.classList.add(sink.name!);
                         else                                    el.classList.remove(sink.name!);
                     }));
                     break;
@@ -624,7 +633,7 @@ export class VirtualNode
                     const el = this.#dom as HTMLElement;
                     const p  = sink.name!.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`);
                     this.#effects.push(effect(() => {
-                        el.style.setProperty(p, (sink.getter as Getter<string>)());
+                        el.style.setProperty(p, (sink.getter as (() => string))());
                     }));
                     break;
                 }
@@ -632,7 +641,7 @@ export class VirtualNode
                 {
                     const rec = this.#dom as unknown as Record<string, unknown>;
                     this.#effects.push(effect(() => {
-                        rec['value'] = (sink.getter as Getter<string>)();
+                        rec['value'] = (sink.getter as (() => string))();
                     }));
                     if (sink.setter)
                     {
@@ -644,12 +653,10 @@ export class VirtualNode
                 }
                 case 'shadow':
                 {
-                    const mode = sink.shadowModeRule ?? sink.shadowMode ?? 'drop';
-                    (this.#dom as HTMLElement).style.boxShadow = Stylesheet.boxShadow(
-                        'open',
-                        mode as ShadowMode | ShadowLayer[] | Rule | Stylesheet,
-                        sink.shadowOpts ?? {},
-                    );
+                    Core.Services.Call('shadow', 'attach', this.#dom!, {
+                        mode   : sink.shadowMode ?? 'closed',
+                        options: sink.shadowOpts ?? {},
+                    });
                     break;
                 }
             }
@@ -668,7 +675,7 @@ export class VirtualNode
     /** Log.txt the current state to console. Returns `this` for chaining. */
     log(v?: unknown): this
     {
-        console.log(v ?? this.#dom ?? `[VirtualNode <${this.#tag}> unmounted]`);
+        console.log(v ?? this.#dom ?? `[Virtual <${this.#tag}> unmounted]`);
         return this;
     }
 
@@ -691,7 +698,7 @@ export class VirtualNode
     {
         if (this.#dom)
         {
-            this.#dom.addEventListener(type, cb, opts);
+            Events.Event.On(this.#dom, type, cb, typeof opts === 'boolean' ? { capture: opts } : opts);
             this.#events.push({ type, cb, opts });
         }
         else
@@ -708,7 +715,7 @@ export class VirtualNode
         opts? : EventListenerOptions | boolean,
     ): this
     {
-        this.#dom?.removeEventListener(type, cb, opts);
+        if (this.#dom) Events.Event.Off(this.#dom, type, cb);
         this.#events = this.#events.filter(e => !(e.type === type && e.cb === cb));
         return this;
     }
@@ -726,26 +733,26 @@ export class VirtualNode
     // ─────────────────────────────────────────────────────────────────────
 
     /**
-     * Materialise this VirtualNode into the DOM, appended to `parent`.
+     * Materialise this Virtual into the DOM, appended to `parent`.
      *
      * Accepted parent types:
      *   - CSS selector string (resolved via querySelector)
      *   - Element (appended directly)
-     *   - VirtualNode (appended to its rendered Element)
+     *   - Virtual (appended to its rendered Element)
      *   - any `{ render(): Element }` object (appended to the result)
      *   - null (no-op)
      */
     append(
-        parent: string | Element | VirtualNode | { render(): Element } | null,
+        parent: string | Element | Virtual | { render(): Element } | null,
     ): this
     {
         const p =
-              typeof parent === 'string'                 ? document.querySelector(parent)
-            : parent instanceof VirtualNode              ? parent.render()
-            : typeof (parent as { render?(): Element })?.render === 'function'
-                                                         ? (parent as { render(): Element }).render()
-            : parent instanceof Element                  ? parent
-            : null;
+            typeof parent === 'string'                 ? document.querySelector(parent)
+                : parent instanceof Virtual              ? parent.render()
+                    : typeof (parent as { render?(): Element })?.render === 'function'
+                        ? (parent as { render(): Element }).render()
+                        : parent instanceof Element                  ? parent
+                            : null;
 
         // Deferred-mount (Snabbdom vnode / React element via Jsx.ts): run the
         // marker closure against the resolved container. It owns patch/diff
@@ -763,7 +770,7 @@ export class VirtualNode
     }
 
     /** Alias for `append()` with cleaner intent at the call site. */
-    mount(parent?: string | Element | VirtualNode | null): this
+    mount(parent?: string | Element | Virtual | null): this
     {
         return this.append(parent ?? null);
     }
@@ -789,12 +796,12 @@ export class VirtualNode
      *   vn.add(childA, 0);             // prepend childA
      *   vn.add(childA, childB, 2);     // insert at index 2
      */
-    add(...args: (VChild | number)[]): this
+    add(...args: ((Virtual | string | number | boolean | null | undefined) | number)[]): this
     {
         const last  = args[args.length - 1];
         const items = typeof last === 'number' ? args.slice(0, -1) : args;
         const index = typeof last === 'number' ? last : this.#children.length;
-        const vnodes = (items as VChild[]).map(c => VirtualNode._normalizeChild(c));
+        const vnodes = (items as (Virtual | string | number | boolean | null | undefined)[]).map(c => Virtual.#NormalizeChild(c));
 
         this.#children.splice(index, 0, ...vnodes);
         for (const vn of vnodes) vn.#parent = this;
@@ -810,18 +817,18 @@ export class VirtualNode
     }
 
     /** Append children at the end (alias for `add(...)`). */
-    push(...nodes: VChild[]): this    { return this.add(...nodes); }
+    push(...nodes: (Virtual | string | number | boolean | null | undefined)[]): this    { return this.add(...nodes); }
 
     /** Prepend children at the start. */
-    unshift(...nodes: VChild[]): this { return this.add(...nodes, 0); }
+    unshift(...nodes: (Virtual | string | number | boolean | null | undefined)[]): this { return this.add(...nodes, 0); }
 
     /**
      * Remove children. Targets may be:
      *   - numeric index (splice at index)
      *   - CSS selector (first match within this node)
-     *   - VirtualNode reference (exact match in children)
+     *   - Virtual reference (exact match in children)
      */
-    remove(...targets: (string | number | VirtualNode)[]): this
+    remove(...targets: (string | number | Virtual)[]): this
     {
         for (const t of targets)
         {
@@ -840,7 +847,7 @@ export class VirtualNode
                 const el = this.#dom?.querySelector(t);
                 el?.parentNode?.removeChild(el);
             }
-            else if (t instanceof VirtualNode)
+            else if (t instanceof Virtual)
             {
                 const i = this.#children.indexOf(t);
                 if (i >= 0)
@@ -962,28 +969,85 @@ export class VirtualNode
         return this;
     }
 
-    /**
-     * Returns a fluent sub-property accessor. Works both pre- and post-
-     * render: before render() the path is written into the attrs buffer;
-     * after, into the live DOM element.
-     *
-     *   new VirtualNode('div').sub('style').set('background', 'orange');
-     *///Riscrivi senza Path! E fai inline! TUTTO! anche SubAccessor che non esiste piu!
-    sub(path: string): Sub
+    /** @name        #read
+     *  @private
+     *  @description Read the raw value at a dotted path from the live DOM (post-render) or the attrs
+     *               buffer (pre-render). No stringification, so nested objects come back as objects.
+     *  @param       {string} path Dotted path.
+     *  @returns     {unknown}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #read(path: string): unknown
     {
-        const root  = (this.#dom ?? this.#attrs) as unknown as Record<string, unknown>;
-        const owner = this;
-        const read  = (pth: string): unknown => { let c: unknown = root; for (const k of pth.split('.')) { if (c == null) return undefined; c = (c as Record<string, unknown>)[k]; } return c; };
-        const write = (pth: string, v: unknown): void => { const ps = pth.split('.'); let c = root; for (let i = 0; i < ps.length - 1; i++) { const k = ps[i]; const nx = c[k]; if (nx == null || typeof nx !== 'object') { if (nx === undefined) { const o: Record<string, unknown> = {}; c[k] = o; c = o; continue; } return; } c = nx as Record<string, unknown>; } c[ps[ps.length - 1]] = v; };
-        const make  = (base: string): Sub => ({
-            set(key, value) { write(base + '.' + key, value); return make(base); },
-            get(key)        { return read(base + '.' + key); },
-            sub(key)        { return make(base + '.' + key); },
-            unwrap()        { return read(base); },
-            end<T = unknown>(): T { return owner as unknown as T; },
-        });
-        return make(path);
+        let c: unknown = this.#dom ?? this.#attrs;
+        for (const k of path.split('.')) { if (c == null) return undefined; c = (c as Record<string, unknown>)[k]; }
+        return c;
     }
+
+    /** @name        #write
+     *  @private
+     *  @description Write a value at a dotted path (live DOM post-render, attrs buffer pre-render),
+     *               creating intermediate plain objects; aborts on a non-object, non-undefined leg.
+     *  @param       {string} path Dotted path.
+     *  @param       {unknown} value Value to write.
+     *  @returns     {void}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #write(path: string, value: unknown): void
+    {
+        const ps = path.split('.');
+        let c = (this.#dom ?? this.#attrs) as unknown as Record<string, unknown>;
+        for (let i = 0; i < ps.length - 1; i++)
+        {
+            const k = ps[i], nx = c[k];
+            if (nx == null || typeof nx !== 'object') { if (nx === undefined) { const o: Record<string, unknown> = {}; c[k] = o; c = o; continue; } return; }
+            c = nx as Record<string, unknown>;
+        }
+        c[ps[ps.length - 1]] = value;
+    }
+
+    /** @name        #sub
+     *  @private
+     *  @description Build the fluent nested accessor bound to `base` (chains via `set`/`sub`, reads raw
+     *               via `get`/`unwrap`, returns to the node via `end`). Fully internal: its shape is
+     *               inferred, so no accessor type is exposed.
+     *  @param       {string} base Current dotted base.
+     *  @returns     {object} The fluent accessor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #sub(base: string)
+    {
+        const self = this;
+        return {
+            set(key: string, value: unknown) { self.#write(`${base}.${key}`, value); return self.#sub(base); },
+            get(key: string)                 { return self.#read(`${base}.${key}`); },
+            sub(key: string)                 { return self.#sub(`${base}.${key}`); },
+            unwrap()                         { return self.#read(base); },
+            end<T = unknown>(): T            { return self as unknown as T; },
+        };
+    }
+
+    /** @name        sub
+     *  @public
+     *  @description Fluent sub-property accessor. Works pre- and post-render: before `render()` the path
+     *               is written into the attrs buffer; after, into the live DOM element. Built under-the-hood
+     *               by `#sub` — no exposed accessor type.
+     *
+     *                 new Virtual('div').sub('style').set('background', 'orange');
+     *  @param       {string} path Dotted path to the nested object.
+     *  @returns     {object} A fluent nested accessor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    sub(path: string)
+    { return this.#sub(path); }
 
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1014,42 +1078,25 @@ export class VirtualNode
         return n;
     }
 
-    /**
-     * Configure `box-shadow` for this element. Accepts:
-     *
-     *   shadow('close')                        — clear
-     *   shadow('open', 'drop',  { blur: 12 })  — preset
-     *   shadow('open', [{ y: 2 }, { y: 8 }])   — multi-layer
-     *   shadow('open', new Rule(...))          — read from Rule
-     *   shadow('open', new Stylesheet([...]))  — first matching Rule wins
-     */
-    shadow(
-        state : ShadowState,
-        mode  : ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop',
-        opts  : ShadowOptions = {},
-    ): this
+    /** @name        shadow
+     *  @public
+     *  @memberof    Virtual
+     *  @param       {'open' | 'closed'} [mode='closed'] Shadow root mode.
+     *  @param       {Record<string, unknown>} [options={}] Backend + projection options for the shadow service.
+     *  @returns     {this} For chaining.
+     *  @description Attach a shadow DOM to this node's element through the kernel `'shadow'` service (no direct
+     *               Shadow import). If the node is already rendered (`#dom` present), attaches immediately;
+     *               otherwise defers via a sink that fires at render() time. Idempotent. Distinct from CSS
+     *               `box-shadow`.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    shadow(mode: 'open' | 'closed' = 'closed', options: Record<string, unknown> = {}): this
     {
         if (this.#dom)
-        {
-            (this.#dom as HTMLElement).style.boxShadow = Stylesheet.boxShadow(state, mode, opts);
-        }
-        else if (state === 'close')
-        {
-            this.#sinks.push({ type: 'shadow', getter: () => null, shadowOpts: {} });
-        }
-        else if (mode instanceof Rule || mode instanceof Stylesheet)
-        {
-            this.#sinks.push({ type: 'shadow', getter: () => null, shadowModeRule: mode, shadowOpts: opts });
-        }
+            Core.Services.Call('shadow', 'attach', this.#dom, { mode, options });
         else
-        {
-            this.#sinks.push({
-                type       : 'shadow',
-                getter     : () => null,
-                shadowMode : mode as ShadowMode | ShadowLayer[],
-                shadowOpts : opts,
-            });
-        }
+            this.#sinks.push({ type: 'shadow', getter: () => null, shadowMode: mode, shadowOpts: options });
         return this;
     }
 
@@ -1077,7 +1124,7 @@ export class VirtualNode
         }
         else
         {
-            this.#sinks.push({ type: 'text', getter: fn as Getter<string> });
+            this.#sinks.push({ type: 'text', getter: fn as (() => string) });
         }
         return this;
     }
@@ -1085,18 +1132,16 @@ export class VirtualNode
     /** Derive a read-only signal computed from `fn`. */
     computed<T>(fn: () => T): ReadonlySignal<T>
     {
-        const s = signal<T>(undefined as T);
-        this.#effects.push(effect(() => s.set(fn())));
-        return s.readonly();
+        return computed(fn);
     }
 
     /**
      * Append a reactive Text node whose value is `getter()`. Updates
      * automatically whenever the getter's dependencies change.
      */
-    text(getter: Getter<string> | string): this
+    text(getter: (() => string) | string): this
     {
-        const g: Getter<string> = VirtualNode._asGetter(getter);
+        const g: (() => string) = Virtual.#AsGetter(getter);
         if (this.#dom)
         {
             const n = document.createTextNode(g());
@@ -1111,19 +1156,19 @@ export class VirtualNode
     }
 
     /** Fast-path text sink for monomorphic string signals (no closure churn). */
-    textMono(s: SignalMono<string>, node?: Text): this
+    textMono(s: Mono<string>, node?: Text): this
     {
         if (this.#dom)
         {
-            const n = node ?? document.createTextNode(s.peek());
+            const n = node ?? document.createTextNode(s.Peek());
             if (!node) this.#dom.appendChild(n);
-            sinkText(s, n);
+            s.BindText(n);
         }
         else
         {
             this.#sinks.push({
                 type   : 'textMono',
-                getter : s.peek as Getter<string>,
+                getter : s.Peek as (() => string),
                 mono   : s,
                 ...(node !== undefined ? { node } : {}),
             });
@@ -1132,9 +1177,9 @@ export class VirtualNode
     }
 
     /** Bind an attribute reactively; `null` removes the attribute. */
-    attr(name: string, getter: Getter<string | null> | string | null): this
+    attr(name: string, getter: (() => string | null) | string | null): this
     {
-        const g: Getter<string | null> = VirtualNode._asGetter(getter);
+        const g: (() => string | null) = Virtual.#AsGetter(getter);
         if (this.#dom)
         {
             const el = this.#dom;
@@ -1152,9 +1197,9 @@ export class VirtualNode
     }
 
     /** Toggle a class reactively (`true` adds, `false` removes). */
-    cls(name: string, getter: Getter<boolean> | boolean): this
+    cls(name: string, getter: (() => boolean) | boolean): this
     {
-        const g: Getter<boolean> = VirtualNode._asGetter(getter);
+        const g: (() => boolean) = Virtual.#AsGetter(getter);
         if (this.#dom)
         {
             const el = this.#dom;
@@ -1185,9 +1230,9 @@ export class VirtualNode
     }
 
     /** Bind a DOM property reactively. */
-    prop(name: string, getter: Getter<unknown> | unknown): this
+    prop(name: string, getter: (() => unknown) | unknown): this
     {
-        const g: Getter<unknown> = VirtualNode._asGetter(getter);
+        const g: (() => unknown) = Virtual.#AsGetter(getter);
         if (this.#dom)
         {
             const rec = this.#dom as unknown as Record<string, unknown>;
@@ -1213,13 +1258,13 @@ export class VirtualNode
      */
     style(
         propOrThing : string | Rule | Stylesheet | Record<string, string>,
-        getter?     : Getter<string> | string,
+        getter?     : (() => string) | string,
     ): this
     {
         // Form 1: reactive (prop, getter) — also accept a static value.
         if (typeof propOrThing === 'string' && typeof getter !== 'undefined')
         {
-            const g = VirtualNode._asGetter(getter);
+            const g = Virtual.#AsGetter(getter);
             if (this.#dom)
             {
                 const el = this.#dom as HTMLElement;
@@ -1302,7 +1347,7 @@ export class VirtualNode
     /**
      * Two-way bind on `value` to a getter (and optional setter on 'input').
      */
-    bind(getter: Getter<string>, setter?: (v: string) => void): this
+    bind(getter: (() => string), setter?: (v: string) => void): this
     {
         this.prop('value', getter);
         if (setter)
@@ -1334,12 +1379,12 @@ export class VirtualNode
      * starts with a Virtual (e.g. for SSR) and then needs the Real fluent
      * API surface for client-side reactivity.
      *
-     *      const v = new VirtualNode({ Tag: 'div' });
+     *      const v = new Virtual({ Tag: 'div' });
      *      v.append('#app');                 // materialises into DOM
      *      v.Real.set('class', 'hero')        // mutates same element via Real
      *           .on('click', handler);
      *
-     * Note: Real imports VirtualNode (this file), so we can't import Real
+     * Note: Real imports Virtual (this file), so we can't import Real
      * at the top here without breaking module init order. Instead we
      * resolve `Real` through `globalThis` — the runtime bundle installs
      * `window.Real` once both modules have loaded.
@@ -1352,7 +1397,7 @@ export class VirtualNode
             if (!g.Real)
             {
                 throw new Error(
-                    '[arianna] VirtualNode.Real requires window.Real (loaded by core/index.ts)',
+                    '[arianna] Virtual.Real requires window.Real (loaded by core/index.ts)',
                 );
             }
             this.#real = new g.Real(this.render());
@@ -1376,7 +1421,7 @@ export class VirtualNode
      * generated class (`__vn-…`) — or `:host` when a shadow root is
      * present.
      *
-     * If the VirtualNode has not been rendered yet (`#dom === null`), the
+     * If the Virtual has not been rendered yet (`#dom === null`), the
      * Sheet is stored and applied on first `render()`. Subsequent
      * `Sheet.Rules.add/remove/...` mutations re-flush automatically (the
      * Sheet emits `Sheet-Changed` and we listen for it).
@@ -1496,7 +1541,6 @@ export class VirtualNode
     // ─── Static reactive primitives (convenience re-exports) ─────────────
     static signal     = signal;
     static signalMono = signalMono;
-    static sinkText   = sinkText;
     static effect     = effect;
     static computed   = computed;
     static batch      = batch;
@@ -1505,18 +1549,4 @@ export class VirtualNode
     static template   = (html: string) => new Template(html);
 }
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Install on window — `Virtual` is the canonical global handle
-// ─────────────────────────────────────────────────────────────────────────────
-if (typeof window !== 'undefined')
-{
-    Object.defineProperty(window, 'Virtual', {
-        value        : VirtualNode,
-        writable     : false,
-        enumerable   : false,
-        configurable : false,
-    });
-}
-
-export default VirtualNode;
+export default Virtual;

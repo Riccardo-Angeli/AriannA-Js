@@ -19,12 +19,22 @@
  * Attrs:  label, direction ('row' | 'column'), value
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface RadioOption {
     value    : string;
@@ -54,7 +64,7 @@ export class Radio extends Component('arianna-radio', HTMLElement, {}, {
 
         this.hasLabel  = () => !!label.get();
         this.labelText = () => label.get() ?? '';
-        this.allOpts   = () => this.options$.get();
+        this.allOpts   = () => this.options$.Get();
         this.itemsCls = () => 'ar-radio-group__items ar-radio-group__items--' +
             (this.getAttribute('direction') ?? 'column');
         this.optCls = (o: RadioOption) =>
@@ -92,8 +102,8 @@ export class Radio extends Component('arianna-radio', HTMLElement, {}, {
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = Radio.DefaultSheet();
     }
 
-    set options(v: RadioOption[]) { this.options$.set(v ?? []); }
-    get options(): RadioOption[]  { return this.options$.get(); }
+    set options(v: RadioOption[]) { this.options$.Set(v ?? []); }
+    get options(): RadioOption[]  { return this.options$.Get(); }
 
     onCreated()       {}
     onBeforeMount()   {}

@@ -20,12 +20,22 @@
  * Attrs:  multiple, removable, disabled
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface ChipOptions {
     options?   : string[];
@@ -54,8 +64,8 @@ export class Chip extends Component('arianna-chip', HTMLElement, {}, {
         this.isRemovable = () => this.hasAttribute('removable');
 
         this.chips = (): ChipView[] => {
-            const opts = this.options$.get();
-            const sel  = this.selected$.get();
+            const opts = this.options$.Get();
+            const sel  = this.selected$.Get();
             return opts.map(label => {
                 const on = sel.has(label);
                 return {
@@ -67,14 +77,14 @@ export class Chip extends Component('arianna-chip', HTMLElement, {}, {
         };
 
         this.onChipClick = (label: string) => {
-            const cur = new Set(this.selected$.get());
+            const cur = new Set(this.selected$.Get());
             if (cur.has(label)) {
                 cur.delete(label);
             } else {
                 if (!this.isMultiple()) cur.clear();
                 cur.add(label);
             }
-            this.selected$.set(cur);
+            this.selected$.Set(cur);
             this.dispatchEvent(new CustomEvent('arianna:change', {
                 bubbles: true, detail: { selected: [...cur] },
             }));
@@ -82,9 +92,9 @@ export class Chip extends Component('arianna-chip', HTMLElement, {}, {
 
         this.onRemoveClick = (label: string, e: Event) => {
             e.stopPropagation();
-            const cur = new Set(this.selected$.get());
+            const cur = new Set(this.selected$.Get());
             cur.delete(label);
-            this.selected$.set(cur);
+            this.selected$.Set(cur);
             this.dispatchEvent(new CustomEvent('arianna:change', {
                 bubbles: true, detail: { selected: [...cur] },
             }));
@@ -106,11 +116,11 @@ export class Chip extends Component('arianna-chip', HTMLElement, {}, {
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = Chip.DefaultSheet();
     }
 
-    set options(v: string[]) { this.options$.set(v ?? []); }
-    get options(): string[]  { return this.options$.get(); }
+    set options(v: string[]) { this.options$.Set(v ?? []); }
+    get options(): string[]  { return this.options$.Get(); }
 
-    set selected(v: string[]) { this.selected$.set(new Set(v ?? [])); }
-    get selected(): string[]  { return [...this.selected$.get()]; }
+    set selected(v: string[]) { this.selected$.Set(new Set(v ?? [])); }
+    get selected(): string[]  { return [...this.selected$.Get()]; }
 
     onCreated()       {}
     onBeforeMount()   {}

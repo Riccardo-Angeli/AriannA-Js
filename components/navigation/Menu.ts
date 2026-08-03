@@ -29,10 +29,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface MenuItem {
     id         : string;
@@ -64,7 +74,7 @@ export class Menu extends Component('arianna-menu', HTMLElement, {}, {
         if (this.parentElement !== document.body) document.body.appendChild(this);
         this.style.display = 'none';
 
-        this.allItems = () => this.items$.get();
+        this.allItems = () => this.items$.Get();
         this.isSep    = (item: MenuItem) => !!item.separator;
         this.notSep   = (item: MenuItem) => !item.separator;
         this.itemClass = (item: MenuItem) => {
@@ -98,8 +108,8 @@ export class Menu extends Component('arianna-menu', HTMLElement, {}, {
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = Menu.DefaultSheet();
     }
 
-    set items(v: MenuItem[]) { this.items$.set(v ?? []); }
-    get items(): MenuItem[]  { return this.items$.get(); }
+    set items(v: MenuItem[]) { this.items$.Set(v ?? []); }
+    get items(): MenuItem[]  { return this.items$.Get(); }
 
     /** Open the menu at viewport coordinates (x, y). */
     openAt(x: number, y: number): this

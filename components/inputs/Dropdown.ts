@@ -16,10 +16,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface DropdownOption {
     value    : string;
@@ -52,10 +62,10 @@ export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
         const value = this.attrSignal('value');
 
         const selected = (): DropdownOption | undefined =>
-            this.options$.get().find(o => o.value === (value.get() ?? ''));
+            this.options$.Get().find(o => o.value === (value.get() ?? ''));
 
         this.placeholderText = () => this.getAttribute('placeholder') ?? 'Select…';
-        this.isOpen          = () => this.open$.get();
+        this.isOpen          = () => this.open$.Get();
         this.isSearchable    = () => this.hasAttribute('searchable');
         this.isClearable     = () => this.hasAttribute('clearable');
         this.isDisabled      = () => this.hasAttribute('disabled');
@@ -66,11 +76,11 @@ export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
         this.valueClass      = () => 'ar-dropdown__value' +
             (this.hasSelection() ? '' : ' ar-dropdown__placeholder');
         this.arrowText       = () => this.isOpen() ? '▾' : '▸';
-        this.filterValue     = () => this.filter$.get();
+        this.filterValue     = () => this.filter$.Get();
 
         this.filteredOpts = (): DropdownOption[] => {
-            const q = this.filter$.get().toLowerCase();
-            const opts = this.options$.get();
+            const q = this.filter$.Get().toLowerCase();
+            const opts = this.options$.Get();
             return q ? opts.filter(o => o.label.toLowerCase().includes(q)) : opts;
         };
         this.optCls = (o: DropdownOption) =>
@@ -81,11 +91,11 @@ export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
         this.onTriggerClick = (e: Event) => {
             e.stopPropagation();
             if (this.isDisabled()) return;
-            const wasOpen = this.open$.get();
-            this.open$.set(!wasOpen);
+            const wasOpen = this.open$.Get();
+            this.open$.Set(!wasOpen);
             if (!wasOpen) {
                 this.#outsideClick = (ev: Event) => {
-                    if (!this.contains(ev.target as Node)) this.open$.set(false);
+                    if (!this.contains(ev.target as Node)) this.open$.Set(false);
                 };
                 setTimeout(() => document.addEventListener('click', this.#outsideClick!), 0);
             } else if (this.#outsideClick) {
@@ -104,14 +114,14 @@ export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
 
         this.onFilter = (e: Event) => {
             e.stopPropagation();
-            this.filter$.set((e.target as HTMLInputElement).value);
+            this.filter$.Set((e.target as HTMLInputElement).value);
         };
 
         this.onOptionClick = (opt: DropdownOption, e: Event) => {
             e.stopPropagation();
             if (opt.disabled) return;
             this.setAttribute('value', opt.value);
-            this.open$.set(false);
+            this.open$.Set(false);
             this.dispatchEvent(new CustomEvent('arianna:change', {
                 bubbles: true, detail: { value: opt.value, option: opt },
             }));
@@ -147,8 +157,8 @@ export class Dropdown extends Component('arianna-dropdown', HTMLElement, {}, {
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = Dropdown.DefaultSheet();
     }
 
-    set options(v: DropdownOption[]) { this.options$.set(v ?? []); }
-    get options(): DropdownOption[]  { return this.options$.get(); }
+    set options(v: DropdownOption[]) { this.options$.Set(v ?? []); }
+    get options(): DropdownOption[]  { return this.options$.Get(); }
 
     onCreated()       {}
     onBeforeMount()   {}

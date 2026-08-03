@@ -30,166 +30,178 @@
  *   }
  */
 
-import Core from './Core.ts';
-import { Observable } from './Observable.ts';
-import State from './State.ts';
-import { signal as _signal } from './Observable.ts';
-import type { Signal } from './Observable.ts';
+import { Core } from './Core.ts';
+import { Reactivity } from './Reactive.ts';
 
-// ── WorkerPool ────────────────────────────────────────────────────────────────
-
-export interface WorkerTask<T = unknown>
+/** @namespace Workers @description Type contracts (merged with the class). */
+export namespace Workers
 {
-    fn     : (...args: unknown[]) => T;
-    args   : unknown[];
-    resolve: (v: T) => void;
-    reject : (e: unknown) => void;
-}
-
-/**
- * Pool di Worker riusabili — evita il costo di spawn per ogni task.
- *
- * @example
- *   const pool = new WorkerPool(4, './worker.js');
- *   const result = await pool.run((a, b) => a + b, [1, 2]);
- */
-export class WorkerPool
-{
-    #workers : Worker[]     = [];
-    #queue   : WorkerTask[] = [];
-    #idle    : Worker[]     = [];
-
-    constructor(size: number, url: string | URL)
+    export interface WorkerTask<T = unknown>
     {
-        for (let i = 0; i < size; i++) {
-            const w = new Worker(url, { type: 'module' });
-            w.onmessage = (e) => this.#onResult(w, e.data);
-            w.onerror   = (e) => this.#onError(w, e);
-            this.#workers.push(w);
-            this.#idle.push(w);
-        }
+        fn     : (...args: unknown[]) => T;
+        args   : unknown[];
+        resolve: (v: T) => void;
+        reject : (e: unknown) => void;
     }
 
     /**
-     * Esegue fn in un worker del pool.
-     * Il worker deve esporre un handler che risponde a { fn, args }.
+     * Pool di Worker riusabili — evita il costo di spawn per ogni task.
+     *
+     * @example
+     *   const pool = new WorkerPool(4, './worker.js');
+     *   const result = await pool.run((a, b) => a + b, [1, 2]);
      */
-    run<T>(fn: (...args: unknown[]) => T, args: unknown[] = []): Promise<T>
+    export class WorkerPool
     {
-        return new Promise((resolve, reject) => {
-            const task: WorkerTask<T> = { fn, args, resolve, reject };
-            const worker = this.#idle.pop();
-            if (worker) this.#dispatch(worker, task as WorkerTask);
-            else this.#queue.push(task as WorkerTask);
-        });
-    }
+        #workers : globalThis.Worker[]     = [];
+        #queue   : Workers.WorkerTask[] = [];
+        #idle    : globalThis.Worker[]     = [];
 
-    /** Termina tutti i worker del pool. */
-    terminate(): void
-    {
-        this.#workers.forEach(w => w.terminate());
-        this.#workers = []; this.#idle = []; this.#queue = [];
-    }
+        constructor(size: number, url: string | URL)
+        {
+            for (let i = 0; i < size; i++) {
+                const w = new globalThis.Worker(url, { type: 'module' });
+                w.onmessage = (e) => this.#onResult(w, e.data);
+                w.onerror   = (e) => this.#onError(w, e);
+                this.#workers.push(w);
+                this.#idle.push(w);
+            }
+        }
 
-    #dispatch(worker: Worker, task: WorkerTask): void
-    {
-        (worker as unknown as Record<string, unknown>)['__task__'] = task;
-        worker.postMessage({ fn: task.fn.toString(), args: task.args });
-    }
+        /**
+         * Esegue fn in un worker del pool.
+         * Il worker deve esporre un handler che risponde a { fn, args }.
+         */
+        run<T>(fn: (...args: unknown[]) => T, args: unknown[] = []): Promise<T>
+        {
+            return new Promise((resolve, reject) => {
+                const task: Workers.WorkerTask<T> = { fn, args, resolve, reject };
+                const worker = this.#idle.pop();
+                if (worker) this.#dispatch(worker, task as Workers.WorkerTask);
+                else this.#queue.push(task as Workers.WorkerTask);
+            });
+        }
 
-    #onResult(worker: Worker, data: unknown): void
-    {
-        const task = (worker as unknown as Record<string, unknown>)['__task__'] as WorkerTask | undefined;
-        task?.resolve(data);
-        const next = this.#queue.shift();
-        if (next) this.#dispatch(worker, next);
-        else this.#idle.push(worker);
-    }
+        /** Termina tutti i worker del pool. */
+        terminate(): void
+        {
+            this.#workers.forEach(w => w.terminate());
+            this.#workers = []; this.#idle = []; this.#queue = [];
+        }
 
-    #onError(worker: Worker, e: ErrorEvent): void
-    {
-        const task = (worker as unknown as Record<string, unknown>)['__task__'] as WorkerTask | undefined;
-        task?.reject(e.error ?? e.message);
-        this.#idle.push(worker);
+        #dispatch(worker: globalThis.Worker, task: Workers.WorkerTask): void
+        {
+            (worker as unknown as Record<string, unknown>)['__task__'] = task;
+            worker.postMessage({ fn: task.fn.toString(), args: task.args });
+        }
+
+        #onResult(worker: globalThis.Worker, data: unknown): void
+        {
+            const task = (worker as unknown as Record<string, unknown>)['__task__'] as Workers.WorkerTask | undefined;
+            task?.resolve(data);
+            const next = this.#queue.shift();
+            if (next) this.#dispatch(worker, next);
+            else this.#idle.push(worker);
+        }
+
+        #onError(worker: globalThis.Worker, e: ErrorEvent): void
+        {
+            const task = (worker as unknown as Record<string, unknown>)['__task__'] as Workers.WorkerTask | undefined;
+            task?.reject(e.error ?? e.message);
+            this.#idle.push(worker);
+        }
     }
-}
 
 // ── SharedState — Signal bridge cross-thread ──────────────────────────────────
 
-const _sharedSignals = new Map<string, Signal<unknown>>();
-
-/**
- * Crea (o recupera) un Signal sincronizzato con i Worker via postMessage.
- * Il worker può aggiornarlo inviando:
- *   { type: 'arianna:signal', key: string, value: T }
- *
- * @example
- *   const progress = Workers.sharedSignal('progress', 0);
- *   State.effect(() => progressBar.style('width', `${progress.get()}%`));
- */
-function sharedSignal<T>(key: string, initial: T): Signal<T>
-{
-    if (_sharedSignals.has(key)) return _sharedSignals.get(key) as Signal<T>;
-    const s = _signal<T>(initial);
-    _sharedSignals.set(key, s as Signal<unknown>);
-    return s;
-}
-
-/** Handler globale per i messaggi dai Worker. Registrato automaticamente. */
-function _installWorkerListener(): void
-{
-    if (typeof window === 'undefined') return;
-    window.addEventListener('message', (e: MessageEvent) => {
-        const { type, key, value } = e.data ?? {};
-        if (type === 'arianna:signal' && _sharedSignals.has(key)) {
-            (_sharedSignals.get(key) as Signal<unknown>).set(value);
-        }
-    });
-}
-
-// ── OffscreenCanvas bridge ─────────────────────────────────────────────────────
-
-/**
- * Trasferisce un Canvas a un Worker per rendering off-thread.
- * Il Worker riceve il canvas e può usare WebGL/2D context senza bloccare il main thread.
- *
- * @example
- *   const canvas = document.getElementById('gl') as HTMLCanvasElement;
- *   const worker = new Worker('./renderer.js', { type: 'module' });
- *   Workers.offscreen(canvas, worker);
- */
-function offscreen(canvas: HTMLCanvasElement, worker: Worker): void
-{
-    if (!('transferControlToOffscreen' in canvas)) {
-        console.warn('[AriannA Workers] OffscreenCanvas not supported in this browser');
-        return;
-    }
-    const offscreenCanvas = (canvas as unknown as { transferControlToOffscreen(): OffscreenCanvas }).transferControlToOffscreen();
-    worker.postMessage({ type: 'arianna:offscreen', canvas: offscreenCanvas }, [offscreenCanvas as unknown as Transferable]);
-}
-
-// ── Workers Plugin ─────────────────────────────────────────────────────────────
-
-export const Workers = {
-    name   : 'AriannAWorkers',
-    version: '0.2.0',
-
-    install(core: typeof Core, _opts?: unknown): void
+    /** @class Worker @description Worker utilities: shared signals synced via postMessage, OffscreenCanvas
+     *  bridge, and the plugin installer. All state/helpers embedded as static # — nothing scattered. */
+    export class Worker
     {
-        _installWorkerListener();
+        /** @name PluginName @public @static @readonly */
+        static readonly PluginName = 'AriannAWorkers';
+        /** @name PluginVersion @public @static @readonly */
+        static readonly PluginVersion = '0.2.0';
 
-        const API = {
-            WorkerPool,
-            sharedSignal,
-            offscreen,
-            /** Tutti i Signal condivisi attivi — utile per debug. */
-            get signals() { return _sharedSignals; },
-        };
+        /** @name #sharedSignals @private @static @description Active shared signals, keyed by name (SOT). */
+        static #sharedSignals = new Map<string, Reactivity.Signal<unknown>>();
 
-        Object.defineProperty(window, 'AriannAWorkers', {
-            value: API, writable: false, enumerable: false, configurable: false,
-        });
-    },
-};
+        /** @name sharedSignal @public @static @description Create/get a Signal synced with Workers via postMessage
+         *  (`{ type: 'arianna:signal', key, value }`). */
+        static sharedSignal<T>(key: string, initial: T): Reactivity.Signal<T>
+        {
+            if (Worker.#sharedSignals.has(key)) return Worker.#sharedSignals.get(key) as Reactivity.Signal<T>;
+            const s = new Reactivity.Signal<T>(initial);
+            Worker.#sharedSignals.set(key, s as Reactivity.Signal<unknown>);
+            return s;
+        }
+
+        /** @name offscreen @public @static @description Transfer a canvas to a Worker for off-thread rendering. */
+        static offscreen(canvas: HTMLCanvasElement, worker: globalThis.Worker): void
+        {
+            if (!('transferControlToOffscreen' in canvas)) {
+                console.warn('[AriannA Workers] OffscreenCanvas not supported in this browser');
+                return;
+            }
+            const offscreenCanvas = (canvas as unknown as { transferControlToOffscreen(): OffscreenCanvas }).transferControlToOffscreen();
+            worker.postMessage({ type: 'arianna:offscreen', canvas: offscreenCanvas }, [offscreenCanvas as unknown as Transferable]);
+        }
+
+        /** @name #installWorkerListener @private @static @description Global handler for messages FROM Workers.
+         *  The `message` event is the worker TRANSPORT (postMessage) → stays native, not the Core.Events bus. */
+        static #installWorkerListener(): void
+        {
+            if (typeof window === 'undefined') return;
+            window.addEventListener('message', (e: MessageEvent) => {
+                const { type, key, value } = e.data ?? {};
+                if (type === 'arianna:signal' && Worker.#sharedSignals.has(key)) {
+                    (Worker.#sharedSignals.get(key) as Reactivity.Signal<unknown>).Set(value);
+                }
+            });
+        }
+
+        /** @name install @public @static @description Plugin install: wires the worker listener + exposes the API. */
+        static install(_core: typeof Core, _opts?: unknown): void
+        {
+            Worker.#installWorkerListener();
+            const API = {
+                WorkerPool,
+                sharedSignal: Worker.sharedSignal,
+                offscreen: Worker.offscreen,
+                get signals() { return Worker.#sharedSignals; },
+            };
+            Object.defineProperty(window, 'AriannAWorkers', {
+                value: API, writable: false, enumerable: false, configurable: false,
+            });
+        }
+    }
+
+    /** @name        workersService
+     *  @private
+     *  @description Registers the 'workers' service: worker pool + shared signals + offscreen transfer.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    const Service = new Core.Services.Service
+    (
+        'workers',
+        {
+            /** Create a reusable Worker pool. */
+            pool(size: number, url: string | URL): Workers.WorkerPool
+            { return new Workers.WorkerPool(size, url); },
+            /** Create/get a cross-thread shared Signal. */
+            sharedSignal: Workers.Worker.sharedSignal,
+            /** Transfer a canvas to a Worker for off-thread rendering. */
+            offscreen: Workers.Worker.offscreen,
+        }
+    );
+}
+
+
 
 export default Workers;
+
+// ── Top-level re-exports (barrel imports WorkerPool / WorkerTask by name). ──
+export import WorkerPool = Workers.WorkerPool;
+export type WorkerTask<T = unknown> = Workers.WorkerTask<T>;

@@ -1,0 +1,1057 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arianna.dev/schemas/arianna-ir-v2.schema.json",
+  "title": "AriannA v2 Master Unified IR Schema",
+  "description": "Schema JSON canonico per l'Intermediate Representation di AriannA v2. Namespace rimane una definition globale completa; Node punta alla Namespace definition tramite chiave/riferimento. Style resta inline nel Type e nel Node quando necessario.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "Version": {
+      "type": "string",
+      "default": "2.0.0"
+    },
+    "Namespaces": {
+      "type": "object",
+      "description": "Catalogo globale delle Namespace definition. Esempi chiave: html, svg, mathml, arianna.",
+      "additionalProperties": {
+        "$ref": "#/$defs/Namespace"
+      }
+    },
+    "Types": {
+      "type": "object",
+      "description": "Catalogo globale delle Type definition AriannA/native/custom.",
+      "additionalProperties": {
+        "$ref": "#/$defs/Type"
+      }
+    },
+    "Node": {
+      "$ref": "#/$defs/Node"
+    },
+    "Reactive": {
+      "$ref": "#/$defs/ReactiveGraph"
+    },
+    "Directives": {
+      "type": "object",
+      "description": "Catalogo opzionale di directive definition riusabili.",
+      "additionalProperties": {
+        "$ref": "#/$defs/Directive"
+      }
+    },
+    "Metadata": {
+      "type": "object",
+      "description": "Metadata documentale dell'IR: source, compiler, build, audit, policy globale. Non contiene riferimenti DOM runtime.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "Version",
+    "Namespaces",
+    "Node"
+  ],
+  "$defs": {
+    "NamespaceRef": {
+      "type": "string",
+      "description": "Chiave che punta a una definition in #/Namespaces. Esempi: html, svg, mathml, arianna.",
+      "minLength": 1
+    },
+    "TypeRef": {
+      "type": "string",
+      "description": "Chiave che punta a una definition in #/Types oppure nome qualificato runtime.",
+      "minLength": 1
+    },
+    "Expression": {
+      "type": "object",
+      "description": "Espressione serializzabile. Può essere path dati, expression DSL, literal o handler symbolic reference.",
+      "additionalProperties": false,
+      "properties": {
+        "Kind": {
+          "type": "string",
+          "enum": [
+            "Literal",
+            "Path",
+            "Expression",
+            "Handler",
+            "Computed"
+          ]
+        },
+        "Value": {},
+        "Path": {
+          "type": "string"
+        },
+        "Code": {
+          "type": "string"
+        },
+        "Args": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Expression"
+          }
+        }
+      },
+      "required": [
+        "Kind"
+      ]
+    },
+    "Style": {
+      "type": "object",
+      "description": "AST CSS unificato AriannA — UN solo tipo ricorsivo. Ogni Style è un blocco: Declarations (proprietà→valore) + Rules annidate. Le at-rule (media, supports, keyframes, font-face, import, charset, layer, container, page, scope, property, …) sono rule-node identificati da At + Prelude. Copre l'INTERO CSS senza enumerare le proprietà. Il blocco radice (su Node/Type) è l'host: Selector assente.",
+      "additionalProperties": false,
+      "properties": {
+        "Selector": {
+          "type": "string",
+          "description": "Selettore relativo al contesto: ':host', '&:hover', '::before', '.x', 'svg path', '> .y'. Per uno step di keyframes è l'offset: 'from' | 'to' | '50%'. Assente sul blocco radice (host)."
+        },
+        "At": {
+          "type": "string",
+          "description": "Nome at-rule SENZA '@'. Se presente, il nodo È una at-rule e Prelude ne è condizione/nome.",
+          "examples": [
+            "media",
+            "supports",
+            "keyframes",
+            "font-face",
+            "import",
+            "charset",
+            "layer",
+            "container",
+            "page",
+            "scope",
+            "property"
+          ]
+        },
+        "Prelude": {
+          "type": "string",
+          "description": "Testo dopo l'at-rule: query media, condizione supports, nome keyframes/layer, url import, ecc. Es. '(min-width: 768px)', 'screen and (hover: hover)', 'spin'."
+        },
+        "Declarations": {
+          "type": "object",
+          "description": "Coppie proprietà→valore. Chiavi PascalCase IR-side (Display, MarginTop, BackgroundColor), serializzate kebab-case in emit. Valore: stringa, numero, o Binding per valori reattivi.",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "$ref": "#/$defs/Binding"
+              }
+            ]
+          }
+        },
+        "Rules": {
+          "type": "array",
+          "description": "Regole annidate (ricorsive): selettori discendenti/pseudo via Selector, at-rule via At+Prelude, step keyframes via Selector=offset.",
+          "items": {
+            "$ref": "#/$defs/Style"
+          }
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      }
+    },
+    "Policy": {
+      "type": "object",
+      "description": "Policy declarativa serializzabile per sicurezza, CSS, eventi, attributi, URL e scope.",
+      "additionalProperties": true,
+      "properties": {
+        "Mode": {
+          "type": "string",
+          "enum": [
+            "Trusted",
+            "Safe",
+            "Sandboxed"
+          ]
+        },
+        "Scope": {
+          "type": "string"
+        },
+        "AllowedAttributes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "AllowedProperties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "AllowedEvents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "AllowedCssProperties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "UrlPolicy": {
+          "type": "string",
+          "enum": [
+            "Deny",
+            "SameOrigin",
+            "AllowListed",
+            "Trusted"
+          ]
+        }
+      }
+    },
+    "Namespace": {
+      "type": "object",
+      "description": "Definition completa di un namespace. È globale e canonica: HTML, SVG, MathML, AriannA, o namespace custom. I Node non duplicano questa struttura; la referenziano.",
+      "additionalProperties": false,
+      "properties": {
+        "Key": {
+          "type": "string",
+          "description": "Chiave canonica: html, svg, mathml, arianna."
+        },
+        "URI": {
+          "type": "string"
+        },
+        "NS": {
+          "type": "boolean"
+        },
+        "Base": {
+          "type": "string"
+        },
+        "Schema": {
+          "type": "string"
+        },
+        "Documentation": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "W3C": {
+              "type": "string"
+            },
+            "MDN": {
+              "type": "string"
+            }
+          }
+        },
+        "Standard": {
+          "type": "object",
+          "description": "Definition dei tag standard del namespace, eventualmente raggruppati per categoria.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "Tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "Interfaces": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/InterfaceDefinition"
+                }
+              },
+              "Attributes": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/AttributeDefinition"
+                }
+              },
+              "Events": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/EventDefinition"
+                }
+              }
+            }
+          }
+        },
+        "Interfaces": {
+          "type": "object",
+          "description": "Interfacce native note: HTMLElement, HTMLButtonElement, SVGSVGElement, ecc.",
+          "additionalProperties": {
+            "$ref": "#/$defs/InterfaceDefinition"
+          }
+        },
+        "Tags": {
+          "type": "object",
+          "description": "Catalogo tag del namespace con mapping tag -> interface/defaults.",
+          "additionalProperties": {
+            "$ref": "#/$defs/TagDefinition"
+          }
+        },
+        "Attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AttributeDefinition"
+          }
+        },
+        "Events": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/EventDefinition"
+          }
+        },
+        "Custom": {
+          "type": "object",
+          "description": "Estensioni custom del namespace.",
+          "additionalProperties": false,
+          "properties": {
+            "Interfaces": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/InterfaceDefinition"
+              }
+            },
+            "Tags": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/TagDefinition"
+              }
+            },
+            "Attributes": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/AttributeDefinition"
+              }
+            },
+            "Events": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/EventDefinition"
+              }
+            }
+          },
+          "required": [
+            "Interfaces",
+            "Tags"
+          ]
+        },
+        "Metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "Key",
+        "URI",
+        "NS",
+        "Base",
+        "Custom"
+      ]
+    },
+    "InterfaceDefinition": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "Extends": {
+          "type": "string"
+        },
+        "Constructor": {
+          "type": "string"
+        },
+        "Properties": {
+          "type": "object"
+        },
+        "Methods": {
+          "type": "object"
+        },
+        "Events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "Name"
+      ]
+    },
+    "TagDefinition": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "Tag": {
+          "type": "string"
+        },
+        "Interface": {
+          "type": "string"
+        },
+        "Constructor": {
+          "type": "string"
+        },
+        "Void": {
+          "type": "boolean"
+        },
+        "Category": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Attributes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "AllowedChildren": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "DefaultRole": {
+          "type": "string"
+        },
+        "Metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "Tag"
+      ]
+    },
+    "AttributeDefinition": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "Type": {
+          "type": "string"
+        },
+        "Boolean": {
+          "type": "boolean"
+        },
+        "ReflectedProperty": {
+          "type": "string"
+        },
+        "Enum": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      },
+      "required": [
+        "Name"
+      ]
+    },
+    "EventDefinition": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "Interface": {
+          "type": "string"
+        },
+        "Bubbles": {
+          "type": "boolean"
+        },
+        "Cancelable": {
+          "type": "boolean"
+        },
+        "Composed": {
+          "type": "boolean"
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      },
+      "required": [
+        "Name"
+      ]
+    },
+    "Type": {
+      "type": "object",
+      "description": "Definition statica di un type AriannA/native/custom. Non contiene stato runtime DOM.",
+      "additionalProperties": false,
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "Tag": {
+          "type": "string"
+        },
+        "Namespace": {
+          "$ref": "#/$defs/NamespaceRef"
+        },
+        "Constructor": {
+          "type": "string"
+        },
+        "Interface": {
+          "type": "string"
+        },
+        "Extends": {
+          "type": "string"
+        },
+        "Template": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/Node"
+            }
+          ]
+        },
+        "Style": {
+          "$ref": "#/$defs/Style"
+        },
+        "Shadow": {
+          "$ref": "#/$defs/Shadow"
+        },
+        "ObservedAttributes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "IsCustomElement": {
+              "type": "boolean"
+            },
+            "IsShadowSealed": {
+              "type": "boolean"
+            }
+          }
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      },
+      "required": [
+        "Name",
+        "Tag",
+        "Namespace",
+        "Interface"
+      ]
+    },
+    "Node": {
+      "type": "object",
+      "description": "Nodo IR serializzabile canonico. Sostituisce Virtual. Non contiene StateNode, History o puntatori DOM reali.",
+      "additionalProperties": false,
+      "properties": {
+        "Id": {
+          "type": "string"
+        },
+        "Key": {
+          "type": "string"
+        },
+        "Kind": {
+          "type": "string",
+          "enum": [
+            "Element",
+            "Text",
+            "Comment",
+            "Fragment",
+            "Template",
+            "Slot",
+            "ShadowRoot",
+            "Portal",
+            "Directive",
+            "Component"
+          ]
+        },
+        "Namespace": {
+          "$ref": "#/$defs/NamespaceRef"
+        },
+        "Type": {
+          "$ref": "#/$defs/TypeRef"
+        },
+        "Tag": {
+          "type": "string"
+        },
+        "Text": {
+          "type": "string"
+        },
+        "Comment": {
+          "type": "string"
+        },
+        "Attributes": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "Properties": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "Events": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/EventBinding"
+          }
+        },
+        "Style": {
+          "$ref": "#/$defs/Style"
+        },
+        "Class": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "boolean"
+              }
+            }
+          ]
+        },
+        "Children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Node"
+          }
+        },
+        "Shadow": {
+          "$ref": "#/$defs/Shadow"
+        },
+        "Directives": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Directive"
+          }
+        },
+        "Bindings": {
+          "type": "object",
+          "description": "Binding locali del nodo: text, attributes.*, properties.*, class.*, style.*, events.*.",
+          "additionalProperties": {
+            "$ref": "#/$defs/Binding"
+          }
+        },
+        "Lifecycle": {
+          "$ref": "#/$defs/Lifecycle"
+        },
+        "Upgrade": {
+          "$ref": "#/$defs/Upgrade"
+        },
+        "Hydration": {
+          "$ref": "#/$defs/Hydration"
+        },
+        "Owner": {
+          "type": "string"
+        },
+        "Scope": {
+          "type": "string"
+        },
+        "Ref": {
+          "type": "string"
+        },
+        "Source": {
+          "$ref": "#/$defs/Source"
+        },
+        "Metadata": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        },
+        "MemoizedProps": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "MemoizedState": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "Kind"
+      ]
+    },
+    "Shadow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Mode": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed"
+          ]
+        },
+        "Css": {
+          "type": "boolean"
+        },
+        "DelegatesFocus": {
+          "type": "boolean"
+        },
+        "Serializable": {
+          "type": "boolean"
+        },
+        "Style": {
+          "$ref": "#/$defs/Style"
+        },
+        "Children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Node"
+          }
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      },
+      "required": [
+        "Mode"
+      ]
+    },
+    "EventBinding": {
+      "type": "object",
+      "description": "Binding evento in stile XML Events (W3C) portato in JSON. La chiave nella mappa Node.Events è il tipo evento (ev:event, es. 'click'). Handler è l'azione; Observer/Target/Phase/Propagate/DefaultAction replicano gli attributi ev:*.",
+      "additionalProperties": false,
+      "properties": {
+        "Handler": {
+          "$ref": "#/$defs/Expression"
+        },
+        "Observer": {
+          "type": "string",
+          "description": "ev:observer — Id del nodo che registra il listener (default: nodo corrente)."
+        },
+        "Target": {
+          "type": "string",
+          "description": "ev:target — Id del nodo che deve essere il target dell'evento perché l'handler scatti (default: qualsiasi)."
+        },
+        "Phase": {
+          "type": "string",
+          "enum": [
+            "capture",
+            "default"
+          ],
+          "default": "default",
+          "description": "ev:phase — fase su cui ascoltare (capture | default/bubble)."
+        },
+        "Propagate": {
+          "type": "string",
+          "enum": [
+            "stop",
+            "continue"
+          ],
+          "default": "continue",
+          "description": "ev:propagate — stop = stopPropagation dopo l'handler."
+        },
+        "DefaultAction": {
+          "type": "string",
+          "enum": [
+            "cancel",
+            "perform"
+          ],
+          "default": "perform",
+          "description": "ev:defaultAction — cancel = preventDefault."
+        },
+        "Once": {
+          "type": "boolean"
+        },
+        "Passive": {
+          "type": "boolean"
+        },
+        "Signal": {
+          "type": "string",
+          "description": "Id di un AbortSignal per rimuovere il listener."
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      },
+      "required": [
+        "Handler"
+      ]
+    },
+    "Binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "From": {
+          "$ref": "#/$defs/Expression"
+        },
+        "To": {
+          "type": "string"
+        },
+        "Mode": {
+          "type": "string",
+          "enum": [
+            "OneWay",
+            "TwoWay",
+            "OneTime",
+            "Event"
+          ]
+        },
+        "Transform": {
+          "$ref": "#/$defs/Expression"
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      },
+      "required": [
+        "From"
+      ]
+    },
+    "Directive": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": {
+          "type": "string",
+          "enum": [
+            "if",
+            "else",
+            "elseif",
+            "for",
+            "model",
+            "show",
+            "hide",
+            "switch",
+            "case",
+            "memo",
+            "key",
+            "portal",
+            "teleport",
+            "await",
+            "suspense",
+            "custom"
+          ]
+        },
+        "Expression": {
+          "$ref": "#/$defs/Expression"
+        },
+        "IterName": {
+          "type": "string"
+        },
+        "IndexName": {
+          "type": "string"
+        },
+        "Key": {
+          "type": "string"
+        },
+        "AnchorId": {
+          "type": "string"
+        },
+        "Children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Node"
+          }
+        },
+        "Metadata": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      },
+      "required": [
+        "Type"
+      ]
+    },
+    "ReactiveGraph": {
+      "type": "object",
+      "description": "Grafo reattivo opzionale globale. I binding locali possono comunque vivere direttamente sui Node.",
+      "additionalProperties": false,
+      "properties": {
+        "Signals": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Signal"
+          }
+        },
+        "Sinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReactiveSink"
+          }
+        }
+      }
+    },
+    "Signal": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "Key": {
+          "type": "string"
+        },
+        "Initial": {},
+        "Metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "Key"
+      ]
+    },
+    "ReactiveSink": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "TargetNodeId": {
+          "type": "string"
+        },
+        "TargetEffect": {
+          "type": "string",
+          "enum": [
+            "text",
+            "attribute",
+            "property",
+            "class",
+            "style",
+            "event",
+            "directive"
+          ]
+        },
+        "TargetName": {
+          "type": "string"
+        },
+        "Expression": {
+          "$ref": "#/$defs/Expression"
+        }
+      },
+      "required": [
+        "TargetNodeId",
+        "TargetEffect",
+        "Expression"
+      ]
+    },
+    "Lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Created": {
+          "$ref": "#/$defs/Expression"
+        },
+        "BeforeMount": {
+          "$ref": "#/$defs/Expression"
+        },
+        "Mounted": {
+          "$ref": "#/$defs/Expression"
+        },
+        "BeforeUpdate": {
+          "$ref": "#/$defs/Expression"
+        },
+        "Updated": {
+          "$ref": "#/$defs/Expression"
+        },
+        "BeforeUnmount": {
+          "$ref": "#/$defs/Expression"
+        },
+        "Unmounted": {
+          "$ref": "#/$defs/Expression"
+        },
+        "Adopted": {
+          "$ref": "#/$defs/Expression"
+        },
+        "AttributeChanged": {
+          "$ref": "#/$defs/Expression"
+        }
+      }
+    },
+    "Upgrade": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Mode": {
+          "type": "string",
+          "enum": [
+            "Auto",
+            "Manual",
+            "None"
+          ]
+        },
+        "Strategy": {
+          "type": "string",
+          "enum": [
+            "Native",
+            "AriannA",
+            "Hybrid"
+          ]
+        },
+        "Type": {
+          "$ref": "#/$defs/TypeRef"
+        },
+        "ObservedAttributes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Once": {
+          "type": "boolean"
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      }
+    },
+    "Hydration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Mode": {
+          "type": "string",
+          "enum": [
+            "None",
+            "Client",
+            "Server",
+            "Resume"
+          ]
+        },
+        "Marker": {
+          "type": "string"
+        },
+        "Checksum": {
+          "type": "string"
+        },
+        "Policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "File": {
+          "type": "string"
+        },
+        "Line": {
+          "type": "integer"
+        },
+        "Column": {
+          "type": "integer"
+        },
+        "Compiler": {
+          "type": "string"
+        },
+        "Language": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

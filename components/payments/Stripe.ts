@@ -31,12 +31,22 @@
  * Attrs: publishable-key, client-secret, return-url, locale, appearance-theme
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface StripeOptions {
     publishableKey   : string;
@@ -77,9 +87,9 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
 
     build(_opts: StripeOptions = {} as StripeOptions)
     {
-        this.statusMsg = () => this.error$.get() ?? (this.ready$.get() ? '' : 'Loading Stripe…');
-        this.payDisabled = () => !this.ready$.get() || this.busy$.get();
-        this.payLabel = () => this.busy$.get() ? 'Processing…' : 'Pay';
+        this.statusMsg = () => this.error$.Get() ?? (this.ready$.Get() ? '' : 'Loading Stripe…');
+        this.payDisabled = () => !this.ready$.Get() || this.busy$.Get();
+        this.payLabel = () => this.busy$.Get() ? 'Processing…' : 'Pay';
 
         this.onPay = () => { void this.pay(); };
 
@@ -97,8 +107,8 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
     }
 
     async pay(): Promise<void> {
-        if (!this.ready$.get() || this.busy$.get()) return;
-        this.busy$.set(true);
+        if (!this.ready$.Get() || this.busy$.Get()) return;
+        this.busy$.Set(true);
         try {
             const stripe = this.#stripe as {
                 confirmPayment(opts: { elements: unknown; confirmParams: { return_url: string }; redirect?: 'if_required' | 'always' }): Promise<{ error?: { message?: string }; paymentIntent?: unknown }>;
@@ -125,7 +135,7 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
                 detail: { method: 'stripe', message: err instanceof Error ? err.message : String(err) },
             }));
         } finally {
-            this.busy$.set(false);
+            this.busy$.Set(false);
         }
     }
 
@@ -133,7 +143,7 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
         const pk = this.getAttribute('publishable-key');
         const cs = this.getAttribute('client-secret');
         if (!pk || !cs) {
-            this.error$.set('Missing publishable-key or client-secret');
+            this.error$.Set('Missing publishable-key or client-secret');
             return;
         }
         try {
@@ -156,10 +166,10 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
             const host = this.querySelector<HTMLElement>('[data-r="mount"]');
             if (host) {
                 paymentEl.mount(host);
-                this.ready$.set(true);
+                this.ready$.Set(true);
             }
         } catch (err) {
-            this.error$.set(err instanceof Error ? err.message : String(err));
+            this.error$.Set(err instanceof Error ? err.message : String(err));
         }
     }
 

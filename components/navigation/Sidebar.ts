@@ -49,10 +49,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface SidebarItem {
     id        : string;
@@ -189,15 +199,15 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
 
         this.onSearchInput = (e: Event) => {
             const v = (e.target as HTMLInputElement).value.toLowerCase().trim();
-            this.query$.set(v);
+            this.query$.Set(v);
         };
 
         this.onSectionClick = (sec: SidebarSection) => {
-            const open = new Set(this.openSecs$.get());
+            const open = new Set(this.openSecs$.Get());
             const wasOpen = open.has(sec.id);
             if (wasOpen) open.delete(sec.id);
             else         open.add(sec.id);
-            this.openSecs$.set(open);
+            this.openSecs$.Set(open);
             this.dispatchEvent(new CustomEvent('arianna:section-toggle', {
                 bubbles: true, detail: { id: sec.id, open: !wasOpen },
             }));
@@ -221,9 +231,9 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
         };
 
         this.flatSections = (): FlatSection[] => {
-            const secs = this.sections$.get();
-            const open = this.openSecs$.get();
-            const q = this.query$.get();
+            const secs = this.sections$.Get();
+            const open = this.openSecs$.Get();
+            const q = this.query$.Get();
 
             return secs
                 .map(sec => {
@@ -241,7 +251,7 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
                         arrowText: isOpen ? '▾' : '▸',
                     };
                 })
-                .filter(fs => !this.query$.get() || fs.items.length > 0);
+                .filter(fs => !this.query$.Get() || fs.items.length > 0);
         };
 
         this.hasMatches = () => this.flatSections().length > 0;
@@ -300,13 +310,13 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
     // ── Programmatic API (mirrors legacy) ────────────────────────────────────
 
     set sections(v: SidebarSection[]) {
-        this.sections$.set(v ?? []);
+        this.sections$.Set(v ?? []);
         const open = new Set<string>(
             (v ?? []).filter(s => s.open !== false).map(s => s.id),
         );
-        this.openSecs$.set(open);
+        this.openSecs$.Set(open);
     }
-    get sections(): SidebarSection[] { return this.sections$.get(); }
+    get sections(): SidebarSection[] { return this.sections$.Get(); }
 
     collapse(): this { this.setAttribute('collapsed', ''); this.dispatchEvent(new CustomEvent('arianna:collapse', { bubbles: true, detail: { collapsed: true } })); return this; }
     expand():   this { this.removeAttribute('collapsed'); this.dispatchEvent(new CustomEvent('arianna:collapse', { bubbles: true, detail: { collapsed: false } })); return this; }
@@ -319,22 +329,22 @@ export class Sidebar extends Component('arianna-sidebar', HTMLElement, {}, {
     }
 
     openSection(id: string): this   {
-        const open = new Set(this.openSecs$.get()); open.add(id); this.openSecs$.set(open);
+        const open = new Set(this.openSecs$.Get()); open.add(id); this.openSecs$.Set(open);
         return this;
     }
     closeSection(id: string): this  {
-        const open = new Set(this.openSecs$.get()); open.delete(id); this.openSecs$.set(open);
+        const open = new Set(this.openSecs$.Get()); open.delete(id); this.openSecs$.Set(open);
         return this;
     }
     toggleSection(id: string): this {
-        const open = new Set(this.openSecs$.get());
+        const open = new Set(this.openSecs$.Get());
         if (open.has(id)) open.delete(id); else open.add(id);
-        this.openSecs$.set(open);
+        this.openSecs$.Set(open);
         return this;
     }
 
     search(q: string): this {
-        this.query$.set(q.toLowerCase().trim());
+        this.query$.Set(q.toLowerCase().trim());
         const input = this.querySelector<HTMLInputElement>('.ar-sidebar__search');
         if (input) input.value = q;
         return this;

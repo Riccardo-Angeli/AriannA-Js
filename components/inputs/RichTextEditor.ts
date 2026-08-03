@@ -56,10 +56,27 @@
  *   arianna:richtext-command  { command, value? }
  */
 
-import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Component } from '../../core/Components.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -247,7 +264,7 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
         this.#buildToolbar();
         if (this.#opts.value) {
             body.innerHTML = this.#opts.value;
-            this.html$.set(this.#opts.value);
+            this.html$.Set(this.#opts.value);
         }
         this.#wireEvents();
 
@@ -260,7 +277,7 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
     set html(value: string) {
         if (!this.#body) return;
         this.#body.innerHTML = value;
-        this.html$.set(value);
+        this.html$.Set(value);
     }
 
     get text(): string { return this.#body?.innerText ?? ''; }
@@ -278,7 +295,7 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
     clear(): this {
         if (!this.#body) return this;
         this.#body.innerHTML = '';
-        this.html$.set('');
+        this.html$.Set('');
         this.#fireChange();
         return this;
     }
@@ -309,7 +326,7 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
     #fireChange(): void {
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
         const html = this.#body.innerHTML;
-        this.html$.set(html);
+        this.html$.Set(html);
         self.fire('arianna:richtext-change', { detail: { html, text: this.text, source: this }, bubbles: true });
     }
 
@@ -350,11 +367,11 @@ export class RichTextEditor extends Component('arianna-richtext-editor', HTMLEle
             this.#fireChange();
         });
         this.#body.addEventListener('focus', () => {
-            this.focused$.set(true);
+            this.focused$.Set(true);
             self.fire('arianna:richtext-focus', { detail: { source: this }, bubbles: true });
         });
         this.#body.addEventListener('blur', () => {
-            this.focused$.set(false);
+            this.focused$.Set(false);
             self.fire('arianna:richtext-blur', { detail: { html: this.html, text: this.text, source: this }, bubbles: true });
         });
         this.#body.addEventListener('keydown', (e: Event) => {

@@ -23,7 +23,7 @@
  * Attrs (declarative): for, plane, enabled
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import {
     Modifier3D, Modifier3DElement,
     type MeshLike, type CameraLike, type Vec3Like,

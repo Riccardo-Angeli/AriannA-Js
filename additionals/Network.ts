@@ -19,10 +19,10 @@
  *
  * Usage:
  *   // After Core.use(Network), all classes are available globally
- *   // and integrate with Real, State, Observable automatically
+ *   // and integrate with Real, State and Reactivity automatically
  */
 
-import { Core, Observable, State } from "../core/index.ts";
+import { Core } from "../core/index.ts";
 
 // ── Network Plugin ─────────────────────────────────────────────────────────────
 

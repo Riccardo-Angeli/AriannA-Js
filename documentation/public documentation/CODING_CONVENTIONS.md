@@ -1,6 +1,6 @@
 # AriannA Coding Conventions
 
-**Status**: Canonical convention for AriannA TypeScript source (`Core.ts`, `Namespace.ts`, and every module built on them). Derived from the kernel cleanup of Core/Namespace and meant to keep every module *self-contained, sealed by default, and free of module-scope clutter*.
+**Status**: Canonical convention for AriannA TypeScript source (`Core.ts`, `Core.ts`, and every module built on them). Derived from the kernel cleanup of Core/Namespace and meant to keep every module *self-contained, sealed by default, and free of module-scope clutter*.
 
 These rules are about **module shape and surface**, not formatting (see `INDENT_CONVENTIONS.md`) or CSS (see `STYLE_CONVENTIONS.md`).
 

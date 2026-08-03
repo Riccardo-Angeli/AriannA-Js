@@ -33,9 +33,26 @@
  */
 
 import { AudioComponent, type AudioComponentOptions } from './AudioComponent.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface AudioEditorOptions extends AudioComponentOptions {
     src?     : string;
@@ -125,8 +142,8 @@ export class AudioEditor extends AudioComponent {
         root.appendChild(wrap);
 
         effect(() => {
-            const sel = this.selection$.get();
-            const buf = this.buffer$.get();
+            const sel = this.selection$.Get();
+            const buf = this.buffer$.Get();
             if (!buf) { status.textContent = 'No audio loaded'; return; }
             const dur = buf.duration;
             if (sel) {
@@ -137,7 +154,7 @@ export class AudioEditor extends AudioComponent {
             }
             this.#redraw();
         });
-        effect(() => { this.samplesPerPx$.get(); this.#redraw(); });
+        effect(() => { this.samplesPerPx$.Get(); this.#redraw(); });
 
         // Source attribute reactive
         const sSrc = self.attrSignal('src');
@@ -149,11 +166,11 @@ export class AudioEditor extends AudioComponent {
         // Mouse interaction — selection
         let dragStart = -1;
         canvas.addEventListener('pointerdown', (e: PointerEvent) => {
-            if (!this.buffer$.get()) return;
+            if (!this.buffer$.Get()) return;
             canvas.setPointerCapture(e.pointerId);
             const r = canvas.getBoundingClientRect();
             dragStart = this.#pxToTime(e.clientX - r.left);
-            this.selection$.set({ start: dragStart, end: dragStart });
+            this.selection$.Set({ start: dragStart, end: dragStart });
         });
         canvas.addEventListener('pointermove', (e: PointerEvent) => {
             if (dragStart < 0) return;
@@ -161,15 +178,15 @@ export class AudioEditor extends AudioComponent {
             const t = this.#pxToTime(e.clientX - r.left);
             const start = Math.min(dragStart, t);
             const end   = Math.max(dragStart, t);
-            this.selection$.set({ start, end });
+            this.selection$.Set({ start, end });
         });
         canvas.addEventListener('pointerup', (e: PointerEvent) => {
             canvas.releasePointerCapture(e.pointerId);
             if (dragStart < 0) return;
-            const sel = this.selection$.peek();
+            const sel = this.selection$.Peek();
             dragStart = -1;
             if (sel && sel.end - sel.start < 0.001) {
-                this.selection$.set(null);
+                this.selection$.Set(null);
             } else if (sel) {
                 self.fire('arianna:editor-selection', { detail: { ...sel, source: this }, bubbles: true });
             }
@@ -178,15 +195,15 @@ export class AudioEditor extends AudioComponent {
         // Wheel zoom (mouse-anchored)
         canvas.addEventListener('wheel', (e: WheelEvent) => {
             e.preventDefault();
-            const buf = this.buffer$.peek();
+            const buf = this.buffer$.Peek();
             if (!buf) return;
             const r = canvas.getBoundingClientRect();
             const mx = e.clientX - r.left;
             const tAnchor = this.#pxToTime(mx);
-            const spp = this.samplesPerPx$.peek();
+            const spp = this.samplesPerPx$.Peek();
             const factor = e.deltaY > 0 ? 1.25 : 0.8;
             const next = Math.max(1, Math.min(buf.sampleRate * buf.duration / canvas.width, spp * factor));
-            this.samplesPerPx$.set(next);
+            this.samplesPerPx$.Set(next);
             const newPx = (tAnchor * buf.sampleRate) / next;
             this.#scrollX = Math.max(0, newPx - mx);
             self.fire('arianna:editor-zoom', { detail: { samplesPerPx: next, source: this }, bubbles: true });
@@ -196,8 +213,8 @@ export class AudioEditor extends AudioComponent {
         // Toolbar handlers
         btnPlay .addEventListener('click', () => void this.playSelection());
         btnStop .addEventListener('click', () => this.stop());
-        btnZIn  .addEventListener('click', () => this.samplesPerPx$.set(Math.max(1, this.samplesPerPx$.peek() * 0.7)));
-        btnZOut .addEventListener('click', () => this.samplesPerPx$.set(this.samplesPerPx$.peek() * 1.4));
+        btnZIn  .addEventListener('click', () => this.samplesPerPx$.Set(Math.max(1, this.samplesPerPx$.Peek() * 0.7)));
+        btnZOut .addEventListener('click', () => this.samplesPerPx$.Set(this.samplesPerPx$.Peek() * 1.4));
         btnFadeI.addEventListener('click', () => this.fade('in'));
         btnFadeO.addEventListener('click', () => this.fade('out'));
         btnCrop .addEventListener('click', () => this.cropSelection());
@@ -225,37 +242,37 @@ export class AudioEditor extends AudioComponent {
     }
 
     setBuffer(buf: AudioBuffer): void {
-        this.buffer$.set(buf);
-        this.selection$.set(null);
+        this.buffer$.Set(buf);
+        this.selection$.Set(null);
         // Fit to width
         if (this.#canvas) {
             const spp = Math.max(1, Math.floor(buf.length / this.#canvas.width));
-            this.samplesPerPx$.set(spp);
+            this.samplesPerPx$.Set(spp);
             this.#scrollX = 0;
         }
     }
 
-    getBuffer(): AudioBuffer | null { return this.buffer$.get(); }
+    getBuffer(): AudioBuffer | null { return this.buffer$.Get(); }
 
     async playSelection(): Promise<void> {
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
-        const buf = this.buffer$.peek();
+        const buf = this.buffer$.Peek();
         if (!buf || !this._audioCtx) return;
         await AudioComponent.resume();
         this.stop();
         const src = this._audioCtx.createBufferSource();
         src.buffer = buf;
         if (this.#gainOut) src.connect(this.#gainOut);
-        const sel = this.selection$.peek();
+        const sel = this.selection$.Peek();
         const start = sel ? sel.start : 0;
         const dur   = sel ? Math.max(0.001, sel.end - sel.start) : buf.duration;
         src.start(0, start, dur);
         src.onended = () => {
-            this.playing$.set(false);
+            this.playing$.Set(false);
             self.fire('arianna:editor-stop', { detail: { source: this }, bubbles: true });
         };
         this.#playSrc = src;
-        this.playing$.set(true);
+        this.playing$.Set(true);
         self.fire('arianna:editor-play', { detail: { source: this }, bubbles: true });
     }
 
@@ -264,13 +281,13 @@ export class AudioEditor extends AudioComponent {
             try { this.#playSrc.stop(); } catch { /* already stopped */ }
             this.#playSrc = undefined;
         }
-        this.playing$.set(false);
+        this.playing$.Set(false);
     }
 
     cropSelection(): void {
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
-        const buf = this.buffer$.peek();
-        const sel = this.selection$.peek();
+        const buf = this.buffer$.Peek();
+        const sel = this.selection$.Peek();
         if (!buf || !sel || !this._audioCtx) return;
         const ctx = this._audioCtx;
         const sr = buf.sampleRate;
@@ -289,8 +306,8 @@ export class AudioEditor extends AudioComponent {
 
     fade(kind: 'in' | 'out'): void {
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
-        const buf = this.buffer$.peek();
-        const sel = this.selection$.peek();
+        const buf = this.buffer$.Peek();
+        const sel = this.selection$.Peek();
         if (!buf || !sel) return;
         const sr = buf.sampleRate;
         const s0 = Math.floor(sel.start * sr);
@@ -304,24 +321,24 @@ export class AudioEditor extends AudioComponent {
                 data[s0 + i] = (data[s0 + i] ?? 0) * g;
             }
         }
-        this.buffer$.set(buf);    // re-trigger render
+        this.buffer$.Set(buf);    // re-trigger render
         self.fire('arianna:editor-fade', { detail: { kind, ...sel, source: this }, bubbles: true });
     }
 
     // ── Render ────────────────────────────────────────────────────────────
 
     #pxToTime(px: number): number {
-        const buf = this.buffer$.peek();
+        const buf = this.buffer$.Peek();
         if (!buf) return 0;
-        const sample = (px + this.#scrollX) * this.samplesPerPx$.peek();
+        const sample = (px + this.#scrollX) * this.samplesPerPx$.Peek();
         return sample / buf.sampleRate;
     }
 
     #timeToPx(t: number): number {
-        const buf = this.buffer$.peek();
+        const buf = this.buffer$.Peek();
         if (!buf) return 0;
         const sample = t * buf.sampleRate;
-        return sample / this.samplesPerPx$.peek() - this.#scrollX;
+        return sample / this.samplesPerPx$.Peek() - this.#scrollX;
     }
 
     #redraw(): void {
@@ -345,11 +362,11 @@ export class AudioEditor extends AudioComponent {
         ctx.lineTo(W, H / 2);
         ctx.stroke();
 
-        const buf = this.buffer$.peek();
+        const buf = this.buffer$.Peek();
         if (!buf) return;
 
         const data = buf.getChannelData(0);
-        const spp = this.samplesPerPx$.peek();
+        const spp = this.samplesPerPx$.Peek();
         const midY = H / 2;
 
         // Min/max peaks per pixel column
@@ -370,7 +387,7 @@ export class AudioEditor extends AudioComponent {
         }
 
         // Selection
-        const sel = this.selection$.peek();
+        const sel = this.selection$.Peek();
         if (sel) {
             const x0 = this.#timeToPx(sel.start);
             const x1 = this.#timeToPx(sel.end);

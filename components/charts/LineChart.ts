@@ -19,9 +19,26 @@
  */
 
 import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type LinePoint = [number, number];   // [x, y]
 
@@ -81,13 +98,13 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
         this.#svg = svg;
         root.appendChild(svg);
 
-        effect(() => { this.series$.get(); this.#redraw(); });
+        effect(() => { this.series$.Get(); this.#redraw(); });
 
         self.Sheet = LineChart.DefaultSheet();
     }
 
-    set series(s: LineSeries[]) { this.series$.set(s); }
-    get series(): LineSeries[]  { return this.series$.get(); }
+    set series(s: LineSeries[]) { this.series$.Set(s); }
+    get series(): LineSeries[]  { return this.series$.Get(); }
 
     #redraw(): void {
         const self = this as unknown as {
@@ -102,7 +119,7 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
         const root = self.render();
         const w = parseInt(svg.getAttribute('width')  ?? '480', 10);
         const h = parseInt(svg.getAttribute('height') ?? '240', 10);
-        const series = this.series$.peek();
+        const series = this.series$.Peek();
         if (!series.length) return;
 
         const showGrid = self.attrSignal('show-grid')?.peek() !== 'false';

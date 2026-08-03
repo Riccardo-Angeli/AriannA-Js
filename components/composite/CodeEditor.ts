@@ -3,36 +3,33 @@
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
  *
- * CodeEditor — pure-AriannA code editor widget.
- *
- *   ┌─────┬──────────────────────────────────────────────┐
- *   │  1  │ const greeting = "Hello, AriannA!";          │
- *   │  2  │                                              │
- *   │  3  │ function greet(name: string) {               │
- *   │  4  │     console.log(`${greeting} — ${name}`);    │
- *   │  5  │ }                                            │
- *   └─────┴──────────────────────────────────────────────┘
+ * CodeEditor — pure-AriannA code editor widget (light DOM, shadow:false).
  *
  * Architecture:
- *   • A transparent <textarea> sits on top of a highlighted <pre><code>
- *     layer. The user types into the textarea; we re-render the pre on
- *     each input. This delegates selection / cursor / native undo-redo
- *     to the browser — no custom carets, no virtual selections.
- *   • Tokenizer is a small regex bank per language. JS / TS / HTML / CSS
- *     are included; unknown languages fall through to a no-highlight mode.
- *   • Gutter line numbers stay aligned by sharing the same font-metrics
- *     (CSS font shorthand mirrored on textarea and pre).
+ *   • A transparent <textarea> sits on top of a highlighted <pre><code> layer.
+ *     The user types into the textarea; the pre is re-rendered on each input.
+ *     Selection / cursor / native undo-redo stay delegated to the browser.
+ *   • Tokenizer is a small regex bank per language (JS/TS/HTML/CSS/JSON);
+ *     unknown languages fall through to a no-highlight mode.
+ *   • Gutter line numbers stay aligned by sharing font-metrics (CSS font
+ *     shorthand mirrored on textarea and pre).
  *
- * Keyboard shortcuts:
- *   Tab               indent by `indent` spaces (or indent selection)
- *   Shift+Tab         dedent
- *   Ctrl/Cmd + D      duplicate current line (or selection)
- *   Ctrl/Cmd + /      toggle line comment
- *   Ctrl/Cmd + ]      indent selection
- *   Ctrl/Cmd + [      dedent selection
- *   Alt + ArrowUp     move line up
- *   Alt + ArrowDown   move line down
- *   Auto-bracket insertion for ( [ { ' " `
+ * Shadow model:
+ *   This component runs shadow:false — internals live in the host's LIGHT DOM.
+ *   Styles authored with `:host` are rewritten to the host tag before injection
+ *   (see build()). External code reads content via the public Value API or, if
+ *   it must reach internals, via this.Shadow?.Root (which resolves to the host
+ *   when shadow:false). It must NOT assume a native ShadowRoot.
+ *
+ * Registration (see the trailing Namespace.Define):
+ *   `class CodeEditor extends Component('arianna-code-editor', HTMLElement, …)`
+ *   RESERVES the tag: the descriptor is committed Pending, backed by a
+ *   ConstructorBridge, with Promote deferred to the first `new`. A markup-first
+ *   editor never gets that `new`, so the canonical second call
+ *   `Namespace.Define('arianna-code-editor', CodeEditor, HTMLElement)` refines the
+ *   descriptor's Constructor → CodeEditor and Promotes it. Namespace.Define
+ *   handles this adopt-path centrally (a second Define on a Pending tag adopts
+ *   instead of rejecting), so no per-component wiring is needed here.
  *
  * Public API:
  *   const editor = new CodeEditor({ language: 'ts', indent: 4 });
@@ -42,42 +39,42 @@
  *   editor.focus(); editor.blur();
  */
 
-import { Component } from '../../core/Component.ts';
-import { signal, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Component } from '../../core/Components.ts';
+import { Core } from '../../core/Core.ts';
+import { Namespace } from '../../core/index.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, and the
+   members went PascalCase — `Get` / `Set` instead of `get` / `set`. The type alias points at the
+   CONTRACT (`Types.SignalContract`) and not at `Reactivity.Signal`, which is the richer class the
+   module also exports: `CreateSignal` returns the contract, so aliasing the class yields the
+   confusing "Type 'Signal<T>' is missing … Source, Mutate, Map, Effect" with the same name twice. */
+const signal = Reactivity.CreateSignal;
+
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type CodeEditorLanguage = 'js' | 'ts' | 'jsx' | 'tsx' | 'html' | 'css' | 'json' | 'plain';
 
 export interface CodeEditorOptions
 {
-    /** Initial source code. */
     value?       : string;
-    /** Syntax highlighting language. Default 'ts'. */
     language?    : CodeEditorLanguage;
-    /** Indent width in spaces. Default 4. */
     indent?      : number;
-    /** Use tabs instead of spaces for indentation. Default false. */
     useTabs?     : boolean;
-    /** Read-only mode. Default false. */
     readonly?    : boolean;
-    /** Visible line numbers. Default true. */
     lineNumbers? : boolean;
-    /** Tab size for displayed tabs. Default 4. */
     tabSize?     : number;
-    /** Fixed height — e.g. '300px'. If unset, the editor grows with content. */
     height?      : string;
-    /** Initial focus on attach. Default false. */
     autoFocus?   : boolean;
 }
 
 interface Token { kind: string; text: string; }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Tokenizers — small regex bank per language. Order matters: each rule
-   is tried left-to-right; the first match wins. The tokenizer keeps a
-   running offset and emits an `unknown` token for unmatched characters.
-   ───────────────────────────────────────────────────────────────────── */
+/* ─── Tokenizers — regex bank per language; first match wins ─────────────── */
 
 interface Rule_ { kind: string; re: RegExp; }
 
@@ -167,16 +164,10 @@ function tokenize(src: string, lang: CodeEditorLanguage): Token[]
         for (const r of rules)
         {
             const m = r.re.exec(slice);
-            if (m && m.index === 0)
-            {
-                matched = { kind: r.kind, text: m[0] };
-                break;
-            }
+            if (m && m.index === 0) { matched = { kind: r.kind, text: m[0] }; break; }
         }
         if (!matched)
         {
-            // No rule matched — emit a single 'unknown' char then advance.
-            // Coalesce consecutive unknowns into one token to keep DOM small.
             const ch = src[i];
             const last = out[out.length - 1];
             if (last && last.kind === 'unknown') last.text += ch;
@@ -190,28 +181,24 @@ function tokenize(src: string, lang: CodeEditorLanguage): Token[]
     return out;
 }
 
-/* HTML-escape — only the chars the highlighter renders inside <span>s. */
 function esc(s: string): string
 {
-    return s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   CodeEditor — composite Component
-   ───────────────────────────────────────────────────────────────────── */
+/* ─── CodeEditor — composite Component ───────────────────────────────────── */
 
-export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}, {
-    attrs : ['language', 'indent', 'readonly', 'line-numbers', 'tab-size', 'height', 'auto-focus'],
-    // AriannA 2.0: CodeEditor internals live inside the component render root.
-    // Closed Shadow DOM is the default; external playground/app code must use
-    // el.Shadow.Root (or the public Value API), never host.querySelector().
-    shadow: false,
-})
+export class CodeEditor extends Component
+(
+    'arianna-code-editor',
+    HTMLElement,
+    {},
+    {
+        attrs : ['language', 'indent', 'readonly', 'line-numbers', 'tab-size', 'height', 'auto-focus'],
+        shadow: false,   // internals live in the host's LIGHT DOM
+    }
+)
 {
-    /** Source code as a reactive Signal. */
     declare value      : Signal<string>;
     declare language   : Signal<CodeEditorLanguage>;
     declare _indent    : number;
@@ -227,27 +214,27 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
     declare _code      : HTMLElement;
     declare _wrap      : HTMLDivElement;
     declare __fieldsInitialized : boolean;
+    declare __built    : boolean;   // build() idempotency guard (declared, not #private,
+                                    // so the markup-upgrade prototype-swap path can't rebrand it)
 
     constructor(opts: CodeEditorOptions = {})
     {
         super(opts as never);
         this._initFields(opts);
+        // Programmatic path (`new CodeEditor({...})`) must build now: nothing else
+        // will. Markup path also reaches build() via onCreated(); the guard makes
+        // the double-invocation a no-op.
+        this.build();
     }
 
-    /**
-     * Idempotent field initializer. Called from both the constructor (when
-     * user does `new CodeEditor({...})`) and from build() (when the element
-     * is created by markup-upgrade, which does NOT call the user-class
-     * constructor — only the parent HTMLElement constructor is invoked).
-     * Reading attribute values lets markup-instantiated editors pick up
-     * `<arianna-code-editor language="js">` automatically.
-     */
+    /** Idempotent field initializer. Called from the constructor (programmatic) and
+     *  from build() (markup-upgrade path, which invokes only the parent constructor).
+     *  Reading attributes lets `<arianna-code-editor language="js">` self-configure. */
     _initFields(opts: CodeEditorOptions = {}): void
     {
         if (this.__fieldsInitialized) return;
         this.__fieldsInitialized = true;
 
-        // Read attributes for markup-upgrade case. Programmatic case passes opts.
         const attrLang   = this.getAttribute('language') as CodeEditorLanguage | null;
         const attrIndent = this.getAttribute('indent');
         const attrTabSz  = this.getAttribute('tab-size');
@@ -269,11 +256,12 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
 
     build(): void
     {
-        // Ensure fields exist (markup-upgrade path doesn't call constructor).
+        if (this.__built) return;     // idempotent: constructor + onCreated may both call
+        this.__built = true;
+
         this._initFields();
 
-        // ── Sheet — scoped styling via :host rewrite ─────────────────────
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = new Stylesheet(
+        const _rules: Rule[] = [
             new Rule(':host', {
                 display:        'block',
                 position:       'relative',
@@ -288,124 +276,64 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
                 overflow:       'hidden',
                 boxSizing:      'border-box',
             }),
-            new Rule(':host:focus, :host *:focus', {
-                outline:        'none',
-            }),
+            new Rule(':host:focus, :host *:focus', { outline: 'none' }),
             new Rule(':host .ce-wrap', {
-                position:       'relative',
-                display:        'flex',
-                width:          '100%',
-                height:         this._height ?? 'auto',
-                minHeight:      this._height ? '0' : '120px',
-                maxHeight:      this._height ?? 'none',
-                overflow:       'auto',
+                position:  'relative',
+                display:   'flex',
+                width:     '100%',
+                height:    this._height ?? 'auto',
+                minHeight: this._height ? '0' : '120px',
+                maxHeight: this._height ?? 'none',
+                overflow:  'auto',
             }),
             new Rule(':host .ce-gutter', {
-                flex:           '0 0 auto',
-                width:          '48px',
-                padding:        '10px 6px 10px 12px',
-                textAlign:      'right',
-                color:          '#5a6068',
-                background:     '#0a0a0c',
-                userSelect:     'none',
-                whiteSpace:     'pre',
-                borderRight:    '1px solid #25272b',
-                fontFamily:     'inherit',
-                fontSize:       'inherit',
-                lineHeight:     'inherit',
-                boxSizing:      'border-box',
+                flex:        '0 0 auto',
+                width:       '48px',
+                padding:     '10px 6px 10px 12px',
+                textAlign:   'right',
+                color:       '#5a6068',
+                background:  '#0a0a0c',
+                userSelect:  'none',
+                whiteSpace:  'pre',
+                borderRight: '1px solid #25272b',
+                fontFamily:  'inherit',
+                fontSize:    'inherit',
+                lineHeight:  'inherit',
+                boxSizing:   'border-box',
             }),
             new Rule(':host .ce-stage', {
-                flex:           '1 1 0',
-                position:       'relative',
-                overflow:       'visible',
-                minWidth:       '0',
-                border:         '0',
-                outline:        'none',
+                flex: '1 1 0', position: 'relative', overflow: 'visible',
+                minWidth: '0', border: '0', outline: 'none',
             }),
             new Rule(':host .ce-pre', {
-                margin:         '0',
-                padding:        '10px 12px',
-                whiteSpace:     'pre',
-                wordWrap:       'normal',
-                overflowWrap:   'normal',
-                fontFamily:     'inherit',
-                fontSize:       'inherit',
-                lineHeight:     'inherit',
-                letterSpacing:  '0',
-                tabSize:        String(this._tabSize),
-                pointerEvents:  'none',
-                color:          '#e6e8eb',
-                background:     'transparent',
-                minHeight:      '100%',
-                boxSizing:      'border-box',
-                border:         '0',
-                outline:        'none',
+                margin: '0', padding: '10px 12px', whiteSpace: 'pre',
+                wordWrap: 'normal', overflowWrap: 'normal',
+                fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit',
+                letterSpacing: '0', tabSize: String(this._tabSize),
+                pointerEvents: 'none', color: '#e6e8eb', background: 'transparent',
+                minHeight: '100%', boxSizing: 'border-box', border: '0', outline: 'none',
             }),
-            // <code> inside <pre> — UA default sets font-family:monospace which
-            // overrides what <pre> inherits from :host. Force it to inherit so
-            // <pre> and <textarea> share identical glyph metrics. Without this
-            // the cursor position drifts relative to the syntax-highlighted
-            // text by a fraction of a character that accumulates per line.
             new Rule(':host .ce-code', {
-                fontFamily:     'inherit',
-                fontSize:       'inherit',
-                lineHeight:     'inherit',
-                letterSpacing:  '0',
-                tabSize:        String(this._tabSize),
-                whiteSpace:     'pre',
-                background:     'transparent',
-                color:          'inherit',
+                fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit',
+                letterSpacing: '0', tabSize: String(this._tabSize),
+                whiteSpace: 'pre', background: 'transparent', color: 'inherit',
             }),
-            // Plain whitespace tokens: must not have any letter-spacing or
-            // font-variant that would change their width compared to the
-            // textarea.
             new Rule(':host .ce-code span', {
-                fontFamily:     'inherit',
-                fontSize:       'inherit',
-                lineHeight:     'inherit',
-                letterSpacing:  '0',
-                fontVariantLigatures: 'none',
+                fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit',
+                letterSpacing: '0', fontVariantLigatures: 'none',
             }),
             new Rule(':host .ce-ta', {
-                position:       'absolute',
-                top:            '0', left: '0', right: '0', bottom: '0',
-                width:          '100%', height: '100%',
-                margin:         '0',
-                padding:        '10px 12px',
-                border:         '0',
-                outline:        'none',
-                resize:         'none',
-                background:     'transparent',
-                color:          'var(--arianna-code-editor-input-color, #e6e8eb)',
-                caretColor:     '#e6e8eb',
-                fontFamily:     'inherit',
-                fontSize:       'inherit',
-                lineHeight:     'inherit',
-                letterSpacing:  '0',
-                fontVariantLigatures: 'none',
-                tabSize:        String(this._tabSize),
-                whiteSpace:     'pre',
-                wordWrap:       'normal',
-                overflowWrap:   'normal',
-                overflow:       'hidden',
-                boxSizing:      'border-box',
-                /* Selection visible against transparent text */
+                position: 'absolute', top: '0', left: '0', right: '0', bottom: '0',
+                width: '100%', height: '100%', margin: '0', padding: '10px 12px',
+                border: '0', outline: 'none', resize: 'none', background: 'transparent',
+                color: 'var(--arianna-code-editor-input-color, #e6e8eb)', caretColor: '#e6e8eb',
+                fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit',
+                letterSpacing: '0', fontVariantLigatures: 'none', tabSize: String(this._tabSize),
+                whiteSpace: 'pre', wordWrap: 'normal', overflowWrap: 'normal',
+                overflow: 'hidden', boxSizing: 'border-box',
             }),
-            new Rule(':host .ce-ta:focus', {
-                outline:        'none',
-                border:         '0',
-                boxShadow:      'none',
-            }),
-            new Rule(':host .ce-ta::selection', {
-                background:     'rgba(228,12,136,0.32)',
-            }),
-            // Note: previously had a ::-moz-selection rule here, but Chrome
-            // rejects the Mozilla-specific pseudo as invalid syntax, and that
-            // failure used to cascade IndexSizeError onto every following
-            // rule. Modern Firefox (62+) supports plain ::selection so the
-            // alias is no longer needed.
-            // ── Token colors (one-dark-ish) ─────────────────────────────
+            new Rule(':host .ce-ta:focus', { outline: 'none', border: '0', boxShadow: 'none' }),
+            new Rule(':host .ce-ta::selection', { background: 'rgba(228,12,136,0.32)' }),
             new Rule(':host .tk-comment',  { color: '#7a818a', fontStyle: 'italic' }),
             new Rule(':host .tk-string',   { color: '#98c379' }),
             new Rule(':host .tk-number',   { color: '#d19a66' }),
@@ -424,7 +352,12 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
             new Rule(':host .tk-unknown',  { color: '#e6e8eb' }),
             new Rule(':host .tk-space',    { color: 'inherit' }),
             new Rule(':host .tk-newline',  { color: 'inherit' }),
-        );
+        ];
+
+        // Light-DOM scoping: `:host` → host tag (negative lookahead preserves `:host(...)`).
+        const _host = this.localName || 'arianna-code-editor';
+        const _css  = _rules.map(r => r.Text).join('\n').replace(/:host(?![\w\-(])/g, _host);
+        (this as unknown as { Sheet: Stylesheet | null }).Sheet = new Stylesheet(_css);
 
         // ── DOM ──────────────────────────────────────────────────────────
         this._wrap = document.createElement('div'); this._wrap.className = 'ce-wrap';
@@ -444,127 +377,87 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
         this._ta.setAttribute('autocapitalize', 'off');
         this._ta.setAttribute('autocorrect', 'off');
         this._ta.setAttribute('wrap', 'off');
-        // Silence the "form field element should have an id or name attribute"
-        // browser accessibility warning. Use the host id as a meaningful name
-        // when available; otherwise a stable per-instance unique name.
-        this._ta.setAttribute('name', this.id ? this.id + '-textarea' : 'arianna-code-editor-' + Math.random().toString(36).slice(2, 10));
+        this._ta.setAttribute('name', this.id ? this.id + '-textarea'
+            : 'arianna-code-editor-' + Math.random().toString(36).slice(2, 10));
         if (this._readonly) this._ta.readOnly = true;
 
         stage.appendChild(this._pre);
         stage.appendChild(this._ta);
         this._wrap.appendChild(stage);
 
-        // ── Mount internals into the correct render target ────────────────
-        //
-        // CodeEditor builds its internals as raw DOM (textarea + pre + gutter),
-        // so it needs a real Node with appendChild to mount into. Under the
-        // open-default shadow model (COMPONENTS.md §0.6 / SHADOW.md §0), the
-        // render root behind `this.Shadow.Root` can be one of:
-        //   • a native ShadowRoot  → has appendChild (mount directly)
-        //   • an AriannaShadow LIGHT backend  → NO appendChild; its `.Host` is
-        //     the real element whose light DOM holds the content → mount there
-        //   • an AriannaShadow IFRAME backend → mount into its document.body
-        //   • nothing (shadow:false)          → mount into the host (this)
-        //
-        // We resolve a concrete appendable Node here. We deliberately do NOT
-        // call appendChild on the AriannaShadow object (it is not a Node).
         const mountTarget = this._resolveMountTarget();
         mountTarget.appendChild(this._wrap);
 
-        // ── Initial paint ────────────────────────────────────────────────
-        this._ta.value = this.value.get();
+        this._ta.value = this.value.Get();
         this._render();
 
-        // ── Wire events ──────────────────────────────────────────────────
-        this._ta.addEventListener('input',    () => this._onInput());
-        this._ta.addEventListener('scroll',   () => this._syncScroll());
-        this._ta.addEventListener('keydown',  (e) => this._onKey(e));
+        this._ta.addEventListener('input',   () => this._onInput());
+        this._ta.addEventListener('scroll',  () => this._syncScroll());
+        this._ta.addEventListener('keydown', (e) => this._onKey(e));
 
         if (this._autoFocus) setTimeout(() => this._ta.focus(), 0);
     }
 
     // ─── Public API ──────────────────────────────────────────────────────
 
-    get Value(): string { return this.value.get(); }
+    get Value(): string { return this.value.Get(); }
     set Value(v: string)
     {
-        this.value.set(v);
+        this.value.Set(v);
         if (this._ta && this._ta.value !== v) this._ta.value = v;
         this._render();
     }
 
-    get Language(): CodeEditorLanguage { return this.language.get(); }
-    set Language(l: CodeEditorLanguage) { this.language.set(l); this._render(); }
+    get Language(): CodeEditorLanguage { return this.language.Get(); }
+    set Language(l: CodeEditorLanguage) { this.language.Set(l); this._render(); }
 
     override focus(): void { this._ta?.focus(); }
     override blur():  void { this._ta?.blur(); }
 
     // ─── Internals ───────────────────────────────────────────────────────
 
-    /**
-     * Resolve a concrete, appendable DOM Node for mounting raw internals,
-     * working across every shadow backend (COMPONENTS.md §0.6.2):
-     *   • native ShadowRoot         → the root itself (has appendChild)
-     *   • AriannaShadow light       → its `.Host` element (light DOM)
-     *   • AriannaShadow iframe      → the iframe's document.body
-     *   • no shadow (shadow:false)  → the host element (`this`)
-     * Never calls appendChild on a non-Node AriannaShadow object.
-     */
+    /** Resolve a concrete appendable Node across shadow backends. With shadow:false
+     *  this returns the host element itself (light DOM). */
     private _resolveMountTarget(): Element | ShadowRoot | DocumentFragment
     {
-        const root = (this as unknown as {
-            Shadow?: { Root?: unknown };
-        }).Shadow?.Root as unknown;
-
-        // No shadow at all → mount into the host element directly.
+        const root = (this as unknown as { Shadow?: { Root?: unknown } }).Shadow?.Root as unknown;
         if (!root) return this as unknown as Element;
 
-        // Native ShadowRoot (open or closed): it is a real Node.
         if (typeof (root as { appendChild?: unknown }).appendChild === 'function'
             && !(root as { IsAriannaShadow?: boolean }).IsAriannaShadow) {
             return root as ShadowRoot;
         }
 
-        // AriannaShadow (light or iframe backend).
         const ar = root as {
-            IsAriannaShadow?: boolean;
-            Backend?: 'light' | 'iframe';
-            Host?: Element;
-            document?: Document | null;
-            iframe?: HTMLIFrameElement | null;
+            IsAriannaShadow?: boolean; Backend?: 'light' | 'iframe';
+            Host?: Element; document?: Document | null; iframe?: HTMLIFrameElement | null;
         };
         if (ar.IsAriannaShadow) {
             if (ar.Backend === 'iframe') {
                 const doc = ar.document ?? (ar.iframe ? ar.iframe.contentDocument : null);
                 if (doc && doc.body) return doc.body as unknown as Element;
-                // iframe not ready → fall back to host so build() still completes.
                 return (ar.Host ?? (this as unknown as Element));
             }
-            // light backend → mount into the host's light DOM.
             return ar.Host ?? (this as unknown as Element);
         }
 
-        // Unknown shape that happens to be appendable → use it; else host.
-        if (typeof (root as { appendChild?: unknown }).appendChild === 'function') {
-            return root as ShadowRoot;
-        }
+        if (typeof (root as { appendChild?: unknown }).appendChild === 'function') return root as ShadowRoot;
         return this as unknown as Element;
     }
 
     private _onInput(): void
     {
         const v = this._ta.value;
-        this.value.set(v);
+        this.value.Set(v);
         this._render();
-        this.fire('change', { detail: { value: v, source: this } });
+        this.dispatchEvent(new CustomEvent('change', { detail: { value: v, source: this }, bubbles: true, composed: true }));
     }
 
     private _render(): void
     {
-        const src    = this._ta?.value ?? this.value.get();
-        const tokens = tokenize(src, this.language.get());
+        const src    = this._ta?.value ?? this.value.Get();
+        const tokens = tokenize(src, this.language.Get());
 
-        // Build highlighted HTML
         let html = '';
         for (const t of tokens)
         {
@@ -572,11 +465,9 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
             if (t.kind === 'space')   { html += t.text; continue; }
             html += `<span class="tk-${t.kind}">${esc(t.text)}</span>`;
         }
-        // Trailing newline ensures pre's last line is laid out fully
         if (!src.endsWith('\n')) html += '\n';
         this._code.innerHTML = html;
 
-        // Gutter
         if (this._showLn)
         {
             const lines = src.split('\n').length;
@@ -599,7 +490,36 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
         const ta  = this._ta;
         const mod = (e.ctrlKey || e.metaKey);
 
-        // Tab / Shift-Tab
+        if (')]}"\'`'.includes(e.key)
+            && ta.selectionStart === ta.selectionEnd
+            && ta.value[ta.selectionStart] === e.key)
+        {
+            e.preventDefault();
+            const s = ta.selectionStart + 1;
+            ta.setSelectionRange(s, s);
+            return;
+        }
+
+        if (e.key === 'Backspace'
+            && ta.selectionStart === ta.selectionEnd
+            && ta.selectionStart > 0)
+        {
+            const openers: Record<string, string> = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'", '`': '`' };
+            const prev = ta.value[ta.selectionStart - 1];
+            const next = ta.value[ta.selectionStart];
+            if (openers[prev] !== undefined && openers[prev] === next)
+            {
+                e.preventDefault();
+                const s = ta.selectionStart - 1;
+                ta.value = ta.value.slice(0, s) + ta.value.slice(s + 2);
+                ta.setSelectionRange(s, s);
+                this.value.Set(ta.value);
+                this._render();
+                this.dispatchEvent(new CustomEvent('change', { detail: { value: ta.value, source: this }, bubbles: true, composed: true }));
+                return;
+            }
+        }
+
         if (e.key === 'Tab')
         {
             e.preventDefault();
@@ -608,43 +528,14 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
             return;
         }
 
-        // Ctrl/Cmd + D — duplicate line(s)
-        if (mod && (e.key === 'd' || e.key === 'D'))
-        {
-            e.preventDefault();
-            this._duplicateLines();
-            return;
-        }
+        if (mod && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._duplicateLines(); return; }
+        if (mod && e.key === '/')                    { e.preventDefault(); this._toggleComment();   return; }
+        if (mod && (e.key === ']' || e.key === '[')) { e.preventDefault(); this._indentSel(e.key === ']' ? +1 : -1); return; }
+        if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); this._moveLines(e.key === 'ArrowUp' ? -1 : +1); return; }
 
-        // Ctrl/Cmd + / — toggle line comment
-        if (mod && e.key === '/')
-        {
-            e.preventDefault();
-            this._toggleComment();
-            return;
-        }
-
-        // Ctrl/Cmd + ] / [ — indent / dedent (with no selection too)
-        if (mod && (e.key === ']' || e.key === '['))
-        {
-            e.preventDefault();
-            this._indentSel(e.key === ']' ? +1 : -1);
-            return;
-        }
-
-        // Alt + ArrowUp / ArrowDown — move line up/down
-        if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'))
-        {
-            e.preventDefault();
-            this._moveLines(e.key === 'ArrowUp' ? -1 : +1);
-            return;
-        }
-
-        // Auto-bracket insertion
         const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'", '`': '`' };
         if (pairs[e.key] !== undefined && ta.selectionStart === ta.selectionEnd)
         {
-            // Don't auto-pair when next char is a word char (typing 'a("foo")' shouldn't expand)
             const after = ta.value[ta.selectionStart] ?? '';
             if (!/\w/.test(after))
             {
@@ -657,7 +548,6 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
             }
         }
 
-        // Smart Enter — keep indentation of previous line
         if (e.key === 'Enter')
         {
             e.preventDefault();
@@ -670,7 +560,6 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
             const prev  = ta.value[ps - 1];
             const next  = ta.value[ps] ?? '';
             const extra = (prev === '{' || prev === '[' || prev === '(') ? this._oneIndent() : '';
-            // If we're sitting between {} put the closing brace on its own line
             if (extra && next && (
                 (prev === '{' && next === '}') ||
                 (prev === '[' && next === ']') ||
@@ -681,50 +570,40 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
                 const s = ta.selectionStart - (1 + indent.length);
                 ta.setSelectionRange(s, s);
             }
-            else
-            {
-                this._insert('\n' + indent + extra);
-            }
+            else { this._insert('\n' + indent + extra); }
             this._render();
             return;
         }
     }
 
-    /** Insert text replacing the current selection. */
     private _insert(text: string): void
     {
         const ta = this._ta;
         const s  = ta.selectionStart, e = ta.selectionEnd;
         ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
         ta.setSelectionRange(s + text.length, s + text.length);
-        this.value.set(ta.value);
-        this.fire('change', { detail: { value: ta.value, source: this } });
+        this.value.Set(ta.value);
+        this.dispatchEvent(new CustomEvent('change', { detail: { value: ta.value, source: this }, bubbles: true, composed: true }));
     }
 
-    private _oneIndent(): string
-    {
-        return this._useTabs ? '\t' : ' '.repeat(this._indent);
-    }
+    private _oneIndent(): string { return this._useTabs ? '\t' : ' '.repeat(this._indent); }
 
-    /** Indent (sign=+1) or dedent (-1) the currently selected lines. */
     private _indentSel(sign: 1 | -1): void
     {
         const ta = this._ta;
         const v  = ta.value;
         let s = ta.selectionStart, e = ta.selectionEnd;
 
-        // Single-line, no-selection indent: insert directly at caret
         if (s === e && sign === +1)
         {
             const ind = this._oneIndent();
             ta.value = v.slice(0, s) + ind + v.slice(s);
             ta.setSelectionRange(s + ind.length, s + ind.length);
-            this.value.set(ta.value);
+            this.value.Set(ta.value);
             this._render();
             return;
         }
 
-        // Expand selection to full lines
         let ls = v.lastIndexOf('\n', s - 1) + 1;
         let le = v.indexOf('\n', e); if (le === -1) le = v.length;
         const before = v.slice(0, ls);
@@ -752,11 +631,10 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
         }
         ta.value = before + mutated + after;
         ta.setSelectionRange(s + delta0, e + deltaN);
-        this.value.set(ta.value);
+        this.value.Set(ta.value);
         this._render();
     }
 
-    /** Duplicate selected lines (or the caret line) below. */
     private _duplicateLines(): void
     {
         const ta = this._ta;
@@ -768,22 +646,18 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
         ta.value = v.slice(0, le) + '\n' + block + v.slice(le);
         const off = 1 + block.length;
         ta.setSelectionRange(s + off, e + off);
-        this.value.set(ta.value);
+        this.value.Set(ta.value);
         this._render();
     }
 
-    /** Toggle "// " comment on each selected line for JS-likes; "<!-- -->" for HTML; "/* *\/" for CSS. */
     private _toggleComment(): void
     {
-        const lang = this.language.get();
+        const lang = this.language.Get();
         let prefix = '// ';
-        if (lang === 'css')                                 prefix = '/* CSS_CMT */';   // unused; CSS uses block below
-        if (lang === 'html')                                prefix = '<!-- HTML_CMT -->'; // unused
-        // For HTML/CSS, fall back to JS-style on JSON/plain
         if (lang === 'json' || lang === 'plain') prefix = '// ';
 
-        if (lang === 'html')      { this._toggleBlockComment('<!-- ', ' -->'); return; }
-        if (lang === 'css')       { this._toggleBlockComment('/* ',   ' */');  return; }
+        if (lang === 'html') { this._toggleBlockComment('<!-- ', ' -->'); return; }
+        if (lang === 'css')  { this._toggleBlockComment('/* ',   ' */');  return; }
 
         const ta = this._ta;
         const v  = ta.value;
@@ -792,12 +666,10 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
         let le = v.indexOf('\n', e); if (le === -1) le = v.length;
         const lines = v.slice(ls, le).split('\n');
 
-        // If ALL non-empty lines start with prefix → remove; else add
         const allCommented = lines.every(l => l.trim().length === 0 || l.trimStart().startsWith(prefix.trimEnd()));
         const newLines = lines.map(line => {
             if (allCommented)
             {
-                // Strip leading "// " (or "//") plus its leading whitespace preserved
                 const idx = line.indexOf(prefix.trimEnd());
                 if (idx === -1) return line;
                 return line.slice(0, idx) + line.slice(idx + (line.slice(idx, idx + prefix.length) === prefix ? prefix.length : prefix.trimEnd().length));
@@ -810,7 +682,7 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
             }
         });
         ta.value = v.slice(0, ls) + newLines.join('\n') + v.slice(le);
-        this.value.set(ta.value);
+        this.value.Set(ta.value);
         this._render();
     }
 
@@ -820,7 +692,6 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
         const v  = ta.value;
         let s = ta.selectionStart, e = ta.selectionEnd;
         if (s === e) {
-            // Comment current line
             const ls = v.lastIndexOf('\n', s - 1) + 1;
             let le = v.indexOf('\n', e); if (le === -1) le = v.length;
             s = ls; e = le;
@@ -829,22 +700,17 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
         let mutated: string;
         if (block.trimStart().startsWith(open) && block.trimEnd().endsWith(close))
         {
-            // Strip
             const i0 = block.indexOf(open);
             const i1 = block.lastIndexOf(close);
             mutated = block.slice(0, i0) + block.slice(i0 + open.length, i1) + block.slice(i1 + close.length);
         }
-        else
-        {
-            mutated = open + block + close;
-        }
+        else { mutated = open + block + close; }
         ta.value = v.slice(0, s) + mutated + v.slice(e);
         ta.setSelectionRange(s, s + mutated.length);
-        this.value.set(ta.value);
+        this.value.Set(ta.value);
         this._render();
     }
 
-    /** Move selected lines (or the caret line) up/down by `dir`. */
     private _moveLines(dir: -1 | 1): void
     {
         const ta = this._ta;
@@ -874,39 +740,24 @@ export class CodeEditor extends Component('arianna-code-editor', HTMLElement, {}
             const shift = nextLine.length + 1;
             ta.setSelectionRange(s + shift, e + shift);
         }
-        this.value.set(ta.value);
+        this.value.Set(ta.value);
         this._render();
     }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────
 
-    onCreated?(): void { this.build(); }
+    /** Core invokes onCreated() after markup upgrade (the user constructor is not
+     *  run on that path). build() is idempotent, so a programmatic instance that
+     *  already built in its constructor makes this a no-op. */
+    onCreated(): void { this.build(); }
 }
 
-// ── Registration ─────────────────────────────────────────────────────────
-// Component(tag, base, …) registers the tag with descriptor.Class = null.
-// The user subclass (CodeEditor) is normally captured on the first
-// `new CodeEditor()` via new.target through super(). But CodeEditor extends
-// HTMLElement and is NOT registered via native customElements, so `new
-// CodeEditor()` throws "Illegal constructor" — the lazy capture never runs and
-// descriptor.Class stays null, which made markup-upgrade pick the wrong class
-// (e.g. ArrayModifierElement). We therefore bind the subclass to its tag
-// EXPLICITLY and safely, without `new`:
-Component.Define('arianna-code-editor', CodeEditor);
-
-// ── Prototype-splice resolution for the markup-upgrade path ───────────────
-// Namespace.Update resolves the user subclass for a tag in this order:
-//   (1) descriptor.Class  (captured by the first `new Sub()` via new.target);
-//   (2) the global window[PascalCase(tag)]  — for 'arianna-code-editor' that
-//       name is exactly 'CodeEditor'.
-// Path (1) never fires here: this element is HTMLElement-based and is NOT
-// registered through native customElements, so `new CodeEditor()` throws
-// "Illegal constructor" and the lazy capture leaves descriptor.Class null.
-// Without a fallback, the upgrade splices the empty Component(...) BASE
-// prototype onto the node — build()/Value/value never reach it, the editor
-// reports "missing API", and the chain shows [HTMLElement, HTMLElement, …].
-// Exposing the class globally under that exact name makes path (2) succeed, so
-// the upgrade splices CodeEditor.prototype and build() runs.
-(globalThis as unknown as Record<string, unknown>).CodeEditor = CodeEditor;
+// ── Registration ──────────────────────────────────────────────────────────
+// `extends Component('arianna-code-editor', HTMLElement, …)` RESERVES the tag
+// (Pending descriptor, backed by a ConstructorBridge). CodeEditor now exists, so
+// this Define ADOPTS the Pending descriptor: Namespace.Define refines its
+// Constructor → CodeEditor and Promotes it (prototype splice, CSS inject,
+// retro-upgrade of markup nodes, 'Defined' event). No `new`, no new.target.
+Namespace.Define('arianna-code-editor', CodeEditor as unknown as Core.Types.Constructor, HTMLElement);
 
 export default CodeEditor;

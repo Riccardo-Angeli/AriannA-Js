@@ -25,12 +25,22 @@
  * Attrs:  separator
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface BreadcrumbItem {
     label : string;
@@ -56,10 +66,10 @@ export class Breadcrumb extends Component('arianna-breadcrumb', HTMLElement, {},
 
         const sep = this.attrSignal('separator');
 
-        this.allItems   = () => this.items$.get();
+        this.allItems   = () => this.items$.Get();
         this.separator  = () => sep.get() ?? '/';
-        this.isLast     = (i: number) => i === this.items$.get().length - 1;
-        this.notLast    = (i: number) => i < this.items$.get().length - 1;
+        this.isLast     = (i: number) => i === this.items$.Get().length - 1;
+        this.notLast    = (i: number) => i < this.items$.Get().length - 1;
         this.onItemClick = (item: BreadcrumbItem, e: Event) => {
             e.preventDefault();
             this.dispatchEvent(new CustomEvent('arianna:click', {
@@ -86,8 +96,8 @@ export class Breadcrumb extends Component('arianna-breadcrumb', HTMLElement, {},
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = Breadcrumb.DefaultSheet();
     }
 
-    set items(v: BreadcrumbItem[]) { this.items$.set(v ?? []); }
-    get items(): BreadcrumbItem[]  { return this.items$.get(); }
+    set items(v: BreadcrumbItem[]) { this.items$.Set(v ?? []); }
+    get items(): BreadcrumbItem[]  { return this.items$.Get(); }
 
     onCreated()       {}
     onBeforeMount()   {}

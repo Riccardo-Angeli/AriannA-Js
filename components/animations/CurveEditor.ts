@@ -23,9 +23,26 @@
  */
 
 import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -77,7 +94,7 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
         this.#svg = svg;
         root.appendChild(svg);
 
-        effect(() => { this.samples$.get(); this.playhead$.get(); this.#redraw(); });
+        effect(() => { this.samples$.Get(); this.playhead$.Get(); this.#redraw(); });
 
         self.Sheet = CurveEditor.DefaultSheet();
     }
@@ -89,14 +106,14 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
         editor.addEventListener('arianna:keyframe-editor-update', () => this.#refresh());
         editor.addEventListener('arianna:keyframe-editor-playhead', (e: Event) => {
             const d = (e as CustomEvent<{ frame: number }>).detail;
-            this.playhead$.set(d.frame);
+            this.playhead$.Set(d.frame);
         });
         this.#refresh();
         return this;
     }
 
     #refresh(): void {
-        if (!this.#bound) { this.samples$.set([]); return; }
+        if (!this.#bound) { this.samples$.Set([]); return; }
         const tracks = Array.from(this.#bound.querySelectorAll('arianna-anim-track'));
         const samples: CurveSample[] = tracks.map(t => {
             if (t.hasAttribute('hidden')) {
@@ -114,7 +131,7 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
             points.sort((a, b) => a.frame - b.frame);
             return { track: t, group: t.getAttribute('group') ?? 'custom', points };
         });
-        this.samples$.set(samples);
+        this.samples$.Set(samples);
     }
 
     #redraw(): void {
@@ -124,7 +141,7 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
 
         const w = parseInt(svg.getAttribute('width')  ?? '720', 10);
         const h = parseInt(svg.getAttribute('height') ?? '260', 10);
-        const samples = this.samples$.peek();
+        const samples = this.samples$.Peek();
         if (!samples.length) return;
 
         const padL = 40, padR = 12, padT = 12, padB = 24;
@@ -230,7 +247,7 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
         }
 
         // Playhead
-        const ph = this.playhead$.peek();
+        const ph = this.playhead$.Peek();
         if (ph >= fMin && ph <= fMax) {
             const phLine = document.createElementNS(SVG_NS, 'line');
             phLine.setAttribute('x1', String(xOf(ph)));

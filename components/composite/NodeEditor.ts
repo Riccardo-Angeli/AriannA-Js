@@ -39,9 +39,26 @@
  */
 
 import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface PortSpec {
     id     : string;
@@ -125,7 +142,7 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
 
     constructor(opts: NodeEditorOptions = {}) {
         super(opts as never);
-        if (opts.schemas)   this.schemas$.set(opts.schemas);
+        if (opts.schemas)   this.schemas$.Set(opts.schemas);
         if (opts.typeCheck) this.#typeCheck = opts.typeCheck;
     }
 
@@ -161,9 +178,9 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
         // Render palette
         effect(() => this.#renderPalette());
         // Render nodes
-        effect(() => { this.nodes$.get(); this.#renderNodes(); this.#renderWires(); });
+        effect(() => { this.nodes$.Get(); this.#renderNodes(); this.#renderWires(); });
         // Render wires
-        effect(() => { this.wires$.get(); this.#renderWires(); });
+        effect(() => { this.wires$.Get(); this.#renderWires(); });
 
         // Drop on canvas → spawn node
         canvas.addEventListener('dragover', e => e.preventDefault());
@@ -182,7 +199,7 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
         const palette = this.#palette;
         if (!palette) return;
         palette.innerHTML = '';
-        const schemas = this.schemas$.get();
+        const schemas = this.schemas$.Get();
         // Group by category
         const groups: Record<string, NodeSchema[]> = {};
         for (const s of schemas) {
@@ -222,7 +239,7 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
         Array.from(canvas.querySelectorAll('.ne-node')).forEach(n => n.remove());
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
 
-        for (const n of this.nodes$.peek()) {
+        for (const n of this.nodes$.Peek()) {
             const div = document.createElement('div');
             div.className = 'ne-node';
             div.style.left  = n.x + 'px';
@@ -415,7 +432,7 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
         Array.from(svg.querySelectorAll('.ne-wire:not(.ne-wire-dragging)')).forEach(w => w.remove());
 
         const r = canvas.getBoundingClientRect();
-        for (const w of this.wires$.peek()) {
+        for (const w of this.wires$.Peek()) {
             const sDot = canvas.querySelector<HTMLElement>(
                 `.ne-port-dot[data-node-id="${w.srcNodeId}"][data-port-id="${w.srcPortId}"][data-port-side="out"]`);
             const tDot = canvas.querySelector<HTMLElement>(
@@ -443,10 +460,10 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
 
     // ── Public API ────────────────────────────────────────────────────────
 
-    setSchemas(s: NodeSchema[]): this { this.schemas$.set(s); return this; }
+    setSchemas(s: NodeSchema[]): this { this.schemas$.Set(s); return this; }
 
     addNode(type: string, x: number, y: number, id?: string): NodeInstance {
-        const schema = this.schemas$.peek().find(s => s.type === type);
+        const schema = this.schemas$.Peek().find(s => s.type === type);
         if (!schema) throw new Error(`Unknown node schema: ${type}`);
         const node: NodeInstance = {
             id    : id ?? this.#nextId('n'),
@@ -459,7 +476,7 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
         for (const sp of (schema.params ?? [])) {
             if (sp.default != null) node.params![sp.id] = sp.default;
         }
-        this.nodes$.set([...this.nodes$.peek(), node]);
+        this.nodes$.Set([...this.nodes$.Peek(), node]);
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
         self.fire('arianna:node-add',     { detail: { node, source: this }, bubbles: true });
         self.fire('arianna:graph-change', { detail: { source: this }, bubbles: true });
@@ -467,34 +484,34 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
     }
 
     removeNode(id: string): void {
-        const node = this.nodes$.peek().find(n => n.id === id);
+        const node = this.nodes$.Peek().find(n => n.id === id);
         if (!node) return;
         // Remove dependent wires
-        const remainingWires = this.wires$.peek().filter(w => w.srcNodeId !== id && w.dstNodeId !== id);
-        this.wires$.set(remainingWires);
-        this.nodes$.set(this.nodes$.peek().filter(n => n.id !== id));
+        const remainingWires = this.wires$.Peek().filter(w => w.srcNodeId !== id && w.dstNodeId !== id);
+        this.wires$.Set(remainingWires);
+        this.nodes$.Set(this.nodes$.Peek().filter(n => n.id !== id));
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
         self.fire('arianna:node-remove',  { detail: { node, source: this }, bubbles: true });
         self.fire('arianna:graph-change', { detail: { source: this }, bubbles: true });
     }
 
     addWire(srcNodeId: string, srcPortId: string, dstNodeId: string, dstPortId: string): WireInstance | null {
-        const src = this.nodes$.peek().find(n => n.id === srcNodeId);
-        const dst = this.nodes$.peek().find(n => n.id === dstNodeId);
+        const src = this.nodes$.Peek().find(n => n.id === srcNodeId);
+        const dst = this.nodes$.Peek().find(n => n.id === dstNodeId);
         if (!src || !dst) return null;
         const sPort = src.schema.outputs.find(p => p.id === srcPortId);
         const dPort = dst.schema.inputs.find( p => p.id === dstPortId);
         if (!sPort || !dPort) return null;
         const status = this.#typeCheck(sPort.type, dPort.type) ?? 'connected-error';
         // Disconnect any existing wire on the destination port (single-in semantics)
-        const existing = this.wires$.peek().filter(w => !(w.dstNodeId === dstNodeId && w.dstPortId === dstPortId));
+        const existing = this.wires$.Peek().filter(w => !(w.dstNodeId === dstNodeId && w.dstPortId === dstPortId));
         const wire: WireInstance = {
             id        : this.#nextId('w'),
             srcNodeId, srcPortId, srcType: sPort.type,
             dstNodeId, dstPortId, dstType: dPort.type,
             status,
         };
-        this.wires$.set([...existing, wire]);
+        this.wires$.Set([...existing, wire]);
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
         self.fire('arianna:wire-add',     { detail: { wire, source: this }, bubbles: true });
         self.fire('arianna:graph-change', { detail: { source: this }, bubbles: true });
@@ -502,16 +519,16 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
     }
 
     removeWire(id: string): void {
-        const w = this.wires$.peek().find(x => x.id === id);
+        const w = this.wires$.Peek().find(x => x.id === id);
         if (!w) return;
-        this.wires$.set(this.wires$.peek().filter(x => x.id !== id));
+        this.wires$.Set(this.wires$.Peek().filter(x => x.id !== id));
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
         self.fire('arianna:wire-remove',  { detail: { wire: w, source: this }, bubbles: true });
         self.fire('arianna:graph-change', { detail: { source: this }, bubbles: true });
     }
 
     setRunState(s: RunState): this {
-        this.runState$.set(s);
+        this.runState$.Set(s);
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
         self.fire('arianna:run-state', { detail: { state: s, source: this }, bubbles: true });
         return this;
@@ -519,13 +536,13 @@ export class NodeEditor extends Component('arianna-node-editor', HTMLElement, {}
 
     /** Export graph as JSON. */
     export(): { nodes: NodeInstance[]; wires: WireInstance[] } {
-        return { nodes: this.nodes$.peek(), wires: this.wires$.peek() };
+        return { nodes: this.nodes$.Peek(), wires: this.wires$.Peek() };
     }
 
     /** Load graph from JSON (schemas must already be set). */
     import(g: { nodes: NodeInstance[]; wires: WireInstance[] }): this {
-        this.nodes$.set(g.nodes);
-        this.wires$.set(g.wires);
+        this.nodes$.Set(g.nodes);
+        this.wires$.Set(g.wires);
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
         self.fire('arianna:graph-change', { detail: { source: this }, bubbles: true });
         return this;

@@ -44,9 +44,26 @@
  */
 
 import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 const BEAT_PX_DEFAULT = 20;     // px per beat at zoom = 1
 const BEATS_PER_BAR    = 4;
@@ -76,9 +93,9 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
         if (opts.length != null) el.setAttribute('length', String(opts.length));
         if (opts.label)          el.setAttribute('label',  opts.label);
         if (opts.color)          el.setAttribute('color',  opts.color);
-        if (opts.start  != null) this.start$.set(opts.start);
-        if (opts.length != null) this.length$.set(opts.length);
-        if (opts.color)          this.color$.set(opts.color);
+        if (opts.start  != null) this.start$.Set(opts.start);
+        if (opts.length != null) this.length$.Set(opts.length);
+        if (opts.color)          this.color$.Set(opts.color);
     }
 
     build(): void {
@@ -105,17 +122,17 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
 
         effect(() => {
             const v = sStart?.get();
-            if (v != null) this.start$.set(parseFloat(v) || 0);
-            el.style.left = `calc(${this.start$.get()} * var(--beat-px, ${BEAT_PX_DEFAULT}px))`;
+            if (v != null) this.start$.Set(parseFloat(v) || 0);
+            el.style.left = `calc(${this.start$.Get()} * var(--beat-px, ${BEAT_PX_DEFAULT}px))`;
         });
         effect(() => {
             const v = sLen?.get();
-            if (v != null) this.length$.set(parseFloat(v) || 1);
-            el.style.width = `calc(${this.length$.get()} * var(--beat-px, ${BEAT_PX_DEFAULT}px))`;
+            if (v != null) this.length$.Set(parseFloat(v) || 1);
+            el.style.width = `calc(${this.length$.Get()} * var(--beat-px, ${BEAT_PX_DEFAULT}px))`;
         });
         effect(() => { label.textContent = sLabel?.get() ?? ''; });
         effect(() => {
-            const c = sColor?.get() ?? this.color$.get();
+            const c = sColor?.get() ?? this.color$.Get();
             el.style.background = c || 'var(--ar-primary, #7eb8f7)';
         });
 
@@ -127,8 +144,8 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
             const targetIsGrip = (e.target as HTMLElement).classList.contains('ap-grip');
             dragKind = targetIsGrip ? 'resize' : 'move';
             startX = e.clientX;
-            origStart = this.start$.peek();
-            origLen   = this.length$.peek();
+            origStart = this.start$.Peek();
+            origLen   = this.length$.Peek();
             el.setPointerCapture(e.pointerId);
             // Select
             el.setAttribute('selected', '');
@@ -140,12 +157,12 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
             const dBeats = (e.clientX - startX) / beatPx;
             if (dragKind === 'move') {
                 const next = Math.max(0, Math.round((origStart + dBeats) * 4) / 4);
-                this.start$.set(next);
+                this.start$.Set(next);
                 el.setAttribute('start', String(next));
                 self.fire('arianna:part-move', { detail: { part: this, start: next, source: this }, bubbles: true });
             } else {
                 const next = Math.max(0.25, Math.round((origLen + dBeats) * 4) / 4);
-                this.length$.set(next);
+                this.length$.Set(next);
                 el.setAttribute('length', String(next));
                 self.fire('arianna:part-resize', { detail: { part: this, length: next, source: this }, bubbles: true });
             }
@@ -407,7 +424,7 @@ export class AudioTrackEditor extends Component('arianna-audio-track-editor', HT
         const playhead = document.createElement('div');
         playhead.className = 'ate-playhead';
         effect(() => {
-            const b = this.playhead$.get();
+            const b = this.playhead$.Get();
             playhead.style.left = (160 + b * this.#beatPx) + 'px';
         });
 
@@ -419,7 +436,7 @@ export class AudioTrackEditor extends Component('arianna-audio-track-editor', HT
     /** Set the playhead in beats. */
     setPlayhead(beats: number): this {
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
-        this.playhead$.set(beats);
+        this.playhead$.Set(beats);
         self.fire('arianna:editor-playhead', { detail: { beat: beats, source: this }, bubbles: true });
         return this;
     }

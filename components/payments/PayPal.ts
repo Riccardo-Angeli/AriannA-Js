@@ -28,10 +28,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface PayPalOptions {
     clientId      : string;
@@ -73,8 +83,8 @@ export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
 
     build(_opts: PayPalOptions = {} as PayPalOptions)
     {
-        this.fallbackVisible = () => !this.sdkLoaded$.get();
-        this.fallbackLabel = () => this.sdkError$.get()
+        this.fallbackVisible = () => !this.sdkLoaded$.Get();
+        this.fallbackLabel = () => this.sdkError$.Get()
             ? 'Open PayPal'
             : 'Loading PayPal…';
 
@@ -100,8 +110,8 @@ export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
     }
 
     async pay(): Promise<void> {
-        if (this.busy$.get()) return;
-        this.busy$.set(true);
+        if (this.busy$.Get()) return;
+        this.busy$.Set(true);
         try {
             const url = this.getAttribute('redirect-url');
             if (url) {
@@ -116,7 +126,7 @@ export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
                 detail: { method: 'paypal', message: err instanceof Error ? err.message : String(err) },
             }));
         } finally {
-            this.busy$.set(false);
+            this.busy$.Set(false);
         }
     }
 
@@ -175,9 +185,9 @@ export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
                 },
             });
             await buttons.render(host);
-            this.sdkLoaded$.set(true);
+            this.sdkLoaded$.Set(true);
         } catch (err) {
-            this.sdkError$.set(err instanceof Error ? err.message : String(err));
+            this.sdkError$.Set(err instanceof Error ? err.message : String(err));
         }
     }
 

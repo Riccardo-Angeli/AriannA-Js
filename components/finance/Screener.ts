@@ -25,10 +25,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 import { _fmt, _fmtK, _esc } from './helpers.ts';
 
 export interface ScreenerRow {
@@ -61,11 +71,11 @@ export class Screener extends Component('arianna-screener', HTMLElement, {}, {
     build(_opts: ScreenerOptions = {})
     {
         this.headerCells = (): HeaderCell[] =>
-            this.columns$.get().map(c => ({ label: String(c).toUpperCase() }));
+            this.columns$.Get().map(c => ({ label: String(c).toUpperCase() }));
 
         this.bodyRows = (): BodyRow[] => {
-            const cols = this.columns$.get();
-            return this.rows$.get().map(row => ({
+            const cols = this.columns$.Get();
+            return this.rows$.Get().map(row => ({
                 cells: cols.map(c => this.#formatCell(c, row[c])),
             }));
         };
@@ -88,11 +98,11 @@ export class Screener extends Component('arianna-screener', HTMLElement, {}, {
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = Screener.DefaultSheet();
     }
 
-    set rows(v: ScreenerRow[]) { this.rows$.set(v ?? []); }
-    get rows(): ScreenerRow[]  { return this.rows$.get(); }
+    set rows(v: ScreenerRow[]) { this.rows$.Set(v ?? []); }
+    get rows(): ScreenerRow[]  { return this.rows$.Get(); }
 
-    set columns(v: (keyof ScreenerRow)[]) { this.columns$.set(v ?? []); }
-    get columns(): (keyof ScreenerRow)[]  { return this.columns$.get(); }
+    set columns(v: (keyof ScreenerRow)[]) { this.columns$.Set(v ?? []); }
+    get columns(): (keyof ScreenerRow)[]  { return this.columns$.Get(); }
 
     onCreated()       {}
     onBeforeMount()   {}

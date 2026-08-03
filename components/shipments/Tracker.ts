@@ -60,10 +60,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type TrackingEventKind =
     | 'created'
@@ -156,7 +166,7 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
         const localeAttr = this.attrSignal('locale');
 
         this.headerTitle = () => {
-            const c = this.carrier$.get();
+            const c = this.carrier$.Get();
             const n = numberAttr.get();
             if (!c && !n) return 'Shipment tracker';
             const parts: string[] = [];
@@ -166,28 +176,28 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
         };
 
         this.headerStyle = () => {
-            const c = this.carrier$.get();
+            const c = this.carrier$.Get();
             return c?.color ? `border-left: 3px solid ${c.color}` : '';
         };
 
-        this.logoHtml = () => this.carrier$.get()?.logo ?? '';
+        this.logoHtml = () => this.carrier$.Get()?.logo ?? '';
 
-        this.hasEvents = () => this.events$.get().length > 0;
+        this.hasEvents = () => this.events$.Get().length > 0;
         this.hasCarrierLink = () => {
-            const c = this.carrier$.get();
+            const c = this.carrier$.Get();
             const n = numberAttr.get();
             return !!(c?.publicUrl && n);
         };
 
         this.portalLabel = () => {
-            const c = this.carrier$.get();
+            const c = this.carrier$.Get();
             return c ? `Track on ${c.name} →` : 'Open portal →';
         };
 
         this.eventList = (): Array<{ icon: string; label: string; raw: string; location: string; date: string; cls: string }> => {
             const locale = localeAttr.get() ?? 'en';
             // Sort descending by `at` (most recent first)
-            return [...this.events$.get()].sort((a, b) => b.at - a.at).map(e => ({
+            return [...this.events$.Get()].sort((a, b) => b.at - a.at).map(e => ({
                 icon    : KIND_ICONS[e.kind] ?? KIND_ICONS.unknown,
                 label   : KIND_LABELS[e.kind] ?? e.kind,
                 raw     : e.raw     ?? '',
@@ -199,7 +209,7 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
         };
 
         this.onPortalClick = () => {
-            const c = this.carrier$.get();
+            const c = this.carrier$.Get();
             const n = numberAttr.get();
             if (!c?.publicUrl || !n) return;
             const url = c.publicUrl.replace('{n}', encodeURIComponent(n));
@@ -244,11 +254,11 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
     // ── Public API ───────────────────────────────────────────────────────────
 
     setCarrier(c: CarrierConfig): this {
-        this.carrier$.set({ ...c });
+        this.carrier$.Set({ ...c });
         this.setAttribute('carrier', c.id);
         return this;
     }
-    getCarrier(): CarrierConfig | null { return this.carrier$.get(); }
+    getCarrier(): CarrierConfig | null { return this.carrier$.Get(); }
 
     setTrackingNumber(n: string): this {
         this.setAttribute('tracking-number', n);
@@ -258,7 +268,7 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
 
     setEvents(events: TrackingEvent[]): this {
         const sanitized = events.map(e => ({ ...e }));
-        this.events$.set(sanitized);
+        this.events$.Set(sanitized);
         // Fire one event per setEvents call (last event = most recent)
         const last = sanitized[sanitized.length - 1];
         if (last) {
@@ -268,10 +278,10 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
         }
         return this;
     }
-    getEvents(): TrackingEvent[] { return this.events$.get().map(e => ({ ...e })); }
+    getEvents(): TrackingEvent[] { return this.events$.Get().map(e => ({ ...e })); }
 
     validateNumber(n: string): boolean {
-        const c = this.carrier$.get();
+        const c = this.carrier$.Get();
         if (!c?.pattern) return n.length > 0;
         return c.pattern.test(n);
     }

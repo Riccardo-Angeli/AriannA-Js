@@ -46,7 +46,9 @@
  */
 
 import { MapEmbed, type MapProvider } from './MapEmbed.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
+import { Css } from '../../core/Css.ts';
+const { Stylesheet } = Css;
+type Stylesheet = Css.Stylesheet;
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
 

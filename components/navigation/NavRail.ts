@@ -29,10 +29,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface NavRailItem {
     id    : string;
@@ -57,7 +67,7 @@ export class NavRail extends Component('arianna-nav-rail', HTMLElement, {}, {
     {
         const active = this.attrSignal('active');
 
-        this.allItems   = () => this.items$.get();
+        this.allItems   = () => this.items$.Get();
         this.isCollapsed = () => this.hasAttribute('collapsed');
         this.toggleIcon  = () => this.isCollapsed() ? '▸' : '◂';
         this.itemClass   = (item: NavRailItem) => {
@@ -94,8 +104,8 @@ export class NavRail extends Component('arianna-nav-rail', HTMLElement, {}, {
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = NavRail.DefaultSheet();
     }
 
-    set items(v: NavRailItem[]) { this.items$.set(v ?? []); }
-    get items(): NavRailItem[]  { return this.items$.get(); }
+    set items(v: NavRailItem[]) { this.items$.Set(v ?? []); }
+    get items(): NavRailItem[]  { return this.items$.Get(); }
 
     toggle(): this { this.onToggle(); return this; }
 

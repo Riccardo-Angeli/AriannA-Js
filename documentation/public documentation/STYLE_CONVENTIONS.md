@@ -400,9 +400,9 @@ For non-Component registrations (direct `Core.Define('case-1o', A1o, ...)` with 
 
 | File | Role |
 |---|---|
-| `core/Namespace.ts` → `Namespace.Define` style block | Phase 1: inject for non-Component ctors; skip when `ctor.__ariannaComponent`. |
+| `../../core/Core.ts` → `Namespace.Define` style block | Phase 1: inject for non-Component ctors; skip when `ctor.__ariannaComponent`. |
 | `core/Component.ts` → Component constructor | Phase 2: inject lazily via `new.target.name` when `descriptor.Class` first set. |
-| `core/Namespace.ts` → `generateNestedCss` | Translate `:host` → `.{className}` inside nested rules. |
+| `../../core/Core.ts` → `generateNestedCss` | Translate `:host` → `.{className}` inside nested rules. |
 
 Idempotency marker: `descriptor._cssInjected: boolean`.
 

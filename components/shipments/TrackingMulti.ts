@@ -38,10 +38,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 import { DHLTracker }   from './DHLTracker.ts';
 import { UPSTracker }   from './UPSTracker.ts';
@@ -94,14 +104,14 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
         this.inputVal  = () => numberAttr.get() ?? '';
 
         this.hasMultiple = () => {
-            const cands = this.candidates$.get();
+            const cands = this.candidates$.Get();
             const forced = carrierAttr.get();
             return cands.length > 1 && !forced;
         };
 
         this.candidatesList = (): Array<{ id: CarrierId; name: string; selected: boolean }> => {
             const sel = carrierAttr.get();
-            return this.candidates$.get().map(id => ({
+            return this.candidates$.Get().map(id => ({
                 id, name: CARRIERS.find(c => c.id === id)!.name,
                 selected: sel === id,
             }));
@@ -175,7 +185,7 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
         if (this.#activeTracker) {
             this.#activeTracker.setEvents(events);
         } else {
-            this.pending$.set(events);
+            this.pending$.Set(events);
         }
         return this;
     }
@@ -187,9 +197,9 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
 
     #detect(): void {
         const n = (this.getAttribute('tracking-number') ?? '').trim();
-        if (!n) { this.candidates$.set([]); return; }
+        if (!n) { this.candidates$.Set([]); return; }
         const matches = CARRIERS.filter(c => c.pattern.test(n)).map(c => c.id);
-        this.candidates$.set(matches);
+        this.candidates$.Set(matches);
         // If forced carrier set, keep it; else if exactly one match, use it
         const forced = this.getAttribute('carrier') as CarrierId | null;
         if (!forced) {
@@ -227,11 +237,11 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
         host.appendChild(tracker);
         this.#activeTracker = tracker;
         // Flush pending events if any
-        const pending = this.pending$.get();
+        const pending = this.pending$.Get();
         if (pending) {
             queueMicrotask(() => {
                 tracker.setEvents(pending);
-                this.pending$.set(null);
+                this.pending$.Set(null);
             });
         }
     }

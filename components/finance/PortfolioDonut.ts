@@ -23,12 +23,22 @@
  * Attrs: size
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 import { _fmt, _esc } from './helpers.ts';
 
 export interface DonutSegment {
@@ -64,7 +74,7 @@ export class PortfolioDonut extends Component('arianna-portfolio-donut', HTMLEle
         const sizeAttr = this.attrSignal('size');
 
         this.svgHtml = (): string => {
-            const segments = this.segments$.get();
+            const segments = this.segments$.Get();
             if (!segments.length) return '';
 
             const s = parseInt(sizeAttr.get() ?? '300', 10) || 300;
@@ -113,8 +123,8 @@ export class PortfolioDonut extends Component('arianna-portfolio-donut', HTMLEle
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = PortfolioDonut.DefaultSheet();
     }
 
-    set segments(v: DonutSegment[]) { this.segments$.set(v ?? []); }
-    get segments(): DonutSegment[]  { return this.segments$.get(); }
+    set segments(v: DonutSegment[]) { this.segments$.Set(v ?? []); }
+    get segments(): DonutSegment[]  { return this.segments$.Get(); }
 
     onCreated()       {}
     onBeforeMount()   {}

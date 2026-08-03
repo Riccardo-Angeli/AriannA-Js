@@ -22,10 +22,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type Level = [price: number, size: number];
 
@@ -49,8 +59,8 @@ export class DepthChart extends Component('arianna-depth-chart', HTMLElement, {}
         const hAttr = this.attrSignal('height');
 
         this.svgHtml = (): string => {
-            const bids = this.bids$.get();
-            const asks = this.asks$.get();
+            const bids = this.bids$.Get();
+            const asks = this.asks$.Get();
             if (!bids.length || !asks.length) return '';
 
             const w = parseInt(wAttr.get() ?? '600', 10) || 600;
@@ -102,16 +112,16 @@ export class DepthChart extends Component('arianna-depth-chart', HTMLElement, {}
 
     /** Convenience: set bids and asks together. */
     setData(bids: Level[], asks: Level[]): this {
-        this.bids$.set(bids ?? []);
-        this.asks$.set(asks ?? []);
+        this.bids$.Set(bids ?? []);
+        this.asks$.Set(asks ?? []);
         return this;
     }
 
-    set bids(v: Level[]) { this.bids$.set(v ?? []); }
-    get bids(): Level[]  { return this.bids$.get(); }
+    set bids(v: Level[]) { this.bids$.Set(v ?? []); }
+    get bids(): Level[]  { return this.bids$.Get(); }
 
-    set asks(v: Level[]) { this.asks$.set(v ?? []); }
-    get asks(): Level[]  { return this.asks$.get(); }
+    set asks(v: Level[]) { this.asks$.Set(v ?? []); }
+    get asks(): Level[]  { return this.asks$.Get(); }
 
     onCreated()       {}
     onBeforeMount()   {}

@@ -38,10 +38,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type ApplePayNetwork =
     | 'visa' | 'masterCard' | 'amex' | 'discover' | 'maestro'
@@ -89,7 +99,7 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
             const style = styleAttr.get() ?? 'black';
             const kind  = typeAttr.get()  ?? 'plain';
             return `ar-applepay__btn ar-applepay__btn--${style} ar-applepay__btn--${kind}`
-                + (this.busy$.get() ? ' ar-applepay__btn--busy' : '');
+                + (this.busy$.Get() ? ' ar-applepay__btn--busy' : '');
         };
 
         this.btnLabel = () => {
@@ -104,7 +114,7 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
             }
         };
 
-        this.visible = () => this.available$.get() || this.hasAttribute('force-show');
+        this.visible = () => this.available$.Get() || this.hasAttribute('force-show');
 
         this.onClick = () => { void this.pay(); };
 
@@ -126,8 +136,8 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
 
     /** Programmatically open the Apple Pay sheet. */
     async pay(): Promise<void> {
-        if (this.busy$.get()) return;
-        this.busy$.set(true);
+        if (this.busy$.Get()) return;
+        this.busy$.Set(true);
         try {
             const merchantId  = this.getAttribute('merchant-id') ?? '';
             const countryCode = this.getAttribute('country-code') ?? 'US';
@@ -171,7 +181,7 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
                 }));
             }
         } finally {
-            this.busy$.set(false);
+            this.busy$.Set(false);
         }
     }
 
@@ -187,7 +197,7 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
     onCreated()       {}
     onBeforeMount()   {}
     async onMount()   {
-        this.available$.set(await ApplePay.isAvailable());
+        this.available$.Set(await ApplePay.isAvailable());
     }
     onBeforeUpdate()  {}
     onUpdate()        {}

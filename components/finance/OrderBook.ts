@@ -22,12 +22,22 @@
  * Attrs: depth
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 import { _fmt, _fmtK } from './helpers.ts';
 
 export type Level = [price: number, size: number];
@@ -60,7 +70,7 @@ export class OrderBook extends Component('arianna-order-book', HTMLElement, {}, 
 
         this.askRows = (): Row[] => {
             const n = depthN();
-            return this.asks$.get().slice(0, n).reverse().map(([p, s]) => ({
+            return this.asks$.Get().slice(0, n).reverse().map(([p, s]) => ({
                 price: _fmt(p),
                 size : _fmtK(s),
                 rowCls: 'ar-ob__row',
@@ -70,7 +80,7 @@ export class OrderBook extends Component('arianna-order-book', HTMLElement, {}, 
 
         this.bidRows = (): Row[] => {
             const n = depthN();
-            return this.bids$.get().slice(0, n).map(([p, s]) => ({
+            return this.bids$.Get().slice(0, n).map(([p, s]) => ({
                 price: _fmt(p),
                 size : _fmtK(s),
                 rowCls: 'ar-ob__row',
@@ -79,14 +89,14 @@ export class OrderBook extends Component('arianna-order-book', HTMLElement, {}, 
         };
 
         this.midText = () => {
-            const bestAsk = this.asks$.get()[0]?.[0];
-            const bestBid = this.bids$.get()[0]?.[0];
+            const bestAsk = this.asks$.Get()[0]?.[0];
+            const bestBid = this.bids$.Get()[0]?.[0];
             if (bestAsk === undefined || bestBid === undefined) return '—';
             return _fmt((bestAsk + bestBid) / 2);
         };
         this.spreadText = () => {
-            const bestAsk = this.asks$.get()[0]?.[0];
-            const bestBid = this.bids$.get()[0]?.[0];
+            const bestAsk = this.asks$.Get()[0]?.[0];
+            const bestBid = this.bids$.Get()[0]?.[0];
             if (bestAsk === undefined || bestBid === undefined) return '—';
             return _fmt(bestAsk - bestBid);
         };
@@ -124,16 +134,16 @@ export class OrderBook extends Component('arianna-order-book', HTMLElement, {}, 
     }
 
     setData(bids: Level[], asks: Level[]): this {
-        this.bids$.set(bids ?? []);
-        this.asks$.set(asks ?? []);
+        this.bids$.Set(bids ?? []);
+        this.asks$.Set(asks ?? []);
         return this;
     }
 
-    set bids(v: Level[]) { this.bids$.set(v ?? []); }
-    get bids(): Level[]  { return this.bids$.get(); }
+    set bids(v: Level[]) { this.bids$.Set(v ?? []); }
+    get bids(): Level[]  { return this.bids$.Get(); }
 
-    set asks(v: Level[]) { this.asks$.set(v ?? []); }
-    get asks(): Level[]  { return this.asks$.get(); }
+    set asks(v: Level[]) { this.asks$.Set(v ?? []); }
+    get asks(): Level[]  { return this.asks$.Get(); }
 
     get depth(): number  { return parseInt(this.getAttribute('depth') ?? '10', 10); }
     set depth(v: number) { this.setAttribute('depth', String(v)); }

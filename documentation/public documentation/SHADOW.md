@@ -743,7 +743,7 @@ This document is the canonical specification for AriannA's shadow modes. Impleme
   Exports: `AriannaShadow`, `AriannaShadowOptions`, `AriannaSlot`, `ShadowMode`, `ShadowBackend`, `IframeProjection`, `ARIANNA_SHADOW_KEY`, `IsAriannaShadow`, `IsIframeBackend`, `GetAriannaShadow`, `AttachAriannaShadow`, `RenderIntoAriannaShadow`.
 - `Component.ts` — `_attachAriannaShadow` dispatcher + mode escalation policy (§8); selects native / light backend / iframe backend
 - `Stylesheet.ts` — selector rewriting per mode (§10)
-- `Namespace.ts` — interface registry, drives the native attempt path
+- `Core.ts` — interface registry, drives the native attempt path
 
 There is intentionally NO `IframeShadow.ts` module. The iframe is a backend of `AriannaShadow`, not a parallel type (see §3.1).
 

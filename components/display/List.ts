@@ -36,10 +36,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface ListItem {
     id        : string;
@@ -72,25 +82,25 @@ export class List extends Component('arianna-list', HTMLElement, {}, {
     {
         this.setAttribute('role', this.hasAttribute('selectable') ? 'listbox' : 'list');
 
-        this.hasItems = () => this.items$.get().length > 0;
-        this.allItems = () => this.items$.get();
+        this.hasItems = () => this.items$.Get().length > 0;
+        this.allItems = () => this.items$.Get();
         this.isSelectable = () => this.hasAttribute('selectable');
 
         this.itemClass = (item: ListItem) => {
             let c = 'ar-list__item';
-            if (this.selected$.get().has(item.id)) c += ' ar-list__item--selected';
+            if (this.selected$.Get().has(item.id)) c += ' ar-list__item--selected';
             if (item.disabled)                      c += ' ar-list__item--disabled';
             return c;
         };
         this.itemRole = () => this.isSelectable() ? 'option' : 'listitem';
         this.itemClick = (item: ListItem) => {
             if (item.disabled || !this.isSelectable()) return;
-            const cur = new Set(this.selected$.get());
+            const cur = new Set(this.selected$.Get());
             const multi = this.hasAttribute('multiselect');
             if (!multi) cur.clear();
             if (cur.has(item.id)) cur.delete(item.id);
             else                   cur.add(item.id);
-            this.selected$.set(cur);
+            this.selected$.Set(cur);
             this.dispatchEvent(new CustomEvent('arianna:select', {
                 bubbles: true,
                 detail : { item, selected: [...cur] },
@@ -121,12 +131,12 @@ export class List extends Component('arianna-list', HTMLElement, {}, {
     }
 
     /** Replace the items list. */
-    set items(v: ListItem[]) { this.items$.set(v ?? []); }
-    get items(): ListItem[]  { return this.items$.get(); }
+    set items(v: ListItem[]) { this.items$.Set(v ?? []); }
+    get items(): ListItem[]  { return this.items$.Get(); }
 
     /** Currently-selected item ids. */
-    get selected(): Set<string> { return this.selected$.get(); }
-    clearSelection(): void { this.selected$.set(new Set()); }
+    get selected(): Set<string> { return this.selected$.Get(); }
+    clearSelection(): void { this.selected$.Set(new Set()); }
 
     onCreated()       {}
     onBeforeMount()   {}

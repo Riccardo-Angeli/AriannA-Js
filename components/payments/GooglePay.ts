@@ -31,10 +31,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type GooglePayEnvironment = 'TEST' | 'PRODUCTION';
 export type GooglePayButtonColor = 'default' | 'black' | 'white';
@@ -78,7 +88,7 @@ export class GooglePay extends Component('arianna-google-pay', HTMLElement, {}, 
             const color = colorAttr.get() ?? 'default';
             const kind  = typeAttr.get()  ?? 'pay';
             return `ar-gpay__btn ar-gpay__btn--${color} ar-gpay__btn--${kind}`
-                + (this.busy$.get() ? ' ar-gpay__btn--busy' : '');
+                + (this.busy$.Get() ? ' ar-gpay__btn--busy' : '');
         };
         this.btnLabel = () => {
             const kind = typeAttr.get() ?? 'pay';
@@ -99,12 +109,12 @@ export class GooglePay extends Component('arianna-google-pay', HTMLElement, {}, 
         this.template = html`
             <button type="button"
                     :class="this.btnCls()"
-                    a-if="this.available$.get()"
+                    a-if="this.available$.Get()"
                     @click="this.onClick">
                 <span class="ar-gpay__label">{{ this.btnLabel() }}</span>
                 <span class="ar-gpay__logo">${GPAY_LOGO}</span>
             </button>
-            <div class="ar-gpay__fallback" a-if="!this.available$.get()">
+            <div class="ar-gpay__fallback" a-if="!this.available$.Get()">
                 Google Pay isn't available on this device.
             </div>
         `;
@@ -113,8 +123,8 @@ export class GooglePay extends Component('arianna-google-pay', HTMLElement, {}, 
     }
 
     async pay(): Promise<void> {
-        if (this.busy$.get()) return;
-        this.busy$.set(true);
+        if (this.busy$.Get()) return;
+        this.busy$.Set(true);
         try {
             const merchantId        = this.getAttribute('merchant-id')         ?? '';
             const merchantName      = this.getAttribute('merchant-name')       ?? '';
@@ -196,7 +206,7 @@ export class GooglePay extends Component('arianna-google-pay', HTMLElement, {}, 
                 }));
             }
         } finally {
-            this.busy$.set(false);
+            this.busy$.Set(false);
         }
     }
 
@@ -211,7 +221,7 @@ export class GooglePay extends Component('arianna-google-pay', HTMLElement, {}, 
     onCreated()       {}
     onBeforeMount()   {}
     async onMount()   {
-        this.available$.set(await GooglePay.isAvailable());
+        this.available$.Set(await GooglePay.isAvailable());
     }
     onBeforeUpdate()  {}
     onUpdate()        {}

@@ -42,10 +42,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface TreeNode {
     id          : string;
@@ -122,7 +132,7 @@ export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
         this.tabIndex = 0;
 
         this.isSearchable = () => this.getAttribute('searchable') !== 'false';
-        this.searchValue  = () => this.query$.get();
+        this.searchValue  = () => this.query$.Get();
         this.showCheckboxes = () => this.hasAttribute('checkboxes');
         this.showIcons      = () => this.getAttribute('icons')  !== 'false';
         this.showBadges     = () => this.getAttribute('badges') !== 'false';
@@ -132,8 +142,8 @@ export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
 
         this.rows = (): FlatRow[] => {
             // Tick$ read forces re-render when internal mutation calls bump().
-            void this.tick$.get();
-            const q = this.query$.get();
+            void this.tick$.Get();
+            const q = this.query$.Get();
             const out: FlatRow[] = [];
             const walk = (states: NodeState[]) => {
                 for (const s of states) {
@@ -156,7 +166,7 @@ export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
                     if (s.expanded && s.children.length) walk(s.children);
                 }
             };
-            walk(this.roots$.get());
+            walk(this.roots$.Get());
             return out;
         };
 
@@ -187,7 +197,7 @@ export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
             }));
         };
         this.onSearchInput = (e: Event) => {
-            this.query$.set((e.target as HTMLInputElement).value.toLowerCase().trim());
+            this.query$.Set((e.target as HTMLInputElement).value.toLowerCase().trim());
         };
 
         // Drag & drop handlers — attached only when draggable attr is set
@@ -300,9 +310,9 @@ export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
     set nodes(v: TreeNode[]) {
         this.#map.clear();
         const states = (v ?? []).map(n => this.#makeState(n, null, 0));
-        this.roots$.set(states);
+        this.roots$.Set(states);
     }
-    get nodes(): TreeNode[] { return this.roots$.get().map(s => s.node); }
+    get nodes(): TreeNode[] { return this.roots$.Get().map(s => s.node); }
 
     expand(id: string): this   { const s = this.#map.get(id); if (s && !s.expanded) this.#expand(s);   return this; }
     collapse(id: string): this { const s = this.#map.get(id); if (s &&  s.expanded) this.#collapse(s); return this; }
@@ -322,7 +332,7 @@ export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
     check(id: string, value = true): this { const s = this.#map.get(id); if (s) this.#setChecked(s, value); return this; }
     getChecked(): TreeNode[]              { return [...this.#map.values()].filter(s => s.checked).map(s => s.node); }
 
-    search(q: string): this { this.query$.set(q.toLowerCase().trim()); return this; }
+    search(q: string): this { this.query$.Set(q.toLowerCase().trim()); return this; }
 
     // ── Internal helpers ─────────────────────────────────────────────────────
 
@@ -410,7 +420,7 @@ export class TreeView extends Component('arianna-tree-view', HTMLElement, {}, {
     }
 
     /** Bump the tick signal to force a template re-render. */
-    #bump(): void { this.tick$.set(this.tick$.get() + 1); }
+    #bump(): void { this.tick$.Set(this.tick$.Get() + 1); }
 
     onCreated()       {}
     onBeforeMount()   {}

@@ -16,11 +16,21 @@
 
 import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
-import { parseHex, rgbToHsl, hslToRgb, rgbToHex } from './ColorPicker.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
+import { parseHexRgba, rgbToHsl, hslToRgb, rgbToHex } from './ColorPicker.ts';
 
 export interface ColorPickerWheelOptions {
     value? : string;
@@ -67,7 +77,7 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
             const rOuter = d / 2 - 4;
             const rInner = rOuter - 20;
             const r = (rInner + rOuter) / 2;
-            return String(cx + r * Math.cos(this.hue$.get() * Math.PI / 180));
+            return String(cx + r * Math.cos(this.hue$.Get() * Math.PI / 180));
         };
         this.dotCy = () => {
             const d = this.dim();
@@ -75,7 +85,7 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
             const rOuter = d / 2 - 4;
             const rInner = rOuter - 20;
             const r = (rInner + rOuter) / 2;
-            return String(cy + r * Math.sin(this.hue$.get() * Math.PI / 180));
+            return String(cy + r * Math.sin(this.hue$.Get() * Math.PI / 180));
         };
 
         this.onPointer = (e: Event) => {
@@ -88,7 +98,7 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
             const x = me.clientX - rect.left - d / 2;
             const y = me.clientY - rect.top  - d / 2;
             const hue = ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
-            this.hue$.set(hue);
+            this.hue$.Set(hue);
             this.#emit();
         };
 
@@ -111,24 +121,24 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
     // ── Public API ───────────────────────────────────────────────────────────
 
     setValue(v: string): this {
-        const p = parseHex(v);
+        const p = parseHexRgba(v);
         if (p) {
-            this.hue$.set(rgbToHsl(p.r, p.g, p.b).h);
+            this.hue$.Set(rgbToHsl(p.r, p.g, p.b).h);
         } else {
             // Try hsl(...) form
             const m = /hsl\(\s*(\d+(?:\.\d+)?)/.exec(v);
-            if (m) this.hue$.set(parseFloat(m[1]!));
+            if (m) this.hue$.Set(parseFloat(m[1]!));
         }
         return this;
     }
 
     getValue(): string {
-        const rgb = hslToRgb(this.hue$.get(), 100, 50);
+        const rgb = hslToRgb(this.hue$.Get(), 100, 50);
         return rgbToHex(rgb.r, rgb.g, rgb.b);
     }
 
     #emit(): void {
-        const h = this.hue$.get();
+        const h = this.hue$.Get();
         const rgb = hslToRgb(h, 100, 50);
         const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
         this.dispatchEvent(new CustomEvent('arianna:change', {

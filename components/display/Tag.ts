@@ -25,10 +25,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface TagOptions {
     removable? : boolean;
@@ -43,10 +53,10 @@ export class Tag extends Component('arianna-tag', HTMLElement, {}, {
 
     build(_opts: TagOptions = {})
     {
-        this.allItems    = () => this.items$.get();
+        this.allItems    = () => this.items$.Get();
         this.isRemovable = () => this.hasAttribute('removable');
         this.onRemove    = (item: string) => {
-            this.items$.set(this.items$.get().filter(i => i !== item));
+            this.items$.Set(this.items$.Get().filter(i => i !== item));
             this.dispatchEvent(new CustomEvent('arianna:remove', { bubbles: true, detail: { item } }));
         };
 
@@ -63,13 +73,13 @@ export class Tag extends Component('arianna-tag', HTMLElement, {}, {
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = Tag.DefaultSheet();
     }
 
-    set items(v: string[]) { this.items$.set(v ?? []); }
-    get items(): string[]  { return this.items$.get(); }
+    set items(v: string[]) { this.items$.Set(v ?? []); }
+    get items(): string[]  { return this.items$.Get(); }
 
     /** Add a single item to the list. */
-    addItem(item: string): void { this.items$.set([...this.items$.get(), item]); }
+    addItem(item: string): void { this.items$.Set([...this.items$.Get(), item]); }
     /** Remove a single item from the list (matches by string equality). */
-    removeItem(item: string): void { this.items$.set(this.items$.get().filter(i => i !== item)); }
+    removeItem(item: string): void { this.items$.Set(this.items$.Get().filter(i => i !== item)); }
 
     onCreated()       {}
     onBeforeMount()   {}

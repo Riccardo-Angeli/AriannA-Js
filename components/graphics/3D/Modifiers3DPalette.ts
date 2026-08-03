@@ -26,10 +26,20 @@
 
 import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type ModifierKind =
     | 'bend' | 'twist' | 'taper' | 'mirror' | 'array' | 'displace'
@@ -94,8 +104,8 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
     build(_opts: Modifiers3DPaletteOptions = {})
     {
         this.stackList = () => {
-            const exp = this.expanded$.get();
-            return this.stack$.get().map(m => ({
+            const exp = this.expanded$.Get();
+            return this.stack$.Get().map(m => ({
                 id: m.id,
                 kind: m.kind,
                 label: KIND_INFO.find(k => k.kind === m.kind)?.label ?? m.kind,
@@ -131,7 +141,7 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
             const row = e.currentTarget as HTMLElement;
             const id = row.dataset.id;
             if (!id) return;
-            this.expanded$.set(this.expanded$.get() === id ? null : id);
+            this.expanded$.Set(this.expanded$.Get() === id ? null : id);
         };
         this.onRemove = (e: Event) => {
             e.stopPropagation();
@@ -231,28 +241,28 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
             enabled: opts.enabled ?? true,
             params: { ...DEFAULT_PARAMS[opts.kind], ...(opts.params ?? {}) },
         };
-        const next = this.stack$.get().slice();
+        const next = this.stack$.Get().slice();
         next.push(entry);
-        this.stack$.set(next);
-        this.expanded$.set(entry.id);
+        this.stack$.Set(next);
+        this.expanded$.Set(entry.id);
         this.#fire();
         return entry;
     }
     removeModifier(id: string): this {
-        const next = this.stack$.get().filter(m => m.id !== id);
-        this.stack$.set(next);
-        if (this.expanded$.get() === id) this.expanded$.set(null);
+        const next = this.stack$.Get().filter(m => m.id !== id);
+        this.stack$.Set(next);
+        if (this.expanded$.Get() === id) this.expanded$.Set(null);
         this.#fire();
         return this;
     }
     toggleEnable(id: string): this {
-        const next = this.stack$.get().map(m => m.id === id ? { ...m, enabled: !m.enabled } : m);
-        this.stack$.set(next);
+        const next = this.stack$.Get().map(m => m.id === id ? { ...m, enabled: !m.enabled } : m);
+        this.stack$.Set(next);
         this.#fire();
         return this;
     }
     moveModifier(id: string, dir: -1 | 1): this {
-        const cur = this.stack$.get();
+        const cur = this.stack$.Get();
         const idx = cur.findIndex(m => m.id === id);
         if (idx === -1) return this;
         const next = cur.slice();
@@ -260,24 +270,24 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
         if (target < 0 || target >= next.length) return this;
         const [moved] = next.splice(idx, 1);
         next.splice(target, 0, moved!);
-        this.stack$.set(next);
+        this.stack$.Set(next);
         this.#fire();
         return this;
     }
     updateParam(id: string, key: string, value: number | string | boolean): this {
-        const next = this.stack$.get().map(m => m.id === id ? { ...m, params: { ...m.params, [key]: value } } : m);
-        this.stack$.set(next);
+        const next = this.stack$.Get().map(m => m.id === id ? { ...m, params: { ...m.params, [key]: value } } : m);
+        this.stack$.Set(next);
         this.#fire();
         return this;
     }
 
     setStack(stack: ModifierEntry[]): this {
-        this.stack$.set(stack.map(m => ({ ...m, params: { ...m.params } })));
+        this.stack$.Set(stack.map(m => ({ ...m, params: { ...m.params } })));
         this.#fire();
         return this;
     }
     getStack(): ModifierEntry[] {
-        return this.stack$.get().map(m => ({ ...m, params: { ...m.params } }));
+        return this.stack$.Get().map(m => ({ ...m, params: { ...m.params } }));
     }
 
     onCreated()       {}

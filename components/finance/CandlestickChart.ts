@@ -25,10 +25,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 import { _svg }      from './helpers.ts';
 
 export interface CandleBar { t: number; o: number; h: number; l: number; c: number; }
@@ -55,7 +65,7 @@ export class CandlestickChart extends Component('arianna-candlestick-chart', HTM
         const bear  = this.attrSignal('bear');
 
         this.svgHtml = (): string => {
-            const data = this.data$.get();
+            const data = this.data$.Get();
             if (!data.length) return '';
 
             const w = parseInt(wAttr.get() ?? '600', 10) || 600;
@@ -100,8 +110,8 @@ export class CandlestickChart extends Component('arianna-candlestick-chart', HTM
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = CandlestickChart.DefaultSheet();
     }
 
-    set data(rows: CandleBar[]) { this.data$.set(rows ?? []); }
-    get data(): CandleBar[]     { return this.data$.get(); }
+    set data(rows: CandleBar[]) { this.data$.Set(rows ?? []); }
+    get data(): CandleBar[]     { return this.data$.Get(); }
 
     onCreated()       {}
     onBeforeMount()   {}

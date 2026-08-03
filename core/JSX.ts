@@ -13,16 +13,20 @@
  * ========================================================================== */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import Real       from './Real.ts';
+import Virtual    from './Virtual.ts';
+import { Core }   from './Core.ts';
+import { Events } from './Events.ts';
 
-import Real                     from './Real.ts';
-import Virtual, { VirtualNode } from './Virtual.ts';
-import Core                     from './Core.ts';
-import type { VAttrs }          from './Virtual.ts';
+/** @namespace Jsx @description AriannA JSX: native runtime (§1), Snabbdom-compatible vdom (§2),
+ *  and React-compatible surface (§3). Types, interfaces, helpers and public API under one namespace. */
+export namespace Jsx
+{
 
 // ─────────────────────────────────────────────────────────────────────────────
 // §1 — AriannA native JSX runtime (re-export)
 // ─────────────────────────────────────────────────────────────────────────────
-// The native factory: h(tag, props, ...children) → Real | VirtualNode.
+// The native factory: h(tag, props, ...children) → Real | Virtual.
 // Props become attributes via .set(); events via $x / onX; children via .add().
 // Merged in from the former ./jsx/jsx-runtime.ts (folder eliminated). The native
 // hyperscript is `hyperscript`; the public Snabbdom `h` is defined in §2 below.
@@ -35,12 +39,12 @@ export type JSXProps = Record<string, unknown> & {
 };
 
 /**
- * A node returned by h() — either a Real instance, a VirtualNode,
+ * A node returned by h() — either a Real instance, a Virtual,
  * a Fragment, a primitive, or null/undefined (both are silently skipped).
  */
 export type JSXNode =
     | Real
-    | VirtualNode
+    | Virtual
     | AriannAFragment
     | string
     | number
@@ -56,15 +60,14 @@ export interface AriannAFragment
 }
 
 /** Intrinsic element map — all HTML/SVG tags are valid JSX elements. */
-export interface IntrinsicElements
-{
-    [tag: string]: JSXProps;
-}
-
 // ── Runtime mode ──────────────────────────────────────────────────────────────
 
 /** Runtime mode — controlled by arianna.config.ts or a per-file pragma. */
 export type JSXRuntime = 'real' | 'virtual';
+
+    /** Attribute bag passed to the runtime: string/number/boolean/null values keyed by name.
+     *  Local to Jsx — no longer imported from Virtual. */
+    export type VAttrs = Record<string, string | number | boolean | null>;
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -101,7 +104,7 @@ function resolveTag(type: string | (new (...a: unknown[]) => unknown)): string
 {
     if (typeof type === 'string') return type;
 
-    const d = Core.GetDescriptor(type as never);
+    const d = Namespaces.Namespace.Resolve(type as never);
     if (d && d.Tags?.length) return d.Tags[0];
 
     // Fallback: convert PascalCase class/function name to kebab-case
@@ -221,7 +224,7 @@ function hReal(
     for (const child of kids)
     {
         if      (child instanceof Real)        r.add(child.render());
-        else if (child instanceof VirtualNode) r.add(child.render());
+        else if (child instanceof Virtual) r.add(child.render());
         else if (child instanceof Node)        r.add(child);
         else if (typeof child === 'string' || typeof child === 'number')
             r.add(String(child));
@@ -233,11 +236,11 @@ function hReal(
 // ── Virtual-mode factory ───────────────────────────────────────────────────────
 
 /**
- * Create a `VirtualNode` from JSX.
+ * Create a `Virtual` from JSX.
  *
  * - Attributes → plain `VAttrs` object passed to `Virtual.Create()`.
  * - Events (`$x` / `onX`) → registered via `.on()` after node creation.
- * - Children → `VirtualNode` children or text strings.
+ * - Children → `Virtual` children or text strings.
  *
  * @param type  - Tag string or component constructor.
  * @param props - Merged props object (attributes + events + children).
@@ -248,7 +251,7 @@ function hVirtual(
     type    : string | (new (...a: unknown[]) => unknown),
     props   : JSXProps | null,
     ...args : unknown[]
-): VirtualNode | AriannAFragment
+): Virtual | AriannAFragment
 {
     // ── Fragment ───────────────────────────────────────────────────────────────
     if ((type as unknown) === FRAGMENT_TAG || type === '')
@@ -295,13 +298,13 @@ function hVirtual(
 
     const vChildren = kids.map(child =>
     {
-        if      (child instanceof VirtualNode)                        return child;
+        if      (child instanceof Virtual)                        return child;
         if      (child instanceof Real)                               return child.render();  // bridge Real → DOM
         if      (typeof child === 'string' || typeof child === 'number') return String(child);
         return String(child);
     });
 
-    const node = new VirtualNode(tag, vAttrs as Record<string,string>, ...(vChildren as never[])) as VirtualNode;
+    const node = new Virtual(tag, vAttrs as Record<string,string>, ...(vChildren as never[])) as Virtual;
 
     // Register event listeners — fired via Observable when node is mounted
     for (const [evType, fn] of events) node.on(evType, fn as never);
@@ -556,7 +559,18 @@ export function h(sel: string, b?: SnabbdomData | VNode | string | Array<VNode |
 
 /** Create a real DOM node from a vnode and store it on vnode.elm. */
 function createElm(vnode: VNode): Node {
-    const el = document.createElement(vnode.tag);
+    // #4 fix — route REGISTERED custom tags through Core.Create so the descriptor
+    // upgrade (factory + constructor body + correct prototype chain) runs
+    // SYNCHRONOUSLY, matching the native `new Real(tag)` path. The Snabbdom/React
+    // createElement path otherwise used a raw document.createElement: the async
+    // MutationObserver would leave a same-tick read seeing HTMLUnknownElement and
+    // an un-run constructor (the `createElement('custom')` case). Plain tags keep
+    // the raw createElement (one descriptor lookup, no behaviour change). Core.Create
+    // marks the node __ariannaUpgraded, so the later Observer #visit is a no-op.
+    const _d = Namespaces.Namespace.Resolve(vnode.tag) as { Custom?: boolean } | undefined;
+    const el = (_d && _d.Custom
+        ? (Namespaces.Namespace.Create(vnode.tag) ?? document.createElement(vnode.tag))
+        : document.createElement(vnode.tag)) as HTMLElement;
     if (vnode.id) el.id = vnode.id;
     for (const c of vnode.classes) el.classList.add(c);
     applyData(el, undefined, vnode.data);
@@ -597,8 +611,8 @@ function applyData(el: HTMLElement, oldData: SnabbdomData | undefined, data: Sna
     for (const k in ndd) el.dataset[k] = ndd[k];
     // events — remove old, add new (simple replace by type)
     const oe = od.on ?? {}, ne = data.on ?? {};
-    for (const t in oe) if (oe[t] !== ne[t]) el.removeEventListener(t, oe[t]);
-    for (const t in ne) if (oe[t] !== ne[t]) el.addEventListener(t, ne[t]);
+    for (const t in oe) if (oe[t] !== ne[t]) Events.Event.Off(el, t, oe[t] as EventListener);
+    for (const t in ne) if (oe[t] !== ne[t]) Events.Event.On(el, t, ne[t] as EventListener);
 }
 
 function sameVNode(a: VNode | string, b: VNode | string): boolean {
@@ -885,3 +899,55 @@ export function createRoot(container: Element): Root {
 
 // React namespace convenience (so `React.createElement` / `React.ReactComponent` work).
 export const React = { createElement, Component: ReactComponent, createRoot };
+
+}
+
+// ── JSX runtime contract + public surface: top-level re-exports (required by the JSX
+//    transform, which imports jsx/jsxs/jsxDEV/Fragment by name) delegating to the namespace. ──
+export const Fragment          = Jsx.Fragment;
+export const jsx               = Jsx.jsx;
+export const jsxs              = Jsx.jsxs;
+export const jsxDEV            = Jsx.jsxDEV;
+export const h                 = Jsx.h;
+export const patch             = Jsx.patch;
+export const createElement     = Jsx.createElement;
+export const createRoot        = Jsx.createRoot;
+export const setDefaultRuntime = Jsx.setDefaultRuntime;
+export const getDefaultRuntime = Jsx.getDefaultRuntime;
+export const React             = Jsx.React;
+export import ReactComponent   = Jsx.ReactComponent;
+import {Namespaces} from "./Namespaces.ts";
+
+if (typeof window !== 'undefined')
+    Object.defineProperty(window, 'Jsx', { value: Jsx, writable: false, enumerable: false, configurable: false });
+
+/** @name jsxService @private @description Registers the 'jsx' service: hyperscript/h/patch/createElement. */
+const Service = new Core.Services.Service
+(
+    'jsx',
+    {
+        /** Hyperscript factory (jsx/jsxs entry). */
+        make: Jsx.hyperscript,
+        /** Snabbdom-style h(). */
+        h: Jsx.h,
+        /** Patch an old vnode/element with a new vnode. */
+        patch: Jsx.patch,
+        /** React-compatible createElement. */
+        createElement: Jsx.createElement,
+    }
+);
+
+export default Jsx;
+
+// ── Top-level type re-exports (barrel index.ts imports these by name). ──
+export type AriannAFragment = Jsx.AriannAFragment;
+export type JSXNode         = Jsx.JSXNode;
+export type JSXProps        = Jsx.JSXProps;
+export type JSXRuntime      = Jsx.JSXRuntime;
+export type ReactElement    = Jsx.ReactElement;
+export type Root            = Jsx.Root;
+export type SnabbdomData    = Jsx.SnabbdomData;
+export type VNode           = Jsx.VNode;
+
+// ── Top-level: hyperscript (barrel imports it by name). ──
+export const hyperscript = Jsx.hyperscript;

@@ -25,9 +25,26 @@
  */
 
 import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type SnapshotProvider = (frame: number) => HTMLElement | SVGElement | null;
 
@@ -81,7 +98,7 @@ export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}
         root.appendChild(host);
 
         // Re-render whenever frame or provider change
-        effect(() => { this.frame$.get(); this.#repaint(); });
+        effect(() => { this.frame$.Get(); this.#repaint(); });
 
         self.Sheet = OnionStage.DefaultSheet();
     }
@@ -95,7 +112,7 @@ export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}
 
     /** Update the live playhead frame. */
     setFrame(f: number): this {
-        this.frame$.set(f);
+        this.frame$.Set(f);
         return this;
     }
 
@@ -116,7 +133,7 @@ export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}
         const before = parseInt(self.attrSignal('before')?.peek() ?? '2', 10) || 0;
         const after  = parseInt(self.attrSignal('after')?.peek()  ?? '2', 10) || 0;
         const step   = parseInt(self.attrSignal('step')?.peek()   ?? '1', 10) || 1;
-        const live   = this.frame$.peek();
+        const live   = this.frame$.Peek();
 
         // Past ghosts (deepest first so live ends up on top)
         for (let i = before; i >= 1; i--) {

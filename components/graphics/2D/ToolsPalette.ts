@@ -21,10 +21,20 @@
 
 import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface PaletteTool {
     id        : string;
@@ -67,7 +77,7 @@ export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement
         this.layoutCls = () => 'ar-tp ar-tp--' + (layoutAttr.get() ?? 'vertical');
         this.showShortcuts = () => this.getAttribute('show-shortcuts') !== 'false';
 
-        this.buttons = () => this.tools$.get().map(t => ({
+        this.buttons = () => this.tools$.Get().map(t => ({
             id: t.id,
             icon: t.icon,
             title: this.showShortcuts() && t.shortcut ? `${t.label} (${t.shortcut})` : t.label,
@@ -100,7 +110,7 @@ export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement
     }
 
     setTool(id: string): this {
-        const t = this.tools$.get().find(x => x.id === id);
+        const t = this.tools$.Get().find(x => x.id === id);
         if (!t || t.behaviour !== 'tool') return this;
         this.setAttribute('active-tool', id);
         this.dispatchEvent(new CustomEvent('arianna:tool', {
@@ -110,7 +120,7 @@ export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement
     }
     getTool(): string | null { return this.getAttribute('active-tool'); }
 
-    setTools(tools: PaletteTool[]): this { this.tools$.set(tools); return this; }
+    setTools(tools: PaletteTool[]): this { this.tools$.Set(tools); return this; }
 
     onCreated()       {}
     onBeforeMount()   {}

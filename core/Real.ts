@@ -1,108 +1,352 @@
 /**
- * Real.ts — eager, fluent wrapper over a live DOM Element.
+ * @module    Real
+ * @author    Riccardo Angeli
+ * @version   2.0.0
+ * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @license   MIT / Commercial (dual license)
+ *
+ * Real — eager, fluent wrapper over a live DOM Element.
  *
  * `Real` is the imperative half of AriannA's DOM API (the lazy half is
  * `Virtual`). Every method mutates a real Element *immediately* and returns
  * `this` for chaining. Reactive binding methods (`text`, `attr`, `cls`,
  * `prop`, `style`) accept a getter that runs inside an `effect`, so reads of
  * signals subscribe automatically; a static value works too (it's wrapped via
- * `asGetter`). See `REAL_VIRTUAL.md` for the conceptual overview.
+ * `Real.#AsGetter`). Constructor and child types are inlined at their use
+ * sites (no top-level aliases); `sub()` builds a private accessor under-the-hood.
+ * See `REAL_VIRTUAL.md` for the conceptual overview.
  */
-import Core, { type TypeDescriptor, type SubAccessor } from './Core.ts';
-import { VirtualNode } from './Virtual.ts';
-import { signal, signalMono, sinkText, effect, type Signal, type SignalMono, type ReadonlySignal } from './Observable.ts';
-import Rule, { type ShadowState, type ShadowMode, type ShadowOptions, type ShadowLayer } from './Rule.ts';
-import { Stylesheet } from './Stylesheet.ts';
-/** Shadow value types re-exported from Rule (their canonical home). */
-export type { ShadowState, ShadowMode, ShadowOptions, ShadowLayer } from './Rule.ts';
-export type { Signal, SignalMono, ReadonlySignal };
-// SubAccessor's canonical home is Core; re-exported here for the barrel.
-// (Dotted-path get/set/sub is inlined in the methods below — no shared helper.)
-export type { SubAccessor } from './Core.ts';
 
-//---------------------------- Questo Blocco va rimosso! Trova il modo, namespace o meglio embed private in Real class-----------------------------------------
-/** Anything `new Real(...)` accepts: selector, Element, constructor, VirtualNode, plain def, or another Real. */
-export type RealTarget = string | Element | (new (...a: unknown[]) => Element) | VirtualNode | RealDef | Real;
-/** Plain object element definition: `{ Tag, Attributes, Style }`. */
-export interface RealDef { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string>; }
-type Getter<T> = () => T;
+import { Core } from './Core.ts';
+import { Events } from './Events.ts';
+import Virtual from './Virtual.ts';
+import { Reactivity } from './Reactive.ts';
+import { Namespaces} from "./Namespaces.ts";
 
-type NodeInput = RealTarget | Node | null;  // RealTarget already covers string/Element/VirtualNode/Real/def
-//---------------------------------------------------------------------
+type Signal<T>         = Reactivity.Signal<T>;
+type SignalMono<T>     = Reactivity.Mono<T>;
+type ReadonlySignal<T> = Reactivity.ReadonlySignal<T>;
+import { Css } from './Css.ts';
+import { Shadows } from './Shadow.ts';
+const { Rule, Stylesheet } = Css;
+type Rule         = Css.Rule;
+type Stylesheet   = Css.Stylesheet;
 
-/**
- * Eager, fluent wrapper around a single live DOM Element.
- *
- * Constructed with `new`, it creates/wraps an Element immediately and offers a
- * chainable API for tree mutation (`append/add/remove/...`), attribute &
- * property access (`set/get/sub`), reactive bindings (`text/attr/cls/prop/style`),
- * events (`on/off/fire`), visibility (`show/hide`), and scoped CSS (`Sheet`).
+/*
+ * Minimal compatibility bridge from the former Observables functional API
+ * to the new Reactivity nominal API. Existing Real call-sites remain unchanged
+ * while every created effect still yields the disposer expected by #effects.
+ */
+const signal =
+    <T>
+    (
+        value: T
+    ): Reactivity.Signal<T> =>
+        new Reactivity.Signal(value);
+
+const signalMono =
+    <T>
+    (
+        value: T
+    ): Reactivity.Mono<T> =>
+        new Reactivity.Mono(value);
+
+const effect =
+    (
+        run: () => void
+    ): (() => void) =>
+    {
+        const instance =
+            new Reactivity.Effect(run);
+
+        return () =>
+            instance.Dispose();
+    };
+
+/** @class       Real
+ *  @classdesc   Eager, fluent wrapper around a single live DOM Element. Constructed with `new`, it
+ *               creates/wraps an Element immediately and offers a chainable API for tree mutation
+ *               (`append/add/remove/…`), attribute & property access (`set/get/sub`), reactive
+ *               bindings (`text/attr/cls/prop/style`), events (`on/off/fire`), visibility
+ *               (`show/hide`), and scoped CSS (`Sheet`).
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license)
  */
 export class Real
 {
-    #el: Element; #mode: boolean; #descriptor: TypeDescriptor | false; #value: unknown; #effects: Array<() => void> = [];
-    #sheet: Stylesheet | null = null; #styleNode: HTMLStyleElement | null = null; #instanceId: string = ''; #sheetSync: (() => void) | null = null;
-    /** Every `new Real(...)` instance, in creation order (used for auto-id allocation). */
+    /** @name        #el
+     *  @private
+     *  @type        {Element}
+     *  @description The underlying live DOM Element.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #el: Element;
+    /** @name        #mode
+     *  @private
+     *  @type        {boolean}
+     *  @description `true` when constructed with `new` (create/wrap), `false` in call/lookup mode.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #mode: boolean;
+    /** @name        #descriptor
+     *  @private
+     *  @type        {Core.Type | false}
+     *  @description Resolved type descriptor for the element, or `false` when none.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #descriptor: Core.Descriptors.Type | false;
+    /** @name        #value
+     *  @private
+     *  @type        {unknown}
+     *  @description Lookup/registration result in call mode; the Real itself in `new` mode.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #value: unknown;
+    /** @name        #effects
+     *  @private
+     *  @type        {Array<() => void>}
+     *  @description Disposers for reactive effects, drained by `destroy()`.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #effects: Array<() => void> = [];
+    /** @name        #sheet
+     *  @private
+     *  @type        {Stylesheet | null}
+     *  @description Scoped Stylesheet attached to this instance, or null.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #sheet: Stylesheet | null = null;
+    /** @name        #styleNode
+     *  @private
+     *  @type        {HTMLStyleElement | null}
+     *  @description The installed `<style>` for the scoped Sheet, or null.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #styleNode: HTMLStyleElement | null = null;
+    /** @name        #instanceId
+     *  @private
+     *  @type        {string}
+     *  @description Stable per-instance id used to scope Sheet rules.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #instanceId: string = '';
+    /** @name        #sheetSync
+     *  @private
+     *  @type        {(() => void) | null}
+     *  @description Re-flush handler bound to the Sheet's `Sheet-Changed` event, or null.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #sheetSync: (() => void) | null = null;
+
+    /** @name        Instances
+     *  @public
+     *  @static
+     *  @readonly
+     *  @type        {Real[]}
+     *  @description Every `new Real(...)` instance, in creation order (used for auto-id allocation).
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     static readonly Instances: Real[] = [];
-    /** The Core namespace registry (passthrough to `Core.Namespaces`). */
-    static get Namespaces() { return Core.Namespaces; }
 
-    /** Coerce a value-or-getter into a getter, so binding methods accept both forms. */
-    private static _asGetter<T>(g: Getter<T> | T): Getter<T> { return typeof g === 'function' ? (g as Getter<T>) : () => g; }
+    /** @name        Namespaces
+     *  @public
+     *  @static
+     *  @readonly
+     *  @type        {typeof Core.Namespaces}
+     *  @description The Core namespace registry (passthrough to `Core.Namespaces`).
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    static get Namespaces()
+    { return Namespaces.Namespace.Namespaces; }
 
-    /** Normalise a mixed list of child inputs into concrete DOM Nodes. */
-    private static _toNodes(items: NodeInput[]): Node[] {
-        return items.flatMap(item => {
+    /** @name        #AsGetter
+     *  @private
+     *  @static
+     *  @description Coerce a value-or-getter into a getter, so binding methods accept both forms.
+     *  @template    T
+     *  @param       {(() => T) | T} g Value or getter.
+     *  @returns     {(() => T)}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    static #AsGetter<T>(g: (() => T) | T): (() => T)
+    { return typeof g === 'function' ? (g as (() => T)) : () => g; }
+
+    /** @name        #ToNodes
+     *  @private
+     *  @static
+     *  @description Normalise a mixed list of child inputs into concrete DOM Nodes.
+     *  @param       {(string|Element|ctor|Virtual|def|Real|Node|null)[]} items Mixed child inputs.
+     *  @returns     {Node[]}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    static #ToNodes(items: (string | Element | (new (...a: unknown[]) => Element) | Virtual | { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string> } | Real | Node | null)[]): Node[]
+    {
+        return items.flatMap(item =>
+        {
             if (!item) return [];
-            if (item instanceof Node) return [item];
-            if (item instanceof Real) return [item.render()];
-            if (item instanceof VirtualNode) return [item.render()];
-            if (typeof item === 'string') { const t = document.createElement('template'); t.innerHTML = item; return Array.from(t.content.childNodes); }
-            if (typeof item === 'object' && 'Tag' in item) { const el = document.createElement((item as RealDef).Tag ?? 'div'); if ((item as RealDef).Attributes) for (const [k,v] of Object.entries((item as RealDef).Attributes!)) el.setAttribute(k,v); return [el]; }
+            if (item instanceof Node)        return [item];
+            if (item instanceof Real)        return [item.render()];
+            if (item instanceof Virtual) return [item.render()];
+            if (typeof item === 'string')
+            {
+                const t = document.createElement('template');
+                t.innerHTML = item;
+                return Array.from(t.content.childNodes);
+            }
+            if (typeof item === 'object' && 'Tag' in item)
+            {
+                const def = item as { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string> };
+                const el  = document.createElement(def.Tag ?? 'div');
+                if (def.Attributes)
+                    for (const [k, v] of Object.entries(def.Attributes)) el.setAttribute(k, v);
+                return [el];
+            }
             return [];
         });
     }
 
-    /**
-     * Create (or wrap) an Element. When called with `new` and a string tag,
-     * the element is created (and, for a registered Custom tag, upgraded) and
-     * auto-assigned an id + matching class. Other inputs (Element, Real,
-     * VirtualNode, template, `{Tag,...}` def) are wrapped/materialised. See
-     * {@link Real.#init} for the per-input behaviour.
+    /** @name        constructor
+     *  @public
+     *  @description Create (or wrap) an Element. When called with `new` and a string tag, the element
+     *               is created (and, for a registered Custom tag, upgraded) and auto-assigned an id +
+     *               matching class. Other inputs (Element, Real, Virtual, template, `{Tag,…}` def)
+     *               are wrapped/materialised. See {@link Real.#init} for the per-input behaviour.
+     *  @param       {string|Element|ctor|Virtual|def|Real} arg0 Selector, Element, constructor, Virtual, def, or Real.
+     *  @param       {Record<string, unknown> | (new (...a: unknown[]) => Element)=} arg1 Options, or a base class.
+     *  @param       {(new (...a: unknown[]) => Element)=} arg2 Base interface (definition form).
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
      */
-    constructor(arg0: RealTarget, arg1?: Record<string, unknown> | (new (...a: unknown[]) => Element), arg2?: new (...a: unknown[]) => Element) {
-        this.#mode = new.target !== undefined; this.#el = document.createElement('div'); this.#descriptor = false; this.#value = this;
+    constructor(arg0: string | Element | (new (...a: unknown[]) => Element) |
+                    Virtual |
+                    {
+                        Tag?: string;
+                        Attributes?: Record<string, string>;
+                        Style?: Record<string, string>
+                    } |
+                    Real,
+                arg1?: Record<string, unknown> |
+                    (new (...a: unknown[]) => Element),
+                arg2?: new (...a: unknown[]) => Element)
+    {
+        this.#mode       = new.target !== undefined;
+        this.#el         = document.createElement('div');
+        this.#descriptor = false;
+        this.#value      = this;
         this.#init(arg0, arg1, arg2);
-        // Auto-assign id + class. SVG/MathML elements have `className` as a
-        // read-only SVGAnimatedString — we can only mutate the class via
-        // setAttribute('class', …), which is also the universally correct
-        // form for HTML. So we always use setAttribute here.
+
+        // Auto-assign the instance id ONLY. `Real-Instance-N` is an IDENTIFIER,
+        // not a class: the class of a type is the constructor name, written by
+        // the upgrade so that the stylesheet Define compiles (`.MyCtor { … }`)
+        // actually matches. The previous form here was
+        //     this.#el.setAttribute('class', autoId);
+        // which REPLACES the whole class attribute and therefore wiped the type
+        // class on every `new Real(tag)` — the element upgraded correctly but
+        // rendered unstyled, with no error anywhere. Never write `class` here.
         if (this.#mode)
         {
-            Real.Instances.push(this); if (!this.#el.id)
+            Real.Instances.push(this);
+            if (!this.#el.id)
             {
-                const autoId = `Real-Instance-${Real.Instances.length}`;
-                this.#el.id = autoId; this.#el.setAttribute('class', autoId);
+                this.#el.id = `Real-Instance-${Real.Instances.length}`;
             }
         }
     }
 
-    /**
-     * Resolve the constructor arguments into `#el`/`#descriptor`/`#value`.
-     * Non-`new` (call) mode is a lookup/registration helper; `new` mode
-     * actually creates or wraps the element. For a registered Custom string
-     * tag it delegates to `Core.Create`, which runs the namespace Update
-     * synchronously (prototype splice + `build()`), so the returned element is
-     * live and upgraded — not a bare, un-upgraded node.
+    /** @name        #init
+     *  @private
+     *  @description Resolve the constructor arguments into `#el`/`#descriptor`/`#value`. Non-`new` (call)
+     *               mode is a lookup/registration helper; `new` mode actually creates or wraps the element.
+     *               For a registered Custom string tag it delegates to `Core.Create`, which runs the namespace
+     *               Update synchronously (prototype splice + `build()`), so the returned element is live and
+     *               upgraded — not a bare, un-upgraded node.
+     *  @param       {string|Element|ctor|Virtual|def|Real} arg0 The primary input.
+     *  @param       {Record<string, unknown> | (new (...a: unknown[]) => Element)=} arg1 Options, or a base class.
+     *  @param       {(new (...a: unknown[]) => Element)=} arg2 Base interface (definition form).
+     *  @returns     {void}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
      */
-    #init(arg0: RealTarget, arg1?: Record<string, unknown> | (new (...a: unknown[]) => Element), arg2?: new (...a: unknown[]) => Element): void {
-        if (!this.#mode) {
-            if (typeof arg0 === 'string') { if (arg1 && typeof arg1 === 'function') { Core.Define(arg0, arg1 as new () => Element, (arg2 ?? HTMLElement) as new () => Element); this.#value = arg1; return; } const d = Core.GetDescriptor(arg0); if (d) { this.#descriptor = d; this.#value = d.Constructor ?? d.Interface; return; } const el = document.querySelector(arg0); if (el) { this.#el = el; this.#descriptor = Core.GetDescriptor(el); this.#value = new Real(el); } return; }
-            if (typeof arg0 === 'function') { const d = Core.GetDescriptor(arg0 as new () => Element); if (d) { this.#descriptor = d; this.#value = d.Interface ?? arg0; } return; }
-            if (arg0 instanceof Element) { this.#el = arg0; this.#descriptor = Core.GetDescriptor(arg0); this.#value = new Real(arg0); this.#mode = true; return; }
+    #init(arg0: string | Element | (new (...a: unknown[]) => Element) | Virtual | { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string> } | Real, arg1?: Record<string, unknown> | (new (...a: unknown[]) => Element), arg2?: new (...a: unknown[]) => Element): void
+    {
+        if (!this.#mode)
+        {
+            if (typeof arg0 === 'string')
+            {
+                if (arg1 && typeof arg1 === 'function')
+                {
+                    Namespaces.Namespace.Define(arg0, arg1 as new () => Element, (arg2 ?? HTMLElement) as new () => Element);
+                    this.#value = arg1;
+                    return;
+                }
+
+                const d = Namespaces.Namespace.Resolve(arg0);
+                if (d)
+                {
+                    this.#descriptor = d;
+                    this.#value      = d.Constructor ?? d.Interface;
+                    return;
+                }
+
+                const el = document.querySelector(arg0);
+                if (el)
+                {
+                    this.#el         = el;
+                    this.#descriptor = Namespaces.Namespace.Resolve(el);
+                    this.#value      = new Real(el);
+                }
+                return;
+            }
+
+            if (typeof arg0 === 'function')
+            {
+                const d = Namespaces.Namespace.Resolve(arg0 as new () => Element);
+                if (d) { this.#descriptor = d; this.#value = d.Interface ?? arg0; }
+                return;
+            }
+
+            if (arg0 instanceof Element)
+            {
+                this.#el         = arg0;
+                this.#descriptor = Namespaces.Namespace.Resolve(arg0);
+                this.#value      = new Real(arg0);
+                this.#mode       = true;
+                return;
+            }
             return;
         }
-        if (typeof arg0 === 'string') {
+
+        if (typeof arg0 === 'string')
+        {
             // Single line: d.Namespace.Create() (direct on the descriptor) — handles
             // every case (CLASS via Reflect.construct, FUNCTION via createElement
             // + Update, plain native tags). Real has no upgrade logic of its
@@ -111,176 +355,708 @@ export class Real
             // splicing the user subclass into the prototype chain and calling
             // build() — so `new Real('case-4b')` / `new Component(tag).Real`
             // produce a live, built element (not a bare, un-upgraded one).
-            const d = Core.GetDescriptor(arg0);
-            if (d && (d as { Custom?: boolean }).Custom && typeof Core.Create === 'function') {
-                this.#el = (Core.Create(arg0) as Element) ?? document.createElement(arg0);
-            } else {
-                this.#el = (d && typeof d.Namespace?.Create === 'function')
-                    ? (d.Namespace.Create(arg0) ?? document.createElement(arg0))
+            const d = Namespaces.Namespace.Resolve(arg0);
+
+            if (d && (d as { Custom?: boolean }).Custom && typeof Namespaces.Namespace.Create === 'function')
+            {
+                this.#el = Namespaces.Namespace.Create(arg0) || document.createElement(arg0);
+            }
+            else
+            {
+                this.#el = (d && typeof Namespaces.Namespace.Namespaces[d.Namespace].Create === 'function')
+                    ? (Namespaces.Namespace.Namespaces[d.Namespace].Create(arg0) || document.createElement(arg0))
                     : document.createElement(arg0);
             }
+
             if (d) this.#descriptor = d;
         }
-        else if (arg0 instanceof Element) { this.#el = arg0; this.#descriptor = Core.GetDescriptor(arg0); }
-        else if (arg0 instanceof Real) { this.#el = arg0.render(); }
-        else if (arg0 instanceof VirtualNode) { this.#el = arg0.render(); }
-        else if (typeof arg0 === 'object' && 'Tag' in (arg0 as object)) { const def = arg0 as RealDef; this.#el = document.createElement(def.Tag ?? 'div'); if (def.Attributes) for (const [k,v] of Object.entries(def.Attributes)) this.#el.setAttribute(k,v); }
-        if (arg1 && typeof arg1 === 'object' && typeof arg1 !== 'function') { const opts = arg1 as Record<string, unknown>; if (opts.id) this.#el.id = String(opts.id); if (opts.class || opts.className) this.#el.setAttribute('class', String(opts.class ?? opts.className)); }
+        else if (arg0 instanceof Element)     { this.#el = arg0; this.#descriptor = Namespaces.Namespace.Resolve(arg0); }
+        else if (arg0 instanceof Real)        { this.#el = arg0.render(); }
+        else if (arg0 instanceof Virtual) { this.#el = arg0.render(); }
+        else if (typeof arg0 === 'object' && 'Tag' in (arg0 as object))
+        {
+            const def = arg0 as { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string> };
+            this.#el = document.createElement(def.Tag ?? 'div');
+            if (def.Attributes)
+                for (const [k, v] of Object.entries(def.Attributes)) this.#el.setAttribute(k, v);
+        }
+
+        if (arg1 && typeof arg1 === 'object' && typeof arg1 !== 'function')
+        {
+            const opts = arg1 as Record<string, unknown>;
+            if (opts.id) this.#el.id = String(opts.id);
+            if (opts.class || opts.className)
+                this.#el.setAttribute('class', String(opts.class ?? opts.className));
+        }
     }
 
-    /** The underlying live Element. */
+    /** @name        render
+     *  @public
+     *  @description The underlying live Element.
+     *  @returns     {Element}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     render(): Element { return this.#el; }
-    /** Coercion hook — returns the underlying Element (so `el == real` etc. work). */
+    /** @name        valueOf
+     *  @public
+     *  @description Coercion hook — returns the underlying Element (so `el == real` etc. work).
+     *  @returns     {Element}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     valueOf(): Element { return this.#el; }
-    /** `console.log` the given value (or the element) and return `this` for chaining. */
+    /** @name        log
+     *  @public
+     *  @description `console.log` the given value (or the element) and return `this`.
+     *  @param       {unknown=} v Value to log.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     log(v?: unknown): this { console.log(v ?? this.#el); return this; }
 
-    /** Add an event listener (`addEventListener`). */
-    on(type: string, cb: EventListener, opts?: AddEventListenerOptions | boolean): this { this.#el.addEventListener(type, cb, opts); return this; }
-    /** Remove an event listener (`removeEventListener`). */
-    off(type: string, cb: EventListener, opts?: EventListenerOptions | boolean): this { this.#el.removeEventListener(type, cb, opts); return this; }
-    /** Dispatch an Event, or a CustomEvent built from a string name + init. */
+    /** @name        on
+     *  @public
+     *  @description Add an event listener (`addEventListener`).
+     *  @param       {string} type Event type.
+     *  @param       {EventListener} cb Handler.
+     *  @param       {AddEventListenerOptions | boolean=} opts Options.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    on(type: string, cb: EventListener, opts?: AddEventListenerOptions | boolean): this
+    { Events.Event.On(this.#el, type, cb, typeof opts === 'boolean' ? { capture: opts } : opts); return this; }
+    /** @name        off
+     *  @public
+     *  @description Remove an event listener (`removeEventListener`).
+     *  @param       {string} type Event type.
+     *  @param       {EventListener} cb Handler.
+     *  @param       {EventListenerOptions | boolean=} opts Options.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    off(type: string, cb: EventListener, opts?: EventListenerOptions | boolean): this
+    { void opts; Events.Event.Off(this.#el, type, cb); return this; }
+    /** @name        fire
+     *  @public
+     *  @description Dispatch an Event, or a CustomEvent built from a string name + init.
+     *  @param       {Event | string} event Event or name.
+     *  @param       {CustomEventInit=} init Init for the string form.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     fire(event: Event | string, init?: CustomEventInit): this { this.#el.dispatchEvent(typeof event === 'string' ? new CustomEvent(event, init) : event); return this; }
 
-    /** Append THIS element as a child of `parent` (selector / Element / Real / VirtualNode). */
-    append(parent: string | Element | Real | VirtualNode | null): this { const p = typeof parent === 'string' ? document.querySelector(parent) : parent instanceof Real ? parent.render() : parent instanceof VirtualNode ? parent.render() : parent; if (p) p.appendChild(this.#el); return this; }
-    /** Insert children at an index (trailing number = index; default = end). Mixed inputs are normalised via {@link toNodes}. */
-    add(...args: (NodeInput | number)[]): this { const last = args[args.length-1]; const items = typeof last === 'number' ? args.slice(0,-1) as NodeInput[] : args as NodeInput[]; const index = typeof last === 'number' ? last : this.#el.childNodes.length; const nodes = Real._toNodes(items); const ref = this.#el.childNodes[index] ?? null; const frag = document.createDocumentFragment(); nodes.forEach(n => frag.appendChild(n)); this.#el.insertBefore(frag, ref); return this; }
-    /** Append children to the end (alias of {@link add} with no index). */
-    push(...nodes: NodeInput[]): this    { return this.add(...nodes); }
-    /** Prepend children to the start (alias of {@link add} at index 0). */
-    unshift(...nodes: NodeInput[]): this { return this.add(...nodes, 0); }
-    /** Remove specific children by index, selector, Real, or Node. */
-    remove(...targets: (string | Node | Real | number)[]): this { for (const t of targets) { let node: Node | null = null; if (typeof t === 'number') node = this.#el.childNodes[t] ?? null; else if (typeof t === 'string') node = this.#el.querySelector(t); else if (t instanceof Real) node = t.render(); else if (t instanceof Node) node = t; if (node && this.#el.contains(node)) this.#el.removeChild(node); } return this; }
-    /** Remove `n` children from the front (default 1). */
-    shift(n = 1): this { for (let i = 0; i < n && this.#el.firstChild; i++) this.#el.removeChild(this.#el.firstChild); return this; }
-    /** Remove `n` children from the end (default 1). */
-    pop(n = 1): this   { for (let i = 0; i < n && this.#el.lastChild;  i++) this.#el.removeChild(this.#el.lastChild);  return this; }
-
-    /**
-     * Read an attribute or property by name (case-insensitive). Supports a
-     * dotted path (e.g. `"dataset.id"`). Returns the value as a string, or
-     * `undefined` when absent.
+    /** @name        append
+     *  @public
+     *  @description Append THIS element as a child of `parent` (selector / Element / Real / Virtual).
+     *  @param       {string | Element | Real | Virtual | null} parent The parent.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
      */
-    get(name: string): string | undefined { if (name.indexOf('.') !== -1) { let cur: unknown = this.#el; for (const p of name.split('.')) { if (cur == null) return undefined; cur = (cur as Record<string, unknown>)[p]; } return cur === undefined ? undefined : (typeof cur === 'string' ? cur : String(cur)); } const u = name.toUpperCase(); for (let i = 0; i < this.#el.attributes.length; i++) { const a = this.#el.attributes.item(i)!; if (a.name.toUpperCase() === u) return a.value; } const rec = this.#el as unknown as Record<string, unknown>; for (const k of Object.keys(rec)) if (k.toUpperCase() === u) return String(rec[k]); return undefined; }
-
-    /**
-     * Set an attribute or property (smart routing, case-insensitive): an
-     * existing attribute → `setAttribute`; else an existing property → assign;
-     * else `setAttribute(name.toLowerCase(), …)`. Dotted paths
-     * (e.g. `"dataset.id"`) traverse/create nested objects inline.
-     */
-    set(name: string, value: unknown): this { if (name.indexOf('.') !== -1) { const parts = name.split('.'); let cur = this.#el as unknown as Record<string, unknown>; for (let i = 0; i < parts.length - 1; i++) { const k = parts[i]; const nx = cur[k]; if (nx == null || typeof nx !== 'object') { if (nx === undefined) { const o: Record<string, unknown> = {}; cur[k] = o; cur = o; continue; } return this; } cur = nx as Record<string, unknown>; } cur[parts[parts.length - 1]] = value; return this; } const u = name.toUpperCase(); for (let i = 0; i < this.#el.attributes.length; i++) { const a = this.#el.attributes.item(i)!; if (a.name.toUpperCase() === u) { this.#el.setAttribute(a.name, String(value)); return this; } } const rec = this.#el as unknown as Record<string, unknown>; for (const k of Object.keys(rec)) if (k.toUpperCase() === u) { rec[k] = value; return this; } this.#el.setAttribute(name.toLowerCase(), String(value)); return this; }
-
-    /**
-     * Returns a fluent sub-property accessor for a nested object on this element.
-     *
-     *   new Real('div').sub('style').set('background', 'orange').set('color', 'white');
-     *   new Real('div').sub('style').get('background');     // 'orange'
-     *   new Real('div').sub('style').sub('transform');      // further nesting
-     *
-     * The returned object exposes `.set(key, value)`, `.get(key)`, `.sub(key)`,
-     * `.unwrap()` (the underlying object) and `.end()` (back to the Real).
-     */
-    sub(path: string): SubAccessor {
-        const root = this.#el as unknown as Record<string, unknown>;
-        const owner = this;
-        const read = (pth: string): unknown => { let c: unknown = root; for (const k of pth.split('.')) { if (c == null) return undefined; c = (c as Record<string, unknown>)[k]; } return c; };
-        const write = (pth: string, v: unknown): void => { const ps = pth.split('.'); let c = root; for (let i = 0; i < ps.length - 1; i++) { const k = ps[i]; const nx = c[k]; if (nx == null || typeof nx !== 'object') { if (nx === undefined) { const o: Record<string, unknown> = {}; c[k] = o; c = o; continue; } return; } c = nx as Record<string, unknown>; } c[ps[ps.length - 1]] = v; };
-        const make = (base: string): SubAccessor => ({
-            set(key, value) { write(base + '.' + key, value); return make(base); },
-            get(key)        { return read(base + '.' + key); },
-            sub(key)        { return make(base + '.' + key); },
-            unwrap()        { return read(base); },
-            end<T = unknown>(): T { return owner as unknown as T; },
-        });
-        return make(path);
+    append(parent: string | Element | Real | Virtual | null): this
+    {
+        const p = typeof parent === 'string' ? document.querySelector(parent)
+            : parent instanceof Real         ? parent.render()
+                : parent instanceof Virtual  ? parent.render()
+                    : parent;
+        if (p) p.appendChild(this.#el);
+        return this;
     }
 
-    /** Show the element (`display = ''`). */
+    /** @name        add
+     *  @public
+     *  @description Insert children at an index (trailing number = index; default = end). Mixed inputs are
+     *               normalised via {@link Real.#ToNodes}.
+     *  @param       {(string|Element|ctor|Virtual|def|Real|Node|null | number)[]} args Child inputs, optional trailing index.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    add(...args: ((string | Element | (new (...a: unknown[]) => Element) | Virtual | { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string> } | Real | Node | null) | number)[]): this
+    {
+        const last  = args[args.length - 1];
+        const items = (typeof last === 'number' ? args.slice(0, -1) : args) as (string | Element | (new (...a: unknown[]) => Element) | Virtual | { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string> } | Real | Node | null)[];
+        const index = typeof last === 'number' ? last : this.#el.childNodes.length;
+        const nodes = Real.#ToNodes(items);
+        const ref   = this.#el.childNodes[index] ?? null;
+        const frag  = document.createDocumentFragment();
+        nodes.forEach(n => frag.appendChild(n));
+        this.#el.insertBefore(frag, ref);
+        return this;
+    }
+
+    /** @name        push
+     *  @public
+     *  @description Append children to the end (alias of {@link Real#add} with no index).
+     *  @param       {...(string|Element|ctor|Virtual|def|Real|Node|null)} nodes Children.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    push(...nodes: (string | Element | (new (...a: unknown[]) => Element) | Virtual | { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string> } | Real | Node | null)[]): this { return this.add(...nodes); }
+    /** @name        unshift
+     *  @public
+     *  @description Prepend children to the start (alias of {@link Real#add} at index 0).
+     *  @param       {...(string|Element|ctor|Virtual|def|Real|Node|null)} nodes Children.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    unshift(...nodes: (string | Element | (new (...a: unknown[]) => Element) | Virtual | { Tag?: string; Attributes?: Record<string, string>; Style?: Record<string, string> } | Real | Node | null)[]): this { return this.add(...nodes, 0); }
+
+    /** @name        remove
+     *  @public
+     *  @description Remove specific children by index, selector, Real, or Node.
+     *  @param       {(string | Node | Real | number)[]} targets Children to remove.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    remove(...targets: (string | Node | Real | number)[]): this
+    {
+        for (const t of targets)
+        {
+            let node: Node | null = null;
+            if      (typeof t === 'number') node = this.#el.childNodes[t] ?? null;
+            else if (typeof t === 'string') node = this.#el.querySelector(t);
+            else if (t instanceof Real)     node = t.render();
+            else if (t instanceof Node)     node = t;
+            if (node && this.#el.contains(node)) this.#el.removeChild(node);
+        }
+        return this;
+    }
+
+    /** @name        shift
+     *  @public
+     *  @description Remove `n` children from the front (default 1).
+     *  @param       {number} [n=1] Count.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    shift(n = 1): this { for (let i = 0; i < n && this.#el.firstChild; i++) this.#el.removeChild(this.#el.firstChild); return this; }
+    /** @name        pop
+     *  @public
+     *  @description Remove `n` children from the end (default 1).
+     *  @param       {number} [n=1] Count.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    pop(n = 1): this { for (let i = 0; i < n && this.#el.lastChild; i++) this.#el.removeChild(this.#el.lastChild); return this; }
+
+    /** @name        get
+     *  @public
+     *  @description Read an attribute or property by name (case-insensitive). Supports a dotted path
+     *               (e.g. `"dataset.id"`). Returns the value as a string, or `undefined` when absent.
+     *  @param       {string} name Attribute/property name or dotted path.
+     *  @returns     {string | undefined}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    get(name: string): string | undefined
+    {
+        if (name.indexOf('.') !== -1)
+        {
+            let cur: unknown = this.#el;
+            for (const p of name.split('.'))
+            {
+                if (cur == null) return undefined;
+                cur = (cur as Record<string, unknown>)[p];
+            }
+            return cur === undefined ? undefined : (typeof cur === 'string' ? cur : String(cur));
+        }
+
+        const u = name.toUpperCase();
+        for (let i = 0; i < this.#el.attributes.length; i++)
+        {
+            const a = this.#el.attributes.item(i)!;
+            if (a.name.toUpperCase() === u) return a.value;
+        }
+
+        const rec = this.#el as unknown as Record<string, unknown>;
+        for (const k of Object.keys(rec)) if (k.toUpperCase() === u) return String(rec[k]);
+        return undefined;
+    }
+
+    /** @name        set
+     *  @public
+     *  @description Set an attribute or property (smart routing, case-insensitive): an existing attribute →
+     *               `setAttribute`; else an existing property → assign; else `setAttribute(name.toLowerCase(), …)`.
+     *               Dotted paths (e.g. `"dataset.id"`) traverse/create nested objects inline.
+     *  @param       {string} name Attribute/property name or dotted path.
+     *  @param       {unknown} value The value to set.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    set(name: string, value: unknown): this
+    {
+        if (name.indexOf('.') !== -1)
+        {
+            const parts = name.split('.');
+            let cur = this.#el as unknown as Record<string, unknown>;
+            for (let i = 0; i < parts.length - 1; i++)
+            {
+                const k  = parts[i];
+                const nx = cur[k];
+                if (nx == null || typeof nx !== 'object')
+                {
+                    if (nx === undefined) { const o: Record<string, unknown> = {}; cur[k] = o; cur = o; continue; }
+                    return this;
+                }
+                cur = nx as Record<string, unknown>;
+            }
+            cur[parts[parts.length - 1]] = value;
+            return this;
+        }
+
+        const u = name.toUpperCase();
+        for (let i = 0; i < this.#el.attributes.length; i++)
+        {
+            const a = this.#el.attributes.item(i)!;
+            if (a.name.toUpperCase() === u) { this.#el.setAttribute(a.name, String(value)); return this; }
+        }
+
+        const rec = this.#el as unknown as Record<string, unknown>;
+        for (const k of Object.keys(rec)) if (k.toUpperCase() === u) { rec[k] = value; return this; }
+
+        this.#el.setAttribute(name.toLowerCase(), String(value));
+        return this;
+    }
+
+    /** @name        #read
+     *  @private
+     *  @description Read the raw value at a dotted path from the element (no stringification —
+     *               unlike `get`, so nested objects like `style` come back as objects).
+     *  @param       {string} path Dotted path.
+     *  @returns     {unknown}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #read(path: string): unknown
+    {
+        let c: unknown = this.#el;
+        for (const k of path.split('.')) { if (c == null) return undefined; c = (c as Record<string, unknown>)[k]; }
+        return c;
+    }
+
+    /** @name        #write
+     *  @private
+     *  @description Write a value at a dotted path on the element, creating intermediate plain
+     *               objects as needed; aborts on a non-object, non-undefined intermediate.
+     *  @param       {string} path Dotted path.
+     *  @param       {unknown} value Value to write.
+     *  @returns     {void}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #write(path: string, value: unknown): void
+    {
+        const ps = path.split('.');
+        let c = this.#el as unknown as Record<string, unknown>;
+        for (let i = 0; i < ps.length - 1; i++)
+        {
+            const k = ps[i], nx = c[k];
+            if (nx == null || typeof nx !== 'object') { if (nx === undefined) { const o: Record<string, unknown> = {}; c[k] = o; c = o; continue; } return; }
+            c = nx as Record<string, unknown>;
+        }
+        c[ps[ps.length - 1]] = value;
+    }
+
+    /** @name        #sub
+     *  @private
+     *  @description Build the fluent nested accessor bound to `base` (chains via `set`/`sub`,
+     *               reads raw via `get`/`unwrap`, returns to the Real via `end`). Fully internal:
+     *               its shape is inferred, so no accessor type or class is exposed.
+     *  @param       {string} base Current dotted base.
+     *  @returns     {object} The fluent accessor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    #sub(base: string)
+    {
+        const self = this;
+        return {
+            set(key: string, value: unknown) { self.#write(`${base}.${key}`, value); return self.#sub(base); },
+            get(key: string)                 { return self.#read(`${base}.${key}`); },
+            sub(key: string)                 { return self.#sub(`${base}.${key}`); },
+            unwrap()                         { return self.#read(base); },
+            end<T = unknown>(): T            { return self as unknown as T; },
+        };
+    }
+
+    /** @name        sub
+     *  @public
+     *  @description Returns a fluent sub-property accessor for a nested object on this element:
+     *
+     *                 new Real('div').sub('style').set('background', 'orange').set('color', 'white');
+     *                 new Real('div').sub('style').get('background');     // 'orange'
+     *                 new Real('div').sub('style').sub('transform');      // further nesting
+     *
+     *               The returned object exposes `.set(key, value)`, `.get(key)`, `.sub(key)`,
+     *               `.unwrap()` (the underlying object) and `.end()` (back to the Real). The
+     *               accessor is built under-the-hood by `#sub` — no exposed accessor type/class.
+     *  @param       {string} path Dotted path to the nested object.
+     *  @returns     {object} A fluent nested accessor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    sub(path: string)
+    { return this.#sub(path); }
+
+    /** @name        show
+     *  @public
+     *  @description Show the element (`display = ''`).
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     show(): this { (this.#el as HTMLElement).style.display = ''; return this; }
-    /** Hide the element (`display = 'none'`). */
+    /** @name        hide
+     *  @public
+     *  @description Hide the element (`display = 'none'`).
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     hide(): this { (this.#el as HTMLElement).style.display = 'none'; return this; }
-    /** True if ALL given nodes (Node / Real / selector) are descendants of this element. */
-    contains(...nodes: (Node | Real | string)[]): boolean { for (const n of nodes) { const el = typeof n === 'string' ? this.#el.querySelector(n) : n instanceof Real ? n.render() : n; if (!el || !this.#el.contains(el)) return false; } return true; }
-    /** Walk a path of child indices: `child([0,2,1])` → `childNodes[0].childNodes[2].childNodes[1]`. */
+
+    /** @name        contains
+     *  @public
+     *  @description True if ALL given nodes (Node / Real / selector) are descendants of this element.
+     *  @param       {(Node | Real | string)[]} nodes The nodes to test.
+     *  @returns     {boolean}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    contains(...nodes: (Node | Real | string)[]): boolean
+    {
+        for (const n of nodes)
+        {
+            const el = typeof n === 'string' ? this.#el.querySelector(n) : n instanceof Real ? n.render() : n;
+            if (!el || !this.#el.contains(el)) return false;
+        }
+        return true;
+    }
+
+    /** @name        child
+     *  @public
+     *  @description Walk a path of child indices: `child([0,2,1])` → `childNodes[0].childNodes[2].childNodes[1]`.
+     *  @param       {number[]} path Child indices.
+     *  @returns     {Node}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     child(path: number[]): Node { let n: Node = this.#el; for (const i of path) n = n.childNodes[i]!; return n; }
-    /** Apply a `box-shadow` from a preset / layer array / Rule / Stylesheet, or clear it (`state==='close'`). */
-    shadow(state: ShadowState, mode: ShadowMode | ShadowLayer[] | Rule | Stylesheet = 'drop', opts: ShadowOptions = {}): this { (this.#el as HTMLElement).style.boxShadow = Stylesheet.boxShadow(state, mode, opts); return this; }
-
-    /** Create a writable {@link Signal} (convenience passthrough to `signal`). */
-    signal<T>(value: T): Signal<T>         { return signal(value); }
-    /** Create an allocation-light single-subscriber {@link SignalMono}. */
+    /** @name        shadow
+     *  @public
+     *  @memberof    Real
+     *  @param       {Shadows.ShadowMode} [mode='closed'] Shadow root mode — `'open'` or `'closed'`.
+     *  @param       {Shadows.AriannaShadowOptions} [options={}] Backend + projection options (light / iframe).
+     *  @returns     {Shadows.AriannaShadow} The attached AriannaShadow for this element.
+     *  @description Attach a shadow DOM to this Real's element via the Shadow service. Delegates to
+     *               `AttachAriannaShadow`, which is idempotent (returns the existing shadow if one is already
+     *               attached). Use this to give the element an encapsulated shadow root — distinct from CSS
+     *               `box-shadow`. Populate it afterwards through the returned AriannaShadow's contract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    shadow(mode: Shadows.ShadowMode = 'closed', options: Shadows.AriannaShadowOptions = {}): Shadows.AriannaShadow
+    {
+        return Shadows.AttachAriannaShadow(this.#el as Element, mode, options);
+    }
+    /** @name        signal
+     *  @public
+     *  @description Create a writable {@link Signal} (convenience passthrough to `signal`).
+     *  @template    T
+     *  @param       {T} value Initial value.
+     *  @returns     {Signal<T>}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    signal<T>(value: T): Signal<T> { return signal(value); }
+    /** @name        signalMono
+     *  @public
+     *  @description Create an allocation-light single-subscriber {@link SignalMono}.
+     *  @template    T
+     *  @param       {T} value Initial value.
+     *  @returns     {SignalMono<T>}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     signalMono<T>(value: T): SignalMono<T> { return signalMono(value); }
-    /** Register an `effect` whose disposer is tracked and cleaned up by {@link destroy}. */
+    /** @name        effect
+     *  @public
+     *  @description Register an `effect` whose disposer is tracked and cleaned up by {@link Real#destroy}.
+     *  @param       {() => void} fn The effect.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     effect(fn: () => void): this { this.#effects.push(effect(fn)); return this; }
-    /** Derived read-only signal: re-runs `fn` in a tracked effect; disposer tracked by {@link destroy}. */
-    computed<T>(fn: () => T): ReadonlySignal<T> { const s = signal<T>(undefined as T); this.#effects.push(effect(() => s.set(fn()))); return s.readonly(); }
+    /** @name        computed
+     *  @public
+     *  @description Derived read-only signal: re-runs `fn` in a tracked effect; disposer tracked by {@link Real#destroy}.
+     *  @template    T
+     *  @param       {() => T} fn Compute function.
+     *  @returns     {ReadonlySignal<T>}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    computed<T>(fn: () => T): ReadonlySignal<T>
+    {
+        return new Reactivity.Memo(fn);
+    }
 
-    /** Append a reactive text node bound to `getter` (or a static string). Re-runs on signal change. */
-    text(getter: Getter<string> | string): this { const g = Real._asGetter(getter); const node = document.createTextNode(g()); this.#el.appendChild(node); this.#effects.push(effect(() => { node.nodeValue = g(); })); return this; }
-    /** Bind a {@link SignalMono} to a Text node via the zero-alloc `sinkText` fast path (creating the node if omitted). */
-    textMono(s: SignalMono<string>, node?: Text): this { if (!node) { node = document.createTextNode(s.peek()); this.#el.appendChild(node); } sinkText(s, node); return this; }
-    /** Reactively bind an attribute; `null` removes it. Re-runs on signal change. */
-    attr(name: string, getter: Getter<string | null> | string | null): this { const g = Real._asGetter(getter); const el = this.#el; this.#effects.push(effect(() => { const v = g(); if (v === null) el.removeAttribute(name); else el.setAttribute(name, v); })); return this; }
-    /** Reactively toggle a class on/off from a boolean getter. */
-    cls(name: string, getter: Getter<boolean> | boolean): this { const g = Real._asGetter(getter); const el = this.#el; this.#effects.push(effect(() => { if (g()) el.classList.add(name); else el.classList.remove(name); })); return this; }
-    /** Return a plain toggler `(on: boolean) => void` for a class — no effect, no tracking. */
-    clsMono(name: string): (v: boolean) => void { const el = this.#el; return (v: boolean) => { if (v) el.classList.add(name); else el.classList.remove(name); }; }
-    /** Reactively assign a JS property on the element from `getter`. */
-    prop(name: string, getter: Getter<unknown> | unknown): this { const g = Real._asGetter(getter); const rec = this.#el as unknown as Record<string, unknown>; this.#effects.push(effect(() => { rec[name] = g(); })); return this; }
-    /** Reactively set one inline style property (camelCase accepted, normalised to kebab-case). */
-    style(prop: string, getter: Getter<string> | string): this { const g = Real._asGetter(getter); const el = this.#el as HTMLElement; const cssProp = prop.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`); this.#effects.push(effect(() => { el.style.setProperty(cssProp, g()); })); return this; }
-    /** Two-way bind the element's `value`: reactive read from `getter`, optional write-back on `input`. */
-    bind(getter: Getter<string>, setter?: (v: string) => void): this { this.prop('value', getter); if (setter) this.#el.addEventListener('input', e => setter((e.target as HTMLInputElement).value)); return this; }
-    /** Dispose all tracked effects and detach the scoped Sheet. Call when discarding the Real. */
-    destroy(): this { this.#effects.forEach(s => s()); this.#effects = []; this.Sheet = null; return this; }
+    /** @name        text
+     *  @public
+     *  @description Append a reactive text node bound to `getter` (or a static string). Re-runs on signal change.
+     *  @param       {(() => string) | string} getter The text source.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    text(getter: (() => string) | string): this
+    {
+        const g = Real.#AsGetter(getter);
+        const node = document.createTextNode(g());
+        this.#el.appendChild(node);
+        this.#effects.push(effect(() => { node.nodeValue = g(); }));
+        return this;
+    }
 
-    /**
-     * Scoped Sheet for this Real instance.
-     *
-     * Assigning a Sheet attaches it to the host element. Each rule's
-     * `:root` selector (and `&`) is rewritten to target THIS element via
-     * an auto-generated class (`__real-…`) — or `:host` when a shadow
-     * root is present. The resulting `<style>` is appended to
-     * `document.head` (light DOM) or to the shadow root, and tracked so
-     * subsequent `Sheet.Rules.add/remove/...` mutations re-flush
-     * automatically.
-     *
-     * Assigning `null` removes the installed `<style>` and detaches the
-     * Sheet (the Sheet itself is preserved — only this Real disconnects).
-     *
-     *   const button = new Real('div').set('class','Fancy').append(stage);
-     *   button.Sheet = new Stylesheet(new Rule(':root', { background: 'yellow' }));
-     *   button.Sheet.Rules.add(new Rule(':root:hover', { transform: 'scale(1.05)' }));
+    /** @name        textMono
+     *  @public
+     *  @description Bind a {@link SignalMono} to a Text node via the zero-alloc `sinkText` fast path (creating the node if omitted).
+     *  @param       {SignalMono<string>} s The mono signal.
+     *  @param       {Text=} node Optional existing text node.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    textMono(s : Reactivity.Mono<string>, node?: Text): this
+    {
+        node ??= document.createTextNode('');
+
+        if (!node.parentNode)
+        {
+            this.#el.appendChild(node);
+        }
+
+        return s.BindText(node), this;
+    }
+
+    /** @name        attr
+     *  @public
+     *  @description Reactively bind an attribute; `null` removes it. Re-runs on signal change.
+     *  @param       {string} name Attribute name.
+     *  @param       {(() => string | null) | string | null} getter The value source.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    attr(name: string, getter: (() => string | null) | string | null): this
+    {
+        const g  = Real.#AsGetter(getter);
+        const el = this.#el;
+        this.#effects.push(effect(() => { const v = g(); if (v === null) el.removeAttribute(name); else el.setAttribute(name, v); }));
+        return this;
+    }
+
+    /** @name        cls
+     *  @public
+     *  @description Reactively toggle a class on/off from a boolean getter.
+     *  @param       {string} name Class name.
+     *  @param       {(() => boolean) | boolean} getter The boolean source.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    cls(name: string, getter: (() => boolean) | boolean): this
+    {
+        const g  = Real.#AsGetter(getter);
+        const el = this.#el;
+        this.#effects.push(effect(() => { if (g()) el.classList.add(name); else el.classList.remove(name); }));
+        return this;
+    }
+
+    /** @name        clsMono
+     *  @public
+     *  @description Return a plain toggler `(on: boolean) => void` for a class — no effect, no tracking.
+     *  @param       {string} name Class name.
+     *  @returns     {(v: boolean) => void}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    clsMono(name: string): (v: boolean) => void
+    {
+        const el = this.#el;
+        return (v: boolean) => { if (v) el.classList.add(name); else el.classList.remove(name); };
+    }
+
+    /** @name        prop
+     *  @public
+     *  @description Reactively assign a JS property on the element from `getter`.
+     *  @param       {string} name Property name.
+     *  @param       {(() => unknown) | unknown} getter The value source.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    prop(name: string, getter: (() => unknown) | unknown): this
+    {
+        const g   = Real.#AsGetter(getter);
+        const rec = this.#el as unknown as Record<string, unknown>;
+        this.#effects.push(effect(() => { rec[name] = g(); }));
+        return this;
+    }
+
+    /** @name        style
+     *  @public
+     *  @description Reactively set one inline style property (camelCase accepted, normalised to kebab-case).
+     *  @param       {string} prop Style property.
+     *  @param       {(() => string) | string} getter The value source.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    style(prop: string, getter: (() => string) | string): this
+    {
+        const g       = Real.#AsGetter(getter);
+        const el      = this.#el as HTMLElement;
+        const cssProp = prop.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`);
+        this.#effects.push(effect(() => { el.style.setProperty(cssProp, g()); }));
+        return this;
+    }
+
+    /** @name        bind
+     *  @public
+     *  @description Two-way bind the element's `value`: reactive read from `getter`, optional write-back on `input`.
+     *  @param       {(() => string)} getter The value source.
+     *  @param       {(v: string) => void=} setter Optional write-back.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    bind(getter: (() => string), setter?: (v: string) => void): this
+    {
+        this.prop('value', getter);
+        if (setter) this.#el.addEventListener('input', e => setter((e.target as HTMLInputElement).value));
+        return this;
+    }
+
+    /** @name        destroy
+     *  @public
+     *  @description Dispose all tracked effects and detach the scoped Sheet. Call when discarding the Real.
+     *  @returns     {this}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    destroy(): this
+    {
+        this.#effects.forEach(s => s());
+        this.#effects = [];
+        this.Sheet = null;
+        return this;
+    }
+
+    /** @name        Sheet
+     *  @public
+     *  @type        {Stylesheet | null}
+     *  @description Scoped Sheet for this Real instance (get).
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
      */
     get Sheet(): Stylesheet | null { return this.#sheet; }
+
+    /** @name        Sheet
+     *  @public
+     *  @description Scoped Sheet for this Real instance (set). Assigning a Sheet attaches it to the host
+     *               element: each rule's `:root` selector (and `&`) is rewritten to target THIS element via
+     *               an auto-generated class (`__real-…`) — or `:host` when a shadow root is present. The
+     *               resulting `<style>` is appended to `document.head` (light DOM) or to the shadow root, and
+     *               tracked so subsequent `Sheet.Rules.add/remove/…` mutations re-flush automatically.
+     *               Assigning `null` removes the installed `<style>` and detaches the Sheet (the Sheet itself
+     *               is preserved — only this Real disconnects).
+     *
+     *                 const button = new Real('div').set('class','Fancy').append(stage);
+     *                 button.Sheet = new Stylesheet(new Rule(':root', { background: 'yellow' }));
+     *                 button.Sheet.Rules.add(new Rule(':root:hover', { transform: 'scale(1.05)' }));
+     *  @param       {Stylesheet | null} next The Sheet to attach, or null to detach.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     set Sheet(next: Stylesheet | null)
     {
         // Detach previous
-        if (this.#sheet && this.#sheetSync)
-            this.#sheet.off('Sheet-Changed', this.#sheetSync);
-        if (this.#styleNode && this.#styleNode.parentNode)
-            this.#styleNode.parentNode.removeChild(this.#styleNode);
+        if (this.#sheet && this.#sheetSync)                 this.#sheet.off('Sheet-Changed', this.#sheetSync);
+        if (this.#styleNode && this.#styleNode.parentNode)  this.#styleNode.parentNode.removeChild(this.#styleNode);
+
         this.#styleNode = null;
         this.#sheetSync = null;
         this.#sheet     = next;
         if (!next) return;
 
-        if (!this.#instanceId)
-            this.#instanceId = 'real-' + Math.random().toString(36).slice(2, 10);
+        if (!this.#instanceId) this.#instanceId = 'real-' + Math.random().toString(36).slice(2, 10);
 
         const el        = this.#el;
         const useShadow = !!(el as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot;
         let   replace   : string;
         if (useShadow) replace = ':host';
-        else {
+        else
+        {
             const cls = '__' + this.#instanceId;
             el.classList.add(cls);
             replace = '.' + cls;
         }
 
-        const apply = () => {
+        const apply = () =>
+        {
             if (!this.#sheet) return;
             let css = '';
             for (const r of this.#sheet.Rules)
@@ -288,7 +1064,8 @@ export class Real
                 const scoped = r.Text.replace(/(^|,\s*|\s)(:root|&)(?![\w-])/g, (_m, pre: string) => pre + replace);
                 css += scoped + '\n';
             }
-            if (!this.#styleNode) {
+            if (!this.#styleNode)
+            {
                 this.#styleNode = document.createElement('style');
                 this.#styleNode.setAttribute('data-arianna-sheet',    el.tagName.toLowerCase());
                 this.#styleNode.setAttribute('data-arianna-instance', this.#instanceId);
@@ -305,12 +1082,17 @@ export class Real
         next.on('Sheet-Changed', apply);
     }
 
-    // ── Global registration ───────────────────────────────────────────────
-    // Pin the constructor name and expose the class on `window`. The bundler
-    // renames the local binding (e.g. `_Real`) to dodge the global, so
-    // `constructor.name` / GetPrototypeChain would report the mangled name —
-    // Build() forces it back. Runs once at class-eval via the static block
-    // below; uses `this` so it survives any bundler rename.
+    /** @name        #Build
+     *  @private @static
+     *  @description Pin the constructor name and expose the class on `window`. The bundler renames the local
+     *               binding (e.g. `_Real`) to dodge the global, so `constructor.name` / GetPrototypeChain would
+     *               report the mangled name — `#Build` forces it back. Runs once at class-eval via the static
+     *               block below; uses `this` so it survives any bundler rename.
+     *  @returns     {void}
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
     static #Build(): void
     {
         try { Object.defineProperty(this, 'name', { value: 'Real', configurable: true }); } catch { /* frozen */ }
@@ -318,8 +1100,33 @@ export class Real
             Object.defineProperty(window, 'Real', { enumerable: true, configurable: false, writable: false, value: this });
     }
 
-    static { this.#Build(); }
-
+    static
+    {
+        this.#Build();
+        /** @name        service
+         *  @private
+         *  @description Registers the 'real' service: create/wrap a live element via Real, so consumers
+         *               (e.g. Component) reach Real through the kernel registry instead of importing it.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        const Service = new Core.Services.Service
+        (
+            'real',
+            {
+                /** Create (or wrap) a Real from any Target (string tag, Element, Virtual, def, or Real). */
+                create(arg: unknown): Real
+                {
+                    return new Real(arg as (string | Element | (new (...a: unknown[]) => Element) | Virtual |
+                        {
+                            Tag?: string;
+                            Attributes?: Record<string, string>;
+                            Style?: Record<string, string> } | Real));
+                },
+            }
+        );
+    }
 }
 
 export default Real;

@@ -1,0 +1,399 @@
+/** @namespace   Properties
+ *  @memberof    Core
+ *  @description Enhanced property subsystem. A single grammar `Descriptor` (declaration keys all
+ *               lowercase; `native` is the ES5 PropertyDescriptor) drives runtime `type`
+ *               (`Core.Types.Type`) / `validate` filtering, `transform`/`prefix`/`suffix`, the
+ *               `observable` lifecycle (before/changing/changed/after events), declarative custom
+ *               `event`s, inter-object `bindings` (one/two-way), and `functions` (before/after run
+ *               hooks). All emission goes through `Core.Events`. Replaces the legacy Grammar/Parse
+ *               engine and the former Options/BindSpec/ObservableSpec/*Detail interfaces.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license)
+ *
+ *  @test        Smoke Test — whole Syntax (native/type/observable/event/bindings two-way/functions)
+ *               const p = new Core.Properties.Property<number>
+ *               (
+ *                   'Volume',
+ *                   {
+ *                      native: { value: 50, enumerable: true },
+ *                      type: 'integer', validate: v => v >= 0 && v <= 100,
+ *                      observable: { changed: 'VolumeChanged' },
+ *                      event: { type: 'VolumePeak', arguments: { threshold: 90 } },
+ *                      bindings: { grid: { ways: 'TwO', targets: [], attributes: ['data-volume'] } },
+ *                      functions:
+ *                      {
+ *                          start: { point: 'before', run: b => { void b.Count; return true; } },
+ *                          end: { point: 'after', run: () => {} }
+ *                      },
+ *                    }
+ *                );
+ *
+ *                p.OnChanged(c => { void `${c.Value.Old}->${c.Value.New}`; });
+ *                p.Install([{}, {}]).Fire({ ts: Date.now() });
+ */
+export namespace Properties
+{
+    // ── Runtime context (inlined/local — NOT a public Spec) ──────────────────────
+    /** Per-element detail of changing/changed (PascalCase, as the legacy Property context). */
+    type Change<T = unknown> = { Name: string; Value: { Old: T; New: T }; Override?: T; Descriptor: PropertyDescriptor<T>; Object?: object };
+    /** Per-batch context of before/after. */
+    type Batch<T = unknown>  = { Name: string; Hosts: readonly object[]; Count: number; Descriptor: PropertyDescriptor<T> };
+
+    // ── Reactive IoC (registered by Observables.ts, if imported) ──────────────────
+    /** @interface Signal @memberof Core.Properties @template T @description Minimal reactive cell the IoC provider must satisfy. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+    export interface Signal<T> { get(): T; set(v: T): void; subscribe(fn: (v: T) => void): () => void; }
+    /** @interface Reactive @memberof Core.Properties @description Reactive backend; Observables.ts registers one via useReactive. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+    export interface Reactive { signal<T>(initial: T): Signal<T>; effect(fn: () => void): () => void; reactive<T extends object>(o: T): T; }
+
+    /** @name        Primitive
+     *  @public
+     *  @type        {'string' | 'number' | 'boolean' | 'function' | 'object'}
+     *  @memberof    Core.Types
+     *  @namespace   Core
+     *  @description The `typeof`-checkable primitive tags shared by `Is()` and
+     *               `Property` — the true common denominator of the two validators.
+     *               Composed into `Type` and `Native` instead of being repeated.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export type Primitive = 'string' | 'number' | 'boolean' | 'function' | 'object';
+
+    /** @name        Type
+     *  @public
+     *  @type        {Primitive | 'integer' | 'array' | 'any' | ((v: unknown) => boolean)}
+     *  @memberof    Core.Types
+     *  @namespace   Core
+     *  @description Runtime validation marker used by `Property`: the primitive tags
+     *               plus `integer` / `array` / `any`, or a user predicate. Matches
+     *               exactly the cases of `Property._matchesType` (exhaustive switch).
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export type Type = Primitive | 'integer' | 'array' | 'any' | ((v: unknown) => boolean);
+
+    class ReactiveSlot { static #p: Reactive | null = null; static use(p: Reactive): void { ReactiveSlot.#p = p; } static get provider(): Reactive | null { return ReactiveSlot.#p; } }
+    /** @name useReactive @public @memberof Core.Properties @description Register the reactive backend (called by Observables.ts). @param {Reactive} provider The provider. @returns {void} @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+    export function useReactive(provider: Reactive): void { ReactiveSlot.use(provider); }
+    /** @name hasReactive @public @memberof Core.Properties @description Whether Observables.ts is imported. @returns {boolean} True if a provider is present. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+    export function hasReactive(): boolean { return ReactiveSlot.provider !== null; }
+
+    // ── The single grammar Descriptor (declaration → lowercase) ──────────────────
+    /** @interface Descriptor @memberof Core.Properties @template T @description Single extended property descriptor. Keys lowercase; `native` is the ES5 descriptor handed to defineProperty. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+    export interface PropertyDescriptor<T = unknown>
+    {
+        native?     : Descriptor.Native<T>;
+        type?       : Type;                 // ← ricicla Core.Types.Type
+        validate?   : (v: T) => boolean;
+        transform?  : (v: T) => T;
+        prefix?     : string;
+        suffix?     : string;
+        observable? : boolean | Descriptor.Observable;
+        event?      : Descriptor.Event | Descriptor.Event[];
+        bindings?   : Descriptor.Bindings;
+        functions?  : Descriptor.Functions;
+    }
+    export namespace Descriptor
+    {
+        /** ES5 PropertyDescriptor (lowercase) → Object.defineProperty. */
+        export interface Native<T = unknown> { value?: T; get?: () => T; set?: (v: T) => void; enumerable?: boolean; configurable?: boolean; writable?: boolean; }
+        /** Lifecycle event names/flags (defaults derive from the property name). */
+        export interface Observable { target?: EventTarget; cancelable?: boolean; propagation?: boolean; before?: string; changing?: string; changed?: string; after?: string; }
+        /** Declarative custom event; declared `arguments` seal as readonly detail props. */
+        export interface Event { type: string; propagation?: boolean; cancelable?: boolean; arguments?: Record<string, unknown>; targets?: object[]; }
+        /** Binding direction. 1|'One' host→targets, 2|'Two' bidirectional; strings case-insensitive at runtime. */
+        export type Ways = 1 | 2 | 'One' | 'Two' | (string & {});
+        /** Sync this property with attributes/properties on target object(s). */
+        export interface Binding { ways?: Ways; target?: object; targets?: object[]; attribute?: string; attributes?: string[] | Record<string, string>; property?: string; properties?: string[] | Record<string, string>; reactive?: 'Signal' | 'Observable' | 'Proxy'; functions?: Functions; }
+        export type Bindings = Record<string, Binding>;
+        /** A before/after run hook. */
+        export interface Hook { point?: 'before' | 'after'; run: (context: { Name: string; Hosts: readonly object[]; Count: number }) => void | boolean; arguments?: unknown[]; }
+        export type Functions = Record<string, Hook>;
+    }
+
+    /** @typedef Hosts @memberof Core.Properties @description A single host or a list/array of hosts. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+    export type Hosts = object | readonly object[] | ArrayLike<object>;
+
+    // ── The Property class ───────────────────────────────────────────────────────
+    /** @class Property
+     *  @memberof Core.Properties
+     *  @template T
+     *  @classdesc Grammar-driven enhanced property. Build with a Descriptor,
+     *             Install on one host or a list (before → per-host changing/commit/changed → after).
+     *             Emits via Core.Events, fires sealed custom events, keeps bindings in sync (one/two-way).
+     *  @author    Riccardo Angeli
+     *  @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license   MIT / Commercial (dual license) */
+    export class Property<T = unknown>
+    {
+        // ── Optional Core dependencies, resolved at RUNTIME (no static import → avoids the
+        //    Core↔Properties circular dependency). Each falls back so Properties stays independent:
+        //    Core.Events → native DOM events; Core.Scopes.Readonly → a standalone descriptor. ──
+        /** @name #Core @private @static @description The kernel, if present on the global (else undefined). */
+        static get #Core(): { Events?: { Event?: { Fire?: (t: unknown, e: unknown) => boolean; On?: (t: EventTarget, ty: string, cb: EventListener) => unknown } }; Scopes?: { Readonly?: globalThis.PropertyDescriptor } } | undefined
+        { return (globalThis as { Core?: unknown }).Core as never; }
+
+        /** @name #Readonly @private @static @description `Core.Scopes.Readonly` if present, else a standalone equivalent. */
+        static get #Readonly(): globalThis.PropertyDescriptor
+        { return Property.#Core?.Scopes?.Readonly ?? { configurable: false, enumerable: true, writable: false }; }
+
+        /** @name #Fire @private @static @description Emit via `Core.Events` (single SOT channel) when present, else native `dispatchEvent` per target. */
+        static #Fire(target: EventTarget | EventTarget[], type: string, detail: Record<string, unknown>, cancelable: boolean, bubbles: boolean): boolean
+        {
+            const F = Property.#Core?.Events?.Event?.Fire;
+            if (F) { try { return F(target, { Type: type, Detail: detail, Cancelable: cancelable, Propagation: bubbles }); } catch { /* fall back to native */ } }
+            const list = Array.isArray(target) ? target : [target];
+            let ok = true;
+            for (const t of list) if (t && typeof t.dispatchEvent === 'function') ok = t.dispatchEvent(new CustomEvent(type, { detail, cancelable, bubbles })) && ok;
+            return ok;
+        }
+
+        /** @name #On @private @static @description Subscribe via `Core.Events` when present, else native `addEventListener`. */
+        static #On(target: EventTarget, type: string, cb: EventListener): void
+        {
+            const O = Property.#Core?.Events?.Event?.On;
+            if (O) { try { O(target, type, cb); return; } catch { /* fall back to native */ } }
+            target.addEventListener(type, cb);
+        }
+        /** @name Name @public @readonly @type {string} @description Accessor key + base of the event names. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+        readonly Name       : string;
+        /** @name Descriptor @public @readonly @type {Readonly<Descriptor<T>>} @description Frozen descriptor sealed at declaration. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+        readonly Descriptor : Readonly<PropertyDescriptor<T>>;
+
+        #value   : T;
+        #hosts                 = new Set<WeakRef<object>>();
+        #index      = new WeakMap<object, WeakRef<object>>();
+        #finalizer = new FinalizationRegistry<WeakRef<object>>
+        (ref => { this.#hosts.delete(ref); });
+        #target  : EventTarget;
+        #names   : { before: string; changing: string; changed: string; after: string };
+        #syncing = false;                                   // re-entrancy guard for two-way
+
+        /** @name constructor @public @description Seal the descriptor, seed the value from native.value/get, resolve the event target + four event names. @param {string} name Property name. @param {Descriptor<T>} descriptor Grammar descriptor. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+        constructor(name: string, descriptor: PropertyDescriptor<T> = {})
+        {
+            this.Name       = name;
+            this.Descriptor = Object.freeze({ ...descriptor });
+            this.#value     = (descriptor.native?.value ?? descriptor.native?.get?.()) as T;
+            const o         = typeof descriptor.observable === 'object' ? descriptor.observable : {};
+            this.#target    = o.target ?? new EventTarget();
+            this.#names     = { before: o.before ?? `Before${name}Changing`, changing: o.changing ?? `${name}Changing`, changed: o.changed ?? `${name}Changed`, after: o.after ?? `After${name}Changed` };
+        }
+
+        /** @name Get @public @description Read the current value. @returns {T} The value. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+        Get(): T { return this.#value; }
+
+        /** @name Set @public @description transform → prefix/suffix → type → validate → changing (cancelable) → commit → bindings → changed. @param {T} value Candidate. @returns {boolean} Applied or rejected. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+        Set(value: T): boolean
+        {
+            const d = this.Descriptor, old = this.#value;
+            let next: T = value;
+            if (d.transform) next = d.transform(next);
+            if (d.prefix !== undefined || d.suffix !== undefined) next = ((d.prefix ?? '') + String(next) + (d.suffix ?? '')) as unknown as T;
+            if (d.type !== undefined && !Property.#matches(next, d.type)) return false;
+            if (d.validate && !d.validate(next)) return false;
+            if (Object.is(old, next)) return true;
+
+            if (d.observable) {
+                const change: Change<T> = { Name: this.Name, Value: { Old: old, New: next }, Descriptor: d };
+                if (!this.#emit(this.#names.changing, change, this.#cancelable, this.#propagation) && this.#cancelable) return false;
+                if (change.Override !== undefined) next = change.Override;
+            }
+
+            this.#value = next;
+            for (const ref of this.#hosts)
+            {
+                const h = ref.deref();
+                if (h === undefined) {
+                    this.#hosts.delete(ref);
+                    continue;
+                }
+                this.#sync(h, next);
+            }
+
+            if (d.observable)
+                this.#emit(this.#names.changed, { Name: this.Name, Value: { Old: old, New: next }, Descriptor: d } as Change<T>, false, this.#propagation);
+            return true;
+        }
+
+        /** @name Install @public @description Apply to one host OR a list/array: before (once) → per-host → after (once). @param {Hosts} hosts Host(s). @returns {this} @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+        Install(hosts: Hosts): this
+        {
+            const list: object[] = Property.#toArray(hosts);
+            const batch: Batch<T> = { Name: this.Name, Hosts: list, Count: list.length, Descriptor: this.Descriptor };
+
+            if (this.#hooks('before', batch) === false) return this;
+            this.#emit(this.#names.before, batch, false, false);
+
+            for (const host of list) this.#installOne(host);
+
+            this.#emit(this.#names.after, batch, false, false);
+            this.#hooks('after', batch);
+            return this;
+        }
+
+        /** @name Fire @public @description Dispatch the declared custom event(s) via Core.Events, sealing declared arguments as readonly detail props. @param {Record<string, unknown>=} extra Extra mutable detail. @returns {this} @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+        Fire(extra?: Record<string, unknown>): this
+        {
+            const events = this.Descriptor.event ? (Array.isArray(this.Descriptor.event) ? this.Descriptor.event : [this.Descriptor.event]) : [];
+            for (const ev of events)
+            {
+                const detail: Record<string, unknown> = { Name: this.Name, Value: this.#value, ...extra };
+                for (const k of Object.keys(ev.arguments ?? {})) Object.defineProperty(detail, k, { value: ev.arguments![k], ...Property.#Readonly });
+                const targets = (ev.targets && ev.targets.length ? ev.targets : [this.#target]) as unknown as EventTarget[];
+                Property.#Fire(targets, ev.type, detail, ev.cancelable ?? false, ev.propagation ?? false);
+            }
+            return this;
+        }
+
+        /** @name OnChanging @public @description Subscribe to the pre-assign (cancelable) changing event. @param {(change: { Name: string; Value: { Old: T; New: T } }, ev: NativeEvent) => void} cb Listener. @returns {this} @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+        OnChanging(cb: (change: Change<T>, ev: Event) => void): this { return this.#on(this.#names.changing, cb); }
+        /** @name OnChanged @public @description Subscribe to the post-assign changed event. @param {(change: { Name: string; Value: { Old: T; New: T } }, ev: NativeEvent) => void} cb Listener. @returns {this} @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+        OnChanged(cb: (change: Change<T>, ev: Event) => void): this { return this.#on(this.#names.changed, cb); }
+
+        /** @name Target @public @readonly @type {EventTarget} @description Internal EventTarget for advanced subscription. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+        get Target(): EventTarget { return this.#target; }
+
+        // ── private ─────────────────────────────────────────────────────────────
+        get #cancelable(): boolean  { const o = this.Descriptor.observable; return typeof o === 'object' ? (o.cancelable ?? true) : true; }
+        get #propagation(): boolean { const o = this.Descriptor.observable; return typeof o === 'object' ? (o.propagation ?? false) : false; }
+
+        #installOne(host: object): void
+        {
+            const self = this, n = this.Descriptor.native ?? {};
+            Object.defineProperty(host, this.Name, {
+                enumerable  : n.enumerable   ?? true,
+                configurable: n.configurable ?? true,
+                get: n.get ?? ((): T => self.#value),
+                set: n.set ?? ((v: T): void => { self.Set(v); }),
+            });
+            if (!this.#index.has(host)) {          // dedup by host identity — one WeakRef per live host
+                const ref = new WeakRef(host);
+                this.#index.set(host, ref);
+                this.#hosts.add(ref);
+                this.#finalizer.register(host, ref);
+            }
+            this.#sync(host, this.#value);
+        }
+
+        #on(type: string, cb: (change: Change<T>, ev: Event) => void): this
+        { Property.#On(this.#target, type, ((e: Event) => cb((e as CustomEvent<Change<T>>).detail, e)) as EventListener); return this; }
+
+        /** Emit via Core.Events (single channel) + local dispatch for cancel semantics. */
+        #emit(type: string, detail: unknown, cancelable: boolean, bubbles: boolean): boolean
+        {
+            const F = Property.#Core?.Events?.Event?.Fire;
+            if (F) { try { F(this.#target, { Type: type, Detail: detail as Record<string, unknown>, Cancelable: cancelable, Propagation: bubbles }); } catch { /* native dispatch below */ } }
+            return this.#target.dispatchEvent(new CustomEvent(type, { detail, cancelable, bubbles }));
+        }
+
+        #hooks(point: 'before' | 'after', batch: Batch<T>): void | boolean
+        {
+            const fns = this.Descriptor.functions;
+            if (!fns) return;
+            for (const key of Object.keys(fns)) {
+                const h = fns[key];
+                if ((h.point ?? 'before') !== point) continue;
+                if (h.run({ Name: batch.Name, Hosts: batch.Hosts, Count: batch.Count }) === false && point === 'before') return false;
+            }
+        }
+
+        #sync(host: object, value: T): void
+        {
+            const bindings = this.Descriptor.bindings;
+            if (!bindings) return;
+            const provider = ReactiveSlot.provider;
+            for (const key of Object.keys(bindings)) {
+                const b = bindings[key];
+                if (b.reactive && provider) { this.#reactive(provider, host, value, b); continue; }
+                this.#direct(host, value, b);
+            }
+        }
+
+        /** DEFAULT: direct wrapping — host→targets, and (two-way) target→host with guards. */
+        #direct(host: object, value: T, b: Descriptor.Binding): void
+        {
+            const targets = b.targets ?? (b.target ? [b.target] : []);
+            const twoWay  = Property.#ways(b.ways) === 2;
+            const attrs   = b.attribute ? [b.attribute] : (Array.isArray(b.attributes) ? b.attributes : Object.keys(b.attributes ?? {}));
+            const props   = b.property  ? [b.property]  : (Array.isArray(b.properties) ? b.properties : Object.keys(b.properties ?? {}));
+            const str     = value === null || value === undefined ? '' : String(value);
+
+            for (const t of targets) {
+                // host → target
+                this.#syncing = true;
+                if (typeof (t as Element).setAttribute === 'function') for (const a of attrs) { if ((t as Element).getAttribute(a) !== str) (t as Element).setAttribute(a, str); }
+                for (const p of props) { const r = t as Record<string, unknown>; if (!Object.is(r[p], value)) r[p] = value; }
+                this.#syncing = false;
+
+                // two-way: target → host (wrap once per target/property)
+                if (twoWay) this.#wrap(host, t, attrs, props);
+            }
+        }
+
+        /** Wrap a target's setAttribute / property setters once, to propagate its changes back to the host. */
+        #wrap(host: object, target: object, attrs: string[], props: string[]): void
+        {
+            const mark = Symbol.for(`arianna:bound:${this.Name}`);
+            const rec  = target as Record<PropertyKey, unknown>;
+            if (rec[mark]) return;                 // guard: already wrapped
+            rec[mark] = true;
+
+            const hostRef = new WeakRef(host);     // weak capture: the target must not keep the host alive
+
+            if (attrs.length && typeof (target as Element).setAttribute === 'function') {
+                const el = target as Element;
+                const original = el.setAttribute.bind(el);
+                el.setAttribute = (name: string, val: string): void => {
+                    original(name, val);
+                    const h = hostRef.deref();
+                    if (h !== undefined && !this.#syncing && attrs.includes(name)) (h as Record<string, unknown>)[this.Name] = val as unknown;
+                };
+            }
+            for (const p of props) {
+                const desc = Object.getOwnPropertyDescriptor(target, p);
+                const originalSet = desc?.set;
+                let store = (target as Record<string, unknown>)[p];
+                Object.defineProperty(target, p, {
+                    configurable: true, enumerable: true,
+                    get: desc?.get ?? ((): unknown => store),
+                    set: (val: unknown): void => { store = val; originalSet?.call(target, val); const h = hostRef.deref(); if (h !== undefined && !this.#syncing) (h as Record<string, unknown>)[this.Name] = val; },
+                });
+            }
+        }
+
+        #reactive(provider: Reactive, host: object, value: T, b: Descriptor.Binding): void
+        {
+            if (b.reactive === 'Proxy') { provider.reactive(host); return; }
+            const s = provider.signal(value);
+            for (const t of (b.targets ?? (b.target ? [b.target] : []))) s.subscribe(v => { void [t, v]; });
+        }
+
+        static #ways(w: Descriptor.Ways | undefined): 1 | 2 { return w === 2 || String(w).toLowerCase() === 'two' ? 2 : 1; }
+
+        static #toArray(h: Hosts): object[]
+        {
+            if (h === null || h === undefined) return [];
+            if (Array.isArray(h)) return h as object[];
+            if (typeof (h as ArrayLike<object>).length === 'number' && typeof h !== 'function') return Array.from(h as ArrayLike<object>);
+            return [h as object];
+        }
+
+        static #matches(v: unknown, t: Type): boolean
+        {
+            if (typeof t === 'function') return t(v);
+            switch (t) {
+                case 'string'  : return typeof v === 'string';
+                case 'number'  : return typeof v === 'number' && !Number.isNaN(v);
+                case 'boolean' : return typeof v === 'boolean';
+                case 'function': return typeof v === 'function';
+                case 'integer' : return typeof v === 'number' && Number.isInteger(v);
+                case 'object'  : return typeof v === 'object' && v !== null && !Array.isArray(v);
+                case 'array'   : return Array.isArray(v);
+                case 'any'     : return true;
+            }
+        }
+    }
+}

@@ -56,7 +56,7 @@
  * required, no double-extends).
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 
 // ── Shared AudioContext ─────────────────────────────────────────────────────
 // One context per page. Created lazily on first access (autoplay policy).

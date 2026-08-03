@@ -21,11 +21,21 @@
 
 import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
-import { parseHex, rgbToHex, rgbToHsl, hslToRgb } from './ColorPicker.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
+import { parseHexRgba, rgbToHex, rgbToHsl, hslToRgb } from './ColorPicker.ts';
 
 export interface ColorPickerSquareOptions {
     color? : string;
@@ -91,17 +101,17 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
         this.showAlpha = () => this.hasAttribute('alpha');
 
         this.svPinStyle = () => {
-            const s = this.state$.get();
+            const s = this.state$.Get();
             const px = (s.s / 100) * this.dim();
             const py = (1 - s.v / 100) * this.dim();
             const rgb = hsvToRgb(s.h, s.s, s.v);
             return `left:${px}px; top:${py}px; background:${rgbToHex(rgb.r, rgb.g, rgb.b)}`;
         };
-        this.huePinStyle = () => `top:${(this.state$.get().h / 360) * this.dim()}px`;
-        this.alphaPinStyle = () => `top:${(1 - this.state$.get().a) * this.dim()}px`;
+        this.huePinStyle = () => `top:${(this.state$.Get().h / 360) * this.dim()}px`;
+        this.alphaPinStyle = () => `top:${(1 - this.state$.Get().a) * this.dim()}px`;
 
         this.readoutRows = (): Array<{ label: string; value: string; field: string }> => {
-            const s = this.state$.get();
+            const s = this.state$.Get();
             const rgb = hsvToRgb(s.h, s.s, s.v);
             const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
             const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
@@ -129,8 +139,8 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
             const rect = (me.currentTarget as HTMLElement).getBoundingClientRect();
             const x = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
             const y = Math.max(0, Math.min(1, (me.clientY - rect.top) / rect.height));
-            const cur = this.state$.get();
-            this.state$.set({ ...cur, s: x * 100, v: (1 - y) * 100 });
+            const cur = this.state$.Get();
+            this.state$.Set({ ...cur, s: x * 100, v: (1 - y) * 100 });
             this.#emit();
         };
         this.onHuePointer = (e: Event) => {
@@ -140,8 +150,8 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
             } else if (!(me.buttons & 1)) return;
             const rect = (me.currentTarget as HTMLElement).getBoundingClientRect();
             const y = Math.max(0, Math.min(1, (me.clientY - rect.top) / rect.height));
-            const cur = this.state$.get();
-            this.state$.set({ ...cur, h: y * 360 });
+            const cur = this.state$.Get();
+            this.state$.Set({ ...cur, h: y * 360 });
             this.#emit();
         };
         this.onAlphaPointer = (e: Event) => {
@@ -151,8 +161,8 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
             } else if (!(me.buttons & 1)) return;
             const rect = (me.currentTarget as HTMLElement).getBoundingClientRect();
             const y = Math.max(0, Math.min(1, (me.clientY - rect.top) / rect.height));
-            const cur = this.state$.get();
-            this.state$.set({ ...cur, a: 1 - y });
+            const cur = this.state$.Get();
+            this.state$.Set({ ...cur, a: 1 - y });
             this.#emit();
         };
 
@@ -164,7 +174,7 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
             const nums = v.split(/[\s,%]+/).filter(Boolean).map(Number);
             let rgb: { r: number; g: number; b: number } | null = null;
             switch (field) {
-                case 'hex' : { const p = parseHex(v); if (p) rgb = { r: p.r, g: p.g, b: p.b }; break; }
+                case 'hex' : { const p = parseHexRgba(v); if (p) rgb = { r: p.r, g: p.g, b: p.b }; break; }
                 case 'rgb' : if (nums.length >= 3) rgb = { r: nums[0]!, g: nums[1]!, b: nums[2]! }; break;
                 case 'hsl' : if (nums.length >= 3) rgb = hslToRgb(nums[0]!, nums[1]!, nums[2]!); break;
                 case 'hsv' : if (nums.length >= 3) rgb = hsvToRgb(nums[0]!, nums[1]!, nums[2]!); break;
@@ -180,8 +190,8 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
             }
             if (rgb) {
                 const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-                const cur = this.state$.get();
-                this.state$.set({ h: hsv.h, s: hsv.s, v: hsv.v, a: cur.a });
+                const cur = this.state$.Get();
+                this.state$.Set({ h: hsv.h, s: hsv.s, v: hsv.v, a: cur.a });
                 this.#emit();
             }
         };
@@ -237,7 +247,7 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
         const svCtx = sv.getContext('2d');
         if (svCtx) {
             const img = svCtx.createImageData(d, d);
-            const s = this.state$.get();
+            const s = this.state$.Get();
             for (let y = 0; y < d; y++) {
                 for (let x = 0; x < d; x++) {
                     const sv2 = (x / (d - 1)) * 100;
@@ -275,7 +285,7 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
                         ctx.fillRect(x, y, cs, cs);
                     }
                 }
-                const s = this.state$.get();
+                const s = this.state$.Get();
                 const rgb = hsvToRgb(s.h, s.s, s.v);
                 for (let y = 0; y < d; y++) {
                     ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${1 - y / d})`;
@@ -288,16 +298,16 @@ export class ColorPickerSquare extends Component('arianna-color-picker-square', 
     // ── Public API ───────────────────────────────────────────────────────────
 
     setColor(hex: string): this {
-        const p = parseHex(hex);
+        const p = parseHexRgba(hex);
         if (!p) return this;
         const hsv = rgbToHsv(p.r, p.g, p.b);
-        this.state$.set({ h: hsv.h, s: hsv.s, v: hsv.v, a: p.a });
+        this.state$.Set({ h: hsv.h, s: hsv.s, v: hsv.v, a: p.a });
         this.#emit();
         return this;
     }
 
     getColor() {
-        const s = this.state$.get();
+        const s = this.state$.Get();
         const rgb = hsvToRgb(s.h, s.s, s.v);
         return {
             rgb,

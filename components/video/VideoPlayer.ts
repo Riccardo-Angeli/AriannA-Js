@@ -44,10 +44,26 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal, effect } from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type VideoProvider = 'native' | 'youtube' | 'twitch' | 'vimeo';
 
@@ -130,15 +146,6 @@ function twitchEmbed(kind: 'video' | 'clip' | 'channel', id: string, parents: st
     };
 }
 
-function formatTime(seconds: number): string {
-    if (!isFinite(seconds) || seconds < 0) return '0:00';
-    const s = Math.floor(seconds % 60);
-    const m = Math.floor(seconds / 60) % 60;
-    const h = Math.floor(seconds / 3600);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
-}
-
 // ── Component ───────────────────────────────────────────────────────────────
 
 export class VideoPlayer extends Component('arianna-video-player', HTMLElement, {}, {
@@ -158,6 +165,15 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
     #source  : string = '';
     #embed   : string = '';
 
+    static #formatTime(seconds: number): string {
+        if (!isFinite(seconds) || seconds < 0) return '0:00';
+        const s = Math.floor(seconds % 60);
+        const m = Math.floor(seconds / 60) % 60;
+        const h = Math.floor(seconds / 3600);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+    }
+
     build(_opts: VideoPlayerOptions = {})
     {
         const sourceAttr = this.attrSignal('source');
@@ -170,31 +186,31 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
             return `aspect-ratio: ${ar}`;
         };
 
-        this.isNative  = () => this.provider$.get() === 'native';
-        this.isEmbed   = () => this.provider$.get() !== 'native';
+        this.isNative  = () => this.provider$.Get() === 'native';
+        this.isEmbed   = () => this.provider$.Get() !== 'native';
         this.embedSrc  = () => this.#embed;
         this.nativeSrc = () => this.#source;
         this.posterSrc = () => posterAttr.get() ?? '';
 
-        this.timeLabel = () => formatTime(this.curTime$.get());
-        this.durLabel  = () => formatTime(this.duration$.get());
-        this.playLabel = () => this.playing$.get() ? '❙❙' : '▶';
+        this.timeLabel = () => VideoPlayer.#formatTime(this.curTime$.Get());
+        this.durLabel  = () => VideoPlayer.#formatTime(this.duration$.Get());
+        this.playLabel = () => this.playing$.Get() ? '❙❙' : '▶';
         this.seekValue = () => {
-            const d = this.duration$.get();
-            return d > 0 ? String((this.curTime$.get() / d) * 100) : '0';
+            const d = this.duration$.Get();
+            return d > 0 ? String((this.curTime$.Get() / d) * 100) : '0';
         };
-        this.volValue  = () => String(this.volume$.get() * 100);
+        this.volValue  = () => String(this.volume$.Get() * 100);
 
         this.showControls = () => this.getAttribute('show-controls') !== 'false';
 
         // ── Handlers ────────────────────────────────────────────────────
         this.onPlayClick = () => {
-            if (this.playing$.get()) this.pause();
+            if (this.playing$.Get()) this.pause();
             else this.play();
         };
         this.onSeekInput = (e: Event) => {
             const pct = parseFloat((e.target as HTMLInputElement).value);
-            const d = this.duration$.get();
+            const d = this.duration$.Get();
             if (d > 0) this.seek((pct / 100) * d);
         };
         this.onVolInput = (e: Event) => {
@@ -253,55 +269,55 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
         const tp = twitchParent ?? this.getAttribute('twitch-parent') ?? undefined;
         const info = detectVideoProvider(url, tp);
         if (info) {
-            this.provider$.set(info.provider);
+            this.provider$.Set(info.provider);
             this.#embed = info.embed;
         } else {
-            this.provider$.set('native');
+            this.provider$.Set('native');
             this.#embed = '';
         }
         this.dispatchEvent(new CustomEvent('arianna:video-source', {
-            bubbles: true, detail: { source: url, provider: this.provider$.get() },
+            bubbles: true, detail: { source: url, provider: this.provider$.Get() },
         }));
         return this;
     }
     getSource(): string { return this.#source; }
-    getProvider(): VideoProvider { return this.provider$.get(); }
+    getProvider(): VideoProvider { return this.provider$.Get(); }
 
     async play(): Promise<void> {
-        if (this.provider$.get() === 'native') {
+        if (this.provider$.Get() === 'native') {
             const v = this.#getVideo();
             if (v) {
                 try { await v.play(); }
                 catch (err) { console.warn('VideoPlayer.play():', err); }
             }
         } else {
-            this.#postIframe(this.provider$.get(), 'play');
+            this.#postIframe(this.provider$.Get(), 'play');
         }
     }
     pause(): void {
-        if (this.provider$.get() === 'native') {
+        if (this.provider$.Get() === 'native') {
             this.#getVideo()?.pause();
         } else {
-            this.#postIframe(this.provider$.get(), 'pause');
+            this.#postIframe(this.provider$.Get(), 'pause');
         }
     }
     seek(seconds: number): void {
-        if (this.provider$.get() === 'native') {
+        if (this.provider$.Get() === 'native') {
             const v = this.#getVideo();
             if (v) v.currentTime = seconds;
         } else {
-            this.#postIframe(this.provider$.get(), 'seek', seconds);
+            this.#postIframe(this.provider$.Get(), 'seek', seconds);
         }
-        this.curTime$.set(seconds);
+        this.curTime$.Set(seconds);
     }
     setVolume(v: number): void {
         const clamped = Math.max(0, Math.min(1, v));
-        this.volume$.set(clamped);
+        this.volume$.Set(clamped);
         const video = this.#getVideo();
         if (video) video.volume = clamped;
-        else this.#postIframe(this.provider$.get(), 'volume', clamped);
+        else this.#postIframe(this.provider$.Get(), 'volume', clamped);
     }
-    getVolume(): number { return this.volume$.get(); }
+    getVolume(): number { return this.volume$.Get(); }
 
     async toggleFullscreen(): Promise<void> {
         if (document.fullscreenElement) {
@@ -354,35 +370,35 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
         const v = this.#getVideo();
         if (!v) return;
         v.addEventListener('play',       () => {
-            this.playing$.set(true);
+            this.playing$.Set(true);
             this.dispatchEvent(new CustomEvent('arianna:video-play', {
                 bubbles: true, detail: { provider: 'native' },
             }));
         });
         v.addEventListener('pause',      () => {
-            this.playing$.set(false);
+            this.playing$.Set(false);
             this.dispatchEvent(new CustomEvent('arianna:video-pause', {
                 bubbles: true, detail: { provider: 'native' },
             }));
         });
         v.addEventListener('timeupdate', () => {
-            this.curTime$.set(v.currentTime);
+            this.curTime$.Set(v.currentTime);
             this.dispatchEvent(new CustomEvent('arianna:video-timeupdate', {
                 bubbles: true, detail: { time: v.currentTime, duration: v.duration },
             }));
         });
         v.addEventListener('loadedmetadata', () => {
-            this.duration$.set(v.duration);
+            this.duration$.Set(v.duration);
         });
         v.addEventListener('ended', () => {
-            this.playing$.set(false);
+            this.playing$.Set(false);
             this.dispatchEvent(new CustomEvent('arianna:video-ended', {
                 bubbles: true, detail: { provider: 'native' },
             }));
         });
         v.addEventListener('volumechange', () => {
-            this.volume$.set(v.volume);
-            this.muted$.set(v.muted);
+            this.volume$.Set(v.volume);
+            this.muted$.Set(v.muted);
         });
         // Restore volume from attr
         const volAttr = parseFloat(this.getAttribute('volume') ?? '1');

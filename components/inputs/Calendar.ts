@@ -28,10 +28,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface CalendarOptions {
     value?            : string | Date;
@@ -114,7 +124,7 @@ export class Calendar extends Component('arianna-calendar', HTMLElement, {}, {
         // Sync cursor to selected value on first build
         const selected = parseDate(value.get());
         if (selected) {
-            this.cursor$.set({ year: selected.getFullYear(), month: selected.getMonth() });
+            this.cursor$.Set({ year: selected.getFullYear(), month: selected.getMonth() });
         }
 
         this.localeStr = () => this.getAttribute('locale') ?? navigator.language ?? 'en-US';
@@ -123,7 +133,7 @@ export class Calendar extends Component('arianna-calendar', HTMLElement, {}, {
         this.isDisabled = () => this.hasAttribute('disabled');
 
         this.monthLabel = (): string => {
-            const c = this.cursor$.get();
+            const c = this.cursor$.Get();
             const d = new Date(c.year, c.month, 1);
             return d.toLocaleDateString(this.localeStr(), { month: 'long', year: 'numeric' });
         };
@@ -143,7 +153,7 @@ export class Calendar extends Component('arianna-calendar', HTMLElement, {}, {
         };
 
         this.weeks = (): WeekRow[] => {
-            const c = this.cursor$.get();
+            const c = this.cursor$.Get();
             const first = this.firstDayN();
             const min = parseDate(this.getAttribute('min'));
             const max = parseDate(this.getAttribute('max'));
@@ -183,26 +193,26 @@ export class Calendar extends Component('arianna-calendar', HTMLElement, {}, {
         };
 
         this.onPrev = () => {
-            const c = this.cursor$.get();
+            const c = this.cursor$.Get();
             const month = c.month === 0 ? 11 : c.month - 1;
             const year  = c.month === 0 ? c.year - 1 : c.year;
-            this.cursor$.set({ year, month });
+            this.cursor$.Set({ year, month });
             this.dispatchEvent(new CustomEvent('arianna:nav', {
                 bubbles: true, detail: { year, month },
             }));
         };
         this.onNext = () => {
-            const c = this.cursor$.get();
+            const c = this.cursor$.Get();
             const month = c.month === 11 ? 0 : c.month + 1;
             const year  = c.month === 11 ? c.year + 1 : c.year;
-            this.cursor$.set({ year, month });
+            this.cursor$.Set({ year, month });
             this.dispatchEvent(new CustomEvent('arianna:nav', {
                 bubbles: true, detail: { year, month },
             }));
         };
         this.onToday = () => {
             const t = new Date();
-            this.cursor$.set({ year: t.getFullYear(), month: t.getMonth() });
+            this.cursor$.Set({ year: t.getFullYear(), month: t.getMonth() });
         };
         this.onDayClick = (cell: DayCell) => {
             if (cell.isOutOfRange || this.isDisabled()) return;

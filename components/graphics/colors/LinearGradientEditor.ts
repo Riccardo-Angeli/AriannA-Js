@@ -19,10 +19,12 @@
  * Attrs:  angle, interp
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { html }      from '../../../core/Template.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 import {
     type GradientStop, type RGBA,
     makeStopState, stopsToCss, clamp01,
@@ -53,13 +55,13 @@ export class LinearGradientEditor extends Component('arianna-linear-gradient-edi
         const interp = (): GradientInterp =>
             (interpAttr.get() as GradientInterp | null) ?? 'srgb';
 
-        this.stripBg = () => `background: linear-gradient(to right, ${stopsToCss(this.state.stops$.get())})`;
+        this.stripBg = () => `background: linear-gradient(to right, ${stopsToCss(this.state.stops$.Get())})`;
         this.previewBg = () => `background: ${this.toCSS()}`;
         this.angleVal  = () => String(angle());
 
         this.pins = (): Array<{ left: string; bg: string; cls: string; title: string; idx: number }> => {
-            const sel = this.state.selected$.get();
-            return this.state.stops$.get().map((s, i) => ({
+            const sel = this.state.selected$.Get();
+            return this.state.stops$.Get().map((s, i) => ({
                 left: `left: ${s.t * 100}%; background: ${colorFieldHex(s.color)}`,
                 bg  : colorFieldHex(s.color),
                 cls : 'ar-grad__pin' + (i === sel ? ' ar-grad__pin--sel' : ''),
@@ -68,8 +70,8 @@ export class LinearGradientEditor extends Component('arianna-linear-gradient-edi
             }));
         };
 
-        this.hasSel = () => this.state.stops$.get().length > 0;
-        this.selStop = (): GradientStop => this.state.stops$.get()[this.state.selected$.get()] ?? this.state.stops$.get()[0]!;
+        this.hasSel = () => this.state.stops$.Get().length > 0;
+        this.selStop = (): GradientStop => this.state.stops$.Get()[this.state.selected$.Get()] ?? this.state.stops$.Get()[0]!;
         this.selHex = () => colorFieldHex(this.selStop().color);
         this.selT   = () => (this.selStop().t * 100).toFixed(1);
         this.selA   = () => (this.selStop().color.a ?? 1).toFixed(2);
@@ -96,7 +98,7 @@ export class LinearGradientEditor extends Component('arianna-linear-gradient-edi
             const idx = parseInt(pin.dataset.idx ?? '0', 10);
             if (me.type === 'pointerdown') {
                 pin.setPointerCapture?.(me.pointerId);
-                this.state.selected$.set(idx);
+                this.state.selected$.Set(idx);
             } else if (!(me.buttons & 1)) return;
             const strip = pin.parentElement?.previousElementSibling as HTMLElement | null;
             if (!strip) return;
@@ -127,7 +129,7 @@ export class LinearGradientEditor extends Component('arianna-linear-gradient-edi
             const v = (e.target as HTMLInputElement).value;
             const c = parseColorString(v);
             if (c) {
-                const idx = this.state.selected$.get();
+                const idx = this.state.selected$.Get();
                 const cur = this.selStop();
                 this.state.updateStop(idx, { color: { ...c, a: cur.color.a } });
                 this.#fire();
@@ -135,19 +137,19 @@ export class LinearGradientEditor extends Component('arianna-linear-gradient-edi
         };
         this.onSelPosChange = (e: Event) => {
             const v = parseFloat((e.target as HTMLInputElement).value) / 100;
-            this.state.updateStop(this.state.selected$.get(), { t: clamp01(v) });
+            this.state.updateStop(this.state.selected$.Get(), { t: clamp01(v) });
             this.#fire();
         };
         this.onSelAlphaChange = (e: Event) => {
             const v = parseFloat((e.target as HTMLInputElement).value);
             const cur = this.selStop();
-            this.state.updateStop(this.state.selected$.get(), {
+            this.state.updateStop(this.state.selected$.Get(), {
                 color: { ...cur.color, a: Math.max(0, Math.min(1, v)) },
             });
             this.#fire();
         };
         this.onRemove = () => {
-            this.state.removeStop(this.state.selected$.get());
+            this.state.removeStop(this.state.selected$.Get());
             this.#fire();
         };
 
@@ -224,10 +226,10 @@ export class LinearGradientEditor extends Component('arianna-linear-gradient-edi
     getInterp(): GradientInterp { return (this.getAttribute('interp') as GradientInterp) || 'srgb'; }
 
     setStops(s: GradientStop[]): this { this.state.setStops(s); this.#fire(); return this; }
-    getStops(): GradientStop[] { return this.state.stops$.get().map(x => ({ ...x, color: { ...x.color } })); }
+    getStops(): GradientStop[] { return this.state.stops$.Get().map(x => ({ ...x, color: { ...x.color } })); }
 
     toCSS(): string {
-        const stops = stopsToCss(this.state.stops$.get());
+        const stops = stopsToCss(this.state.stops$.Get());
         const interp = this.getInterp();
         const space = interp === 'srgb' ? '' : ` in ${interp}`;
         return `linear-gradient(${this.getAngle()}deg${space}, ${stops})`;

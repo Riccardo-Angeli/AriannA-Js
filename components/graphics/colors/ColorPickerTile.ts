@@ -22,11 +22,21 @@
 
 import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
-import { parseHex, rgbToHex } from './ColorPicker.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
+import { parseHexRgba, rgbToHex } from './ColorPicker.ts';
 
 const PALETTES: Record<string, string[]> = {
     'tailwind': [
@@ -94,7 +104,7 @@ export class ColorPickerTile extends Component('arianna-color-picker-tile', HTML
 
         this.paletteTiles = (): Array<{ hex: string; style: string; cls: string }> => {
             const sz = this.size();
-            const sel = this.state$.get().selected.toLowerCase();
+            const sel = this.state$.Get().selected.toLowerCase();
             return this.#resolvePalette().map(hex => ({
                 hex,
                 style: `background: ${hex}; width: ${sz}px; height: ${sz}px`,
@@ -103,13 +113,13 @@ export class ColorPickerTile extends Component('arianna-color-picker-tile', HTML
         };
         this.recentTiles = (): Array<{ hex: string; style: string }> => {
             const sz = this.size();
-            return this.state$.get().recent.map(hex => ({
+            return this.state$.Get().recent.map(hex => ({
                 hex,
                 style: `background: ${hex}; width: ${sz}px; height: ${sz}px`,
             }));
         };
-        this.hasRecent = () => this.state$.get().recent.length > 0;
-        this.inputVal  = () => this.state$.get().selected;
+        this.hasRecent = () => this.state$.Get().recent.length > 0;
+        this.inputVal  = () => this.state$.Get().selected;
 
         this.onTileClick = (e: Event) => {
             const btn = e.currentTarget as HTMLButtonElement;
@@ -159,22 +169,22 @@ export class ColorPickerTile extends Component('arianna-color-picker-tile', HTML
 
     set palette(v: keyof typeof PALETTES | string[]) {
         if (Array.isArray(v)) {
-            this.paletteOverride$.set(v);
+            this.paletteOverride$.Set(v);
         } else {
-            this.paletteOverride$.set(null);
+            this.paletteOverride$.Set(null);
             this.setAttribute('palette', v);
         }
     }
     get palette(): string[] { return this.#resolvePalette(); }
 
     setColor(hex: string): this {
-        const p = parseHex(hex);
+        const p = parseHexRgba(hex);
         if (!p) return this;
         const canonical = rgbToHex(p.r, p.g, p.b);
-        const cur = this.state$.get();
+        const cur = this.state$.Get();
         const recent = [canonical, ...cur.recent.filter(c => c.toLowerCase() !== canonical.toLowerCase())]
             .slice(0, parseInt(this.getAttribute('recent-max') ?? '12', 10) || 12);
-        this.state$.set({ selected: canonical, recent });
+        this.state$.Set({ selected: canonical, recent });
         this.dispatchEvent(new CustomEvent('arianna:change', {
             bubbles: true,
             detail: { hex: canonical, rgb: { r: p.r, g: p.g, b: p.b } },
@@ -183,15 +193,15 @@ export class ColorPickerTile extends Component('arianna-color-picker-tile', HTML
     }
 
     getColor(): { hex: string; rgb: { r: number; g: number; b: number } } {
-        const hex = this.state$.get().selected;
-        const p = parseHex(hex) ?? { r: 0, g: 0, b: 0, a: 1 };
+        const hex = this.state$.Get().selected;
+        const p = parseHexRgba(hex) ?? { r: 0, g: 0, b: 0, a: 1 };
         return { hex, rgb: { r: p.r, g: p.g, b: p.b } };
     }
 
-    getRecent(): string[] { return this.state$.get().recent.slice(); }
+    getRecent(): string[] { return this.state$.Get().recent.slice(); }
 
     #resolvePalette(): string[] {
-        const override = this.paletteOverride$.get();
+        const override = this.paletteOverride$.Get();
         if (override) return override;
         const name = this.getAttribute('palette') ?? 'tailwind';
         return PALETTES[name] || PALETTES['tailwind']!;

@@ -26,10 +26,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface StepperOptions {
     variant? : 'horizontal' | 'vertical';
@@ -62,9 +72,9 @@ export class Stepper extends Component('arianna-stepper', HTMLElement, {}, {
         const curNum = (): number => parseInt(current.get() ?? '0', 10) || 0;
 
         this.entries = (): StepEntry[] => {
-            const steps = this.steps$.get();
+            const steps = this.steps$.Get();
             const cur   = curNum();
-            const done  = this.completed$.get();
+            const done  = this.completed$.Get();
             return steps.map((label, index) => {
                 const isDone    = done.has(index);
                 const isActive  = index === cur;
@@ -92,16 +102,16 @@ export class Stepper extends Component('arianna-stepper', HTMLElement, {}, {
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = Stepper.DefaultSheet();
     }
 
-    set steps(v: string[]) { this.steps$.set(v ?? []); }
-    get steps(): string[]  { return this.steps$.get(); }
+    set steps(v: string[]) { this.steps$.Set(v ?? []); }
+    get steps(): string[]  { return this.steps$.Get(); }
 
     next(): this
     {
         const cur = this.current;
-        if (cur < this.steps$.get().length - 1) {
-            const done = new Set(this.completed$.get());
+        if (cur < this.steps$.Get().length - 1) {
+            const done = new Set(this.completed$.Get());
             done.add(cur);
-            this.completed$.set(done);
+            this.completed$.Set(done);
             this.setAttribute('current', String(cur + 1));
             this.dispatchEvent(new CustomEvent('arianna:change', {
                 bubbles: true, detail: { step: cur + 1 },
@@ -124,9 +134,9 @@ export class Stepper extends Component('arianna-stepper', HTMLElement, {}, {
 
     complete(n: number = this.current): this
     {
-        const done = new Set(this.completed$.get());
+        const done = new Set(this.completed$.Get());
         done.add(n);
-        this.completed$.set(done);
+        this.completed$.Set(done);
         return this;
     }
 

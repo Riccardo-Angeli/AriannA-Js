@@ -127,8 +127,8 @@ const GENERATORS = {
  * @author    Your Name
  */
 import Real   from '../../core/Real.ts';
-import { signal, effect } from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
+import { signal, effect } from '../../core/Observables.ts';
+import type { Signal } from '../../core/Observables.ts';
 
 export interface ${name}Options {
   label?    : string;
@@ -188,7 +188,7 @@ export function ${name.toLowerCase()}(
  * @module ${name}State
  */
 import State from '../../core/State.ts';
-import { signal, computed } from '../../core/Observable.ts';
+import { signal, computed } from '../../core/Observables.ts';
 
 export interface ${name}StateShape {
   // define your state shape here

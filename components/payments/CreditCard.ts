@@ -30,10 +30,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type CardBrand =
     | 'visa' | 'mastercard' | 'amex' | 'discover' | 'maestro'
@@ -126,11 +136,11 @@ export class CreditCard extends Component('arianna-credit-card', HTMLElement, {}
         const amountAttr = this.attrSignal('amount');
         const currencyAttr = this.attrSignal('currency');
 
-        this.brandInfo = () => detectBrand(this.form$.get().number);
+        this.brandInfo = () => detectBrand(this.form$.Get().number);
         this.brand     = (): CardBrand => this.brandInfo().brand;
 
         this.numberDisplay = () => {
-            const f = this.form$.get();
+            const f = this.form$.Get();
             return formatCardNumber(f.number, this.brand());
         };
         this.cvvMaxLen = () => this.brandInfo().cvvLen;
@@ -144,19 +154,19 @@ export class CreditCard extends Component('arianna-credit-card', HTMLElement, {}
         };
 
         this.cardPreviewCls = () => 'ar-cc__preview ar-cc__preview--' + this.brand()
-            + (this.form$.get().flipped ? ' ar-cc__preview--flipped' : '');
+            + (this.form$.Get().flipped ? ' ar-cc__preview--flipped' : '');
 
         this.previewNumber = () => this.numberDisplay() || '•••• •••• •••• ••••';
-        this.previewHolder = () => this.form$.get().holder.toUpperCase() || 'CARDHOLDER NAME';
+        this.previewHolder = () => this.form$.Get().holder.toUpperCase() || 'CARDHOLDER NAME';
         this.previewExp    = () => {
-            const f = this.form$.get();
+            const f = this.form$.Get();
             return (f.expMonth || 'MM') + '/' + (f.expYear || 'YY');
         };
         this.previewBrand  = () => this.brand().toUpperCase();
-        this.previewCvv    = () => this.form$.get().cvv || '•••';
+        this.previewCvv    = () => this.form$.Get().cvv || '•••';
 
         this.valid = () => {
-            const f = this.form$.get();
+            const f = this.form$.Get();
             const info = this.brandInfo();
             const numRaw = f.number.replace(/\D/g, '');
             if (!info.lengths.includes(numRaw.length)) return false;
@@ -179,41 +189,41 @@ export class CreditCard extends Component('arianna-credit-card', HTMLElement, {}
         // ── Handlers ────────────────────────────────────────────────────
         this.onNumber = (e: Event) => {
             const v = (e.target as HTMLInputElement).value;
-            const cur = this.form$.get();
-            this.form$.set({ ...cur, number: v.replace(/\D/g, '').slice(0, 19) });
+            const cur = this.form$.Get();
+            this.form$.Set({ ...cur, number: v.replace(/\D/g, '').slice(0, 19) });
             this.#fireChange();
         };
         this.onHolder = (e: Event) => {
-            const cur = this.form$.get();
-            this.form$.set({ ...cur, holder: (e.target as HTMLInputElement).value });
+            const cur = this.form$.Get();
+            this.form$.Set({ ...cur, holder: (e.target as HTMLInputElement).value });
             this.#fireChange();
         };
         this.onExpMonth = (e: Event) => {
             const v = (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 2);
-            const cur = this.form$.get();
-            this.form$.set({ ...cur, expMonth: v });
+            const cur = this.form$.Get();
+            this.form$.Set({ ...cur, expMonth: v });
             this.#fireChange();
         };
         this.onExpYear = (e: Event) => {
             const v = (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 2);
-            const cur = this.form$.get();
-            this.form$.set({ ...cur, expYear: v });
+            const cur = this.form$.Get();
+            this.form$.Set({ ...cur, expYear: v });
             this.#fireChange();
         };
         this.onCvv = (e: Event) => {
             const v = (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, this.cvvMaxLen());
-            const cur = this.form$.get();
-            this.form$.set({ ...cur, cvv: v });
+            const cur = this.form$.Get();
+            this.form$.Set({ ...cur, cvv: v });
             this.#fireChange();
         };
         this.onCvvFocus = () => {
-            this.form$.set({ ...this.form$.get(), flipped: true });
+            this.form$.Set({ ...this.form$.Get(), flipped: true });
         };
         this.onCvvBlur = () => {
-            this.form$.set({ ...this.form$.get(), flipped: false });
+            this.form$.Set({ ...this.form$.Get(), flipped: false });
         };
         this.onSave = (e: Event) => {
-            this.form$.set({ ...this.form$.get(), save: (e.target as HTMLInputElement).checked });
+            this.form$.Set({ ...this.form$.Get(), save: (e.target as HTMLInputElement).checked });
         };
         this.onSubmit = () => { void this.pay(); };
 
@@ -250,33 +260,33 @@ export class CreditCard extends Component('arianna-credit-card', HTMLElement, {}
                     <label class="ar-cc__field">
                         <span>Cardholder</span>
                         <input type="text" autocomplete="cc-name"
-                               :value="this.form$.get().holder"
+                               :value="this.form$.Get().holder"
                                @input="this.onHolder"/>
                     </label>
                     <div class="ar-cc__row">
                         <label class="ar-cc__field">
                             <span>Month</span>
                             <input type="text" inputmode="numeric" autocomplete="cc-exp-month" placeholder="MM"
-                                   :value="this.form$.get().expMonth"
+                                   :value="this.form$.Get().expMonth"
                                    @input="this.onExpMonth"/>
                         </label>
                         <label class="ar-cc__field">
                             <span>Year</span>
                             <input type="text" inputmode="numeric" autocomplete="cc-exp-year" placeholder="YY"
-                                   :value="this.form$.get().expYear"
+                                   :value="this.form$.Get().expYear"
                                    @input="this.onExpYear"/>
                         </label>
                         <label class="ar-cc__field">
                             <span>CVV</span>
                             <input type="text" inputmode="numeric" autocomplete="cc-csc"
-                                   :value="this.form$.get().cvv"
+                                   :value="this.form$.Get().cvv"
                                    @input="this.onCvv"
                                    @focus="this.onCvvFocus"
                                    @blur="this.onCvvBlur"/>
                         </label>
                     </div>
                     <label class="ar-cc__save" a-if="this.hasAttribute('save-option')">
-                        <input type="checkbox" :checked="this.form$.get().save" @change="this.onSave"/>
+                        <input type="checkbox" :checked="this.form$.Get().save" @change="this.onSave"/>
                         <span>Save this card for future payments</span>
                     </label>
                     <button type="button" class="ar-cc__pay"
@@ -296,7 +306,7 @@ export class CreditCard extends Component('arianna-credit-card', HTMLElement, {}
             }));
             return;
         }
-        const f = this.form$.get();
+        const f = this.form$.Get();
         const card: CardData = {
             number   : f.number.replace(/\D/g, ''),
             holder   : f.holder.trim() || undefined,
@@ -312,7 +322,7 @@ export class CreditCard extends Component('arianna-credit-card', HTMLElement, {}
     }
 
     getCard(): Partial<CardData> {
-        const f = this.form$.get();
+        const f = this.form$.Get();
         return {
             number  : f.number,
             holder  : f.holder,

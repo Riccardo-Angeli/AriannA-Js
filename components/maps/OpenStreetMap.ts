@@ -19,7 +19,7 @@
  */
 
 import { MapEmbed, type MapProvider } from './MapEmbed.ts';
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 
 export class OpenStreetMap extends (Component('arianna-osm-map', HTMLElement, {}, {
     attrs : [

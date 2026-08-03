@@ -181,17 +181,22 @@ async function buildBundle(bundle) {
     const outfile = resolve(outDir, `${bundle.name}.js`);
 
     const esbuildOpts = {
-        entryPoints  : [entry],
-        bundle       : true,
-        format       : 'esm',
-        platform     : 'browser',
-        target       : 'es2022',
+        entryPoints      : [entry],
+        bundle           : true,
+        format           : 'esm',
+        platform         : 'browser',
+        target           : 'es2022',
         outfile,
-        external     : bundle.external,
-        plugins      : bundle.plugins,
-        sourcemap    : false,
-        legalComments: 'eof',
-        absWorkingDir: repoRoot,
+        external         : bundle.external,
+        plugins          : bundle.plugins,
+        sourcemap        : false,
+        legalComments    : 'eof',
+        absWorkingDir    : repoRoot,
+        // Keep IMPORT-TIME side effects (Core's eager standard-descriptor seeding, component
+        // registration, self-install). package.json's `sideEffects` array would let esbuild
+        // tree-shake Core's top-level seeding away — which is exactly what left components with
+        // "The Type descriptor … is not standard". Ignoring the annotations preserves it.
+        ignoreAnnotations: true,
     };
 
     if (watch) {

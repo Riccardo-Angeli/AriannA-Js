@@ -13,8 +13,10 @@
 
 import { Component, type ComponentStyleMap } from '../../core/Component.ts';
 import { html } from '../../core/Template.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface ButtonOptions {
     variant?  : 'default' | 'primary' | 'danger' | 'ghost' | 'link';

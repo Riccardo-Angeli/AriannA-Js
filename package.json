@@ -153,7 +153,7 @@
     "esbuild": "^0.28.0",
     "husky": "^9.0.0",
     "terser": "^5.47.1",
-    "typedoc": "^0.25.0",
+    "typedoc": "^0.28.20",
     "typescript": "^5.4.0"
   },
   "engines": {

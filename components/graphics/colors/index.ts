@@ -17,11 +17,11 @@
  *   arianna-radial-gradient-editor
  *   arianna-shape-gradient-editor (freeform mesh)
  *
- * Shared math (`parseHex`, `rgbToHex`, `rgbToHsl`, `hslToRgb`) lives in
+ * Shared math (`parseHexRgba`, `rgbToHex`, `rgbToHsl`, `hslToRgb`) lives in
  * `ColorPicker.ts` and is re-exported here for downstream use.
  */
 
-export { ColorPicker, parseHex, rgbToHex, rgbToHsl, hslToRgb } from './ColorPicker.ts';
+export { ColorPicker, parseHexRgba, rgbToHex, rgbToHsl, hslToRgb } from './ColorPicker.ts';
 export type { RGB, HSL, Color, ColorPickerOptions } from './ColorPicker.ts';
 
 export { ColorPickerSquare } from './ColorPickerSquare.ts';

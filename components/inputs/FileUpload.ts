@@ -18,10 +18,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface FileUploadOptions {
     accept?   : string;
@@ -56,13 +66,13 @@ export class FileUpload extends Component('arianna-file-upload', HTMLElement, {}
         this.hintText   = () => hint.get() ?? '';
         this.hasHint    = () => !!hint.get();
         this.zoneClass  = () => 'ar-fileupload__zone'
-            + (this.dragging$.get() ? ' ar-fileupload__zone--over' : '');
+            + (this.dragging$.Get() ? ' ar-fileupload__zone--over' : '');
 
-        this.fileViews = (): FileView[] => this.files$.get().map(f => ({
+        this.fileViews = (): FileView[] => this.files$.Get().map(f => ({
             name  : f.name,
             sizeKB: (f.size / 1024).toFixed(1),
         }));
-        this.hasFiles = () => this.files$.get().length > 0;
+        this.hasFiles = () => this.files$.Get().length > 0;
 
         this.onInputChange = (e: Event) => {
             const inp = e.target as HTMLInputElement;
@@ -70,12 +80,12 @@ export class FileUpload extends Component('arianna-file-upload', HTMLElement, {}
         };
         this.onDragOver = (e: Event) => {
             e.preventDefault();
-            this.dragging$.set(true);
+            this.dragging$.Set(true);
         };
-        this.onDragLeave = () => this.dragging$.set(false);
+        this.onDragLeave = () => this.dragging$.Set(false);
         this.onDrop = (e: Event) => {
             e.preventDefault();
-            this.dragging$.set(false);
+            this.dragging$.Set(false);
             const de = e as DragEvent;
             if (de.dataTransfer?.files) this.#setFiles(Array.from(de.dataTransfer.files));
         };
@@ -104,14 +114,14 @@ export class FileUpload extends Component('arianna-file-upload', HTMLElement, {}
     }
 
     /** Programmatically clear the file selection. */
-    clear(): this { this.files$.set([]); return this; }
+    clear(): this { this.files$.Set([]); return this; }
 
     /** Current files list (snapshot). */
-    get files(): File[] { return this.files$.get(); }
+    get files(): File[] { return this.files$.Get(); }
 
     #setFiles(files: File[]): void
     {
-        this.files$.set(files);
+        this.files$.Set(files);
         this.dispatchEvent(new CustomEvent('arianna:change', {
             bubbles: true, detail: { files },
         }));

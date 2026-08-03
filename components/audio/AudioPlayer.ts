@@ -27,9 +27,26 @@
 
 import { AudioComponent, type AudioComponentOptions } from './AudioComponent.ts';
 import { TransportBar } from './TransportBar.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface AudioPlayerOptions extends AudioComponentOptions {
     src?     : string;
@@ -59,8 +76,8 @@ export class AudioPlayer extends AudioComponent {
         if (opts.autoplay) el.setAttribute('autoplay', '');
         if (opts.loop)     el.setAttribute('loop',     '');
         if (opts.label)    el.setAttribute('label',  opts.label);
-        if (opts.src)   this.src$.set(opts.src);
-        if (opts.label) this.label$.set(opts.label);
+        if (opts.src)   this.src$.Set(opts.src);
+        if (opts.label) this.label$.Set(opts.label);
     }
 
     build(): void {
@@ -81,7 +98,7 @@ export class AudioPlayer extends AudioComponent {
         label.className = 'ap-label';
         const sLabel = self.attrSignal('label');
         effect(() => {
-            const v = sLabel?.get() ?? this.label$.get();
+            const v = sLabel?.get() ?? this.label$.Get();
             label.textContent = v ?? '';
             label.style.display = v ? '' : 'none';
         });
@@ -106,9 +123,9 @@ export class AudioPlayer extends AudioComponent {
         // Reactive src binding (attr OR signal)
         const sSrc = self.attrSignal('src');
         effect(() => {
-            const v = sSrc?.get() ?? this.src$.get();
+            const v = sSrc?.get() ?? this.src$.Get();
             if (v && v !== audio.src) {
-                this.loading$.set(true);
+                this.loading$.Set(true);
                 audio.src = v;
                 audio.load();
             }
@@ -117,7 +134,7 @@ export class AudioPlayer extends AudioComponent {
         // Wire audio events → component events + transport state
         audio.addEventListener('loadedmetadata', () => {
             transport.setDuration(audio.duration || 0);
-            this.loading$.set(false);
+            this.loading$.Set(false);
             self.fire('arianna:audio-load', { detail: { duration: audio.duration, source: this }, bubbles: true });
             if (audio.hasAttribute('autoplay') || root.hasAttribute('autoplay')) {
                 void audio.play().catch(() => { /* autoplay rejected */ });
@@ -140,7 +157,7 @@ export class AudioPlayer extends AudioComponent {
             this.#stopTimeUpdater();
         });
         audio.addEventListener('error', () => {
-            this.loading$.set(false);
+            this.loading$.Set(false);
             self.fire('arianna:audio-error', { detail: { error: audio.error, source: this }, bubbles: true });
         });
 
@@ -209,7 +226,7 @@ export class AudioPlayer extends AudioComponent {
 
     /** Public API: set source. */
     setSource(src: string): this {
-        this.src$.set(src);
+        this.src$.Set(src);
         const self = this as unknown as { render(): HTMLElement };
         self.render().setAttribute('src', src);
         return this;

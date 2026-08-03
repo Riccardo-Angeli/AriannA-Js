@@ -32,10 +32,27 @@
  *   arianna:pianoroll-stop
  */
 
-import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Component } from '../../core/Components.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface PianoNote {
     pitch    : number;   // MIDI 0..127 (60 = C4)
@@ -151,12 +168,12 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
         effect(() => {
             // Strip existing note elements, redraw from signal
             grid.querySelectorAll('.pr-note').forEach(n => n.remove());
-            for (const n of this.notes$.get()) {
+            for (const n of this.notes$.Get()) {
                 const div = this.#renderNote(n);
                 grid.appendChild(div);
             }
             // Playhead
-            const ph = this.playhead$.get();
+            const ph = this.playhead$.Get();
             let phEl = grid.querySelector<HTMLDivElement>('.pr-playhead');
             if (!phEl) {
                 phEl = document.createElement('div');
@@ -177,14 +194,14 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
             const pitch = this.#pitchMax - Math.floor(y / this.#cellH);
             if (pitch < this.#pitchMin || pitch > this.#pitchMax) return;
             const note: PianoNote = { pitch, start, length: 1, velocity: 0.8 };
-            this.notes$.set([...this.notes$.peek(), note]);
+            this.notes$.Set([...this.notes$.Peek(), note]);
             self.fire('arianna:pianoroll-note-add', { detail: { note, source: this }, bubbles: true });
         });
 
         btnPlay .addEventListener('click', () => this.play());
         btnStop .addEventListener('click', () => this.stop());
         btnClear.addEventListener('click', () => {
-            this.notes$.set([]);
+            this.notes$.Set([]);
         });
 
         self.Sheet = PianoRoll.DefaultSheet();
@@ -233,7 +250,7 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
             if (e.detail >= 2) {
                 // Double-click → delete
                 const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
-                this.notes$.set(this.notes$.peek().filter(x => x !== n));
+                this.notes$.Set(this.notes$.Peek().filter(x => x !== n));
                 self.fire('arianna:pianoroll-note-remove', { detail: { note: n, source: this }, bubbles: true });
                 return;
             }
@@ -267,12 +284,12 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
 
     #updateNote(oldNote: PianoNote, newNote: PianoNote): void {
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
-        const list = this.notes$.peek();
+        const list = this.notes$.Peek();
         const idx = list.indexOf(oldNote);
         if (idx < 0) return;
         const next = list.slice();
         next[idx] = newNote;
-        this.notes$.set(next);
+        this.notes$.Set(next);
         // Mutate oldNote in place so subsequent drag deltas track correctly
         Object.assign(oldNote, newNote);
         self.fire('arianna:pianoroll-note-edit', { detail: { note: newNote, oldNote, source: this }, bubbles: true });
@@ -286,33 +303,33 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
     // ── Public API ────────────────────────────────────────────────────────
 
     addNote(n: PianoNote): this {
-        this.notes$.set([...this.notes$.peek(), n]);
+        this.notes$.Set([...this.notes$.Peek(), n]);
         return this;
     }
 
     setNotes(notes: PianoNote[]): this {
-        this.notes$.set(notes);
+        this.notes$.Set(notes);
         return this;
     }
 
-    getNotes(): PianoNote[] { return this.notes$.get(); }
+    getNotes(): PianoNote[] { return this.notes$.Get(); }
 
     play(): void {
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
-        this.playing$.set(true);
+        this.playing$.Set(true);
         self.fire('arianna:pianoroll-play', { detail: { source: this }, bubbles: true });
     }
 
     stop(): void {
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
-        this.playing$.set(false);
-        this.playhead$.set(0);
+        this.playing$.Set(false);
+        this.playhead$.Set(0);
         self.fire('arianna:pianoroll-stop', { detail: { source: this }, bubbles: true });
     }
 
     /** Drive the playhead from an external clock (e.g. AudioContext). */
     setPlayhead(beat: number): this {
-        this.playhead$.set(beat);
+        this.playhead$.Set(beat);
         return this;
     }
 

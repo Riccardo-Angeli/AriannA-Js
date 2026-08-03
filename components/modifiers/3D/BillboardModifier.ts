@@ -12,7 +12,7 @@
  * Attrs (declarative): for, lock-x, lock-y, lock-z, enabled
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import {
     Modifier3D, Modifier3DElement,
     _vNorm, _vSub,

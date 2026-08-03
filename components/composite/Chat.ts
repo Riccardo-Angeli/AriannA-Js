@@ -39,9 +39,26 @@
  */
 
 import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface ChatUser {
     id     : string;
@@ -79,11 +96,13 @@ export interface ChatOptions {
     conversations? : ChatConversation[];
 }
 
-function fmtTime(ts: number): string {
+function fmtChatTime(ts: number): string {
     const d = new Date(ts);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
-
+// riga 82:  function fmtTime(ts: number): string {      →  function fmtChatTime(ts: number): string {
+// riga 254: time.textContent = fmtTime(m.ts);           →  time.textContent = fmtChatTime(m.ts);
+// riga 347: time.textContent = fmtTime(m.ts);           →  time.textContent = fmtChatTime(m.ts);
 export class Chat extends Component('arianna-chat', HTMLElement, {}, {
     attrs : [],
 })
@@ -102,8 +121,8 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
 
     constructor(opts: ChatOptions = {}) {
         super(opts as never);
-        if (opts.me)            this.me$.set(opts.me);
-        if (opts.conversations) this.conversations$.set(opts.conversations);
+        if (opts.me)            this.me$.Set(opts.me);
+        if (opts.conversations) this.conversations$.Set(opts.conversations);
     }
 
     build(): void {
@@ -165,8 +184,8 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
 
         // Reactive renders
         effect(() => this.#renderSidebar());
-        effect(() => { this.activeId$.get(); this.#renderHeader(); this.#renderThread(); });
-        effect(() => { this.replyTo$.get(); this.#renderReplyBar(); });
+        effect(() => { this.activeId$.Get(); this.#renderHeader(); this.#renderThread(); });
+        effect(() => { this.replyTo$.Get(); this.#renderReplyBar(); });
 
         // Composer wiring
         sendBtn.addEventListener('click', () => this.#sendCurrent());
@@ -181,12 +200,12 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
             input.style.height = 'auto';
             input.style.height = Math.min(input.scrollHeight, 96) + 'px';
             // typing event
-            const cid = this.activeId$.peek();
+            const cid = this.activeId$.Peek();
             if (cid) self.fire('arianna:chat-typing', { detail: { conversationId: cid, typing: input.value.length > 0, source: this }, bubbles: true });
         });
         fileBtn.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', () => {
-            const cid = this.activeId$.peek();
+            const cid = this.activeId$.Peek();
             if (!cid || !fileInput.files?.length) return;
             self.fire('arianna:chat-attach', { detail: { conversationId: cid, files: Array.from(fileInput.files), source: this }, bubbles: true });
             fileInput.value = '';
@@ -197,15 +216,15 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
 
     #sendCurrent(): void {
         const input = this.#input;
-        const cid   = this.activeId$.peek();
+        const cid   = this.activeId$.Peek();
         if (!input || !cid) return;
         const text = input.value.trim();
         if (!text) return;
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
-        const replyTo = this.replyTo$.peek() ?? undefined;
+        const replyTo = this.replyTo$.Peek() ?? undefined;
         self.fire('arianna:chat-send', { detail: { conversationId: cid, text, replyTo, source: this }, bubbles: true });
         // Optimistic local insert
-        const me = this.me$.peek();
+        const me = this.me$.Peek();
         this.addMessage(cid, {
             id     : 'local-' + Date.now().toString(36),
             author : me.id,
@@ -216,14 +235,14 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         });
         input.value = '';
         input.style.height = 'auto';
-        this.replyTo$.set(null);
+        this.replyTo$.Set(null);
     }
 
     #renderSidebar(): void {
         const sidebar = this.#sidebar;
         if (!sidebar) return;
         sidebar.innerHTML = '';
-        const conversations = [...this.conversations$.get()].sort((a, b) => {
+        const conversations = [...this.conversations$.Get()].sort((a, b) => {
             const la = a.messages?.[a.messages.length - 1]?.ts ?? 0;
             const lb = b.messages?.[b.messages.length - 1]?.ts ?? 0;
             return lb - la;
@@ -231,7 +250,7 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         for (const c of conversations) {
             const it = document.createElement('div');
             it.className = 'ch-conv-item';
-            if (c.id === this.activeId$.peek()) it.classList.add('active');
+            if (c.id === this.activeId$.Peek()) it.classList.add('active');
             const avatar = document.createElement('div');
             avatar.className = 'ch-avatar';
             avatar.textContent = (c.peer.avatar ? '' : (c.peer.name[0] ?? '?').toUpperCase());
@@ -251,7 +270,7 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
             if (m) {
                 const time = document.createElement('div');
                 time.className = 'ch-conv-time';
-                time.textContent = fmtTime(m.ts);
+                time.textContent = fmtChatTime(m.ts);
                 right.appendChild(time);
             }
             if (c.unread) {
@@ -270,9 +289,9 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         const header = this.#header;
         if (!header) return;
         header.innerHTML = '';
-        const id = this.activeId$.peek();
+        const id = this.activeId$.Peek();
         if (!id) return;
-        const c = this.conversations$.peek().find(x => x.id === id);
+        const c = this.conversations$.Peek().find(x => x.id === id);
         if (!c) return;
         const avatar = document.createElement('div');
         avatar.className = 'ch-avatar ch-avatar-sm';
@@ -291,11 +310,11 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         const thread = this.#thread;
         if (!thread) return;
         thread.innerHTML = '';
-        const id = this.activeId$.peek();
+        const id = this.activeId$.Peek();
         if (!id) return;
-        const c = this.conversations$.peek().find(x => x.id === id);
+        const c = this.conversations$.Peek().find(x => x.id === id);
         if (!c || !c.messages?.length) return;
-        const me = this.me$.peek();
+        const me = this.me$.Peek();
         let prevAuthor: string | null = null;
         let prevTs    = 0;
         for (const m of c.messages) {
@@ -344,7 +363,7 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
             footer.className = 'ch-msg-footer';
             const time = document.createElement('span');
             time.className = 'ch-msg-time';
-            time.textContent = fmtTime(m.ts);
+            time.textContent = fmtChatTime(m.ts);
             footer.appendChild(time);
             if (mine && m.status) {
                 const tick = document.createElement('span');
@@ -354,7 +373,7 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
             }
             bubble.appendChild(footer);
 
-            bubble.addEventListener('dblclick', () => this.replyTo$.set(m.id));
+            bubble.addEventListener('dblclick', () => this.replyTo$.Set(m.id));
 
             thread.appendChild(bubble);
             prevAuthor = m.author;
@@ -372,10 +391,10 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
     #renderReplyBar(): void {
         const bar = this.#replyBar;
         if (!bar) return;
-        const id  = this.replyTo$.peek();
-        const cid = this.activeId$.peek();
+        const id  = this.replyTo$.Peek();
+        const cid = this.activeId$.Peek();
         if (!id || !cid) { bar.style.display = 'none'; return; }
-        const c = this.conversations$.peek().find(x => x.id === cid);
+        const c = this.conversations$.Peek().find(x => x.id === cid);
         const m = c?.messages?.find(x => x.id === id);
         if (!m) { bar.style.display = 'none'; return; }
         bar.style.display = 'flex';
@@ -387,59 +406,59 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         close.type = 'button';
         close.className = 'ch-reply-close';
         close.textContent = '×';
-        close.addEventListener('click', () => this.replyTo$.set(null));
+        close.addEventListener('click', () => this.replyTo$.Set(null));
         bar.append(q, close);
     }
 
     // ── Public API ────────────────────────────────────────────────────────
 
-    setMe(u: ChatUser): this { this.me$.set(u); return this; }
+    setMe(u: ChatUser): this { this.me$.Set(u); return this; }
 
     addConversation(c: ChatConversation): this {
         c.messages ??= [];
-        this.conversations$.set([...this.conversations$.peek(), c]);
-        if (!this.activeId$.peek()) this.activeId$.set(c.id);
+        this.conversations$.Set([...this.conversations$.Peek(), c]);
+        if (!this.activeId$.Peek()) this.activeId$.Set(c.id);
         return this;
     }
 
     selectConversation(id: string): this {
-        this.activeId$.set(id);
+        this.activeId$.Set(id);
         // Mark as read
-        const list = this.conversations$.peek().map(c => c.id === id ? { ...c, unread: 0 } : c);
-        this.conversations$.set(list);
+        const list = this.conversations$.Peek().map(c => c.id === id ? { ...c, unread: 0 } : c);
+        this.conversations$.Set(list);
         const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
         self.fire('arianna:chat-select', { detail: { conversationId: id, source: this }, bubbles: true });
         return this;
     }
 
     addMessage(conversationId: string, msg: ChatMessage): this {
-        const list = this.conversations$.peek().map(c => {
+        const list = this.conversations$.Peek().map(c => {
             if (c.id !== conversationId) return c;
             const msgs = [...(c.messages ?? []), msg];
-            const me = this.me$.peek();
+            const me = this.me$.Peek();
             const isIncoming = msg.author !== me.id;
-            const unread = isIncoming && this.activeId$.peek() !== conversationId
+            const unread = isIncoming && this.activeId$.Peek() !== conversationId
                 ? (c.unread ?? 0) + 1
                 : 0;
             return { ...c, messages: msgs, unread };
         });
-        this.conversations$.set(list);
+        this.conversations$.Set(list);
         return this;
     }
 
     setMessageStatus(conversationId: string, messageId: string, status: MessageStatus): this {
-        const list = this.conversations$.peek().map(c => {
+        const list = this.conversations$.Peek().map(c => {
             if (c.id !== conversationId) return c;
             const msgs = (c.messages ?? []).map(m => m.id === messageId ? { ...m, status } : m);
             return { ...c, messages: msgs };
         });
-        this.conversations$.set(list);
+        this.conversations$.Set(list);
         return this;
     }
 
     setPeerTyping(conversationId: string, typing: boolean): this {
-        const list = this.conversations$.peek().map(c => c.id === conversationId ? { ...c, typing } : c);
-        this.conversations$.set(list);
+        const list = this.conversations$.Peek().map(c => c.id === conversationId ? { ...c, typing } : c);
+        this.conversations$.Set(list);
         return this;
     }
 

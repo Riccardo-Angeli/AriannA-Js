@@ -61,10 +61,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type AccordionIconStyle = 'chevron' | 'plus' | 'arrow' | 'none';
 
@@ -115,8 +125,8 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
         this.resizerHandles = () => 'e';
 
         this.panels = (): PanelView[] => {
-            const open = this.openIds$.get();
-            return this.items$.get().map(item => {
+            const open = this.openIds$.Get();
+            return this.items$.Get().map(item => {
                 const isOpen = open.has(item.id);
                 return {
                     item,
@@ -178,7 +188,7 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
 
     set items(v: AccordionItem[]) {
         const fullItems = v.map(i => ({ open: false, disabled: false, ...i }));
-        this.items$.set(fullItems);
+        this.items$.Set(fullItems);
 
         // Build initial open set from items[].open
         let open = new Set<string>(fullItems.filter(i => i.open && !i.disabled).map(i => i.id));
@@ -187,17 +197,17 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
             const first = [...open][0];
             open = new Set([first]);
         }
-        this.openIds$.set(open);
+        this.openIds$.Set(open);
     }
-    get items(): AccordionItem[] { return this.items$.get(); }
+    get items(): AccordionItem[] { return this.items$.Get(); }
 
     open(id: string): this {
-        const item = this.items$.get().find(i => i.id === id);
-        if (!item || item.disabled || this.openIds$.get().has(id)) return this;
+        const item = this.items$.Get().find(i => i.id === id);
+        if (!item || item.disabled || this.openIds$.Get().has(id)) return this;
 
-        const newOpen = this.isMultiple() ? new Set(this.openIds$.get()) : new Set<string>();
+        const newOpen = this.isMultiple() ? new Set(this.openIds$.Get()) : new Set<string>();
         newOpen.add(id);
-        this.openIds$.set(newOpen);
+        this.openIds$.Set(newOpen);
 
         this.#animateOpen(id);
         this.dispatchEvent(new CustomEvent('arianna:open', {
@@ -207,16 +217,16 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
     }
 
     close(id: string): this {
-        const item = this.items$.get().find(i => i.id === id);
-        if (!item || item.disabled || !this.openIds$.get().has(id)) return this;
+        const item = this.items$.Get().find(i => i.id === id);
+        if (!item || item.disabled || !this.openIds$.Get().has(id)) return this;
 
         // Snapshot pixel height BEFORE removing from open set so the CSS
         // transition has a defined "from" value rather than "auto" → 0.
         this.#animateClose(id);
 
-        const newOpen = new Set(this.openIds$.get());
+        const newOpen = new Set(this.openIds$.Get());
         newOpen.delete(id);
-        this.openIds$.set(newOpen);
+        this.openIds$.Set(newOpen);
 
         this.dispatchEvent(new CustomEvent('arianna:close', {
             bubbles: true, detail: { id, item },
@@ -225,9 +235,9 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
     }
 
     toggle(id: string): this {
-        const wasOpen = this.openIds$.get().has(id);
+        const wasOpen = this.openIds$.Get().has(id);
         const result = wasOpen ? this.close(id) : this.open(id);
-        const item = this.items$.get().find(i => i.id === id);
+        const item = this.items$.Get().find(i => i.id === id);
         this.dispatchEvent(new CustomEvent('arianna:toggle', {
             bubbles: true, detail: { id, item, open: !wasOpen },
         }));
@@ -236,35 +246,35 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
 
     openAll(): this {
         const all = new Set<string>(
-            this.items$.get().filter(i => !i.disabled).map(i => i.id),
+            this.items$.Get().filter(i => !i.disabled).map(i => i.id),
         );
-        this.openIds$.set(all);
+        this.openIds$.Set(all);
         return this;
     }
 
     closeAll(): this {
-        this.openIds$.set(new Set());
+        this.openIds$.Set(new Set());
         return this;
     }
 
-    isOpen(id: string): boolean { return this.openIds$.get().has(id); }
+    isOpen(id: string): boolean { return this.openIds$.Get().has(id); }
 
-    openItems(): string[] { return [...this.openIds$.get()]; }
+    openItems(): string[] { return [...this.openIds$.Get()]; }
 
     addItem(item: AccordionItem, index?: number): this {
         const full = { open: false, disabled: false, ...item };
-        const items = [...this.items$.get()];
+        const items = [...this.items$.Get()];
         if (index !== undefined && index >= 0 && index < items.length) {
             items.splice(index, 0, full);
         } else {
             items.push(full);
         }
-        this.items$.set(items);
+        this.items$.Set(items);
 
         if (full.open && !full.disabled) {
-            const open = this.isMultiple() ? new Set(this.openIds$.get()) : new Set<string>();
+            const open = this.isMultiple() ? new Set(this.openIds$.Get()) : new Set<string>();
             open.add(full.id);
-            this.openIds$.set(open);
+            this.openIds$.Set(open);
         }
         this.dispatchEvent(new CustomEvent('arianna:add', {
             bubbles: true, detail: { id: item.id, item: full },
@@ -273,11 +283,11 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
     }
 
     removeItem(id: string): this {
-        const items = this.items$.get().filter(i => i.id !== id);
-        this.items$.set(items);
-        const open = new Set(this.openIds$.get());
+        const items = this.items$.Get().filter(i => i.id !== id);
+        this.items$.Set(items);
+        const open = new Set(this.openIds$.Get());
         open.delete(id);
-        this.openIds$.set(open);
+        this.openIds$.Set(open);
         this.dispatchEvent(new CustomEvent('arianna:remove', {
             bubbles: true, detail: { id },
         }));
@@ -285,37 +295,37 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
     }
 
     setContent(id: string, contentHtml: string): this {
-        const items = this.items$.get().map(i =>
+        const items = this.items$.Get().map(i =>
             i.id === id ? { ...i, content: contentHtml } : i,
         );
-        this.items$.set(items);
+        this.items$.Set(items);
         return this;
     }
 
     setTitle(id: string, titleHtml: string): this {
-        const items = this.items$.get().map(i =>
+        const items = this.items$.Get().map(i =>
             i.id === id ? { ...i, title: titleHtml } : i,
         );
-        this.items$.set(items);
+        this.items$.Set(items);
         return this;
     }
 
     enable(id: string): this {
-        const items = this.items$.get().map(i =>
+        const items = this.items$.Get().map(i =>
             i.id === id ? { ...i, disabled: false } : i,
         );
-        this.items$.set(items);
+        this.items$.Set(items);
         return this;
     }
 
     disable(id: string): this {
-        const items = this.items$.get().map(i =>
+        const items = this.items$.Get().map(i =>
             i.id === id ? { ...i, disabled: true } : i,
         );
-        this.items$.set(items);
-        const open = new Set(this.openIds$.get());
+        this.items$.Set(items);
+        const open = new Set(this.openIds$.Get());
         open.delete(id);
-        this.openIds$.set(open);
+        this.openIds$.Set(open);
         return this;
     }
 

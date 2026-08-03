@@ -20,10 +20,21 @@
  */
 
 import { Component } from '../../../core/Component.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
 import { LinearGradientEditor } from './LinearGradientEditor.ts';
 import { type RGBA, colorFieldHex, parseColorString } from './GradientEditor.ts';
 
@@ -68,9 +79,9 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
         this.dimH = () => String(h());
 
         this.pinList = (): Array<{ style: string; idx: number; cls: string; bg: string }> => {
-            const sel = this.selected$.get();
+            const sel = this.selected$.Get();
             const W = w(), H = h();
-            return this.points$.get().map((p, i) => ({
+            return this.points$.Get().map((p, i) => ({
                 style: `left: ${p.x * W}px; top: ${p.y * H}px; background: ${colorFieldHex(p.color)}`,
                 idx  : i,
                 cls  : 'ar-grad__mesh-pt' + (i === sel ? ' ar-grad__mesh-pt--sel' : ''),
@@ -78,8 +89,8 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
             }));
         };
 
-        this.hasSel = () => this.points$.get().length > 0;
-        this.selPt = () => this.points$.get()[this.selected$.get()] ?? this.points$.get()[0]!;
+        this.hasSel = () => this.points$.Get().length > 0;
+        this.selPt = () => this.points$.Get()[this.selected$.Get()] ?? this.points$.Get()[0]!;
         this.selHex = () => colorFieldHex(this.selPt().color);
         this.selX = () => (this.selPt().x * 100).toFixed(1);
         this.selY = () => (this.selPt().y * 100).toFixed(1);
@@ -104,7 +115,7 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
             const idx = parseInt(pt.dataset.idx ?? '0', 10);
             if (me.type === 'pointerdown') {
                 pt.setPointerCapture?.(me.pointerId);
-                this.selected$.set(idx);
+                this.selected$.Set(idx);
             } else if (!(me.buttons & 1)) return;
             const canvas = pt.parentElement as HTMLElement;
             const rect = canvas.getBoundingClientRect();
@@ -123,29 +134,29 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
             const c = parseColorString((e.target as HTMLInputElement).value);
             if (c) {
                 const cur = this.selPt();
-                this.updatePoint(this.selected$.get(), { color: { ...c, a: cur.color.a } });
+                this.updatePoint(this.selected$.Get(), { color: { ...c, a: cur.color.a } });
             }
         };
         this.onSelXChange = (e: Event) => {
             const v = parseFloat((e.target as HTMLInputElement).value) / 100;
-            this.updatePoint(this.selected$.get(), { x: Math.max(0, Math.min(1, v)) });
+            this.updatePoint(this.selected$.Get(), { x: Math.max(0, Math.min(1, v)) });
         };
         this.onSelYChange = (e: Event) => {
             const v = parseFloat((e.target as HTMLInputElement).value) / 100;
-            this.updatePoint(this.selected$.get(), { y: Math.max(0, Math.min(1, v)) });
+            this.updatePoint(this.selected$.Get(), { y: Math.max(0, Math.min(1, v)) });
         };
         this.onSelRChange = (e: Event) => {
-            this.updatePoint(this.selected$.get(), {
+            this.updatePoint(this.selected$.Get(), {
                 radius: Math.max(0.01, Math.min(2, parseFloat((e.target as HTMLInputElement).value))),
             });
         };
         this.onSelAChange = (e: Event) => {
             const cur = this.selPt();
-            this.updatePoint(this.selected$.get(), {
+            this.updatePoint(this.selected$.Get(), {
                 color: { ...cur.color, a: Math.max(0, Math.min(1, parseFloat((e.target as HTMLInputElement).value))) },
             });
         };
-        this.onRemove = () => this.removePoint(this.selected$.get());
+        this.onRemove = () => this.removePoint(this.selected$.Get());
 
         this.template = html`
             <div class="ar-grad__row">
@@ -206,7 +217,7 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
         const W = canvas.width, H = canvas.height;
-        const pts = this.points$.get();
+        const pts = this.points$.Get();
         if (!pts.length) { ctx.clearRect(0, 0, W, H); return; }
 
         const img = ctx.createImageData(W, H);
@@ -265,26 +276,26 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
             y: Math.max(0, Math.min(1, y)),
             color: { ...color },
         };
-        const cur = this.points$.get().slice();
+        const cur = this.points$.Get().slice();
         cur.push(p);
-        this.points$.set(cur);
-        this.selected$.set(cur.length - 1);
+        this.points$.Set(cur);
+        this.selected$.Set(cur.length - 1);
         this.#fire();
         return p;
     }
     removePoint(idx: number): this {
-        const cur = this.points$.get();
+        const cur = this.points$.Get();
         if (cur.length <= 1) return this;
         if (idx < 0 || idx >= cur.length) return this;
         const next = cur.slice();
         next.splice(idx, 1);
-        this.points$.set(next);
-        if (this.selected$.get() >= next.length) this.selected$.set(next.length - 1);
+        this.points$.Set(next);
+        if (this.selected$.Get() >= next.length) this.selected$.Set(next.length - 1);
         this.#fire();
         return this;
     }
     updatePoint(idx: number, patch: Partial<ShapeStop>): this {
-        const cur = this.points$.get();
+        const cur = this.points$.Get();
         const p = cur[idx];
         if (!p) return this;
         const next = cur.slice();
@@ -295,19 +306,19 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
             radius: patch.radius ?? p.radius,
         };
         next[idx] = updated;
-        this.points$.set(next);
+        this.points$.Set(next);
         this.#fire();
         return this;
     }
 
     setPoints(pts: ShapeStop[]): this {
-        this.points$.set(pts.map(p => ({ ...p, color: { ...p.color } })));
-        if (this.selected$.get() >= this.points$.get().length) this.selected$.set(0);
+        this.points$.Set(pts.map(p => ({ ...p, color: { ...p.color } })));
+        if (this.selected$.Get() >= this.points$.Get().length) this.selected$.Set(0);
         this.#fire();
         return this;
     }
     getPoints(): ShapeStop[] {
-        return this.points$.get().map(p => ({ ...p, color: { ...p.color } }));
+        return this.points$.Get().map(p => ({ ...p, color: { ...p.color } }));
     }
 
     toCanvasDataURL(type: string = 'image/png'): string {

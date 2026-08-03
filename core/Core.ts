@@ -1,2012 +1,3039 @@
 /**
- * @module    Core
+ * @module    core/Namespace
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026
+ * @version   2.0.0
+ * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @license MIT / Commercial (dual license)
  *
- * The zero-dependency kernel of AriannA. Loaded first; every other module
- * depends on this and Core imports nothing.
+ * # Namespace — distributed CustomElementRegistry of AriannA
  *
- * Responsibilities:
- *   - UUID generation
- *   - Prototype-chain introspection
- *   - Property-descriptor scope templates (Scopes)
- *   - Global namespace registry (html / svg / mathML / x3d / custom)
- *   - Type-descriptor registry + O(1) lookup indexes (GetDescriptor / Define)
- *   - Element creation + upgrade (Create / Upgrade)
- *   - DOM lifecycle watcher: class Observer (auto-registers into Observers);
- *     Core.Observer = running global instance, Core.Observers = registry
- *   - Two-phase boot: Initialize() (buffering) → Bootstrap() (flush + live)
- *   - Static DOM event bus (Events.On / Off / Fire)
- *   - Configuration (version + future runtime config, JSON-exportable)
- *   - Property — enhanced reactive property descriptor (one self-contained
- *     class: private-static helpers, nested Property.* types)
+ * Unlike the W3C `CustomElementRegistry` (singleton, define-once, hardcoded
+ * to 3 namespaces), AriannA's `Namespace` is an **instantiable class**:
  *
- * Extracted out of Core (see derived file):
- *   - Plugin    → ./Plugin.ts     (Plugin class + static registry)
+ *   const html   = new Namespace('html',   { URI: 'http://www.w3.org/1999/xhtml',      NS: false, ... });
+ *   const svg    = new Namespace('svg',    { URI: 'http://www.w3.org/2000/svg',        NS: true,  ... });
+ *   const mathML = new Namespace('mathML', { URI: 'http://www.w3.org/1998/Math/MathML', NS: true,  ... });
+ *   const x3d    = new Namespace('x3d',    { URI: 'http://www.web3d.org/...',           NS: true,  ... });
  *
- * Dependency order:
- *   Core ← Namespace ← Real ← Virtual ← Component
- *         ↑           ↑
- *        Observable  State
+ * # The data root (v2)
+ *
+ * In v2 `Namespace` is the **import-free data root** of the framework: it owns
+ * the type model and nothing it depends on points back up to it.
+ *
+ *   - Namespace.Descriptors — runtime registry shapes (`Type`, `Namespace`): the
+ *                             records stored in the live registry maps and read
+ *                             on the hot path.
+ *   - Namespace.IR          — the serializable IR model (Node, Style, Binding,
+ *                             EventBinding, …) that Real/Virtual materialize.
+ *
+ * `Element`, `Map`, `Record` are ambient (lib.dom / lib.es), so the module
+ * imports nothing — the invariant that keeps the dependency graph acyclic.
+ *
+ * Each instance owns:
+ *   - Standard.{Interfaces, Tags} — pre-registered native interfaces + tags
+ *   - Custom.{Interfaces, Tags}   — user-defined custom elements (mutable)
+ *   - Create(tag)                  — createElement vs createElementNS (per NS flag)
+ *   - Define(tag, ctor, base, css) — registers a new Custom descriptor
+ *   - GetDescriptor(query)         — lookup by tag, ctor, or instance
+ *   - Update(node)                 — called by Core.Observer on every upgrade
+ *
+ * # Orthogonal concerns via IoC (v2)
+ *
+ * Behaviour that is not "data" no longer lives in Namespace; it is injected as a
+ * service so the data root stays import-free and single-responsibility:
+ *
+ *   - CSS apply / emit    — provided by Rule / Stylesheet
+ *   - Shadow attach / get — provided by Shadow; `Type` carries a `Shadow` ref,
+ *                           just as it carries its `Namespace`
+ *   - Fragile install     — provided by Real, driven by descriptor data
+ *   - Native patching      — performed by Core at boot (see below)
+ *
+ * Services are registered at boot into a `Namespace.Services` slot; the factory
+ * and Update paths call the injected service, never an imported implementation.
+ *
+ * # Fragile forms — data, not a hardcoded table (v2)
+ *
+ * Native interfaces with internal slots (input, select, textarea, canvas, img,
+ * video, …) cannot be prototype-spliced reliably. Instead of a hardcoded proxy
+ * spec keyed by interface name, each descriptor carries the forwarding data:
+ *
+ *   - Slot       — 'Internal' (backing native isolated in a shadow root) or
+ *                  'External' (backing native in light DOM, for form/label/AOM)
+ *   - Properties — property names forwarded to the inner native element
+ *   - Methods    — method names forwarded to the inner native element
+ *
+ * The install logic (compose inner native + forward) lives in Real / an IoC
+ * installer; Namespace only declares the data. A descriptor also carries two
+ * independent status axes: `State` (the descriptor's own construction outcome)
+ * and `Supported`/`Defined` (the type's standing within its namespace).
+ *
+ * # Why we don't (necessarily) use customElements
+ *
+ *   - customElements locks you into 3 namespaces; we want any number
+ *   - customElements.define is one-shot; we allow redefine, mutation, removal
+ *   - customElements requires `extends:'div'` for native-extension; we patch
+ *     the native constructors so `extends HTMLDivElement` works directly
+ *   - customElements lifecycle (connectedCallback etc.) is browser-imposed;
+ *     ours flows through Core.Observer which YOU control
+ *   - customElements requires the constructor body to be empty during super();
+ *     ours allows arbitrary code (Component(this), .add(), .set(), etc.)
+ *
+ * # Update(node) — the heart of upgrade
+ *
+ * Core.Observer iterates m.addedNodes and, for each Element, calls
+ * `descriptor.Update(node)` which delegates to `namespace.Update(node)`.
+ * The Namespace.Update logic:
+ *
+ *   1. Find the matching descriptor (Standard or Custom) by node.tagName
+ *   2. setPrototypeOf(node, descriptor.Constructor.prototype)
+ *   3. setPrototypeOf(descriptor.Constructor.prototype, descriptor.Interface.prototype)
+ *   4. If descriptor.Custom: optionally call the Component(node) installer
+ *   5. Run the user's constructor body bound to the node
+ *
+ * Shadow attachment, CSS application and fragile forwarding in this path go
+ * through the injected services, not through helpers owned by Namespace.
+ *
+ * # Native constructor patching — a Core boot concern (v2)
+ *
+ * Making `class FormC extends HTMLDivElement { constructor() { super(); ... } }`
+ * work without customElements.define requires the native constructors to be
+ * patched so `super()` yields a real element from the right namespace. In v2
+ * this is an **operational** step performed by **Core at boot**, driven by the
+ * descriptor data Namespace owns — not by the data root itself. For every
+ * standard interface (HTMLDivElement, HTMLInputElement, SVGCircleElement, …)
+ * Core:
+ *
+ *   1. Reads window[ifaceName] — the native browser constructor
+ *   2. Wraps it in a function that, when invoked via `super()`, produces a real
+ *      DOM element from THIS namespace (createElement / createElementNS) with
+ *      the user's class prototype spliced in front
+ *   3. Reinstalls the wrapper at window[ifaceName]
  */
+import { Namespaces }    from "./Namespaces.ts";
+import type { Observer } from './Observer.ts';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-/** Shape of a type descriptor stored in the namespace registry. */
-export interface TypeDescriptor
+/**
+ * @namespace Core
+ * @author    Riccardo Angeli
+ * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+ * @license   MIT / Commercial (dual license)
+ *
+ * @description Type-only contracts for the Namespace data root: the runtime
+ *              registry descriptors (`Namespace.Descriptors`) and the
+ *              serializable IR model (`Namespace.IR`).
+ *
+ *              The data root imports nothing — `Element`, `Map`, `Record` are
+ *              ambient (lib.dom / lib.es), so the "Namespace imports nothing"
+ *              invariant holds. Both sub-namespaces contain only types and
+ *              therefore erase at compile time (zero runtime footprint); never
+ *              place a `const` or function here, or TypeScript will emit the
+ *              namespace object.
+ */
+export namespace Core
 {
-    Name        : string;
-    Tags        : string[];
-    Namespace   : NamespaceDescriptor;
-    Constructor : (new (...args: unknown[]) => Element) | null;
-    Interface   : (new (...args: unknown[]) => Element) | null;
-    Prototype   : object | null;
-    Supported   : boolean;
-    Defined     : boolean;
-    Declaration : 'FUNCTION' | 'CLASS' | 'CUSTOM';
-    Type        : 'STANDARD' | 'CUSTOM';
-    Standard    : boolean;
-    Custom      : boolean;
-    Style       : Record<string, string>;
-    /**
-     * Registration path of the tag:
-     *   true  → registered via the browser-native `customElements.define`
-     *   false → registered via AriannA's `Core.Define` / namespace registry
+    /** Constants Block */
+
+    /** @name        Scopes
+     *  @public
+     *  @type        {Readonly<Record<string, { configurable: boolean; enumerable: boolean; writable: boolean }>>}
+     *  @description Reusable `Object.defineProperty` descriptor templates (sealed by default):
+     *               `Private`, `Readonly`, `Writable`, `Configurable`. Spread one into a descriptor
+     *               and add the `value`.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     *  @example     Object.defineProperty(obj, 'k', { ...Core.Scopes.Readonly, value: 42 });
      */
-    Native?     : boolean;
-    /** Prototype chain captured at registration (name → constructor). */
-    Chain?      : Map<string, unknown>;
-    /**
-     * User subclass bound after registration — set by Component.Define for the
-     * clean form `Component(tag, base, css, def)`, or captured lazily from
-     * new.target on the first `new`. Namespace.Update prefers this over the
-     * window.<PascalCase> lookup, matching the old Component.js behaviour where
-     * the bound class is used directly.
-     */
-    Class?      : (new (...args: unknown[]) => Element) | null;
-    /** Factory built by Namespace.Define — `new`-able to produce an instance. */
-    Factory?    : new (...args: unknown[]) => Element;
-    /** Called when an element is added via markup. */
-    Update?     : (element: Element) => void;
-}
-
-/**
- * Full namespace descriptor (html / svg / mathML / x3d / custom).
- *
- * The Create / Update / Define methods are exposed directly on the descriptor
- * by Namespace.toDescriptor() — there is no `functions` indirection. Core calls
- * them straight: ns.Create(tag), ns.Update(el, hint), ns.Define(tag, …).
- */
-export interface NamespaceDescriptor
-{
-    name          : string;
-    schema        : string;
-    state         : 'enabled' | 'disabled';
-    enabled       : boolean;
-    disabled      : boolean;
-    base          : (new (...args: unknown[]) => Element) | null;
-    tags          : Record<string, TypeDescriptor>;
-    types         :
-    {
-        standard : { interfaces: Record<string, TypeDescriptor>; tags: Record<string, TypeDescriptor> };
-        custom   : { interfaces: Record<string, TypeDescriptor>; tags: Record<string, TypeDescriptor> };
-    };
-    documentation : { w3c: string };
-
-    /** Create an element in this namespace (createElement / createElementNS). */
-    Create?  : (tag: string) => Element | null;
-    /** Synchronously upgrade an element (prototype splice + build). */
-    Update?  : (element: Element, hint?: TypeDescriptor) => void;
-    /** Register a custom element type in this namespace. */
-    Define?  : (
-        tag: string,
-        constructor: new (...args: unknown[]) => Element,
-        base?: new (...args: unknown[]) => Element,
-        style?: Record<string, string>,
-    ) => new (...args: unknown[]) => Element;
-}
-
-// ── UUID ──────────────────────────────────────────────────────────────────────
-
-/**
- * Generates a UUID v4-style identifier.
- * @example Core.Uuid()  // "a3f1bc-7d2-e94-f05-8c2b3a1d"
- */
-export function UUID(): string
-{
-    const b: string[] = [];
-    for (let i = 0; i < 9; i++)
-        b.push((Math.floor(1 + Math.random() * 0x10000)).toString(16).slice(1));
-    return `${b[1]}${b[2]}-${b[3]}-${b[4]}-${b[5]}-${b[6]}${b[7]}${b[8]}`;
-}
-
-// ── Configuration ─────────────────────────────────────────────────────────────
-
-/**
- * Runtime configuration of the Core. Holds the SemVer version and is the home
- * for future load-time settings (enabled namespaces, module manifest, …).
- * `toJSON()` makes it serialisable to a .json / .yml config file.
- *
- * @example
- *   Core.Configuration.version.string   // "1.0.0"
- *   JSON.stringify(Core.Configuration)   // '{"version":"1.0.0"}'
- */
-/** Fluent accessor for a nested object on a target. Returned by `Real.sub` / `VirtualNode.sub`. */
-export interface SubAccessor {
-    /** Set a key (or dotted sub-key) on this sub-object. */
-    set(key: string, value: unknown): SubAccessor;
-    /** Get a key (or dotted sub-key) from this sub-object. */
-    get(key: string): unknown;
-    /** Descend further into a nested key — returns a sub-accessor for it. */
-    sub(key: string): SubAccessor;
-    /** The underlying object at this path (or undefined if it's a primitive). */
-    unwrap(): unknown;
-    /** Return the original owner (Real / VirtualNode / Element) for chaining. */
-    end<T = unknown>(): T;
-}
-
-/** Read a value from `target` following a dotted `path` (e.g. "style.background"). */
-export function readDottedPath(target: Record<string, unknown>, path: string): unknown {
-    const parts = path.split('.');
-    let cur: unknown = target;
-    for (const p of parts) {
-        if (cur === null || cur === undefined) return undefined;
-        cur = (cur as Record<string, unknown>)[p];
-    }
-    return cur;
-}
-
-/** Write `value` into `target` following a dotted `path`; auto-creates plain-object segments, never clobbers a non-object/DOM ancestor. */
-export function writeDottedPath(target: Record<string, unknown>, path: string, value: unknown): void {
-    const parts = path.split('.');
-    let cur: Record<string, unknown> = target;
-    for (let i = 0; i < parts.length - 1; i++) {
-        const p = parts[i];
-        const next = cur[p];
-        if (next === null || next === undefined || typeof next !== 'object') {
-            if (next === undefined) { const o: Record<string, unknown> = {}; cur[p] = o; cur = o; continue; }
-            return;
-        }
-        cur = next as Record<string, unknown>;
-    }
-    cur[parts[parts.length - 1]] = value;
-}
-
-/** Build a {@link SubAccessor} bound to `rootTarget` at `basePath`; `end()` returns `owner`. */
-export function makeSubAccessor(rootTarget: Record<string, unknown>, basePath: string, owner: unknown): SubAccessor {
-    const accessor: SubAccessor = {
-        set(key, value) { writeDottedPath(rootTarget, basePath + '.' + key, value); return accessor; },
-        get(key)        { return readDottedPath(rootTarget, basePath + '.' + key); },
-        sub(key)        { return makeSubAccessor(rootTarget, basePath + '.' + key, owner); },
-        unwrap()        { return readDottedPath(rootTarget, basePath); },
-        end<T = unknown>(): T { return owner as T; },
-    };
-    return accessor;
-}
-
-/** camelCase / PascalCase → kebab-case (e.g. "BackgroundColor" → "-background-color"). */
-export function toKebab(s: string): string {
-    return s.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`);
-}
-
-/** kebab-case → camelCase, lowercasing the first char (e.g. "Background-color" → "backgroundColor"). */
-export function toCamel(s: string): string {
-    const lc = s.charAt(0).toLowerCase() + s.slice(1);
-    return lc.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
-}
-
-export const Configuration =
-{
-    version:
-    {
-        major  : 1,
-        minor  : 0,
-        patch  : 0,
-        get string() { return `${this.major}.${this.minor}.${this.patch}`; },
-    },
-    toJSON() { return { version: this.version.string }; },
-};
-
-// ── Scopes ────────────────────────────────────────────────────────────────────
-
-/**
- * Reusable Object.defineProperty descriptor templates.
- * @example Object.defineProperty(obj, 'k', { ...Core.Scopes.Readonly, value: 42 });
- */
-export const Scopes: Readonly<Record<string, { configurable: boolean; enumerable: boolean; writable: boolean }>> = Object.freeze(
-{
-    Private      : { configurable: false, enumerable: false, writable: false },
-    Readonly     : { configurable: false, enumerable: true,  writable: false },
-    Writable     : { configurable: false, enumerable: true,  writable: true  },
-    Configurable : { configurable: true,  enumerable: true,  writable: false },
-});
-
-// ── Prototype chain ───────────────────────────────────────────────────────────
-
-/**
- * Returns the complete prototype chain of an object or constructor as an
- * array of constructor names.
- * @example
- *   Core.GetPrototypeChain(document.createElement('input'))
- *   // → ["HTMLInputElement","HTMLElement","Element","Node","EventTarget","Object"]
- */
-export function GetPrototypeChain(obj: object | (new () => object) | null | undefined): string[]
-{
-    // EAGER: flush any pending DOM mutations synchronously so a node added on
-    // this same tick (e.g. createElement + appendChild) is ALREADY upgraded —
-    // prototype spliced and, for FUNCTION form, its constructor body run on the
-    // node — before we read its chain. The MutationObserver is otherwise async,
-    // so without this drain the chain would still read the un-upgraded base.
-    try { Observer.drainAll(); } catch { /* pre-Initialize / non-DOM */ }
-    const chain: string[] = [];
-    // A null/undefined target (e.g. a querySelector that found nothing) has no
-    // chain. Return empty instead of letting Object.getPrototypeOf(null) throw
-    // "can't convert null to object".
-    if (obj === null || obj === undefined) return chain;
-    let proto: object | null =
-        typeof obj === 'function'
-            ? (obj as { prototype: object }).prototype
-            : Object.getPrototypeOf(obj);
-
-    while (proto !== null)
-    {
-        const ctor = (proto as { constructor?: { name?: string } }).constructor;
-        if (ctor?.name) chain.push(ctor.name);
-        proto = Object.getPrototypeOf(proto);
-    }
-    return chain;
-}
-
-// ── Namespace registry ────────────────────────────────────────────────────────
-// Module-private. Each namespace auto-registers itself here from its own
-// constructor in Namespace.ts (writing through Core.Namespaces). Read via Core.
-const namespaces: Record<string, NamespaceDescriptor> = {};
-
-
-// ── Type-descriptor registry ──────────────────────────────────────────────────
-
-/**
- * Look up a type descriptor by tag name, constructor, or Node instance.
- * Returns false if not found.
- * @example
- *   Core.GetDescriptor('input')          // HTML standard descriptor
- *   Core.GetDescriptor(HTMLInputElement) // same, via constructor
- *   Core.GetDescriptor(myElement)        // same, via Node instance
- *   Core.GetDescriptor('my-widget')      // custom element descriptor
- */
-export function GetDescriptor(
-    obj: string | (new (...args: unknown[]) => Element) | Node | object,
-): TypeDescriptor | false
-{
-    if (!obj) return false;
-
-    const t = typeof obj;
-
-    // ── Scan the namespace registry ───────────────────────────────────────
-    let key: string;
-    if (t === 'string') {
-        key = (obj as string).toLowerCase();
-    } else if (t === 'function') {
-        key = (obj as { name: string }).name.toLowerCase();
-    } else if (obj instanceof Node) {
-        const el = obj instanceof Element ? obj : null;
-        key = String(el?.getAttribute?.('data-arianna-tag') || el?.getAttribute?.('is') || obj.nodeName).toLowerCase();
-    } else {
-        const o = obj as Record<string, unknown>;
-        const tagKey = Object.keys(o).find(k => k.toUpperCase() === 'TAG');
-        if (!tagKey) return false;
-        key = String(o[tagKey]).toLowerCase();
-    }
-
-    for (const nsKey of Object.keys(namespaces))
-    {
-        const ns  = namespaces[nsKey];
-        const std = ns.types.standard;
-        const cst = ns.types.custom;
-
-        const found = std.tags[key] ?? std.interfaces[key] ?? cst.tags[key] ?? cst.interfaces[key];
-        if (found) return found;
-
-        if (typeof obj === 'function') {
-            for (const k of Object.keys(std.interfaces)) {
-                const d = std.interfaces[k];
-                if (k.toLowerCase() === key || d.Constructor === obj || d.Interface === obj) return d;
-            }
-            for (const k of Object.keys(cst.interfaces)) {
-                const d = cst.interfaces[k];
-                if (k.toLowerCase() === key || d.Constructor === obj || d.Interface === obj) return d;
-            }
-        }
-    }
-    return false;
-}
-
-// ── Convenience query helpers ─────────────────────────────────────────────────
-
-/** Returns descriptor.Type: "STANDARD" | "CUSTOM" | "INVALID". */
-export function GetType(obj: Parameters<typeof GetDescriptor>[0]): string
-{
-    const d = GetDescriptor(obj);
-    return d ? (d.Type ?? 'INVALID') : 'INVALID';
-}
-
-/** Returns descriptor.Constructor (user class for Custom, native IDL for Standard). */
-export function GetConstructor(obj: Parameters<typeof GetDescriptor>[0]): (new (...a: never[]) => Element) | undefined
-{
-    const d = GetDescriptor(obj);
-    return d && d.Constructor ? d.Constructor as new (...a: never[]) => Element : undefined;
-}
-
-/** Returns descriptor.Interface (first native IDL super class). */
-export function GetInterface(obj: Parameters<typeof GetDescriptor>[0]): (new (...a: never[]) => Element) | undefined
-{
-    const d = GetDescriptor(obj);
-    return d && d.Interface ? d.Interface as new (...a: never[]) => Element : undefined;
-}
-
-/** Returns descriptor.Tags — every tag name that resolves to this type. */
-export function GetTags(obj: Parameters<typeof GetDescriptor>[0]): string[]
-{
-    const d = GetDescriptor(obj);
-    return d && d.Tags ? d.Tags : [];
-}
-
-/**
- * Returns the descriptor's owning Namespace descriptor (or the namespace by key
- * when passed 'html' / 'svg' / 'mathML' / 'x3d' directly).
- */
-export function GetNamespace(obj: Parameters<typeof GetDescriptor>[0]): NamespaceDescriptor | undefined
-{
-    if (typeof obj === 'string' && namespaces[obj]) return namespaces[obj];
-    const d = GetDescriptor(obj);
-    return d && d.Namespace ? d.Namespace : undefined;
-}
-
-/**
- * Register a custom element type descriptor in the appropriate namespace.
- * Works with all namespaces (html / svg / mathML / x3d / custom). Never throws:
- * scans namespaces to find the right one from the base constructor, with a
- * silent html-namespace fallback.
- *
- * @param tag         - Hyphenated custom element tag (e.g. 'my-button')
- * @param constructor - Class or function constructor
- * @param base        - Interface to extend (default HTMLElement). Any registered
- *                      native interface works: HTMLDivElement, SVGSVGElement, …
- * @param style       - Optional default CSS properties object
- */
-export function Define(
-    tag         : string,
-    constructor : new (...args: unknown[]) => Element,
-    base        : new (...args: unknown[]) => Element = HTMLElement,
-    style       : Record<string, string> = {},
-): new (...args: unknown[]) => Element
-{
-    const ct = tag.toLowerCase();
-
-    // 3-arg form: the STYLE was passed in the base slot because the class already
-    // carries its base via `extends` — Core.Define('custom', class extends X {…},
-    // { …style }). Here `base` is a style object / Rule / Stylesheet, not a
-    // constructor. Re-route it into `style` and reset `base` so the `extends`
-    // introspection below recovers the real base. Without this, `base` stays the
-    // style object, the namespace lookup fails, and Define emits the noisy
-    // "base 'undefined' not found" warning before defaulting to html.
-    if (base !== HTMLElement && !(typeof base === 'function' && !!(base as { prototype?: object }).prototype))
-    {
-        if (!style || (typeof style === 'object' && Object.keys(style as object).length === 0))
+    export const Scopes: Readonly<Record<string,
         {
-            style = base as unknown as Record<string, string>;
-        }
-        base = HTMLElement;
-    }
-
-    // Introspect base from `class X extends Y {}` when base is omitted.
-    if (base === HTMLElement)
-    {
-        try {
-            const src = constructor.toString();
-            const m = src.match(/extends\s+([A-Z][A-Za-z0-9_]*)/);
-            if (m) {
-                const ifaceName = m[1];
-                const win = (typeof window !== 'undefined' ? window : globalThis) as Record<string, unknown>;
-                const candidate = win[ifaceName];
-                if (typeof candidate === 'function' && candidate !== HTMLElement) {
-                    // Use the `extends` target even when it isn't registered as a
-                    // Standard descriptor yet (e.g. the eager native patch /
-                    // registration isn't live in this realm). Without this, `base`
-                    // stays HTMLElement, the namespace lookup below can't place it,
-                    // and Define emits the noisy "base 'undefined'" warning while
-                    // defaulting the base wrongly to HTMLElement.
-                    base = candidate as new (...args: unknown[]) => Element;
-                }
-            }
-        } catch { /* introspection is best-effort */ }
-    }
-
-    // Already registered? Return existing factory (idempotent).
-    const existing = GetDescriptor(ct);
-    if (existing && existing.Factory) return existing.Factory;
-
-    // Locate the correct namespace.
-    let ns: NamespaceDescriptor | null = null;
-    const baseDsc = GetDescriptor(base);
-    if (baseDsc && baseDsc.Namespace) {
-        ns = baseDsc.Namespace;
-    } else {
-        for (const nsKey of Object.keys(namespaces)) {
-            const candidate = namespaces[nsKey];
-            if (candidate.base === base) { ns = candidate; break; }
-            for (const k of Object.keys(candidate.types.standard.interfaces)) {
-                const d = candidate.types.standard.interfaces[k];
-                if (d.Constructor === base || d.Interface === base || k === (base as { name?: string }).name) { ns = candidate; break; }
-            }
-            if (ns) break;
-        }
-    }
-    if (!ns) {
-        ns = namespaces['html'] ?? Object.values(namespaces)[0];
-        console.warn(`Core.Define: base '${(base as { name?: string } | null | undefined)?.name ?? 'undefined'}' not found in any namespace — defaulting to html.`);
-    }
-
-    // ── Core.Define's responsibility: hand the ctor to the namespace UNWRAPPED ──
-    // The namespace owns construction. It adapts a no-extends CLASS (createDynamicWrapper:
-    // re-home its prototype onto the interface + expose its constructor body) and builds
-    // the real element via the CORRECT Reflect.construct order — interface as the target,
-    // the user class as newTarget — so `this` is a real element, never an empty {}. We do
-    // NOT pre-wrap here (that double-wrapped) and we must NOT re-parent a no-extends class
-    // before delegating: it has to reach Namespace.Define still rooted at Function.prototype
-    // so `_isNoExtendsClass` detects it and the adapter runs. A FUNCTION or an own-super
-    // CLASS (native / registered-custom super) is re-parented onto the base so the chain is
-    // right — that path already worked and is untouched.
-    const isClass   = /^class[\s{]/.test(constructor.toString());
-    const noExtends = isClass && Object.getPrototypeOf(constructor) === Function.prototype;
-
-    const toDefine: new (...args: unknown[]) => Element = constructor;
-
-    if (!noExtends
-        && toDefine && (toDefine as { prototype?: object }).prototype
-        && Object.getPrototypeOf(toDefine) !== base)
-    {
-        try
+            configurable : boolean;
+            enumerable   : boolean;
+            writable     : boolean
+        } >> = Object.freeze
+    (
         {
-            Object.setPrototypeOf(toDefine, base);
-            const _cp = (toDefine as { prototype?: object }).prototype;
-            const _bp = (base as { prototype?: object }).prototype;
-            if (_cp && _bp && Object.getPrototypeOf(_cp) !== _bp) Object.setPrototypeOf(_cp, _bp);
+            Private      : { configurable: false, enumerable: false, writable: false },
+            Readonly     : { configurable: false, enumerable: true,  writable: false },
+            Writable     : { configurable: false, enumerable: true,  writable: true  },
+            Configurable : { configurable: true,  enumerable: true,  writable: false },
         }
-        catch { /* frozen / cyclic — leave as authored */ }
-    }
+    );
 
-    // Delegate to the namespace's own Define.
-    if (ns && typeof ns.Define === 'function') return ns.Define(ct, toDefine, base, style);
+    /** Namespaces Block */
 
-    // Fallback: minimal descriptor (robustness — shouldn't happen in practice).
-    console.warn(`Core.Define: namespace '${ns.name}' has no Define() — using fallback.`);
-    // Capture the constructor prototype chain (name → constructor) so every
-    // TypeDescriptor — defined or fallback — carries a consistent Chain Map.
-    const chain = new Map<string, unknown>();
-    for (let c: unknown = constructor; typeof c === 'function' && c !== Function.prototype; c = Object.getPrototypeOf(c))
-        if ((c as { name?: string }).name) chain.set((c as { name: string }).name, c);
-    const descriptor: TypeDescriptor = {
-        Name        : constructor.name,
-        Tags        : [ct],
-        Namespace   : ns,
-        Constructor : constructor,
-        Interface   : base,
-        Prototype   : constructor.prototype,
-        Supported   : true,
-        Defined     : true,
-        Declaration : /^class[\s{]/.test(constructor.toString()) ? 'CLASS' : 'FUNCTION',
-        Type        : 'CUSTOM',
-        Standard    : false,
-        Custom      : true,
-        Style       : style,
-        Native      : false,
-        Chain       : chain,
-    };
-    ns.types.custom.interfaces[constructor.name] = descriptor;
-    ns.types.custom.tags[ct]                     = descriptor;
-    return constructor;
-}
-
-/**
- * Create an element by tag, applying the registered descriptor's upgrade
- * SYNCHRONOUSLY before returning — the JS-side equivalent of writing the tag
- * in markup, without waiting for the MutationObserver microtask.
- * @example const el = Core.Create('my-card');  // already upgraded
- */
-export function Create(tag: string): Element | null
-{
-    const ct = tag.toLowerCase();
-    const d  = GetDescriptor(ct);
-
-    if (!d || !d.Namespace) {
-        try { return document.createElement(ct); } catch { return null; }
-    }
-
-    const ns = d.Namespace;
-
-    // Factory-first (legacy model): the registered factory is the SAME new-able
-    // function that `new A1a()` uses — it creates the element, splices the factory
-    // prototype (chained to the interface) and runs the body. Routing Create through
-    // it guarantees Core.Create / Real produce an element identical to the
-    // constructor path, instead of a separate createElement+Update path that can
-    // diverge. Falls back to Create+Update when no factory is registered.
-    if (d.Custom && typeof d.Factory === 'function') {
-        try {
-            const made = new (d.Factory as new () => Element)();
-            if (made instanceof Element) {
-                // When a user subclass is bound to this tag (Component.Define /
-                // @Component on `class X extends Base`), the registered factory was
-                // built for the BASE (e.g. HTMLDivElement) — so it produces a chain
-                // headed by the base, not by X. Splice the bound subclass prototype
-                // so Create / Real match `new X()` ([X, Base, ...]) instead of
-                // ([Base, Base, ...]).
-                const bound = (d as { Class?: (new (...a: unknown[]) => Element) | null }).Class;
-                // Only splice when it ADDS the bound layer (made is not yet an
-                // instance of it). If `made` is ALREADY an instance of `bound` —
-                // i.e. the factory produced an equal-or-more-derived chain
-                // (`new X()` where X extends the bound class) — splicing would
-                // FLATTEN it back to the bound prototype and drop X from the chain.
-                // Guard with `!(made instanceof bound)` so the most-derived
-                // prototype the factory built is preserved.
-                if (typeof bound === 'function' && bound !== d.Constructor && bound.prototype
-                    && !(made instanceof (bound as new (...a: unknown[]) => Element))) {
-                    try { Object.setPrototypeOf(made, bound.prototype); }
-                    catch { /* fragile/native base: keep factory prototype */ }
-                }
-                return made;
-            }
-        }
-        catch (e) { console.warn('[arianna] Core.Create: factory failed, falling back:', e); }
-    }
-
-    let el: Element | null = null;
-    if (typeof ns.Create === 'function') el = ns.Create(ct);
-    else { try { el = document.createElement(ct); } catch { /* SSR */ } }
-    if (!el) return null;
-
-    if (d.Custom && typeof ns.Update === 'function') {
-        try {
-            // Update may COERCE the node to its native base (e.g. <case-x> → <div
-            // is="case-x">) and return the replacement. Use the returned element so
-            // callers (Real, the factory, user code) get the upgraded node, not the
-            // stale original.
-            const upgraded: unknown = (ns.Update as (e: Element, d?: unknown) => unknown)(el, d);
-            if (upgraded instanceof Element) el = upgraded;
-        }
-        catch (e) { console.warn('[arianna] Core.Create: Update failed:', e); }
-    }
-    return el;
-}
-
-/** True when AriannA has already upgraded an Element via Namespace.Update(). */
-export function IsUpgraded(node: unknown): boolean
-{
-    return !!(node && typeof node === 'object'
-        && (node as { __ariannaUpgraded?: boolean }).__ariannaUpgraded === true);
-}
-
-/**
- * Upgrade a single Element via the namespace registry. Single-node, O(1):
- * descriptor lookup then Namespace.Update(). Does not walk descendants.
- */
-export function Upgrade(node: Node | Element | null | undefined): Element | null
-{
-    if (!(node instanceof Element)) return null;
-    if (IsUpgraded(node)) return node;
-
-    const d = GetDescriptor(node);
-    if (!d || !d.Custom || !d.Constructor) return node;
-
-    const ns = d.Namespace;
-    if (ns && typeof ns.Update === 'function') {
-        try { ns.Update(node, d); }
-        catch (e) { console.warn('[Core.Upgrade] namespace.Update failed:', e); }
-    } else if (d.Update) {
-        try { d.Update(node); }
-        catch (e) { console.warn('[Core.Upgrade] descriptor.Update failed:', e); }
-    }
-    return node;
-}
-
-// ── DOM Events static bus ─────────────────────────────────────────────────────
-
-/**
- * `Events` and its types under one `namespace Events`. Synchronous, multi-target,
- * multi-type DOM event helpers as static methods on the `Events` class. A preflight
- * map (`Events.Types`, the canonical W3C-Level-3 keyword → interface table ported
- * from the legacy engine) validates keywords in On/Off and lets Fire construct the
- * correct Event subtype. For the AriannA pub/sub bus use Observable.
- */
-export namespace Events
-{
-    /**
-     * AriannA lifecycle event names — the SINGLE source of truth. Anything that
-     * fires or listens for an upgrade/lifecycle event references these constants
-     * instead of hard-coding an `'arianna:…'` string (kills the scattered literals).
+    /** @namespace   Services
+     *  @memberof    Core
+     *  @description The service registry — the single "quasi zero-import" seam of the kernel. Holds a
+     *               private `services` Map, the operations over it (Register / Resolve / Has / Revoke /
+     *               Providers / Call), the `Service` class producers instantiate to self-register, the
+     *               structural service SHAPE types (`Types.CssService` / `EventService` / `ObservableService`),
+     *               and the lazy accessor getters (`Events` / `Observables` / `Css`). Feature modules
+     *               (Events.ts, Observables.ts, Css.ts) register their container here at namespace init
+     *               and resolve one another THROUGH this registry — never importing each other directly.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
      */
-    export const Lifecycle = Object.freeze({
-        Ready:        'arianna:ready',
-        NodeAdding:   'arianna:nodeadding',
-        NodeAdded:    'arianna:nodeadded',
-        NodeRemoved:  'arianna:noderemoved',
-        SlotChange:   'arianna:slotchange',
-        Connected:    'arianna:connected',
-        Disconnected: 'arianna:disconnected',
-    });
-
-    /** A target the bus accepts: an EventTarget, a CSS selector, or a list of targets. */
-    export type Target = EventTarget | string | EventTarget[];
-
-    /** A preflight entry: canonical event name + the name of its DOM Event interface. */
-    export interface TypeSpec { Name: string; Interface: string; }
-
-    /** @example Core.Events.On('.btn', 'click mouseenter', handler); */
-    export class Events
+    export namespace Services
     {
-        /**
-         * Preflight table of every W3C-Level-3 event keyword → its canonical name and
-         * the *name* of its DOM Event interface (kept as a string so a missing/non-
-         * constructable interface, e.g. the deprecated MutationEvent, can never break
-         * the build or the runtime). Used to validate keywords (On/Off) and to build
-         * the right Event subtype (Fire). Ported from the legacy Component.Events.Types.
+        /** @name        services
+         *  @private
+         *  @constant
+         *  @memberof    Core.Services
+         *  @type        {Map<string, Record<string, unknown>>}
+         *  @description The registry backing store — the single source of truth for all registered service
+         *               containers, keyed by name. Deliberately PRIVATE to the namespace: every read and
+         *               write goes through the exported operations (`Register` / `Resolve` / `Has` /
+         *               `Revoke` / `Providers` / `Call`) and the lazy accessor getters, never by touching
+         *               the Map directly. This encapsulation is what lets the storage change (e.g. to a
+         *               different structure) without breaking a single call site.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
          */
-        static readonly Types: Readonly<Record<string, TypeSpec>> = Object.freeze({
-            click:                           { Name: 'click', Interface: 'MouseEvent' },
-            dblclick:                        { Name: 'dblclick', Interface: 'MouseEvent' },
-            mouseenter:                      { Name: 'mouseenter', Interface: 'MouseEvent' },
-            mouseleave:                      { Name: 'mouseleave', Interface: 'MouseEvent' },
-            mousemove:                       { Name: 'mousemove', Interface: 'MouseEvent' },
-            mouseout:                        { Name: 'mouseout', Interface: 'MouseEvent' },
-            mouseover:                       { Name: 'mouseover', Interface: 'MouseEvent' },
-            mouseup:                         { Name: 'mouseup', Interface: 'MouseEvent' },
-            mousedown:                       { Name: 'mousedown', Interface: 'MouseEvent' },
-            mousewheel:                      { Name: 'mousewheel', Interface: 'MouseEvent' },
-            contextmenu:                     { Name: 'contextmenu', Interface: 'MouseEvent' },
-            drag:                            { Name: 'drag', Interface: 'DragEvent' },
-            dragend:                         { Name: 'dragend', Interface: 'DragEvent' },
-            dragenter:                       { Name: 'dragenter', Interface: 'DragEvent' },
-            dragleave:                       { Name: 'dragleave', Interface: 'DragEvent' },
-            dragover:                        { Name: 'dragover', Interface: 'DragEvent' },
-            dragstart:                       { Name: 'dragstart', Interface: 'DragEvent' },
-            drop:                            { Name: 'drop', Interface: 'DragEvent' },
-            dragdrop:                        { Name: 'dragdrop', Interface: 'DragEvent' },
-            dragexit:                        { Name: 'dragexit', Interface: 'DragEvent' },
-            draggesture:                     { Name: 'draggesture', Interface: 'DragEvent' },
-            wheel:                           { Name: 'wheel', Interface: 'WheelEvent' },
-            keypress:                        { Name: 'keypress', Interface: 'KeyboardEvent' },
-            keydown:                         { Name: 'keydown', Interface: 'KeyboardEvent' },
-            keyup:                           { Name: 'keyup', Interface: 'KeyboardEvent' },
-            animationstart:                  { Name: 'animationstart', Interface: 'AnimationEvent' },
-            animationend:                    { Name: 'animationend', Interface: 'AnimationEvent' },
-            animationiteration:              { Name: 'animationiteration', Interface: 'AnimationEvent' },
-            abort:                           { Name: 'abort', Interface: 'UIEvent' },
-            DOMActivate:                     { Name: 'DOMActivate', Interface: 'UIEvent' },
-            error:                           { Name: 'error', Interface: 'UIEvent' },
-            load:                            { Name: 'load', Interface: 'UIEvent' },
-            resize:                          { Name: 'resize', Interface: 'UIEvent' },
-            scroll:                          { Name: 'scroll', Interface: 'UIEvent' },
-            select:                          { Name: 'select', Interface: 'UIEvent' },
-            unload:                          { Name: 'unload', Interface: 'UIEvent' },
-            MozScrolledAreaChanged:          { Name: 'MozScrolledAreaChanged', Interface: 'UIEvent' },
-            overflow:                        { Name: 'overflow', Interface: 'UIEvent' },
-            underflow:                       { Name: 'underflow', Interface: 'UIEvent' },
-            DOMFocusIn:                      { Name: 'DOMFocusIn', Interface: 'FocusEvent' },
-            DOMFocusOut:                     { Name: 'DOMFocusOut', Interface: 'FocusEvent' },
-            focusin:                         { Name: 'focusin', Interface: 'FocusEvent' },
-            focusout:                        { Name: 'focusout', Interface: 'FocusEvent' },
-            DOMAttrModified:                 { Name: 'DOMAttrModified', Interface: 'MutationEvent' },
-            DOMCharacterDataModified:        { Name: 'DOMCharacterDataModified', Interface: 'MutationEvent' },
-            DOMNodeInserted:                 { Name: 'DOMNodeInserted', Interface: 'MutationEvent' },
-            DOMNodeInsertedIntoDocument:     { Name: 'DOMNodeInsertedIntoDocument', Interface: 'MutationEvent' },
-            DOMNodeRemoved:                  { Name: 'DOMNodeRemoved', Interface: 'MutationEvent' },
-            DOMNodeRemovedFromDocument:      { Name: 'DOMNodeRemovedFromDocument', Interface: 'MutationEvent' },
-            DOMSubtreeModified:              { Name: 'DOMSubtreeModified', Interface: 'MutationEvent' },
-            cut:                             { Name: 'cut', Interface: 'ClipboardEvent' },
-            copy:                            { Name: 'copy', Interface: 'ClipboardEvent' },
-            paste:                           { Name: 'paste', Interface: 'ClipboardEvent' },
-            compositionstart:                { Name: 'compositionstart', Interface: 'CompositionEvent' },
-            compositionupdate:               { Name: 'compositionupdate', Interface: 'CompositionEvent' },
-            compositionend:                  { Name: 'compositionend', Interface: 'CompositionEvent' },
-            afterprint:                      { Name: 'afterprint', Interface: 'Event' },
-            beforeprint:                     { Name: 'beforeprint', Interface: 'Event' },
-            cached:                          { Name: 'cached', Interface: 'Event' },
-            canplay:                         { Name: 'canplay', Interface: 'Event' },
-            canplaythrough:                  { Name: 'canplaythrough', Interface: 'Event' },
-            change:                          { Name: 'change', Interface: 'Event' },
-            chargingchange:                  { Name: 'chargingchange', Interface: 'Event' },
-            chargingtimechange:              { Name: 'chargingtimechange', Interface: 'Event' },
-            dischargingtimechange:           { Name: 'dischargingtimechange', Interface: 'Event' },
-            DOMContentLoaded:                { Name: 'DOMContentLoaded', Interface: 'Event' },
-            checking:                        { Name: 'checking', Interface: 'Event' },
-            downloading:                     { Name: 'downloading', Interface: 'Event' },
-            durationchange:                  { Name: 'durationchange', Interface: 'Event' },
-            emptied:                         { Name: 'emptied', Interface: 'Event' },
-            ended:                           { Name: 'ended', Interface: 'Event' },
-            fullscreenchange:                { Name: 'fullscreenchange', Interface: 'Event' },
-            fullscreenerror:                 { Name: 'fullscreenerror', Interface: 'Event' },
-            input:                           { Name: 'input', Interface: 'Event' },
-            invalid:                         { Name: 'invalid', Interface: 'Event' },
-            languagechange:                  { Name: 'languagechange', Interface: 'Event' },
-            levelchange:                     { Name: 'levelchange', Interface: 'Event' },
-            loadeddata:                      { Name: 'loadeddata', Interface: 'Event' },
-            loadedmetadata:                  { Name: 'loadedmetadata', Interface: 'Event' },
-            noupdate:                        { Name: 'noupdate', Interface: 'Event' },
-            obsolete:                        { Name: 'obsolete', Interface: 'Event' },
-            offline:                         { Name: 'offline', Interface: 'Event' },
-            online:                          { Name: 'online', Interface: 'Event' },
-            open:                            { Name: 'open', Interface: 'Event' },
-            orientationchange:               { Name: 'orientationchange', Interface: 'Event' },
-            pause:                           { Name: 'pause', Interface: 'Event' },
-            pointerlockchange:               { Name: 'pointerlockchange', Interface: 'Event' },
-            pointerlockerror:                { Name: 'pointerlockerror', Interface: 'Event' },
-            play:                            { Name: 'play', Interface: 'Event' },
-            playing:                         { Name: 'playing', Interface: 'Event' },
-            ratechange:                      { Name: 'ratechange', Interface: 'Event' },
-            readystatechange:                { Name: 'readystatechange', Interface: 'Event' },
-            reset:                           { Name: 'reset', Interface: 'Event' },
-            seeked:                          { Name: 'seeked', Interface: 'Event' },
-            seeking:                         { Name: 'seeking', Interface: 'Event' },
-            stalled:                         { Name: 'stalled', Interface: 'Event' },
-            submit:                          { Name: 'submit', Interface: 'Event' },
-            success:                         { Name: 'success', Interface: 'Event' },
-            suspend:                         { Name: 'suspend', Interface: 'Event' },
-            timeupdate:                      { Name: 'timeupdate', Interface: 'Event' },
-            updateready:                     { Name: 'updateready', Interface: 'Event' },
-            visibilitychange:                { Name: 'visibilitychange', Interface: 'Event' },
-            volumechange:                    { Name: 'volumechange', Interface: 'Event' },
-            waiting:                         { Name: 'waiting', Interface: 'Event' },
-            afterscriptexecute:              { Name: 'afterscriptexecute', Interface: 'Event' },
-            beforescriptexecute:             { Name: 'beforescriptexecute', Interface: 'Event' },
-            MozAudioAvailable:               { Name: 'MozAudioAvailable', Interface: 'Event' },
-            hashchange:                      { Name: 'hashchange', Interface: 'Event' },
-            gamepadconnected:                { Name: 'gamepadconnected', Interface: 'Event' },
-            gamepaddisconnected:             { Name: 'gamepaddisconnected', Interface: 'Event' },
-            loadend:                         { Name: 'loadend', Interface: 'Event' },
-            loadstart:                       { Name: 'loadstart', Interface: 'Event' },
-            progress:                        { Name: 'progress', Interface: 'Event' },
-            timeout:                         { Name: 'timeout', Interface: 'Event' },
-            uploadprogress:                  { Name: 'uploadprogress', Interface: 'Event' },
-            alerting:                        { Name: 'alerting', Interface: 'Event' },
-            busy:                            { Name: 'busy', Interface: 'Event' },
-            callschanged:                    { Name: 'callschanged', Interface: 'Event' },
-            connected:                       { Name: 'connected', Interface: 'Event' },
-            connecting:                      { Name: 'connecting', Interface: 'Event' },
-            dialing:                         { Name: 'dialing', Interface: 'Event' },
-            held:                            { Name: 'held', Interface: 'Event' },
-            holding:                         { Name: 'holding', Interface: 'Event' },
-            incoming:                        { Name: 'incoming', Interface: 'Event' },
-            resuming:                        { Name: 'resuming', Interface: 'Event' },
-            statechange:                     { Name: 'statechange', Interface: 'Event' },
-            disconnecting:                   { Name: 'disconnecting', Interface: 'Event' },
-            disconnected:                    { Name: 'disconnected', Interface: 'Event' },
-            delivered:                       { Name: 'delivered', Interface: 'Event' },
-            received:                        { Name: 'received', Interface: 'Event' },
-            sent:                            { Name: 'sent', Interface: 'Event' },
-            compassneedscalibration:         { Name: 'compassneedscalibration', Interface: 'Event' },
-            touchcancel:                     { Name: 'touchcancel', Interface: 'Event' },
-            touchend:                        { Name: 'touchend', Interface: 'Event' },
-            touchenter:                      { Name: 'touchenter', Interface: 'Event' },
-            touchleave:                      { Name: 'touchleave', Interface: 'Event' },
-            touchmove:                       { Name: 'touchmove', Interface: 'Event' },
-            touchstart:                      { Name: 'touchstart', Interface: 'Event' },
-            transitionend:                   { Name: 'transitionend', Interface: 'Event' },
-            pagehide:                        { Name: 'pagehide', Interface: 'Event' },
-            pageshow:                        { Name: 'pageshow', Interface: 'Event' },
-            SVGAbort:                        { Name: 'SVGAbort', Interface: 'Event' },
-            SVGError:                        { Name: 'SVGError', Interface: 'Event' },
-            SVGLoad:                         { Name: 'SVGLoad', Interface: 'Event' },
-            SVGResize:                       { Name: 'SVGResize', Interface: 'Event' },
-            SVGScroll:                       { Name: 'SVGScroll', Interface: 'Event' },
-            SVGUnload:                       { Name: 'SVGUnload', Interface: 'Event' },
-            SVGZoom:                         { Name: 'SVGZoom', Interface: 'Event' },
-            storage:                         { Name: 'storage', Interface: 'Event' },
-            beginEvent:                      { Name: 'beginEvent', Interface: 'Event' },
-            endEvent:                        { Name: 'endEvent', Interface: 'Event' },
-            repeatEvent:                     { Name: 'repeatEvent', Interface: 'Event' },
-            popstate:                        { Name: 'popstate', Interface: 'Event' },
-            message:                         { Name: 'message', Interface: 'Event' },
-            upgradeneeded:                   { Name: 'upgradeneeded', Interface: 'Event' },
-            versionchange:                   { Name: 'versionchange', Interface: 'Event' },
-            cardstatechange:                 { Name: 'cardstatechange', Interface: 'Event' },
-            connectionInfoUpdate:            { Name: 'connectionInfoUpdate', Interface: 'Event' },
-            cfstatechange:                   { Name: 'cfstatechange', Interface: 'Event' },
-            datachange:                      { Name: 'datachange', Interface: 'Event' },
-            dataerror:                       { Name: 'dataerror', Interface: 'Event' },
-            DOMMouseScroll:                  { Name: 'DOMMouseScroll', Interface: 'Event' },
-            icccardlockerror:                { Name: 'icccardlockerror', Interface: 'Event' },
-            iccinfochange:                   { Name: 'iccinfochange', Interface: 'Event' },
-            localized:                       { Name: 'localized', Interface: 'Event' },
-            MozBeforeResize:                 { Name: 'MozBeforeResize', Interface: 'Event' },
-            mozbrowserclose:                 { Name: 'mozbrowserclose', Interface: 'Event' },
-            mozbrowsercontextmenu:           { Name: 'mozbrowsercontextmenu', Interface: 'Event' },
-            mozbrowsererror:                 { Name: 'mozbrowsererror', Interface: 'Event' },
-            mozbrowsericonchange:            { Name: 'mozbrowsericonchange', Interface: 'Event' },
-            mozbrowserlocationchange:        { Name: 'mozbrowserlocationchange', Interface: 'Event' },
-            mozbrowserloadend:               { Name: 'mozbrowserloadend', Interface: 'Event' },
-            mozbrowserloadstart:             { Name: 'mozbrowserloadstart', Interface: 'Event' },
-            mozbrowseropenwindow:            { Name: 'mozbrowseropenwindow', Interface: 'Event' },
-            mozbrowsersecuritychange:        { Name: 'mozbrowsersecuritychange', Interface: 'Event' },
-            mozbrowsershowmodalprompt:       { Name: 'mozbrowsershowmodalprompt', Interface: 'Event' },
-            mozbrowsertitlechange:           { Name: 'mozbrowsertitlechange', Interface: 'Event' },
-            MozGamepadButtonDown:            { Name: 'MozGamepadButtonDown', Interface: 'Event' },
-            MozGamepadButtonUp:              { Name: 'MozGamepadButtonUp', Interface: 'Event' },
-            MozMousePixelScroll:             { Name: 'MozMousePixelScroll', Interface: 'Event' },
-            MozOrientation:                  { Name: 'MozOrientation', Interface: 'Event' },
-            moztimechange:                   { Name: 'moztimechange', Interface: 'Event' },
-            MozTouchDown:                    { Name: 'MozTouchDown', Interface: 'Event' },
-            MozTouchMove:                    { Name: 'MozTouchMove', Interface: 'Event' },
-            MozTouchUp:                      { Name: 'MozTouchUp', Interface: 'Event' },
-            disabled:                        { Name: 'disabled', Interface: 'Event' },
-            enabled:                         { Name: 'enabled', Interface: 'Event' },
-            statuschange:                    { Name: 'statuschange', Interface: 'Event' },
-            smartcardInsert:                 { Name: 'smartcard-insert', Interface: 'Event' },
-            smartcardRemove:                 { Name: 'smartcard-remove', Interface: 'Event' },
-            stkcommand:                      { Name: 'stkcommand', Interface: 'Event' },
-            stksessionend:                   { Name: 'stksessionend', Interface: 'Event' },
-            text:                            { Name: 'text', Interface: 'Event' },
-            ussdreceived:                    { Name: 'ussdreceived', Interface: 'Event' },
-            voicechange:                     { Name: 'voicechange', Interface: 'Event' },
-            broadcast:                       { Name: 'broadcast', Interface: 'Event' },
-            CheckboxStateChange:             { Name: 'CheckboxStateChange', Interface: 'Event' },
-            command:                         { Name: 'command', Interface: 'Event' },
-            commandupdate:                   { Name: 'commandupdate', Interface: 'Event' },
-            DOMMenuItemActive:               { Name: 'DOMMenuItemActive', Interface: 'Event' },
-            DOMMenuItemInactive:             { Name: 'DOMMenuItemInactive', Interface: 'Event' },
-            RadioStateChange:                { Name: 'RadioStateChange', Interface: 'Event' },
-            ValueChange:                     { Name: 'ValueChange', Interface: 'Event' },
-            MozSwipeGesture:                 { Name: 'MozSwipeGesture', Interface: 'Event' },
-            MozMagnifyGestureStart:          { Name: 'MozMagnifyGestureStart', Interface: 'Event' },
-            MozMagnifyGestureUpdate:         { Name: 'MozMagnifyGestureUpdate', Interface: 'Event' },
-            MozMagnifyGesture:               { Name: 'MozMagnifyGesture', Interface: 'Event' },
-            MozRotateGestureStart:           { Name: 'MozRotateGestureStart', Interface: 'Event' },
-            MozRotateGestureUpdate:          { Name: 'MozRotateGestureUpdate', Interface: 'Event' },
-            MozRotateGesture:                { Name: 'MozRotateGesture', Interface: 'Event' },
-            MozTapGesture:                   { Name: 'MozTapGesture', Interface: 'Event' },
-            MozPressTapGesture:              { Name: 'MozPressTapGesture', Interface: 'Event' },
-            MozEdgeUIGesture:                { Name: 'MozEdgeUIGesture', Interface: 'Event' },
-            MozAfterPaint:                   { Name: 'MozAfterPaint', Interface: 'Event' },
-            DOMPopupBlocked:                 { Name: 'DOMPopupBlocked', Interface: 'Event' },
-            DOMWindowCreated:                { Name: 'DOMWindowCreated', Interface: 'Event' },
-            DOMWindowClose:                  { Name: 'DOMWindowClose', Interface: 'Event' },
-            DOMTitleChanged:                 { Name: 'DOMTitleChanged', Interface: 'Event' },
-            DOMLinkAdded:                    { Name: 'DOMLinkAdded', Interface: 'Event' },
-            DOMLinkRemoved:                  { Name: 'DOMLinkRemoved', Interface: 'Event' },
-            DOMMetaAdded:                    { Name: 'DOMMetaAdded', Interface: 'Event' },
-            DOMMetaRemoved:                  { Name: 'DOMMetaRemoved', Interface: 'Event' },
-            DOMWillOpenModalDialog:          { Name: 'DOMWillOpenModalDialog', Interface: 'Event' },
-            DOMModalDialogClosed:            { Name: 'DOMModalDialogClosed', Interface: 'Event' },
-            DOMAutoComplete:                 { Name: 'DOMAutoComplete', Interface: 'Event' },
-            DOMFrameContentLoaded:           { Name: 'DOMFrameContentLoaded', Interface: 'Event' },
-            AlertActive:                     { Name: 'AlertActive', Interface: 'Event' },
-            MozEnteredDomFullscreen:         { Name: 'MozEnteredDomFullscreen', Interface: 'Event' },
-            SSWindowClosing:                 { Name: 'SSWindowClosing', Interface: 'Event' },
-            SSTabClosing:                    { Name: 'SSTabClosing', Interface: 'Event' },
-            SSTabRestoring:                  { Name: 'SSTabRestoring', Interface: 'Event' },
-            SSTabRestored:                   { Name: 'SSTabRestored', Interface: 'Event' },
-            SSWindowStateReady:              { Name: 'SSWindowStateReady', Interface: 'Event' },
-            SSWindowStateBusy:               { Name: 'SSWindowStateBusy', Interface: 'Event' },
-            tabviewsearchenabled:            { Name: 'tabviewsearchenabled', Interface: 'Event' },
-            tabviewsearchdisabled:           { Name: 'tabviewsearchdisabled', Interface: 'Event' },
-            tabviewframeinitialized:         { Name: 'tabviewframeinitialized', Interface: 'Event' },
-            tabviewshown:                    { Name: 'tabviewshown', Interface: 'Event' },
-            tabviewhidden:                   { Name: 'tabviewhidden', Interface: 'Event' },
-            TabOpen:                         { Name: 'TabOpen', Interface: 'Event' },
-            TabClose:                        { Name: 'TabClose', Interface: 'Event' },
-            TabSelect:                       { Name: 'TabSelect', Interface: 'Event' },
-            TabShow:                         { Name: 'TabShow', Interface: 'Event' },
-            TabHide:                         { Name: 'TabHide', Interface: 'Event' },
-            TabPinned:                       { Name: 'TabPinned', Interface: 'Event' },
-            TabUnpinned:                     { Name: 'TabUnpinned', Interface: 'Event' },
-            CssRuleViewRefreshed:            { Name: 'CssRuleViewRefreshed', Interface: 'Event' },
-            CssRuleViewChanged:              { Name: 'CssRuleViewChanged', Interface: 'Event' },
-            MSFullscreenChange:              { Name: 'MSFullscreenChange', Interface: 'Event' },
-            MSFullscreenError:               { Name: 'MSFullscreenError', Interface: 'Event' },
-            MSGestureChange:                 { Name: 'MSGestureChange', Interface: 'Event' },
-            MSGestureEnd:                    { Name: 'MSGestureEnd', Interface: 'Event' },
-            MSGestureHold:                   { Name: 'MSGestureHold', Interface: 'Event' },
-            MSGestureStart:                  { Name: 'MSGestureStart', Interface: 'Event' },
-            MSGestureTap:                    { Name: 'MSGestureTap', Interface: 'Event' },
-            MSInertiaStart:                  { Name: 'MSInertiaStart', Interface: 'Event' },
-            MSManipulationStateChanged:      { Name: 'MSManipulationStateChanged', Interface: 'Event' },
-            mssitemodejumplistitemremoved:   { Name: 'mssitemodejumplistitemremoved', Interface: 'Event' },
-            MSContentZoom:                   { Name: 'MSContentZoom', Interface: 'Event' },
-            gotpointercapture:               { Name: 'gotpointercapture', Interface: 'Event' },
-            lostpointercapture:              { Name: 'lostpointercapture', Interface: 'Event' },
-            MSPointerHover:                  { Name: 'MSPointerHover', Interface: 'Event' },
-            pointercancel:                   { Name: 'pointercancel', Interface: 'Event' },
-            pointerdown:                     { Name: 'pointerdown', Interface: 'Event' },
-            pointerenter:                    { Name: 'pointerenter', Interface: 'Event' },
-            pointerleave:                    { Name: 'pointerleave', Interface: 'Event' },
-            pointermove:                     { Name: 'pointermove', Interface: 'Event' },
-            pointerout:                      { Name: 'pointerout', Interface: 'Event' },
-            pointerover:                     { Name: 'pointerover', Interface: 'Event' },
-            pointerup:                       { Name: 'pointerup', Interface: 'Event' },
-            msthumbnailclick:                { Name: 'msthumbnailclick', Interface: 'Event' },
-            deactivate:                      { Name: 'deactivate', Interface: 'Event' },
-            transitionstart:                 { Name: 'transitionstart', Interface: 'Event' },
-            beforecopy:                      { Name: 'beforecopy', Interface: 'Event' },
-            beforecut:                       { Name: 'beforecut', Interface: 'Event' },
-            beforeeditfocus:                 { Name: 'beforeeditfocus', Interface: 'Event' },
-            beforepaste:                     { Name: 'beforepaste', Interface: 'Event' },
-            beforeupdate:                    { Name: 'beforeupdate', Interface: 'Event' },
-            cellchange:                      { Name: 'cellchange', Interface: 'Event' },
-            controlselect:                   { Name: 'controlselect', Interface: 'Event' },
-            dataavailable:                   { Name: 'dataavailable', Interface: 'Event' },
-            datasetchanged:                  { Name: 'datasetchanged', Interface: 'Event' },
-            datasetcomplete:                 { Name: 'datasetcomplete', Interface: 'Event' },
-            errorupdate:                     { Name: 'errorupdate', Interface: 'Event' },
-            help:                            { Name: 'help', Interface: 'Event' },
-            layoutcomplete:                  { Name: 'layoutcomplete', Interface: 'Event' },
-            losecapture:                     { Name: 'losecapture', Interface: 'Event' },
-            move:                            { Name: 'move', Interface: 'Event' },
-            moveend:                         { Name: 'moveend', Interface: 'Event' },
-            movestart:                       { Name: 'movestart', Interface: 'Event' },
-            propertychange:                  { Name: 'propertychange', Interface: 'Event' },
-            resizeend:                       { Name: 'resizeend', Interface: 'Event' },
-            resizestart:                     { Name: 'resizestart', Interface: 'Event' },
-            rowenter:                        { Name: 'rowenter', Interface: 'Event' },
-            rowexit:                         { Name: 'rowexit', Interface: 'Event' },
-            rowsdelete:                      { Name: 'rowsdelete', Interface: 'Event' },
-            rowsinserted:                    { Name: 'rowsinserted', Interface: 'Event' },
-            selectionchange:                 { Name: 'selectionchange', Interface: 'Event' },
-            selectstart:                     { Name: 'selectstart', Interface: 'Event' },
-            storagecommit:                   { Name: 'storagecommit', Interface: 'Event' },
-            webglcontextlost:                { Name: 'webglcontextlost', Interface: 'WebGLContextEvent' },
-            webglcontextrestored:            { Name: 'webglcontextrestored', Interface: 'WebGLContextEvent' },
-            webglcontextcreationerror:       { Name: 'webglcontextcreationerror', Interface: 'WebGLContextEvent' },
-        });
-
-        /** Add `callback` for one or more space/comma/pipe-separated `types` on every resolved target. */
-        static On(target: Target, types: string, callback: EventListener, options?: AddEventListenerOptions): void
-        {
-            Events._resolveTargets(target).forEach(el =>
-                Events._splitTypes(types).forEach(t => { Events._preflight(t); el.addEventListener(t, callback, options); }));
-        }
-
-        /** Remove `callback` for the given `types` from every resolved target. */
-        static Off(target: Target, types: string, callback: EventListener, options?: boolean | EventListenerOptions): void
-        {
-            Events._resolveTargets(target).forEach(el =>
-                Events._splitTypes(types).forEach(t => { Events._preflight(t); el.removeEventListener(t, callback, options); }));
-        }
-
-        /** Dispatch `type` on every resolved target, using the correct Event interface when known. */
-        static Fire(target: Target, type: string, init?: CustomEventInit): void
-        {
-            Events._preflight(type);
-            const ev = Events._build(type, init);
-            Events._resolveTargets(target).forEach(el => el.dispatchEvent(ev));
-        }
-
-        // ── private static helpers ────────────────────────────────────────────
-
-        /** Warn on a likely-typo keyword: unknown, and neither namespaced (`ns:evt`) nor hyphenated (`my-evt`). Custom events stay valid. */
-        private static _preflight(type: string): void
-        {
-            if (!Events.Types[type] && !type.includes(':') && !type.includes('-'))
-                console.warn(`[arianna] Events: unknown event keyword "${type}" — not a W3C Level-3 type. Custom events are fine; otherwise check for a typo.`);
-        }
-
-        /** Construct the right Event subtype for `type` (e.g. MouseEvent), falling back to CustomEvent. */
-        private static _build(type: string, init?: CustomEventInit): Event
-        {
-            const spec = Events.Types[type];
-            if (spec && typeof window !== 'undefined') {
-                const Ctor = (window as unknown as Record<string, unknown>)[spec.Interface];
-                if (typeof Ctor === 'function') {
-                    try { return new (Ctor as new (t: string, i?: unknown) => Event)(type, { bubbles: true, composed: true, ...init }); }
-                    catch { /* not constructable (e.g. MutationEvent) — fall back to CustomEvent */ }
-                }
-            }
-            return new CustomEvent(type, { bubbles: true, composed: true, ...init });
-        }
-
-        private static _resolveTargets(t: Target): EventTarget[]
-        {
-            if (typeof t === 'string') return Array.from(document.querySelectorAll<Element>(t)) as EventTarget[];
-            return Array.isArray(t) ? t : [t];
-        }
-
-        private static _splitTypes(s: string): string[]
-        {
-            return s.split(/\s+|,|\|/g).filter(Boolean);
-        }
-    }
-}
-
-
-// ── Observer — DOM custom-element lifecycle watcher (lifted from legacy) ───────
-//
-// A stateful MutationObserver wrapper carried over from the legacy
-// Component.Observer: Connect / Disconnect / Connected / Disconnected / State /
-// Configuration / Element. Two-phase upgrade driven by Initialize()/Bootstrap():
-//   • buffering (default): custom tags whose definition is not yet loaded are
-//     deferred to the static Observer.Stack; definable nodes upgrade immediately.
-//   • live (after Bootstrap): every added subtree upgrades immediately.
-//
-// Every `new Observer()` AUTO-REGISTERS into the `Observers` registry — exactly
-// like Namespace.ts registers itself on Core. The running global observer is the
-// first entry, created by Initialize() and exposed read-only as Core.Observer;
-// the registry is Core.Observers. The actual upgrade is routed through Upgrade()
-// (→ Namespace.Update), NOT the legacy inline prototype splice.
-
-/**
- * Registry of every live Observer. The running global observer is the first
- * entry (added by Initialize()); further observers add themselves on `new
- * Observer()`. Exposed as Core.Observers.
- */
-const observers: Set<Observer> = new Set();
-
-export class Observer
-{
-    /** Pending custom nodes deferred during buffering; drained by Bootstrap() → flush(). */
-    static readonly Stack: Set<Element> = new Set();
-
-    /** Boot phase: false = buffering (defer unknown custom tags), true = live. */
-    static live = false;
-
-    readonly #mo   : MutationObserver;
-    #connected     = false;
-    #element       : Node;
-    #configuration : MutationObserverInit;
-
-    constructor(configuration?: Partial<MutationObserverInit>)
-    {
-        this.#element       = typeof document !== 'undefined' ? document.documentElement : (null as unknown as Node);
-        this.#configuration = { childList: true, subtree: true, attributes: true, attributeOldValue: true, ...configuration };
-        this.#mo            = new MutationObserver((mutations) => this.#handle(mutations));
-        observers.add(this);                                   // auto-register (first entry = the global)
-    }
-
-    // ── Legacy lifecycle properties ───────────────────────────────────────────
-
-    /** Start observing. `element` defaults to <html>; `configuration` to the current one. */
-    Connect(element?: Node, configuration?: Partial<MutationObserverInit>): this
-    {
-        if (element instanceof Node) this.#element = element;
-        if (configuration && typeof configuration === 'object') Object.assign(this.#configuration, configuration);
-        this.#mo.observe(this.#element, this.#configuration);
-        this.#connected = true;
-        return this;
-    }
-
-    /** Stop observing. */
-    Disconnect(): this
-    {
-        this.#mo.disconnect();
-        this.#connected = false;
-        return this;
-    }
-
-    get Connected(): boolean { return this.#connected; }
-    set Connected(v: boolean) { if (typeof v === 'boolean' && v !== this.#connected) (v ? this.Connect() : this.Disconnect()); }
-
-    get Disconnected(): boolean { return !this.#connected; }
-    set Disconnected(v: boolean) { if (typeof v === 'boolean' && v !== !this.#connected) (v ? this.Disconnect() : this.Connect()); }
-
-    get State(): 'Connected' | 'Disconnected' { return this.#connected ? 'Connected' : 'Disconnected'; }
-    set State(s: string)
-    {
-        const v = String(s).toUpperCase();
-        if (v === 'CONNECTED' && !this.#connected)        this.Connect();
-        else if (v === 'DISCONNECTED' && this.#connected) this.Disconnect();
-    }
-
-    get Configuration(): MutationObserverInit { return this.#configuration; }
-    set Configuration(c: MutationObserverInit)
-    {
-        if (c && typeof c === 'object') {
-            this.#configuration = { ...c };
-            if (this.#connected) { this.#mo.disconnect(); this.#mo.observe(this.#element, this.#configuration); }
-        }
-    }
-
-    get Element(): Node { return this.#element; }
-    set Element(el: Node)
-    {
-        if (el instanceof Node) {
-            this.#element = el;
-            if (this.#connected) { this.#mo.disconnect(); this.#mo.observe(this.#element, this.#configuration); }
-        }
-    }
-
-    /** Convenience accessor for the shared deferred stack (same Set as Observer.Stack). */
-    get Stack(): Set<Element> { return Observer.Stack; }
-
-    // ── Upgrade pipeline ──────────────────────────────────────────────────────
-
-    /** Sweep an existing subtree with the current phase rule (used at Initialize). */
-    sweep(root: Node = this.#element): void { Observer.#visit(root); }
-
-    /** EAGER pump: synchronously process THIS observer's queued mutation records
-     *  (upgrade + lifecycle dispatch + FUNCTION-form constructor body) instead of
-     *  waiting for the asynchronous MutationObserver microtask. */
-    drain(): void { this.#handle(this.#mo.takeRecords()); }
-
-    #handle(mutations: MutationRecord[]): void
-    {
-        for (const m of mutations) {
-            // Attribute change → {prefix}-change event on the element.
-            if (m.type === 'attributes' && m.target instanceof Element) {
-                const attr = m.target.attributes.getNamedItem(m.attributeName ?? '');
-                if (attr) {
-                    const evName = /^(\w+)/.exec(attr.name)?.[1]?.toLowerCase() ?? attr.name;
-                    m.target.dispatchEvent(new CustomEvent(`${evName}-change`, { detail: { element: m.target, attribute: attr } }));
-                }
-            }
-            // Child list change → lifecycle events + upgrade.
-            if (m.type === 'childList') {
-                for (const node of Array.from(m.addedNodes)) {
-                    if (!(node instanceof Element)) continue;
-                    const descriptor = GetDescriptor(node);
-                    node.dispatchEvent(new CustomEvent(Events.Lifecycle.NodeAdding, { detail: { node, descriptor } }));
-                    Observer.#visit(node);                    // upgrade-or-defer (the MO already stacks pending nodes)
-                    document.dispatchEvent(new CustomEvent(Events.Lifecycle.NodeAdded, { detail: { node, descriptor } }));
-                }
-                for (const node of Array.from(m.removedNodes)) {
-                    if (!(node instanceof Element)) continue;
-                    document.dispatchEvent(new CustomEvent(Events.Lifecycle.NodeRemoved, { detail: { node, descriptor: GetDescriptor(node) } }));
-                }
-            }
-        }
-    }
-
-    /** Buffering visit: upgrade definable nodes now; defer unknown custom tags. */
-    static #visit(node: Node): void
-    {
-        if (node instanceof Element) {
-            if (!IsUpgraded(node)) {
-                Upgrade(node);                                          // no-op unless descriptor known + Custom
-                if (!IsUpgraded(node) && node.localName.includes('-'))
-                    Observer.Stack.add(node);                           // custom tag, definition not loaded yet → defer
-            }
-            for (let c = node.firstElementChild; c; c = c.nextElementSibling) Observer.#visit(c);
-            return;
-        }
-        for (let c = node.firstChild; c; c = c.nextSibling) Observer.#visit(c);
-    }
-
-    /** Flush the deferred stack (definitions now loaded) and flip to live. */
-    static flush(): void
-    {
-        for (const el of Observer.Stack) { if (el.isConnected) Upgrade(el); }
-        Observer.Stack.clear();
-        Observer.live = true;
-    }
-
-    /** EAGER: drain every registered observer's pending records synchronously,
-     *  so introspection (GetPrototypeChain) and same-tick reads reflect the
-     *  upgraded DOM without waiting for the async MutationObserver. */
-    static drainAll(): void { for (const o of observers) o.drain(); }
-
-    /** Self-register on window so `new Observer()` is reachable globally (like Real / State). */
-    static
-    {
-        if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Observer'))
-            Object.defineProperty(window, 'Observer', { enumerable: true, configurable: false, writable: false, value: Observer });
-    }
-}
-
-// ── Boot: Initialize() + Bootstrap() ──────────────────────────────────────────
-
-/**
- * Argument to {@link Bootstrap}. Declares which definition-bearing bundles to
- * dynamically import before flipping the buffered Observer live — so the whole
- * page boot is a single `<head>` line. Forms:
- *
- *   • a keyword            'components'                       → <base>arianna-components.js
- *   • an explicit URL      '/cdn/arianna.js'                  → used as-is
- *   • an array of either   ['additionals', 'components']
- *   • a config object      { additionals: true, components: true }
- *
- * Keyword → URL: 'core' → '<base>arianna.js', otherwise '<base>arianna-<kw>.js'.
- * A token with '/', a leading '.', 'http(s):' or a '.js' suffix is treated as a URL.
- */
-export type BootSpec =
-    | string
-    | readonly string[]
-    | {
-        /** Base URL for keyword resolution. Default '/release/dist/'. */
-        base?: string;
-        /** Load core: `true` → keyword, `string` → explicit URL. */
-        core?: boolean | string;
-        /** Load additionals: `true` → keyword, `string` → explicit URL. */
-        additionals?: boolean | string;
-        /** Load components: `true` → keyword, `string` → explicit URL. */
-        components?: boolean | string;
-        /** Extra explicit bundle keywords / URLs. */
-        bundles?: readonly string[];
-        /** Mirror the loaded modules' exports onto window. Default `true`. */
-        mirror?: boolean;
-    };
-
-/**
- * Boot owner. The two phase flags are #-private static — runtime-hard-private,
- * so no stray module code can read or flip them; the ONLY mutators are
- * Initialize() / Bootstrap(). The outside world reads them through the sealed,
- * read-only Core.Initialized / Core.Booted getters.
- */
-class Boot
-{
-    static #initialized = false;
-    static #booted      = false;
-
-    /** Resolvers for callers awaiting Ready() before Bootstrap() has flipped #booted. */
-    static #readyResolvers: Array<() => void> = [];
-
-    static get initialized(): boolean { return Boot.#initialized; }
-    static get booted():      boolean { return Boot.#booted; }
-
-    /**
-     * Resolves when the page is fully booted (Bootstrap() has run). Resolves
-     * synchronously if already booted; otherwise on the next Bootstrap() completion.
-     * Lets a consumer do `await Core.Ready()` instead of hand-rolling an
-     * `arianna:ready` listener + already-booted guard in every page.
-     */
-    static Ready(): Promise<void>
-    {
-        if (Boot.#booted) return Promise.resolve();
-        return new Promise<void>(resolve => { Boot.#readyResolvers.push(resolve); });
-    }
-
-    /**
-     * Phase 1 — synchronous, runs as soon as Core is imported (head, blocking).
-     *
-     *   • exposes window.Core early (so a head bootstrap can use it during load);
-     *   • creates the global Observer in BUFFERING mode (auto-registered in Observers),
-     *     so future custom tags without a loaded definition defer to Observer.Stack;
-     *   • sweeps the DOM already present at import time with the same rule — so load
-     *     order is irrelevant for markup parsed before Core ran.
-     *
-     * Idempotent. Loading the component ESM modules is the caller's job; when those
-     * resolve, call Bootstrap().
-     */
-    static Initialize(root: Document | Element = document): void
-    {
-        if (typeof document === 'undefined' || Boot.#initialized) return;
-        Boot.#initialized = true;
-
-        if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Core')) {
-            Object.defineProperty(window, 'Core', { enumerable: true, configurable: false, writable: false, value: Core });
-        }
-
-        // The global observer registers itself as the first entry of `observers`.
-        new Observer().Connect(document.documentElement).sweep(root as Node);
-    }
-
-    /**
-     * Phase 2 — call once the modules that DEFINE the buffered tags have loaded.
-     *
-     *   • Observer.flush(): upgrades every deferred element + flips the observer LIVE;
-     *   • fires `arianna:ready` on the document (once).
-     *
-     * Idempotent. Trigger it from the loader when the definition-bearing modules
-     * (Namespace + the components a page uses) have resolved — NOT merely after Core.
-     */
-    static async Bootstrap(spec?: BootSpec): Promise<void>
-    {
-        if (typeof document === 'undefined') return;
-
-        // (1) Optionally load the definition-bearing bundles first, so a single
-        //     head line is the whole boot. Failures are isolated (one bad bundle
-        //     must not abort the flush). No spec → no await → flush stays synchronous,
-        //     keeping legacy fire-and-forget `Bootstrap()` callers unchanged.
-        if (spec !== undefined) {
-            const { urls, mirror } = Boot.#resolveSpec(spec);
-            const mods = await Promise.all(urls.map(u =>
-                import(/* @vite-ignore */ u)
-                    .catch((e: unknown) => { console.warn('[arianna] Bootstrap: import failed for', u, e); return null; })
-            ));
-            if (mirror) for (const m of mods) if (m) Boot.#mirror(m as Record<string, unknown>);
-        }
-
-        // (2) Upgrade every deferred element + flip the buffered Observer LIVE.
-        Observer.flush();
-
-        // (3) Fire arianna:ready once, and release any Ready() awaiters.
-        if (!Boot.#booted) {
-            Boot.#booted = true;
-            const resolvers = Boot.#readyResolvers;
-            Boot.#readyResolvers = [];
-            for (const resolve of resolvers) resolve();
-            document.dispatchEvent(new CustomEvent(Events.Lifecycle.Ready, { detail: { version: Configuration.version.string } }));
-        }
-    }
-
-    /** Resolve a {@link BootSpec} into concrete bundle URLs + the mirror flag. */
-    static #resolveSpec(spec: BootSpec): { urls: string[]; mirror: boolean }
-    {
-        // Default base honours a ?bundle= override (the dev-server convention),
-        // falling back to '/release/dist/'. So the single head line never reads it.
-        const DEFAULT_BASE =
-            (typeof location !== 'undefined' && new URLSearchParams(location.search).get('bundle')) || '/release/dist/';
-        const toURL = (token: string, base: string): string =>
-            /^https?:|^\.|\/|\.js$/.test(token)
-                ? token
-                : base + (token === 'core' ? 'arianna.js' : `arianna-${token}.js`);
-
-        if (typeof spec === 'string')   return { urls: [toURL(spec, DEFAULT_BASE)], mirror: true };
-        if (Array.isArray(spec))        return { urls: (spec as readonly string[]).map(s => toURL(s, DEFAULT_BASE)), mirror: true };
-
-        const o      = spec as Exclude<BootSpec, string | readonly string[]>;
-        const base   = o.base ?? DEFAULT_BASE;
-        const tokens = [...(o.bundles ?? [])];
-        for (const kw of ['core', 'additionals', 'components'] as const) {
-            const v = o[kw];
-            if (v === true)                 tokens.push(kw);
-            else if (typeof v === 'string') tokens.push(v);
-        }
-        return { urls: tokens.map(t => toURL(t, base)), mirror: o.mirror ?? true };
-    }
-
-    /** Mirror a module's exports onto window, prefixing built-ins so globals survive. */
-    static #mirror(mod: Record<string, unknown>): void
-    {
-        if (typeof window === 'undefined') return;
-        const win = window as unknown as Record<string, unknown>;
-        for (const key of Object.keys(mod)) {
-            const name = Boot.#BUILTIN_GLOBALS.has(key) ? 'Arianna' + key : key;
-            try { Object.defineProperty(win, name, { value: mod[key], writable: false, configurable: true, enumerable: true }); }
-            catch { /* read-only / sealed global — skip */ }
-        }
-    }
-
-    /** Global identifiers a bundle export must not clobber (gets an 'Arianna' prefix). */
-    static readonly #BUILTIN_GLOBALS = new Set<string>([
-        'Math', 'Date', 'Number', 'String', 'Boolean', 'Symbol', 'BigInt', 'Object', 'Array', 'Map',
-        'Set', 'WeakMap', 'WeakSet', 'Promise', 'JSON', 'RegExp', 'Error', 'TypeError', 'RangeError',
-        'SyntaxError', 'Proxy', 'Reflect', 'Function', 'Infinity', 'NaN', 'undefined', 'globalThis',
-        'console', 'window', 'document', 'navigator', 'location', 'history', 'localStorage',
-        'sessionStorage', 'fetch', 'XMLHttpRequest', 'WebSocket', 'Worker', 'Audio',
-    ]);
-}
-
-/** Phase 1 boot — thin wrapper over Boot.Initialize (the export name is the public API). */
-export function Initialize(root: Document | Element = document): void { Boot.Initialize(root); }
-
-/**
- * Phase 2 boot — thin wrapper over Boot.Bootstrap. With no argument it just flushes
- * the buffered Observer (legacy, synchronous). With a {@link BootSpec} it ALSO loads
- * the definition-bearing bundles first, so the whole page boot is one head line:
- *
- *   <script type="module">
- *     import { Bootstrap } from '/release/dist/arianna.js';
- *     Bootstrap({ additionals: true, components: true });
- *   </script>
- */
-export function Bootstrap(spec?: BootSpec): Promise<void> { return Boot.Bootstrap(spec); }
-
-/**
- * AriannA(spec?) — the one-call boot. Equivalent to Bootstrap() but with the
- * full default spec, so a page only needs:  `import { AriannA } from '…/arianna.js'; AriannA()`.
- * Pass a spec to override (e.g. AriannA({ core: true }) for core-only).
- */
-export function AriannA(spec?: BootSpec): Promise<void>
-{
-    return Boot.Bootstrap(spec ?? { core: true, additionals: true, components: true });
-}
-
-/** Resolves once the page is booted (immediately if already booted). See Boot.Ready. */
-export function Ready(): Promise<void> { return Boot.Ready(); }
-
-// ── Helpers — generic object / value utilities ────────────────────────────────
-
-/**
- * Checks whether `value` satisfies all the given type tags.
- * @example Core.Is(class A {}, 'class')  // true
- */
-export function Is(
-    value: unknown,
-    ...types: ('string' | 'number' | 'boolean' | 'symbol' | 'function' | 'object' | 'class' | (new (...args: never[]) => unknown))[]
-): boolean
-{
-// Legacy short-circuit: falsy subject or zero types → true (skip checks).
-    if (!value || types.length === 0) return true;
-
-    const native = new Set(['string', 'number', 'boolean', 'symbol', 'function', 'object']);
-    for (const t of types) {
-        if (typeof t === 'string') {
-            if (t === 'class') {
-                // New robustness: must be a function, via Function.prototype.toString + \b.
-                if (typeof value !== 'function' || !/^class\b/.test(Function.prototype.toString.call(value))) return false;
-            } else if (native.has(t)) {
-                if (typeof value !== t) return false;
-            }
-        } else if (typeof t === 'function') {
-            if (!(value instanceof t)) return false;
-        }
-    }
-    return true;
-}
-
-/**
- * Deep equality across primitives, plain objects, arrays, regex, dates, and
- * class instances. Pass 2+ args or a single array.
- * @example Core.Equals({a:1}, {a:1})  // true
- */
-export function Equals(...args: unknown[]): boolean
-{
-    let elements = args;
-    if (args.length === 1 && Array.isArray(args[0])) elements = args[0] as unknown[];
-    if (elements.length < 2) return true;
-
-    for (let i = elements.length - 1; i > 0; i--) {
-        const x = elements[i];
-        const y = elements[i - 1];
-        if (Object.is(x, y)) continue;
-        if ((x === null || x === undefined) && (y === null || y === undefined)) continue;
-        if (x === null || y === null || x === undefined || y === undefined) return false;
-
-        const tx = typeof x, ty = typeof y;
-        if (tx !== ty) return false;
-
-        if (tx === 'object') {
-            if (x instanceof Date && y instanceof Date) { if (x.getTime() !== y.getTime()) return false; continue; }
-            if (x instanceof RegExp && y instanceof RegExp) { if (x.toString() !== y.toString()) return false; continue; }
-            if (Array.isArray(x) || Array.isArray(y)) {
-                if (!Array.isArray(x) || !Array.isArray(y)) return false;
-                if (x.length !== y.length) return false;
-                for (let k = 0; k < x.length; k++) if (!Equals(x[k], y[k])) return false;
-                continue;
-            }
-            const xo = x as Record<string, unknown>;
-            const yo = y as Record<string, unknown>;
-            const xk = Object.keys(xo);
-            const yk = Object.keys(yo);
-            if (xk.length !== yk.length) return false;
-            for (const k of xk) {
-                if (!Object.prototype.hasOwnProperty.call(yo, k)) return false;
-                if (!Equals(xo[k], yo[k])) return false;
-            }
-            continue;
-        }
-        if (tx === 'function') {
-            if ((x as () => unknown).toString() !== (y as () => unknown).toString()) return false;
-            continue;
-        }
-        return false;
-    }
-    return true;
-}
-
-/** True when an object has no own enumerable properties. Non-objects → true. */
-export function Empty(value: unknown): boolean
-{
-    if (value === null || value === undefined || typeof value !== 'object') return true;
-    for (const _ in value as object) return false;
-    return true;
-}
-
-/**
- * Checks if `target` has all the specified members. For HTMLElement, members
- * are checked against attributes; otherwise against own properties.
- */
-export function Has(target: object | null | undefined, ...members: string[]): boolean
-{
-    if (!target || typeof target !== 'object') return false;
-    if (members.length === 0) return true;
-    const isElement = typeof HTMLElement !== 'undefined' && target instanceof HTMLElement;
-    for (const m of members) {
-        if (isElement) { if ((target as HTMLElement).getAttribute(m) === null) return false; }
-        else           { if (!(m in (target as Record<string, unknown>))) return false; }
-    }
-    return true;
-}
-
-/** Deep-clone a value (primitives, Date, RegExp, Array, plain Object, Node, function). */
-export function Clone<T>(value: T): T
-{
-    if (value === null || value === undefined) return value;
-    const t = typeof value;
-    if (t === 'string' || t === 'number' || t === 'boolean' || t === 'symbol' || t === 'bigint') return value;
-
-    if (t === 'function') {
-        const fn = value as unknown as () => unknown;
-        const out = new Function('return ' + fn.toString())() as () => unknown;
-        const fnRec = fn as unknown as Record<string, unknown>;
-        const outRec = out as unknown as Record<string, unknown>;
-        for (const k of Object.keys(fnRec)) outRec[k] = fnRec[k];
-        return out as unknown as T;
-    }
-    if (typeof Node !== 'undefined' && value instanceof Node) return value.cloneNode(true) as unknown as T;
-    if (value instanceof Date)   return new Date(value.getTime()) as unknown as T;
-    if (value instanceof RegExp) return new RegExp(value.source, value.flags) as unknown as T;
-    if (Array.isArray(value))    return value.map(v => Clone(v)) as unknown as T;
-    if (t === 'object') {
-        const obj = value as Record<string, unknown>;
-        const out: Record<string, unknown> = {};
-        for (const k of Object.keys(obj)) out[k] = Clone(obj[k]);
-        return out as unknown as T;
-    }
-    return value;
-}
-
-/**
- * Mixes own enumerable properties from sources into target. Special-cases ES
- * classes (copies prototype methods onto target.prototype). Returns target.
- */
-export function Assign<T extends object>(target: T, ...sources: unknown[]): T
-{
-    if (target === null || target === undefined) throw new TypeError('Cannot convert first argument to object');
-    const to = Object(target) as Record<string, unknown>;
-    for (const source of sources) {
-        if (source === null || source === undefined) continue;
-        if (typeof source === 'function' && Is(source, 'class')) {
-            const ctor = source as new () => object;
-            const targetCtor = target as unknown as { prototype?: Record<string, unknown> };
-            if (!targetCtor.prototype) continue;
-            for (const k of Object.getOwnPropertyNames(ctor.prototype)) {
-                if (k !== 'constructor') targetCtor.prototype[k] = (ctor.prototype as Record<string, unknown>)[k];
-            }
-            try {
-                const instance = new ctor() as Record<string, unknown>;
-                const proto = Object.getPrototypeOf(targetCtor.prototype) as Record<string, unknown> | null;
-                if (proto) for (const k of Object.getOwnPropertyNames(instance)) if (k !== 'constructor') proto[k] = instance[k];
-            } catch { /* class with required ctor args — skip */ }
-            continue;
-        }
-        const src = Object(source) as Record<string, unknown>;
-        for (const k of Object.keys(src)) {
-            const desc = Object.getOwnPropertyDescriptor(src, k);
-            if (desc?.enumerable) to[k] = src[k];
-        }
-    }
-    return target;
-}
-
-/**
- * Replaces an Element's outerHTML (single-root). Returns the new node, or
- * undefined if input was invalid.
- */
-export function Replace(target: Node | null | undefined, replacement: string | Node | null | undefined): Node | undefined
-{
-    if (!target || !(target instanceof Node) || !target.parentNode) return undefined;
-    if (replacement === null || replacement === undefined) return undefined;
-    let next: Node | null = null;
-    if (typeof replacement === 'string') {
-        const tpl = document.createElement('template');
-        tpl.innerHTML = replacement;
-        next = tpl.content.firstElementChild ?? tpl.content.firstChild;
-    } else if (replacement instanceof Node) {
-        next = replacement;
-    }
-    if (!next) return undefined;
-    if (next.parentNode) next.parentNode.removeChild(next);
-    target.parentNode.replaceChild(next, target);
-    return next;
-}
-
-/**
- * Mixin-style runtime class extension. Variadic: Extends(A, B, C) makes A
- * extend B, B extend C (left-to-right). SSR-safe.
- * @example Core.Extends(A, B);  // A inherits B's prototype
- */
-export function Extends(...classes: unknown[]): unknown
-{
-    if (classes.length < 2) return classes[0];
-    for (let i = 0; i < classes.length - 1; i++) {
-        const Sub = classes[i];
-        const Super = classes[i + 1];
-        if (typeof Sub !== 'function' || typeof Super !== 'function') continue;
-        const SubF = Sub as unknown as { prototype: object };
-        const SuperF = Super as unknown as { prototype: object };
-        if (!SubF.prototype || !SuperF.prototype) continue;
-        try {
-            Object.setPrototypeOf(SubF.prototype, SuperF.prototype);
-            Object.setPrototypeOf(SubF, SuperF);
-        } catch { /* native built-ins may resist — skip */ }
-    }
-    return classes[0];
-}
-
-/**
- * Build a GENUINE derived class `class <name> extends Base { constructor(){ super();
- * …original body } }` from a no-extends class, and RETURN it (the `CreaClasseEstesa`
- * pattern). This is the ONE place AriannA evaluates a class source — isolated here so
- * Core.Define can simulate `extends` for a class that doesn't declare one: super()
- * builds the real element (Namespace.Create → createElementNS for SVG/MathML/X3D) and
- * the original constructor body runs on it. A class that already extends, or a
- * function, never reaches here (Core.Define re-parents those instead). If the source
- * has no `constructor(){}`, the default derived constructor already calls super().
- */
-export function ExtendClass(
-    Base : new (...a: unknown[]) => Element,
-    Source : new (...a: unknown[]) => Element,
-): new (...a: unknown[]) => Element
-{
-    const name = Source.name || 'AriannaExtended';
-
-    // Extract the original constructor body ONCE as a free-standing, super-less
-    // function. Used in two places: (1) here, applied on `this` right after super()
-    // builds the element on construction; (2) the markup-upgrade path (Update),
-    // applied on the live node. Best-effort: if it can't be parsed (private fields /
-    // strict CSP on Function), the element is still built by super() — no crash, and
-    // setup falls to build().
-    let bodyFn: ((this: Element, ...a: unknown[]) => void) | null = null;
-    try
-    {
-        const orig = Source.toString();
-        const cm   = /\bconstructor\s*\(([^)]*)\)\s*\{/.exec(orig);
-        if (cm)
-        {
-            let i = cm.index + cm[0].length;
-            let depth = 1;
-            const start = i;
-            for (; i < orig.length && depth > 0; i++)
-            {
-                const ch = orig[i];
-                if (ch === '{') depth++;
-                else if (ch === '}') depth--;
-            }
-            bodyFn = new Function(cm[1], orig.slice(start, i - 1)) as (this: Element, ...a: unknown[]) => void;
-        }
-    }
-    catch { /* private fields / super / CSP — no free-standing body */ }
-
-    // GENUINE derived class — `Base` is a closure variable, so `super()` ALWAYS runs
-    // and lets the namespace build the real element (Namespace.Create / patched native
-    // → createElementNS for SVG/MathML/X3D). No Function-string evaluation for the
-    // class itself, so this works even under a strict CSP. The original body then runs
-    // on `this` (the real element) — "Core.Define must also call super()", satisfied.
-    const Dynamic = class extends (Base as new (...a: unknown[]) => Element)
-    {
-        constructor(...args: unknown[])
-        {
-            super(...args);
-            if (bodyFn)
-            {
-                try { bodyFn.apply(this as unknown as Element, args); }
-                catch (e) { console.warn(`Core.ExtendClass: <${name}> body failed:`, e); }
-            }
-        }
-    } as unknown as new (...a: unknown[]) => Element;
-
-    try { Object.defineProperty(Dynamic, 'name', { value: name, configurable: true }); } catch { /* resists */ }
-
-    // Carry the original class's prototype methods onto the derived class so instances
-    // keep their API (the genuine `extends` only inherits Base's prototype otherwise).
-    try
-    {
-        for (const k of Object.getOwnPropertyNames(Source.prototype))
-        {
-            if (k === 'constructor') continue;
-            const d = Object.getOwnPropertyDescriptor(Source.prototype, k);
-            if (d) { try { Object.defineProperty((Dynamic as { prototype: object }).prototype, k, d); } catch { /* read-only */ } }
-        }
-    }
-    catch { /* non-enumerable host proto */ }
-
-    // Expose the body for the markup-upgrade path (Update applies it on the live node).
-    if (bodyFn)
-    {
-        try { Object.defineProperty(Dynamic, '__ariannaBody', { value: bodyFn, configurable: true }); } catch { /* resists */ }
-    }
-
-    return Dynamic;
-}
-
-// ── Property — enhanced reactive property descriptor ──────────────────────────
-
-/**
- * `Property` and its types live under one `namespace Property`: the option /
- * detail interfaces and the `Property` class itself are grouped together. The
- * class's validation / DOM-resolution helpers are `private static` members.
- */
-export namespace Property
-{
-    /** Type marker for runtime validation: a built-in tag or a predicate. */
-    export type Type =
-        | 'string' | 'number' | 'boolean' | 'integer'
-        | 'function' | 'object' | 'array' | 'any'
-        | ((v: unknown) => boolean);
-
-    /**
-     * Sync target for `bind` (two-way) or `bound` (one-way mirror).
-     * - attribute(s)        — DOM attribute(s) on the host element (or host.element)
-     * - property/properties — sibling JS properties on the host object
-     */
-    export interface BindSpec
-    {
-        attribute?  : string;
-        attributes? : string[];
-        property?   : string;
-        properties? : string[];
-    }
-
-    /**
-     * Event emission settings. Defaults: private internal EventTarget,
-     * cancelable changing, no propagation.
-     */
-    export interface ObservableSpec
-    {
-        target?         : EventTarget | null;
-        propagation?    : boolean;
-        cancelable?     : boolean;
-        changingEvent?  : string;
-        changedEvent?   : string;
-    }
-
-    /** Constructor options for `Property`. */
-    export interface Options
-    {
-        initial?      : unknown;
-        enumerable?   : boolean;
-        configurable? : boolean;
-        type?         : Type;
-        validate?     : (v: unknown) => boolean;
-        transform?    : (v: unknown) => unknown;
-        bind?         : BindSpec;
-        bound?        : BindSpec;
-        observable?   : ObservableSpec;
-        silent?       : boolean;
-    }
-
-    export interface ChangingDetail
-    {
-        name     : string;
-        oldValue : unknown;
-        newValue : unknown;
-        /** Set this in a listener to override the value being committed. */
-        override?: unknown;
-    }
-
-    export interface ChangedDetail
-    {
-        name     : string;
-        oldValue : unknown;
-        newValue : unknown;
-        bind     : BindSpec | undefined;
-        bound    : BindSpec | undefined;
-    }
-
-    /**
-     * `Property` — enhanced JavaScript property descriptor. Wraps
-     * Object.defineProperty and adds runtime `type` validation, value
-     * `transform`, `bind` / `bound` two-way / one-way sync to attributes and
-     * sibling properties, a cancelable `${name}Changing` event (preventDefault
-     * aborts the set; listeners may override via `event.detail.override`), and a
-     * post-set `${name}Changed` event.
-     *
-     * Install on a host with `descriptor.install(host)`. Reading host[name]
-     * returns the current value; writing host[name] = x routes through every
-     * layer. The instance is the registry for runtime state, so multiple
-     * installs mirror the same value across hosts.
-     *
-     * @example
-     *   const vol = new Core.Property('volume', {
-     *       initial: 50, type: 'number',
-     *       validate: v => v >= 0 && v <= 100,
-     *       bind: { attribute: 'data-volume' },
-     *   });
-     *   vol.install(strip).onChanged(d => console.log('vol →', d.newValue));
-     *   strip.volume = 80;     // event fired, attribute updated
-     *   strip.volume = 999;    // rejected by validator, no event
-     */
-    export class Property<T = unknown>
-    {
-        public  readonly name : string;
-        public  readonly opts : Readonly<Options>;
-        private _value        : T;
-        private _hosts        : Set<object> = new Set();
-        private _eventTarget  : EventTarget;
-        private _changingEvt  : string;
-        private _changedEvt   : string;
-        private _silent       : boolean;
-
-        constructor(name: string, options: Options = {})
-        {
-            this.name         = name;
-            this.opts         = Object.freeze({ ...options });
-            this._value       = options.initial as T;
-            this._silent      = options.silent ?? false;
-            const obs         = options.observable ?? {};
-            this._eventTarget = obs.target ?? new EventTarget();
-            this._changingEvt = obs.changingEvent ?? `${name}Changing`;
-            this._changedEvt  = obs.changedEvent  ?? `${name}Changed`;
-        }
-
-        /** Direct read of the current value. */
-        get(): T { return this._value; }
-
-        /**
-         * Direct write through transform → type check → validate → changing event
-         * → commit → sync → changed event. Returns true if applied, false if
-         * rejected (by type / validator / listener preventDefault).
+        const services = new Map<string, Record<string, unknown>>();
+
+        /* Services Types  */
+
+        /** @namespace   Types
+         *  @memberof    Core.Services
+         *  @description Structural SHAPE types for the registered service containers. Each type describes
+         *               only the surface a consumer calls — typed structurally (no `import` of Css / Events
+         *               / Observables) so Core stays free of feature-module dependencies. A lookup returns
+         *               `T | undefined`; the absence lives at the call site, not in the type.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
          */
-        set(value: T): boolean
+        export namespace Types
         {
-            const opts = this.opts;
-            const old  = this._value;
-
-            let next: T = value;
-            if (opts.transform) next = opts.transform(next) as T;
-
-            if (opts.type !== undefined && !Property._matchesType(next, opts.type)) return false;
-            if (opts.validate && !opts.validate(next))                              return false;
-            if (Object.is(old, next))                                               return true;
-
-            if (!this._silent)
+            /** @name        ObserverService
+             *  @public
+             *  @memberof    Core.Services.Types
+             *  @type        {object}
+             *  @description Structural contract of the 'observer' service. Two members and no more: `Create`
+             *               hands back the OBJECT, and everything an observer can do is on it — connecting,
+             *               reconfiguring, draining, sweeping. Re-exporting those through the registry would
+             *               keep the same API alive in two places, with the worse signature of the two: a
+             *               method turned into a function taking its own receiver, an accessor turned into a
+             *               read/write call. `DrainAll` is here because it is the one operation that has no
+             *               instance to hang from.
+             *
+             *               Everything is `unknown` on purpose: naming the class would put back the import
+             *               the service exists to remove. Callers holding the real type cast on their side.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            export type ObserverService =
             {
-                const detail: ChangingDetail = { name: this.name, oldValue: old, newValue: next };
-                const cancelable = opts.observable?.cancelable ?? true;
-                const ev = new CustomEvent(this._changingEvt, { detail, cancelable, bubbles: opts.observable?.propagation ?? false });
-                const ok = this._eventTarget.dispatchEvent(ev);
-                if (!ok && cancelable) return false;
-                if (detail.override !== undefined) next = detail.override as T;
-            }
+                /** @name        Create
+                 *  @public
+                 *  @memberof    Core.Services.Types.ObserverService
+                 *  @param       {MutationCallback} [callback] Reports each batch the browser delivers; the
+                 *               default is kept when omitted.
+                 *  @param       {Partial<MutationObserverInit>} [configuration] Merged OVER the defaults,
+                 *               never substituted — `{ attributes: false }` narrows them, whereas a
+                 *               single-key config would read as childList off too and the observer would
+                 *               silently report nothing.
+                 *  @param       {Node} [element] The root to watch. Passing it CONNECTS; it comes last
+                 *               because everything before it configures, and adding a root starts the watch.
+                 *  @returns     {unknown} The Observer — connected only when `element` was given.
+                 *  @description Build an observer. The only entry point: what comes back carries the whole
+                 *               surface, so the registry does not have to.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Create(callback?: MutationCallback, configuration?: Partial<MutationObserverInit>, element?: Node): unknown;
 
-            this._value = next;
-            for (const host of this._hosts) this._sync(host, next);
+                /** @name        DrainAll
+                 *  @public
+                 *  @memberof    Core.Services.Types.ObserverService
+                 *  @returns     {void}
+                 *  @description Flush EVERY live observer synchronously. Static by nature — it acts on the
+                 *               registry, not on one instance — which is why it survives here while the
+                 *               per-observer `drain` stays on the object.
+                 *
+                 *               Diagnostic in intent: it also flushes observers the kernel does not own, and
+                 *               running someone else's callback at a moment they did not choose is a real
+                 *               cost. The kernel drains only its own, through `AriannA.Drain`.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                DrainAll(): void;
+            };
 
-            if (!this._silent)
+            /** @name        EventService
+             *  @public
+             *  @memberof    Core.Services.Types
+             *  @description Shape of the 'events' service. Fire / On / Off over DOM targets or a
+             *               selector string, typed structurally so Core needs no import from Events.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            export type EventService =
             {
-                const detail: ChangedDetail = {
-                    name: this.name, oldValue: old, newValue: next, bind: opts.bind, bound: opts.bound,
-                };
-                const ev = new CustomEvent(this._changedEvt, { detail, cancelable: false, bubbles: opts.observable?.propagation ?? false });
-                this._eventTarget.dispatchEvent(ev);
-            }
-            return true;
-        }
+                Fire
+                (
+                    target: EventTarget | string | readonly EventTarget[],
+                    event: string |
+                        {
+                            Type         : string;
+                            Detail?      : unknown;
+                            Cancelable?  : boolean;
+                            Propagation? : boolean;
+                            Path?        : string[];
+                            Broker?      : string;
+                        }
+                ): boolean;
+                On
+                (
+                    target: EventTarget | string | readonly EventTarget[],
+                    types: string,
+                    handler: EventListener,
+                    options?: AddEventListenerOptions & { phase?: 'capture' | 'bubble' | 'broker'; brokers?: string[] },
+                ): unknown[];
+                Off
+                (
+                    target: EventTarget | string | readonly EventTarget[],
+                    types: string,
+                    handler: EventListener,
+                ): void;
+            };
 
-        /**
-         * Install this Property as a real getter/setter on `host` via
-         * Object.defineProperty. Multiple hosts share the same value. Chainable.
-         */
-        install(host: object): this
-        {
-            const self = this;
-            Object.defineProperty(host, this.name, {
-                enumerable  : this.opts.enumerable   ?? true,
-                configurable: this.opts.configurable ?? true,
-                get(): T { return self._value; },
-                set(v: T): void { self.set(v); },
-            });
-            this._hosts.add(host);
-            this._sync(host, this._value);
-            return this;
-        }
-
-        /** Subscribe to the cancelable changing event. Chainable. */
-        onChanging(cb: (detail: ChangingDetail, ev: Event) => void): this
-        {
-            this._eventTarget.addEventListener(this._changingEvt, ((ev: Event) =>
-                cb((ev as CustomEvent<ChangingDetail>).detail, ev)) as EventListener);
-            return this;
-        }
-
-        /** Subscribe to the post-set changed event. Chainable. */
-        onChanged(cb: (detail: ChangedDetail, ev: Event) => void): this
-        {
-            this._eventTarget.addEventListener(this._changedEvt, ((ev: Event) =>
-                cb((ev as CustomEvent<ChangedDetail>).detail, ev)) as EventListener);
-            return this;
-        }
-
-        /** The internal EventTarget — for advanced subscription patterns. */
-        get target(): EventTarget { return this._eventTarget; }
-
-        private _sync(host: object, value: T): void
-        {
-            const dom = Property._resolveDomElement(host);
-
-            const apply = (spec: BindSpec | undefined) =>
+            /** @name        ObservableService
+             *  @public
+             *  @memberof    Core.Services.Types
+             *  @description Shape of the 'observable' service. make / signal / reactive / effect /
+             *               computed, typed structurally so Core needs no import from Observables.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            export type ReactivityService =
             {
-                if (!spec) return;
+                make(value: object): object;
+                signal<T>(value: T): { Value: T; value: T };
+                reactive<T extends object>(raw: T): T;
+                effect(fn: (onCleanup?: (cb: () => void) => void) => void): () => void;
+                computed<T>(fn: () => T): { readonly Value: T; readonly value: T };
+            };
 
-                if (dom)
+            /** @name        CssService
+             *  @public
+             *  @memberof    Core.Services.Types
+             *  @description Shape of the 'css' service. Rule / Stylesheet static surfaces, typed
+             *               structurally so Core needs no import from Css.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            export type CssService =
+            {
+                Compile
+                (
+                    input: unknown,
+                    selector?: string
+                ): string | false;
+                readonly Rule:
                 {
-                    const attrs: string[] = [];
-                    if (spec.attribute)  attrs.push(spec.attribute);
-                    if (spec.attributes) attrs.push(...spec.attributes);
-                    for (const a of attrs)
+                    GetObject(text: string): Record<string, unknown>;
+                    GetText(rule: object): string;
+                    GetText(rule: object, selector:string): string;
+                    GetContents(rule: object): Record<string, unknown>;
+                    GetType(rule: object): string;
+                    GetSelector(rule: object): string;
+                    From(rule: object): object;
+                    Parse(text: string): object[];
+                };
+                readonly Stylesheet:
+                {
+                    ToString(source: unknown): string;
+                    Parse(text: string): object;
+                    ToArray(text: string): object[];
+                    Less(text: string): string;
+                    readonly Sheets: object[];
+                    readonly Links: HTMLLinkElement[];
+                    readonly Paths: string[];
+                };
+                readonly Types:
+                {
+                    readonly Rule       : 'Rule';
+                    readonly Stylesheet : 'Stylesheet';
+                };
+            };
+
+            /** @name        RealService
+             *  @private
+             *  @memberof    Core.Services.Types
+             *  @type        {{ create(arg: unknown): Real }}
+             *  @description Local shape of the `'real'` service as consumed here: `create` builds a Real primitive
+             *               from an element or tag. Mirrors `Core.Services.Types.RealService` (typed structurally
+             *               in Core to avoid importing Real); here `Real` is in scope, so the return is concrete.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            export type RealService =
+            { create(arg: unknown): object };
+
+            /** @name        VirtualService
+             *  @public
+             *  @memberof    Core.Services.Types
+             *  @description Shape of the 'virtual' service (Virtual DOM / virtual-node backend). STUB — the
+             *               surface will be defined when the Virtual module lands; empty for now so the
+             *               accessor and registry wiring can exist ahead of the implementation.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            export type VirtualService =
+            {  };
+
+            /** @name        ShadowService
+             *  @public
+             *  @memberof    Core.Services.Types
+             *  @description Shape of the 'shadow' service (registered by the Shadow module): `shadow`
+             *               renders a component's template / shadow root for a node. Typed structurally
+             *               (node/opts kept loose) so Core needs no import from the Shadow module.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            export type ShadowService =
+            {
+                shadow(node: Element, opts:
+                { def?: Record<string, unknown>; tag?: string }): void
+            };
+
+            /** @name        TemplatesService
+             *  @public
+             *  @memberof    Core.Services.Types
+             *  @description Shape of the 'templates' service (template compilation / instantiation). STUB —
+             *               surface TBD when the Template module lands; empty for now so the accessor and
+             *               registry wiring can exist ahead of the implementation.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            export type TemplatesService =
+            {  };
+
+            /** @name        StateService
+             *  @public
+             *  @memberof    Core.Services.Types
+             *  @description Shape of the 'state' service (registered by the State module): `make` builds a
+             *               State (Observable + named snapshots + mutation history) from a source object.
+             *               Typed structurally (returns `object`) so Core needs no import from the State module.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            export type StateService =
+            { make(source: object): object };
+
+            /** @name        ContextService
+             *  @public
+             *  @memberof    Core.Services.Types
+             *  @description Shape of the 'context' service (dependency/context propagation across the tree).
+             *               STUB — surface TBD when the Context module lands; empty for now so the accessor
+             *               and registry wiring can exist ahead of the implementation.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            export type ContextService =
+            { };
+
+            /** @name        DirectivesService
+             *  @public
+             *  @memberof    Core.Services.Types
+             *  @description Shape of the 'directives' service (attribute/behavioural directives registry).
+             *               STUB — surface TBD when the Directives module lands; empty for now so the accessor
+             *               and registry wiring can exist ahead of the implementation.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            export type DirectivesService =
+            {  };
+        }
+
+        /* Services Static Services Properties */
+
+        /** @name        Object.defineProperties (service accessors)
+         *  @public
+         *  @memberof    Core.Services
+         *  @description Installs the three lazy service accessors — `Events`, `Observables`, `Css` —
+         *               as getter properties on the `Services` namespace object. Each getter reads the
+         *               registry AT ACCESS TIME via `Resolve`, never caching: a service registered
+         *               later by its own module (Events.ts / Observables.ts / Css.ts, each `new
+         *               Core.Services.Service(...)` at its namespace init) is therefore always seen. A
+         *               plain `const` snapshot would freeze `undefined` while the registry is still
+         *               empty at load; a getter re-reads on every access instead. Consumers write
+         *               `Core.Services.Events?.Fire(...)`, `Core.Services.Observables?.make(...)`,
+         *               `Core.Services.Css?.compile(...)` — the `?.` guards the window before the
+         *               producing module has registered (SSR / early boot). This is the "quasi
+         *               zero-import" seam: producers self-register, consumers resolve through the
+         *               registry, and no feature module imports another directly.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        Object.defineProperties
+        (
+            Services,
+            {
+                Observer:
+                {
+                    get(): Services.Types.ObserverService | undefined
+                    { return Services.Resolve<Services.Types.ObserverService>('observer'); },
+                    enumerable: false, configurable: true,
+                },
+                /** @name        Events
+                 *  @public
+                 *  @readonly
+                 *  @memberof    Core.Services
+                 *  @type        {Services.Types.EventService | undefined}
+                 *  @description Lazy accessor for the 'events' service container (registered by Events.ts).
+                 *               Resolved per access; `undefined` until the producer registers.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Events:
+                {
+                    get(): Services.Types.EventService | undefined
+                    { return Services.Resolve<Services.Types.EventService>('events'); },
+                    enumerable: false, configurable: true,
+                },
+                /** @name        Observables
+                 *  @public
+                 *  @readonly
+                 *  @memberof    Core.Services
+                 *  @type        {Services.Types.ObservableService | undefined}
+                 *  @description Lazy accessor for the 'observable' service container (registered by
+                 *               Observables.ts). Resolved per access; `undefined` until registered.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Reactive:
+                {
+                    get(): Services.Types.ReactivityService | undefined
+                    { return Services.Resolve<Services.Types.ReactivityService>('reactive'); },
+                    enumerable: false, configurable: true,
+                },
+                /** @name        Css
+                 *  @public
+                 *  @readonly
+                 *  @memberof    Core.Services
+                 *  @type        {Services.Types.CssService | undefined}
+                 *  @description Lazy accessor for the 'css' service container (registered by Css.ts).
+                 *               Resolved per access; `undefined` until registered.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Css:
+                {
+                    get(): Services.Types.CssService | undefined
+                    { return Services.Resolve<Services.Types.CssService>('css'); },
+                    enumerable: false, configurable: true,
+                },
+                /** @name Real
+                 *  @public
+                 *  @readonly
+                 *  @memberof Core.Services
+                 *  @type {Services.Types.RealService | undefined}
+                 *  @description Lazy accessor for the 'real' service; resolved per access, undefined until registered.
+                 *  @author Riccardo Angeli
+                 *  @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license MIT / Commercial (dual license) */
+                Real:
+                {
+                    get(): Services.Types.RealService | undefined
+                    { return Services.Resolve<Services.Types.RealService>('real'); },
+                    enumerable: false, configurable: true,
+                },
+                /** @name        Shadow
+                 *  @public
+                 *  @readonly
+                 *  @memberof    Core.Services
+                 *  @type        {Services.Types.ShadowService | undefined}
+                 *  @description Lazy accessor for the 'shadow' service — resolved from the registry on every
+                 *               access (never cached), so a provider registered after this file loads is still
+                 *               seen; `undefined` until the Shadow module registers it.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Shadow:
+                {
+                    get(): Services.Types.ShadowService | undefined
+                    { return Services.Resolve<Services.Types.ShadowService>('shadow'); },
+                    enumerable: false, configurable: true,
+                },
+                /** @name        State
+                 *  @public
+                 *  @readonly
+                 *  @memberof    Core.Services
+                 *  @type        {Services.Types.StateService | undefined}
+                 *  @description Lazy accessor for the 'state' service — resolved from the registry on every
+                 *               access (never cached), so a provider registered after this file loads is still
+                 *               seen; `undefined` until the State module registers it.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                State:
+                {
+                    get(): Services.Types.StateService | undefined
+                    { return Services.Resolve<Services.Types.StateService>('state'); },
+                    enumerable: false, configurable: true,
+                },
+                /** @name        Virtual
+                 *  @public
+                 *  @readonly
+                 *  @memberof    Core.Services
+                 *  @type        {Services.Types.VirtualService | undefined}
+                 *  @description Lazy accessor for the 'virtual' service — resolved from the registry on every
+                 *               access (never cached), so a provider registered after this file loads is still
+                 *               seen; `undefined` until the Virtual module registers it.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Virtual:
+                {
+                    get(): Services.Types.VirtualService | undefined
+                    { return Services.Resolve<Services.Types.VirtualService>('virtual'); },
+                    enumerable: false, configurable: true,
+                },
+                /** @name        Templates
+                 *  @public
+                 *  @readonly
+                 *  @memberof    Core.Services
+                 *  @type        {Services.Types.TemplatesService | undefined}
+                 *  @description Lazy accessor for the 'templates' service — resolved from the registry on every
+                 *               access (never cached), so a provider registered after this file loads is still
+                 *               seen; `undefined` until the Templates module registers it.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Templates:
+                {
+                    get(): Services.Types.TemplatesService | undefined
+                    { return Services.Resolve<Services.Types.TemplatesService>('templates'); },
+                    enumerable: false, configurable: true,
+                },
+                /** @name        Context
+                 *  @public
+                 *  @readonly
+                 *  @memberof    Core.Services
+                 *  @type        {Services.Types.ContextService | undefined}
+                 *  @description Lazy accessor for the 'context' service — resolved from the registry on every
+                 *               access (never cached), so a provider registered after this file loads is still
+                 *               seen; `undefined` until the Context module registers it.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Context:
+                {
+                    get(): Services.Types.ContextService | undefined
+                    { return Services.Resolve<Services.Types.ContextService>('context'); },
+                    enumerable: false, configurable: true,
+                },
+                /** @name        Directives
+                 *  @public
+                 *  @readonly
+                 *  @memberof    Core.Services
+                 *  @type        {Services.Types.DirectivesService | undefined}
+                 *  @description Lazy accessor for the 'directives' service — resolved from the registry on every
+                 *               access (never cached), so a provider registered after this file loads is still
+                 *               seen; `undefined` until the Directives module registers it.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Directives:
+                {
+                    get(): Services.Types.DirectivesService | undefined
+                    { return Services.Resolve<Services.Types.DirectivesService>('directives'); },
+                    enumerable: false, configurable: true,
+                }
+            }
+        );
+
+        export declare const Observer:    Services.Types.ObserverService   | undefined;
+        /** @name        Events
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Services
+         *  @type        {Services.Types.EventService | undefined}
+         *  @description Ambient type declaration for the runtime getter installed above — lets TypeScript
+         *               see `Core.Services.Events` (the `defineProperties` getter supplies the value).
+         *               `declare` emits no code, so there is no conflict with the runtime definition.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export declare const Events:      Services.Types.EventService      | undefined;
+        /** @name        Observables
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Services
+         *  @type        {Services.Types.ObservableService | undefined}
+         *  @description Ambient type declaration for the runtime getter installed above — lets TypeScript
+         *               see `Core.Services.Observables`. `declare` emits no code.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export declare const Reactivity:  Services.Types.ReactivityService | undefined;
+        /** @name        Css
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Services
+         *  @type        {Services.Types.CssService | undefined}
+         *  @description Ambient type declaration for the runtime getter installed above — lets TypeScript
+         *               see `Core.Services.Css`. `declare` emits no code.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export declare const Css:         Services.Types.CssService        | undefined;
+        /** @name        Real
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Services
+         *  @type        {Services.Types.RealService | undefined}
+         *  @description Ambient type declaration for the runtime `Real` getter installed via
+         *               `Object.defineProperties` above — it lets TypeScript see `Core.Services.Real`
+         *               while the getter supplies the value at run time (`declare` emits no code, so there
+         *               is no conflict with the runtime definition). Resolves the `'real'` service lazily
+         *               on every access; `undefined` until the Real module registers it.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export declare const Real:        Services.Types.RealService       | undefined;
+        /** @name        Shadow
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Services
+         *  @type        {Services.Types.ShadowService | undefined}
+         *  @description Ambient declaration for the runtime Shadow getter installed via
+         *               `Object.defineProperties` — lets TypeScript see `Core.Services.Shadow` while the
+         *               getter supplies the value at run time (`declare` emits no code). Resolves the
+         *               'shadow' service lazily; `undefined` until registered.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export declare const Shadow:      Services.Types.ShadowService     | undefined;
+        /** @name        State
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Services
+         *  @type        {Services.Types.StateService | undefined}
+         *  @description Ambient declaration for the runtime State getter installed via
+         *               `Object.defineProperties` — lets TypeScript see `Core.Services.State` while the
+         *               getter supplies the value at run time (`declare` emits no code). Resolves the
+         *               'state' service lazily; `undefined` until registered.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export declare const State:       Services.Types.StateService      | undefined;
+        /** @name        Virtual
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Services
+         *  @type        {Services.Types.VirtualService | undefined}
+         *  @description Ambient declaration for the runtime Virtual getter installed via
+         *               `Object.defineProperties` — lets TypeScript see `Core.Services.Virtual` while the
+         *               getter supplies the value at run time (`declare` emits no code). Resolves the
+         *               'state' service lazily; `undefined` until registered.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export declare const Virtual:     Services.Types.VirtualService    | undefined;
+        /** @name        Templates
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Services
+         *  @type        {Services.Types.TemplatesService | undefined}
+         *  @description Ambient declaration for the runtime Templates getter installed via
+         *               `Object.defineProperties` — lets TypeScript see `Core.Services.Templates` while the
+         *               getter supplies the value at run time (`declare` emits no code). Resolves the
+         *               'state' service lazily; `undefined` until registered.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export declare const Templates:   Services.Types.TemplatesService  | undefined;
+        /** @name        Context
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Services
+         *  @type        {Services.Types.ContextService | undefined}
+         *  @description Ambient declaration for the runtime Context getter installed via
+         *               `Object.defineProperties` — lets TypeScript see `Core.Services.Context` while the
+         *               getter supplies the value at run time (`declare` emits no code). Resolves the
+         *               'state' service lazily; `undefined` until registered.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export declare const Context:     Services.Types.ContextService    | undefined;
+        /** @name        Directives
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Services
+         *  @type        {Services.Types.DirectivesService | undefined}
+         *  @description Ambient declaration for the runtime Directives getter installed via
+         *               `Object.defineProperties` — lets TypeScript see `Core.Services.Directives` while the
+         *               getter supplies the value at run time (`declare` emits no code). Resolves the
+         *               'state' service lazily; `undefined` until registered.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export declare const Directives:  Services.Types.DirectivesService | undefined;
+
+        /* Services Static Namespace Functions */
+
+        /** @name        Register
+         *  @public
+         *  @function
+         *  @memberof    Core.Services
+         *  @param       {string} name Non-empty registry key.
+         *  @param       {object} container Capability container.
+         *  @returns     {void}
+         *  @description Register (or override, last-write-wins) a named container in the registry.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function  Register(name: string, container: object): void
+        { services.set(name, container as Record<string, unknown>); }
+        /** @name        Resolve
+         *  @public
+         *  @function
+         *  @memberof    Core.Services
+         *  @template    T
+         *  @param       {string} name Registry key.
+         *  @returns     {T | undefined} The container, or `undefined` when unregistered.
+         *  @description Resolve a registered container by name. The primary lookup used by the lazy
+         *               accessors and by consumers reaching services through the registry.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function  Resolve<T extends object = object>(name: string): T | undefined
+        { return services.get(name) as T | undefined; }
+        /** @name        Provides
+         *  @public
+         *  @function
+         *  @memberof    Core.Services
+         *  @param       {string} name Registry key.
+         *  @returns     {boolean} True if a container is registered under `name`.
+         *  @description Membership test against the registry.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function  Provides(name: string): boolean
+        { return services.has(name); }
+        /** @name        Revoke
+         *  @public
+         *  @static
+         *  @memberof    Core.Services.Service
+         *  @param       {string} name Registry key.
+         *  @returns     {boolean} True if a container was present and removed.
+         *  @description Remove a registered container from the registry.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function  Revoke(name: string): boolean
+        { return services.delete(name); }
+        /** @name        Providers
+         *  @public
+         *  @static
+         *  @memberof    Core.Services.Service
+         *  @returns     {string[]} The names of all registered containers.
+         *  @description Enumerate every registry key currently registered.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function  Providers(): string[]
+        { return [...services.keys()]; }
+        /** @name        Call
+         *  @public
+         *  @static
+         *  @memberof    Core.Services.Service
+         *  @template    R
+         *  @param       {string} name Registry key.
+         *  @param       {string} method Method name on the container.
+         *  @param       {...unknown} args Arguments forwarded to the method.
+         *  @returns     {R | undefined} The method's result, or `undefined` if the service is
+         *               unregistered or the member is not a function.
+         *  @description Resolve a container and invoke `container[method](...args)` in one call —
+         *               a convenience over `Resolve(name)?.[method](...)`.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function  Call<R = unknown>(name: string, method: string, ...args: unknown[]): R | undefined
+        {
+            const fn = services.get(name)?.[method];
+            return typeof fn === 'function' ? (fn as (...a: unknown[]) => R)(...args) : undefined;
+        }
+
+        export class Service<T extends object = object>
+        {
+            static
+            {
+                if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Service'))
+                {
+                    Object.defineProperty
+                    (
+                        window,
+                        'Service',
+                        {
+                            enumerable: true,
+                            configurable: false,
+                            writable: false,
+                            value: Service
+                        }
+                    );
+                }
+            }
+
+            /**
+             * @name Name
+             * @public
+             * @readonly
+             * @type {string}
+             * @description Registry key.
+             * @author Riccardo Angeli
+             * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+             * @license MIT / Commercial (dual license)
+             * */
+            public readonly Name : string;
+            /** @name Container @public @readonly @type {Record<string, unknown>} @description The registered container. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+            public readonly Container : Record<string, unknown>;
+
+            /** @name constructor @public @description Validate, store, and register the container into the shared Services map (last-write-wins). @param {string} name Non-empty key. @param {Record<string, unknown>} container Capability container. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
+            constructor(name: string, container: Record<string, unknown>)
+            {
+                if (!name || typeof name !== 'string')          throw new TypeError('Service: name must be a non-empty string.');
+                if (!container || typeof container !== 'object') throw new TypeError('Service: container must be an object.');
+                this.Name = name; this.Container = container;
+                Services.Register(name, container);
+            }
+        }
+    }
+
+    /** @namespace   Types
+     *  @memberof    Core
+     *  @description Shared structural type aliases used across the kernel — the
+     *               constructor/interface shapes that the descriptors and `Define`
+     *               rely on. Names are distinct from the descriptor's field names
+     *               (`Constructor`/`Interface`) to avoid self-referential overlap.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export namespace Types
+    {
+        /** @name        Primitive
+         *  @public
+         *  @type        {'string' | 'number' | 'boolean' | 'function' | 'object'}
+         *  @memberof    Core.Types
+         *  @namespace   Core
+         *  @description The `typeof`-checkable primitive tags shared by `Is()` and
+         *               `Property` — the true common denominator of the two validators.
+         *               Composed into `Type` and `Native` instead of being repeated.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export type Primitive   = 'string' | 'number' | 'boolean' | 'function' | 'object' | 'symbol';
+
+        /** @name        Constructor
+         *  @public
+         *  @type        {(new (...args: unknown[]) => unknown) | ((...args: unknown[]) => unknown)}
+         *  @memberof    Core.Types
+         *  @namespace   Core
+         *  @description A user-supplied constructor: a class (construct-style) or a
+         *               function constructor / factory (call-style). Its return is
+         *               NOT necessarily an `Element` — it may yield a wrapper, a
+         *               Real, any object. Superset of `IDLInterface` (an IDL
+         *               interface is also a valid `Ctor`).
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export type Constructor = (new (...args: unknown[]) => unknown) | ((...args: unknown[]) => unknown);
+
+        /** @name        Type
+         *  @public
+         *  @type        {Primitive | 'integer' | 'array' | 'any' | ((v: unknown) => boolean)}
+         *  @memberof    Core.Types
+         *  @namespace   Core
+         *  @description Runtime validation marker used by `Property`: the primitive tags
+         *               plus `integer` / `array` / `any`, or a user predicate. Matches
+         *               exactly the cases of `Property._matchesType` (exhaustive switch).
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export type Type        = Primitive | 'integer' | 'array' | 'any' | ((v: unknown) => boolean);
+
+        /** @name        IDL
+         *  @public
+         *  @type        {new (...args: unknown[]) => Element}
+         *  @memberof    Core.Types
+         *  @namespace   Core
+         *  @description The constructor of a native DOM interface — `HTMLElement`,
+         *               `HTMLDivElement`, `SVGSVGElement`, `MathMLElement`, and every
+         *               other built-in whose instances are `Element`s. A CONSTRUCTOR
+         *               type (`.prototype`, `.name`, callable with `new`), NOT the
+         *               `Element` instance it produces: the two are duals, and the
+         *               distinction matters wherever a type is consumed by reference
+         *               (a `Base` to extend, a value to splice) rather than by instance.
+         *               Named as a domain concept so `Base`, `IsNative`, and friends read
+         *               in terms of "native interface" instead of a bare constructor
+         *               signature — and so a non-DOM target can redefine what a native
+         *               interface IS in one place, without the DOM leaking into every
+         *               signature. Distinct from `Native` (the string tags `Is()` tests)
+         *               and from `Declaration === 'NATIVE'` (how a type was declared):
+         *               `IDL` is the constructor's TYPE, the other two are a tag set and
+         *               a registry value.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export type IDL         = new (...args: unknown[]) => Element;
+
+        /** @name        Native
+         *  @public
+         *  @type        { Primitive | 'symbol' | 'class' | 'idl' | Constructor }
+         *  @memberof    Core.Types
+         *  @namespace   Core
+         *  @description Type tags accepted by `Is()`: the primitive tags plus `symbol`,
+         *               `class` (function whose source starts with `class`), or a
+         *               `Constructor` to test with `instanceof`.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export type Native      = Primitive | 'class' | 'idl' | 'idl-patched' | Constructor;
+
+        /** @name        Base
+         *  @public
+         *  @type        {IDL | symbol | Function}
+         *  @memberof    Core.Types
+         *  @namespace   Core
+         *  @description The base a Custom type extends. Accepts three shapes: a native
+         *               DOM IDL constructor (`HTMLElement`, `SVGSVGElement`, … — the
+         *               usual case), a `symbol` (a registered/branded base looked up in
+         *               the type registry rather than passed by reference), or a plain
+         *               `Function` (a user constructor/factory serving as base). Broader
+         *               than `IDL` — it does not require the base to be construct-style or
+         *               to yield an `Element` — and orthogonal to `Constructor`, which is
+         *               the implementation being defined, not what it extends.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export type Base        = IDL | symbol | Constructor
+
+        /** @name        Declaration
+         *  @public
+         *  @type        {'CLASS' | 'FUNCTION' | 'IDL'}
+         *  @memberof    Core.Types
+         *  @namespace   Core
+         *  @description Declaration form of a type's backing value — how it was written,
+         *               independent of what it extends. `'CLASS'` is a `class` (construct-
+         *               style, its constructor runs on `new`); `'FUNCTION'` is a plain
+         *               function constructor / factory (call-style, its body runs via
+         *               apply on the node); `'IDL'` is a native DOM interface constructor
+         *               (`HTMLDivElement`, `SVGSVGElement`, …). `GetDeclaration` resolves
+         *               all three from a live constructor.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export type Declaration = 'CLASS' | 'FUNCTION' | 'IDL';
+
+        /** @name        Packages
+         *  @public
+         *  @memberof    Core
+         *  @type        {string | readonly string[] | { base?: string; core?: boolean | string; additionals?: boolean | string; components?: boolean | string; bundles?: readonly string[]; mirror?: boolean }}
+         *  @description Boot spec accepted by `Bootstrap` / `AriannA`. A single keyword/URL string, a list
+         *               of them, or an object selecting the standard bundles (`core` / `additionals` /
+         *               `components`) plus extra `bundles`, a resolution `base`, and a `mirror` flag.
+         *               Keywords resolve to `${base}arianna.js` (core) or `${base}arianna-<kw>.js`.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export type Packages =
+            | string
+            | readonly string[]
+            | {
+            /** Base URL for keyword resolution. Default '/release/dist/'. */
+            base?: string;
+            /** Load core: `true` → keyword, `string` → explicit URL. */
+            core?: boolean | string;
+            /** Load additionals: `true` → keyword, `string` → explicit URL. */
+            additionals?: boolean | string;
+            /** Load components: `true` → keyword, `string` → explicit URL. */
+            components?: boolean | string;
+            /** Extra explicit bundle keywords / URLs. */
+            bundles?: readonly string[];
+            /** Mirror the loaded modules' exports onto window. Default `true`. */
+            mirror?: boolean;
+        };
+
+        /** @name        TypeOptions
+         *  @public
+         *  @type        {{ Css?: string; Attrs?: string[]; Shadow?: 'open'|'closed'|false; Bus?: string; Render?: 'real'|'virtual'; Template?: {...}; Slot?: 'Internal'|'External' }}
+         *  @memberof    Core.Types
+         *  @namespace   Core
+         *  @description The optional configuration a caller hands to Reserve/Define for a Custom
+         *               type. These are the AUTHORING shapes (a `shadow` string, a single `bus`
+         *               name), which Reserve normalizes into the descriptor's richer runtime
+         *               shapes (a `Shadow` object, a `Brokers` array). Every field is optional;
+         *               an omitted field leaves its descriptor counterpart at the empty default.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export interface TypeOptions
+        {
+            /** Scoped CSS for the type, as a raw string (compiled by the css service at use). */
+            Css?      : string;
+            /** Observed attribute names → become the descriptor's `Attributes`. */
+            Attrs?    : string[];
+            /** Shadow projection: 'open'/'closed' attaches a shadow root; false opts out (light DOM). */
+            Shadow?   : 'open' | 'closed' | false;
+            /** Event-bus name for parent/child registration → wrapped into the descriptor's `Brokers`. */
+            Bus?      : string;
+            /** JSX render mode for this type → wrapped into the descriptor's `Render`. */
+            Render?   : 'real' | 'virtual';
+            /** Declarative template spec, passed through to the descriptor's `Template`. */
+            Template? : { Ref?: string; Html?: string; Mode?: 'clone' | 'compile' };
+            /** Backing-node slotting for form/label/AOM cases, passed through to `Slot`. */
+            Slot?     : 'Internal' | 'External';
+        }
+    }
+
+    /** @namespace Descriptors
+     *  @memberof  Namespace
+     *  @author    Riccardo Angeli
+     *  @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license MIT / Commercial (dual license)
+     *  @description Runtime registry descriptors — the shapes stored in the live
+     *               registry maps and read on the hot path.
+     */
+    export namespace Descriptors
+    {
+        /** URL schema/spec (in html coincide con Uri) */
+        export interface Namespace
+        {
+            /** @name        Name
+             *  @public
+             *  @type        {string}
+             *  @description Namespace name: 'html' | 'svg' | 'mathML' | 'x3d' | ….
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Name          : string;
+            /** @name        Uri
+             *  @public
+             *  @type        {string}
+             *  @description URI used by `createElementNS` (e.g.
+             *               'http://www.w3.org/2000/svg').
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Uri           : string;
+            /** @name        NS
+             *  @public
+             *  @type        {boolean}
+             *  @description Namespaced flag: `true` → `createElementNS(Uri, tag)`,
+             *               `false` → `createElement` (html).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            NS            : boolean;
+            /** @name        Base
+             *  @public
+             *  @type        {(new (...args: unknown[]) => Element) | null}
+             *  @description Native base constructor (HTMLElement, SVGElement,
+             *               MathMLElement, …); `null` when none applies.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Base          : (new (...args: unknown[]) => Element) | null;
+            /** @name        Schema
+             *  @public
+             *  @type        {string}
+             *  @description Schema/spec URL (coincides with `Uri` for html).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Schema        : string;
+            /** @name        Documentation
+             *  @public
+             *  @type        {{ w3c: string }}
+             *  @description Reference documentation links for the namespace.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Documentation : { w3c: string };
+            /** @name        Types
+             *  @public
+             *  @type        {{ Standard: Record<string, { Tags: string[] }>; Custom: Record<string, { Tags: string[] }> }}
+             *  @description Declarative seed of the namespace's types, split in two: `Standard`
+             *               (pre-registered native interfaces → their tags, e.g.
+             *               { HTMLDivElement: { Tags: ['div'] }, … }) and `Custom` (user-defined
+             *               types, empty at seed time). Serializable config/identity — the live
+             *               materialized registry (Interfaces/Tags of descriptors) lives on the
+             *               Namespace class, not here.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Types         :
+            {
+                /** @name        Standard
+                 *  @public
+                 *  @namespace   Descriptor
+                 *  @memberOf    Namespace
+                 *  @type        {{ Interfaces: Record<string, Descriptors.Type>; Tags: Record<string, Descriptors.Type> }}
+                 *  @description Built-in namespace interfaces, materialized at construction
+                 *               from the descriptor seed. `Interfaces`: interface name →
+                 *               descriptor; `Tags`: tag → descriptor.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Standard : { Interfaces: Record<string, { Tags : string[] } >; Tags: Record<string, string> };
+                /** @name        Custom
+                 *  @public
+                 *  @namespace   Descriptor
+                 *  @memberOf    Namespace
+                 *  @type        {{ Interfaces: Record<string, Descriptors.Type>; Tags: Record<string, Descriptors.Type> }}
+                 *  @description User-defined types registered at runtime via Define. Empty
+                 *               at construction; same shape as `Standard`.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                Custom   : { Constructors: Record<string, { Tags : string[] } >; Tags: Record<string, string> };
+            };
+            /** @name        Enabled
+             *  @public
+             *  @type        {boolean}
+             *  @description Operational flag: the namespace is active and serving Create/Update/Define.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Enabled       : boolean,
+            /** @name        Disabled
+             *  @public
+             *  @type        {boolean}
+             *  @description Operational flag: the namespace is inactive. Inverse of `Enabled`.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Disabled      : boolean,
+            /** @name        State
+             *  @public
+             *  @type        {boolean}
+             *  @description Validity of the namespace descriptor itself (`true` = healthy/usable),
+             *               analogous to `Type.State`; distinct from the operational `Enabled`/`Disabled`.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            State         : boolean,
+            /** @name        Loading
+             *  @public
+             *  @type        {boolean}
+             *  @description Async-load status — `true` while this namespace's deferred
+             *               resources (e.g. its component ESM modules) are being
+             *               fetched and registered. The *in-progress* edge: pairs with
+             *               `Loaded` (the *completed* edge). Both are `false` before any
+             *               load starts. Orthogonal to `Enabled` (operational/serving).
+             *  @default     false
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Loading     : boolean;
+            /** @name        Loaded
+             *  @public
+             *  @type        {boolean}
+             *  @description Async-load status — `true` once this namespace's deferred
+             *               resources have finished loading and registering. The
+             *               *completed* edge, distinct from `Loading` (in progress).
+             *               Also distinct from `Enabled`: a namespace can be `Loaded`
+             *               yet `Disabled` (loaded but not serving Create/Upgrade/Define).
+             *  @default     false
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Loaded      : boolean;
+            /** @name        Root
+             *  @public
+             *  @type        {Element | null}
+             *  @description Root element under which this namespace mounts and observes
+             *               its elements; `null` when unbound (e.g. SSR before attach,
+             *               or document-wide observation). Per-namespace — distinct from
+             *               the facade's `Core.Root`, which is the whole document root
+             *               (`document.documentElement`).
+             *  @default     null
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Root        : Window | null
+        }
+
+        /** @author    Riccardo Angeli
+         *  @copyright Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license MIT / Commercial (dual license)
+         *  @interface Type
+         *  @memberof  Core.Descriptors
+         *  @description Descriptor of a type in the namespace registry (formerly
+         *               `TypeDescriptor`).
+         *
+         *               It carries two independent, complementary status axes:
+         *               `State` concerns the descriptor itself — the outcome of its
+         *               construction/registration (intact, degraded, unusable) — while
+         *               `Supported`/`Defined` concern the type relative to its
+         *               namespace (native interface present in the environment / type
+         *               registered).
+         *
+         *               The optional triplet `Slot`/`Properties`/`Methods` appears only
+         *               for fragile native forms (those with internal slots) and
+         *               travels together: the presence of any one marks the type as
+         *               fragile; their absence means a direct native extension.
+         */
+        export interface Type
+        {
+            /** @name        Name
+             *  @public
+             *  @type        {string}
+             *  @description Identifying name of the type — the DOM interface name for
+             *               standard types, the custom name otherwise.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Name        : string,
+            /** @name        Tags
+             *  @public
+             *  @type        {string[]}
+             *  @description Tags that instantiate this type. A type may own several
+             *               (e.g. `h1`…`h6` all map to HTMLHeadingElement).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Tags        : string[],
+            /** @name        Namespace
+             *  @public
+             *  @type        {Namespace}
+             *  @description Owning namespace (identity: html / svg / mathML / x3d / …).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Namespace   : string,
+            /** @name        Constructor
+             *  @public
+             *  @type        {Constructor | null}
+             *  @description Effective constructor used to instantiate the type — a class
+             *               or a function. Its return is NOT necessarily an `Element`
+             *               (it may yield a wrapper, a Real, any object). `null` when
+             *               unresolved.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Constructor : Types.Constructor | null,
+            /** @name        Interface
+             *  @public
+             *  @type        {Interface | null}
+             *  @description Reference native DOM interface (HTMLDivElement, SVGSVGElement,
+             *               …) — always an `Element` constructor. `null` when absent from
+             *               the environment.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Interface   : Types.Constructor | false |null,
+            /** @name        Base
+             *  @public
+             *  @type        {Types.Constructor | false | null}
+             *  @description The base as DECLARED at Define time. Differs from `Interface` when the
+             *               declared super is a user class: `Interface` is the first patched IDL
+             *               found by climbing (what the element is minted from), `Base` is the
+             *               constructor the user named (what the prototype is grafted onto).
+             *               `false`/`null` when the two coincide. Kept in sync with
+             *               `Namespaces.Descriptors.Type`.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Base        : Types.Constructor | false | null,
+            /** @name        Prototype
+             *  @public
+             *  @type        {object | null}
+             *  @description Prototype captured at registration, used for the prototype
+             *               splice during upgrade; `null` when not available.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Prototype   : object | null,
+            /** @name        Supported
+             *  @public
+             *  @type        {boolean}
+             *  @description Type status within the namespace: the native interface is
+             *               supported by the environment.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Supported   : boolean,
+            /** @name        Defined
+             *  @public
+             *  @type        {boolean}
+             *  @description Type status within the namespace: the type is registered /
+             *               defined.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Defined     : boolean,
+            /** @name        Patched
+             *  @public
+             *  @type        {boolean}
+             *  @description Whether this type's native constructor has been wrapped by
+             *               `_patchNative` (super()-capable). Distinct from `Defined`,
+             *               which only marks the type as registered and is `true` for
+             *               every supported native regardless of patching — so it can't
+             *               gate the patch. Idempotency marker: the patch pass skips a
+             *               native whose `Patched` is already `true`. Live runtime field,
+             *               not emitted by the serializer.
+             *  @default     false
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Patched     : boolean,
+            /** @name        Upgraded
+             *  @public
+             *  @type        {boolean}
+             *  @description Whether this type's native constructor has been wrapped by
+             *               `_patchNative` (super()-capable). Distinct from `Defined`,
+             *               which only marks the type as registered and is `true` for
+             *               every supported native regardless of patching — so it can't
+             *               gate the patch. Idempotency marker: the patch pass skips a
+             *               native whose `Patched` is already `true`. Live runtime field,
+             *               not emitted by the serializer.
+             *  @default     false
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Upgraded    : boolean,
+            /** @name        Declaration
+             *  @public
+             *  @type        {'FUNCTION' | 'CLASS' | 'CUSTOM'}
+             *  @description Declaration form: function, class with `extends`, or custom
+             *               element.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Declaration : Types.Declaration,
+            /** @name        Type
+             *  @public
+             *  @type        {'STANDARD' | 'CUSTOM'}
+             *  @description Type category: a namespace standard or a user custom type.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Type        : 'STANDARD' | 'CUSTOM',
+            /** @name        Standard
+             *  @public
+             *  @type        {boolean}
+             *  @description Convenience boolean: `true` for a namespace standard
+             *               (mirrors `Type === 'STANDARD'`).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Standard    : boolean,
+            /** @name        Custom
+             *  @public
+             *  @type        {boolean}
+             *  @description Convenience boolean: `true` for a user custom type (mirrors
+             *               `Type === 'CUSTOM'`).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Custom      : boolean,
+            /** @name        Component
+             *  @public
+             *  @type        {boolean}
+             *  @description Convenience boolean: `true` when this custom type was defined through the
+             *               Component (Layer 2) factory. Orthogonal to both `Type` and `Declaration`:
+             *               a Component is `Type: 'CUSTOM'`, `Declaration: 'CLASS'`, `Component: true`
+             *               — the flag carries the layer distinction WITHOUT extending either enum
+             *               (no `'COMPONENT'` Type value, no Component Declaration form, mirroring how
+             *               a class is a `Declaration` not a `Type`). COEXISTS with `Custom`: a
+             *               Component descriptor has BOTH `Custom: true` and `Component: true`; plain
+             *               customs have `Component: false`. Set by the Component factory after Reserve
+             *               (`descriptor.Component = true`), before Promote.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Component   : boolean,
+            /** @name        Css
+             *  @public
+             *  @type        {string}
+             *  @description Compiled CSS for this type — the single source of truth for its
+             *               styling (replaces the former flat `Style` map). Holds everything:
+             *               flat declarations, `@media`, `@keyframes`, pseudo-states, nested
+             *               selectors. Applied by injecting a `<style>` block. `''` when the
+             *               type has no style (standard natives fall back to UA styles). The
+             *               merge of base + custom styles happens upstream in `Define`, before
+             *               compilation, so the descriptor always holds the final fused text.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Stylesheet  : string | null;
+            /** @name        Methods
+             *  @public
+             *  @type        {string[]=}
+             *  @description Names of methods forwarded to the inner native element
+             *               (fragile forms only).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Shadow?     : { Mode: 'open'|'closed', Setting?: any, Css?: boolean, DelegatesFocus?: boolean },
+            /** @name        Methods
+             *  @public
+             *  @type        {string[]=}
+             *  @description Names of methods forwarded to the inner native element
+             *               (fragile forms only).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Template?   : { Ref?: string, Html?: string, Mode?: 'clone'|'compile' } | null,
+            /** @name        Native
+             *  @public
+             *  @type        {boolean}
+             *  @description Registration path: `true` via the browser-native
+             *               `customElements.define`, `false` via the AriannA registry.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Native      : boolean,
+            /** @name        Chain
+             *  @public
+             *  @type        {Map<string, unknown>}
+             *  @description Prototype chain captured at registration (name → constructor).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Chain?      : string[],
+            /** @name        Slot
+             *  @public
+             *  @type        {'Internal' | 'External'=}
+             *  @description Placement of the backing native for forms with internal
+             *               slots: `Internal` → inside a shadow root (isolated;
+             *               presentational: canvas/img/video/audio), `External` → in
+             *               light DOM (participates in form/label/AOM:
+             *               input/select/textarea). Absent ⟹ the type is not fragile
+             *               (it extends the native directly). The install logic
+             *               (compose inner native + forward) lives in Real / an IoC
+             *               installer, not here.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Slot?       : 'Internal' | 'External' | null,
+            /** @name        State
+             *  @public
+             *  @type        {'Fail' | 'Warn' | 'Success'}
+             *  @description Status of the descriptor itself (construction/registration
+             *               outcome): `Success` intact, `Warn` degraded but usable,
+             *               `Fail` unusable. Orthogonal to `Supported`/`Defined`, which
+             *               describe the type within its namespace.
+             *  @default     'Success'
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            State       : 'Fail' | 'Warn' | 'Success' | 'Pending' | null,
+            /** @name        Properties
+             *  @public
+             *  @type        {string[]=}
+             *  @description Names of properties forwarded to the inner native element
+             *               (fragile forms only).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Attributes? : string[] | null,
+            /** @name        Properties
+             *  @public
+             *  @type        {string[]=}
+             *  @description Names of properties forwarded to the inner native element
+             *               (fragile forms only).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Render?     : string[] | null,
+            /** @name        Properties
+             *  @public
+             *  @type        {string[]=}
+             *  @description Names of properties forwarded to the inner native element
+             *               (fragile forms only).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Properties? : string[] | null,
+            /** @name        Methods
+             *  @public
+             *  @type        {string[]=}
+             *  @description Names of methods forwarded to the inner native element
+             *               (fragile forms only).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Methods?    : string[] | null
+            /** @name        Properties
+             *  @public
+             *  @type        {string[]=}
+             *  @description Names of properties forwarded to the inner native element
+             *               (fragile forms only).
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            Brokers?    : string[] | null,
+        }
+    }
+
+    export namespace Text
+    {
+        /** @name        toKebab
+         *  @public
+         *  @description camelCase / PascalCase → kebab-case (each uppercase letter becomes `-` + its
+         *               lowercase form).
+         *  @param       {string} s Source identifier.
+         *  @returns     {string} Kebab-cased string (e.g. `"BackgroundColor"` → `"-background-color"`).
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toKebab(s: string): string
+        {
+            return s.replace(/([A-Z])/g, c => `-${c.toLowerCase()}`);
+        }
+
+        /** @name        toCamel
+         *  @public
+         *  @description kebab-case → camelCase, lowercasing the first character.
+         *  @param       {string} s Source identifier.
+         *  @returns     {string} Camel-cased string (e.g. `"Background-color"` → `"backgroundColor"`).
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toCamel(s: string): string {
+            const lc = s.charAt(0).toLowerCase() + s.slice(1);
+            return lc.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+        }
+
+        /** @name        toPascal
+         *  @public
+         *  @description Converts a single string identifier (kebab/snake/spaces/camel) to PascalCase.
+         *  @param       {string} s Source identifier.
+         *  @returns     {string} Pascal-cased string.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toPascal(s: string): string;
+
+        /** @name        toPascal
+         *  @public
+         *  @description Converts an array of word strings into a single concatenated PascalCase string.
+         *  @param       {readonly string[]} words Array of words.
+         *  @returns     {string} Pascal-cased string.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toPascal(words: readonly string[]): string;
+
+        /** @name        toPascal
+         *  @public
+         *  @description Converts multiple string arguments into a single concatenated PascalCase string.
+         *  @param       {...string} words Multiple word arguments.
+         *  @returns     {string} Pascal-cased string.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toPascal(...words: string[]): string;
+
+        /** @name        toPascal
+         *  @public
+         *  @description Core implementation handling all 3 overloads with uppercase phonetics split.
+         *  @param       {string | readonly string[]} first First identifier or array of words.
+         *  @param       {...string} rest Remaining variadic string components.
+         *  @returns     {string} Concatenated PascalCase string.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toPascal(first: string | readonly string[], ...rest: string[]): string {
+            let tokens: string[] = [];
+
+            if (Array.isArray(first)) {
+                tokens = first;
+            } else if (rest.length > 0) {
+                tokens = [first as string, ...rest];
+            } else if (typeof first === 'string' && first) {
+                tokens = first
+                    .replace(/([A-Z])/g, ' $1')
+                    .replace(/[-_\s]+/g, ' ')
+                    .trim()
+                    .split(/\s+/);
+            } else {
+                return '';
+            }
+
+            return tokens
+                .filter(Boolean)
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join('');
+        }
+
+        /** @name        toSnake
+         *  @public
+         *  @description camelCase / PascalCase → snake_case (each uppercase letter becomes `_` + its
+         *               lowercase form).
+         *  @param       {string} s Source identifier.
+         *  @returns     {string} Snake-cased string (e.g. `"BackgroundColor"` → `"_background-color"`).
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toSnake(s: string): string {
+            return s.replace(/([A-Z])/g, c => `_${c.toLowerCase()}`);
+        }
+
+        /** @name        toScreamingSnake
+         *  @public
+         *  @description camelCase / PascalCase → SCREAMING_SNAKE_CASE (each uppercase letter becomes `_`
+         *               + its uppercase form, and the rest is capitalized).
+         *  @param       {string} s Source identifier.
+         *  @returns     {string} Screaming-snake-cased string (e.g. `"BackgroundColor"` → `"_BACKGROUND_COLOR"`).
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toScreamingSnake(s: string): string {
+            return s.replace(/([A-Z])/g, c => `_${c}`).toUpperCase();
+        }
+
+        /** @name        toTrain
+         *  @public
+         *  @description camelCase / PascalCase → Train-Case (each uppercase letter becomes `-` + its
+         *               uppercase form).
+         *  @param       {string} s Source identifier.
+         *  @returns     {string} Train-cased string (e.g. `"backgroundColor"` → `"background-Color"`).
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toTrain(s: string): string {
+            return s.replace(/([A-Z])/g, c => `-${c}`);
+        }
+
+        /** @name        toFlat
+         *  @public
+         *  @description camelCase / PascalCase / separated → flatcase (removes all separators
+         *               and converts everything to lowercase).
+         *  @param       {string} s Source identifier.
+         *  @returns     {string} Flat-cased string (e.g. `"Background-Color"` → `"backgroundcolor"`).
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toFlat(s: string): string {
+            return s.replace(/[-_\s]/g, '').toLowerCase();
+        }
+
+        /** @name        toUpperFlat
+         *  @public
+         *  @description camelCase / PascalCase / separated → UPPERFLATCASE (removes all separators
+         *               and converts everything to uppercase).
+         *  @param       {string} s Source identifier.
+         *  @returns     {string} Upper-flat-cased string (e.g. `"Background-Color"` → `"BACKGROUNDCOLOR"`).
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function toUpperFlat(s: string): string {
+            return s.replace(/[-_\s]/g, '').toUpperCase();
+        }
+    }
+
+    export namespace Debug
+    {
+        /** @name        warn
+         *  @public
+         *  @memberof    Core
+         *  @description Coded diagnostic sink for otherwise-silent recovery `catch` blocks.
+         *               No-op unless `Configuration.debug` is `true`; never throws, never
+         *               alters control flow. Callers keep running their fallback afterwards.
+         *  @param       {string} code Short stable diagnostic code (e.g. `'SET_ATTR'`).
+         *  @param       {...unknown} args Contextual payload (error object, tag, …).
+         *  @returns     {void}
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        export function warn(code: string, ...args: unknown[]): void
+        {
+            if (AriannA.Configuration.debug && typeof console !== 'undefined')
+                console.warn(`[arianna:${code}]`, ...args);
+        }
+    }
+
+    /** Classes Block */
+
+    /** @namespace   Boot
+     *  @memberof    Core
+     *  @description Boot subsystem (replaces the former `Boot` class). Groups the boot state and the
+     *               multi-mode bundle loader. State lives in two `Property` instances (`Initialized`,
+     *               `Booted`) — hard-private inside the Property, exposed read-only via
+     *               `Core.Initialized` / `Core.Booted`, and transitioned only by `AriannA()`. The
+     *               single entry `AriannA(mode)` folds the old two-phase boot; `Ready()` awaits the
+     *               `Booted` flag. Lifecycle notifications ride the `arianna-ready` DOM event,
+     *               fired through the `'events'` service registry (no direct Events import).
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export class AriannA
+    {
+        /** @name        Configuration
+         *  @public
+         *  @description Static framework configuration: the semantic version and its JSON projection.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        static Configuration =
+        {
+            /** @name        version
+             *  @public
+             *  @memberof    Core.Configuration
+             *  @type        {{ major: number; minor: number; patch: number; string: string }}
+             *  @description Semantic version components plus a computed `string` accessor.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            version:
+            {
+                /** @name        major
+                 *  @public
+                 *  @memberof    Core.Configuration.version
+                 *  @type        {number}
+                 *  @description Major version component.
+                 *  @default     1
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                major  : 1,
+                /** @name        minor
+                 *  @public
+                 *  @memberof    Core.Configuration.version
+                 *  @type        {number}
+                 *  @description Minor version component.
+                 *  @default     0
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                minor  : 0,
+                /** @name        patch
+                 *  @public
+                 *  @memberof    Core.Configuration.version
+                 *  @type        {number}
+                 *  @description Patch version component.
+                 *  @default     0
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                patch  : 0,
+                /** @name        string
+                 *  @public
+                 *  @readonly
+                 *  @memberof    Core.Configuration.version
+                 *  @type        {string}
+                 *  @description Computed `"major.minor.patch"` version string.
+                 *  @returns     {string} The dotted version.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license)
+                 */
+                get string() { return `${this.major}.${this.minor}.${this.patch}`; },
+            },
+            /** @name        nativePatch
+             *  @public
+             *  @memberof    Core.Configuration
+             *  @type        {boolean}
+             *  @description Feature-flag: when `true` (default) the framework wraps native
+             *               element constructors (`window.HTMLDivElement`, `SVGElement`, …) in
+             *               `Namespace.Initialize()`, so `super()` inside an AriannA subclass
+             *               returns a real, correctly-tagged element. Set to `false` to leave
+             *               the global native constructors untouched (opt-out for hosts that
+             *               forbid monkey-patching, or for SSR / spec-only runs).
+             *  @default     true
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            nativePatch: true,
+            /** @name        debug
+             *  @public
+             *  @memberof    Core.Configuration
+             *  @type        {boolean}
+             *  @description Feature-flag: when `true`, otherwise-silent recovery `catch`
+             *               blocks emit a coded diagnostic via `Core.warn(code, …)`. Default
+             *               `false` keeps production quiet; flip on in development to surface
+             *               swallowed failures. Does not change control flow.
+             *  @default     false
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            debug: false,
+            /** @name        toJSON
+             *  @public
+             *  @memberof    Core.Configuration
+             *  @description Serializer — projects the configuration to a plain `{ version }` object.
+             *  @returns     {{ version: string }} JSON projection.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license)
+             */
+            get JSON() { return { version: this.version.string }; },
+            load(json: object){}
+        };
+
+        /** @name        #ready
+         *  @private
+         *  @static
+         *  @memberof    Core.Boot.AriannA
+         *  @type        {Promise<void> | null}
+         *  @description The one boot promise, memoised. `Ready` hands this back rather than building a new
+         *               Promise per read — two reads would otherwise mean two promises and two listeners,
+         *               and neither would be the one `Boot()` actually produced, so a boot that threw would
+         *               leave every waiter hanging instead of rejecting. Null until the first read or the
+         *               first construction, whichever comes first.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        static #ready       : Promise<void> | null = null;
+
+        /** @name        #initialized
+         *  @private
+         *  @static
+         *  @memberof    Core.Boot.AriannA
+         *  @type        {boolean}
+         *  @description True once `Initialize()` has completed. A REPORT, not a guard — what actually keeps
+         *               initialization idempotent is `#observer`, because it names the thing that must exist
+         *               rather than asserting that it does. Read through `Initialized`.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        static #initialized : boolean              = false;
+
+        /** @name        #booted
+         *  @private
+         *  @static
+         *  @memberof    Core.Boot.AriannA
+         *  @type        {boolean}
+         *  @description True once `Boot()` has started pulling the optional bundles. Set BEFORE the first
+         *               `await`, not after: two callers landing in the same tick would both clear a flag
+         *               raised afterwards, and both would import. Read through `Booted`.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        static #booted      : boolean              = false;
+
+        /** @name        #observer
+         *  @private
+         *  @static
+         *  @memberof    Core.Boot.AriannA
+         *  @type        {Observer | null}
+         *  @description The observer this class put on the document, and the only guard that decides whether
+         *               `Initialize()` has work left. Private on purpose: the previous guard counted entries
+         *               in the shared observer registry, which ANY observer created for any reason
+         *               satisfies — so the second boot path read the count, concluded the job was done, and
+         *               silently skipped the wiring it was carrying. A field nobody else can set cannot be
+         *               satisfied by accident.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        static #observer    : Observer | null      = null;
+
+        /** @name        #globals
+         *  @private
+         *  @static
+         *  @memberof    Core.Boot.AriannA
+         *  @type        {Set<string>}
+         *  @description Global names a mirrored export must not clobber. Anything in here is published
+         *               prefixed — a bundle exporting `Math` lands on `AriannAMath`, not over the runtime's.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        static readonly #globals                   = new Set<string>([ 'Math', 'Date', /* … */ ]);
+
+        /** @name        constructor
+         *  @public
+         *  @memberof    Core.Boot.AriannA
+         *  @param       {Types.Packages} [packages={}] Which optional bundles to pull and whether to mirror
+         *               their exports. Left out, it reaches `#packages` as `{}` — the same thing a bare
+         *               `new AriannA()` asks for, which today resolves to no URLs at all.
+         *  @description Bring the framework up: seed the namespaces and start the observer synchronously,
+         *               then let the bundles load in the background. Two phases and not one, because the
+         *               observer has to be watching while the imports are still in flight — everything
+         *               added in that window would otherwise never be promoted.
+         *
+         *               Repeating it is free. Every step guards on its own static, so a second `new` finds
+         *               the observer already placed and the boot already started, and hands back an instance
+         *               whose `Ready` is the SAME promise the first one got. That is what `??=` buys: not a
+         *               shortcut, but the guarantee that every caller waits on the boot that actually
+         *               happened, errors included.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        constructor(packages?: Types.Packages)
+        {
+            AriannA.Initialize();
+            AriannA.#ready ??= AriannA.Boot(packages);
+        }
+
+        /** @name        Ready
+         *  @public
+         *  @readonly
+         *  @memberof    Core.Boot.AriannA
+         *  @returns     {Promise<void>} The boot promise — the same one every caller gets.
+         *  @description Await the boot from an instance. Hands back the memoised promise rather than
+         *               building a fresh one per read, which matters for two reasons: two reads would mean
+         *               two promises and two listeners, and neither would be the promise `Boot()` actually
+         *               returned — so a boot that threw would leave every waiter hanging instead of
+         *               rejecting. Reading it without ever having constructed starts the boot, which is the
+         *               sensible reading of "are you ready?" asked of something nobody has started.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        get Ready(): Promise<void>
+        {
+            return AriannA.#ready ??= AriannA.Boot();
+        }
+
+        /** @name        #packages
+         *  @private
+         *  @static
+         *  @memberof    Core.Boot.AriannA
+         *  @param       {Types.Packages} spec The package specification.
+         *  @returns     {{ urls: string[]; mirror: boolean }} Module URLs to import, and whether to mirror.
+         *  @description Resolve a package spec to a list of bundle URLs. STUB: returns no URLs at all, so
+         *               `Boot` currently imports nothing and `#mirror` never runs.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        static #packages(spec: Types.Packages): { urls: string[]; mirror: boolean }
+        {
+            void spec;
+
+            return { urls: [], mirror: true };
+        }
+
+        /** @name        #mirror
+         *  @private
+         *  @static
+         *  @memberof    Core.Boot.AriannA
+         *  @param       {Record<string, unknown>} mod A loaded bundle's exports.
+         *  @returns     {void}
+         *  @description Publish a bundle's exports onto the global scope, prefixing anything that would
+         *               shadow a built-in. STUB: computes the name and defines nothing.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        static #mirror(mod: Record<string, unknown>): void
+        {
+            if (typeof window === 'undefined') return;
+
+            for (const k of Object.keys(mod))
+            {
+                const name = AriannA.#globals.has(k) ? 'AriannA' + k : k;
+
+                void name; /* defineProperty… */
+            }
+        }
+
+        /** @name        Initialized
+         *  @public
+         *  @static
+         *  @readonly
+         *  @memberof    Core.Boot.AriannA
+         *  @returns     {boolean} True once `Initialize()` has completed.
+         *  @description Whether phase one has run: namespaces seeded, observer placed. A report for
+         *               diagnostics, not something to branch on — `Initialize()` guards itself on
+         *               `#observer`, and code that gates on this flag instead is how two boot paths end up
+         *               each trusting the other.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        static get Initialized() { return this.#initialized; }
+
+        /** @name        Booted
+         *  @public
+         *  @static
+         *  @readonly
+         *  @memberof    Core.Boot.AriannA
+         *  @returns     {boolean} True once `Boot()` has started pulling the optional bundles.
+         *  @description Whether phase two has begun. Note STARTED, not finished: the flag is raised before
+         *               the first `await`, so that two callers in the same tick cannot both get past it. To
+         *               wait for completion, await `Ready` — this is a probe, not a barrier.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        static get Booted()      { return this.#booted; }
+
+        /** @name        Ready
+         *  @public
+         *  @static
+         *  @readonly
+         *  @memberof    Core.Boot.AriannA
+         *  @returns     {Promise<void>} The boot promise — the same one the instance accessor returns.
+         *  @description Await the boot without holding an instance. Same promise, same memo: `AriannA.Ready`
+         *               and `new AriannA().Ready` are interchangeable by construction, so a caller that only
+         *               ever imported the class is never waiting on a different boot than the one that ran.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        static get Ready(): Promise<void>
+        {
+            return AriannA.#ready ??= AriannA.Boot();
+        }
+
+        /** @name        Boot
+         *  @public
+         *  @static
+         *  @memberof    Core.Boot.AriannA
+         *  @param       {Types.Packages} [spec] Which optional bundles to pull and whether to mirror their
+         *               exports onto the global scope.
+         *  @returns     {Promise<void>} Settles once the bundles are in and 'arianna-ready' has fired.
+         *  @description Phase two: pull the optional bundles and announce readiness. Runs at most once.
+         *               `Initialize()` is called FIRST and synchronously, before the first `await` — the
+         *               observer has to be live while the imports are still in flight, not after them, or
+         *               every node added in between is missed. The flag is set BEFORE the await too: two
+         *               callers arriving in the same tick would otherwise both pass the guard and import.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        static async Boot(spec?: Types.Packages): Promise<void>
+        {
+            AriannA.Initialize();
+
+            if (AriannA.#booted || typeof document === 'undefined') return;
+
+            AriannA.#booted = true;
+
+            const { urls, mirror } = AriannA.#packages(spec ?? {});
+            const mods             = await Promise.all
+            (
+                urls.map(u => import(/* @vite-ignore */ u).catch(() => null))
+            );
+
+            if (mirror)
+            {
+                for (const m of mods)
+                {
+                    if (m) AriannA.#mirror(m as Record<string, unknown>);
+                }
+            }
+
+            Core.Services.Events?.Fire
+            (
+                document,
+                {
+                    Type   : 'arianna-ready',
+                    Detail : { version: AriannA.Configuration.version.string },
+                }
+            );
+        }
+
+        /** @name        Initialize
+         *  @public
+         *  @static
+         *  @memberof    Core.Boot.AriannA
+         *  @returns     {void}
+         *  @description Phase one, synchronous: seed the standard namespaces and put the single global
+         *               observer on the document, so define and upgrade run eagerly from the first tick.
+         *               Idempotent through `#observer`, a field this class OWNS — a count over the shared
+         *               observer registry is satisfied by anyone's observer, which is how two boot paths
+         *               end up each believing the other did the work.
+         *
+         *               Observed root is `document.body`, never `documentElement`: `<head>` is where every
+         *               Promote injects its scoped `<style>` and where every `new Css.Stylesheet` appends a
+         *               `<link>` and a `<style>` from its own constructor, so watching it feeds the
+         *               framework's own CSS writes straight back into this callback.
+         *
+         *               The upgrade rides the observer callback and NOT the 'NodeAdded' event, so it needs
+         *               neither bubbling nor a listener. It runs BEFORE the original callback, so whoever
+         *               does listen receives a node already promoted. Order is load-bearing: the `Callback`
+         *               setter only re-binds the live MutationObserver when the observer is already
+         *               connected, so Connect comes first and the callback second — the other way round the
+         *               swap is silently ignored. The sweep comes last, into a pipeline already whole.
+         *
+         *               The guard is `instanceof HTMLUnknownElement` and nothing else, because it is the
+         *               only native interface that STOPS matching once the type prototype is spliced on: it
+         *               switches itself off. `HTMLElement` and `SVGElement` stay true after promotion and
+         *               would re-patch the same node forever.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
+         */
+        static Initialize(): void
+        {
+            if (typeof document === 'undefined') return;
+
+            if (!Namespaces.Namespace.Namespaces['html']) AriannA.Install();
+
+            if (typeof globalThis !== 'undefined')
+            {
+                (globalThis as { Core?: unknown }).Core ??= Core;
+            }
+
+            if (AriannA.#observer) return;
+
+            const service = Core.Services.Observer;
+
+            if (!service) return;
+
+            const stage    = document.body ?? document.documentElement;
+            const observer = Services.Observer?.Create() as Observer;
+            const base     = observer.Callback!;
+
+            observer?.connect(stage);
+
+            observer.Callback = function (mutations: MutationRecord[], observer: MutationObserver): void
+            {
+                for (const m of mutations)
+                {
+                    if (m.type !== 'childList') continue;
+
+                    for (const node of m.addedNodes)
                     {
-                        const str = value === null || value === undefined ? '' : String(value);
-                        if (dom.getAttribute(a) !== str) dom.setAttribute(a, str);
+                        if (!(node instanceof Element)) continue;
+
+                        const d = Namespaces.Namespace.Resolve(node);
+
+                        if (!d || !d.Custom || !d.Defined) continue;
+                        if (Object.getPrototypeOf(node) === d.Prototype) continue;
+
+                        const n = Namespaces.Namespace.Namespaces[d.Namespace];
+
+                        if (n) n.Upgrade(node, d);
                     }
                 }
 
-                const props: string[] = [];
-                if (spec.property)   props.push(spec.property);
-                if (spec.properties) props.push(...spec.properties);
-                for (const p of props)
-                {
-                    const cur = (host as Record<string, unknown>)[p];
-                    if (!Object.is(cur, value)) (host as Record<string, unknown>)[p] = value;
-                }
+                base.call(this, mutations, observer);
             };
-            apply(this.opts.bind);
-            apply(this.opts.bound);
+
+            observer.sweep(stage);
+
+            AriannA.#observer    = observer as Observer;
+            AriannA.#initialized = true;
         }
 
-        // ── private static helpers ────────────────────────────────────────────
-
-        /** Runtime type check against a Type tag or predicate. */
-        private static _matchesType(v: unknown, t: Type): boolean
-        {
-            if (typeof t === 'function') return t(v);
-            switch (t)
-            {
-                case 'string'   : return typeof v === 'string';
-                case 'number'   : return typeof v === 'number' && !Number.isNaN(v);
-                case 'integer'  : return typeof v === 'number' && Number.isInteger(v);
-                case 'boolean'  : return typeof v === 'boolean';
-                case 'function' : return typeof v === 'function';
-                case 'object'   : return typeof v === 'object' && v !== null && !Array.isArray(v);
-                case 'array'    : return Array.isArray(v);
-                case 'any'      : return true;
-            }
-        }
-
-        /**
-         * Resolve the DOM element associated with a host: an HTMLElement directly,
-         * or any Real-like wrapper exposing `.element`. SSR-safe (null off-DOM).
+        /** @name        Install
+         *  @public
+         *  @memberof    Core
+         *  @description Install the built-in namespaces (html / svg / mathML / x3d). Each `new Namespace`
+         *               auto-registers into `Core.Namespaces` via its constructor (§6); `Install()` makes that
+         *               registration an explicit, ordered boot step —
+         *               `Core.Initialize() → Namespace.Install() → Core.Bootstrap()` — instead of an
+         *               import-time side-effect. Merged onto the class as `Namespace.Install()`.
+         *  @returns     {{ html: Namespace; svg: Namespace; mathML: Namespace; x3d: Namespace }} The four
+         *               built-in namespace instances.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license)
          */
-        private static _resolveDomElement(host: object): HTMLElement | null
+        static Install():
         {
-            if (typeof HTMLElement === 'undefined') return null;
-            if (host instanceof HTMLElement) return host;
-            const wrapper = host as { element?: unknown };
-            if (wrapper.element instanceof HTMLElement) return wrapper.element;
-            return null;
+            html:   Namespaces.Namespace;
+            svg:    Namespaces.Namespace;
+            mathML: Namespaces.Namespace;
+            x3d:    Namespaces.Namespace
+        }
+        {
+            const html   = new Namespaces.Namespace
+            (
+                'html',
+                {
+                    Uri: 'http://www.w3.org/1999/xhtml',
+                    NS: false,
+                    Base: HTMLElement,
+                    Schema: 'http://www.w3.org/1999/xhtml',
+                    Documentation: { w3c: 'https://html.spec.whatwg.org/' },
+                    Types :
+                        {
+                            Standard :
+                                {
+                                    Interfaces :
+                                        {
+                                            HTMLElement: {
+                                                Tags: [
+                                                    'address', 'article', 'footer', 'header', 'section', 'nav', 'dd', 'dt',
+                                                    'figcaption', 'figure', 'main', 'abbr', 'b', 'bdi', 'bdo', 'cite', 'code',
+                                                    'dfn', 'em', 'i', 'mark', 'rt', 'rtc', 'ruby', 's', 'samp', 'small', 'strong',
+                                                    'sub', 'sup', 'u', 'var', 'wbr', 'area', 'noscript', 'noembed', 'plaintext',
+                                                    'strike', 'tt', 'summary', 'acronym', 'basefont', 'big', 'center',
+                                                ]
+                                            },
+                                            HTMLUnknownElement: {Tags: ['isindex', 'spacer', 'menuitem', 'decorator', 'applet', 'blink', 'keygen']},
+                                            HTMLHtmlElement: {Tags: ['html']},
+                                            HTMLBaseElement: {Tags: ['base']},
+                                            HTMLHeadElement: {Tags: ['head']},
+                                            HTMLLinkElement: {Tags: ['link']},
+                                            HTMLMetaElement: {Tags: ['meta']},
+                                            HTMLStyleElement: {Tags: ['style']},
+                                            HTMLTitleElement: {Tags: ['title']},
+                                            HTMLPreElement: {Tags: ['pre', 'listing', 'xmp']},
+                                            HTMLHeadingElement: {Tags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']},
+                                            HTMLDivElement: {Tags: ['div']},
+                                            HTMLDListElement: {Tags: ['dl']},
+                                            HTMLHRElement: {Tags: ['hr']},
+                                            HTMLLIElement: {Tags: ['li']},
+                                            HTMLOListElement: {Tags: ['ol']},
+                                            HTMLParagraphElement: {Tags: ['p']},
+                                            HTMLUListElement: {Tags: ['ul']},
+                                            HTMLAnchorElement: {Tags: ['a']},
+                                            HTMLBRElement: {Tags: ['br']},
+                                            HTMLQuoteElement: {Tags: ['quote']},
+                                            HTMLSpanElement: {Tags: ['span']},
+                                            HTMLAudioElement: {Tags: ['audio']},
+                                            HTMLImageElement: {Tags: ['img']},
+                                            HTMLMapElement: {Tags: ['map']},
+                                            HTMLTrackElement: {Tags: ['track']},
+                                            HTMLVideoElement: {Tags: ['video']},
+                                            HTMLEmbedElement: {Tags: ['embed']},
+                                            HTMLIFrameElement: {Tags: ['iframe']},
+                                            HTMLObjectElement: {Tags: ['object']},
+                                            HTMLParamElement: {Tags: ['param']},
+                                            HTMLSourceElement: {Tags: ['source']},
+                                            HTMLCanvasElement: {Tags: ['canvas']},
+                                            HTMLScriptElement: {Tags: ['script']},
+                                            HTMLModElement: {Tags: ['ins', 'del']},
+                                            HTMLTableCaptionElement: {Tags: ['caption']},
+                                            HTMLTableColElement: {Tags: ['col', 'colgroup']},
+                                            HTMLTableElement: {Tags: ['table']},
+                                            HTMLTableSectionElement: {Tags: ['tbody', 'thead', 'tfoot']},
+                                            HTMLTableCellElement: {Tags: ['td', 'th']},
+                                            HTMLTableRowElement: {Tags: ['tr']},
+                                            HTMLButtonElement: {Tags: ['button']},
+                                            HTMLDataListElement: {Tags: ['datalist']},
+                                            HTMLFieldSetElement: {Tags: ['fieldset']},
+                                            HTMLFormElement: {Tags: ['form']},
+                                            HTMLInputElement: {Tags: ['input']},
+                                            HTMLLabelElement: {Tags: ['label']},
+                                            HTMLLegendElement: {Tags: ['legend']},
+                                            HTMLOptGroupElement: {Tags: ['optgroup']},
+                                            HTMLOptionElement: {Tags: ['option']},
+                                            HTMLProgressElement: {Tags: ['progress']},
+                                            HTMLSelectElement: {Tags: ['select']},
+                                            HTMLTextAreaElement: {Tags: ['textarea']},
+                                            HTMLMenuElement: {Tags: ['menu']},
+                                            HTMLDirectoryElement: {Tags: ['dir']},
+                                            HTMLFrameElement: {Tags: ['frame']},
+                                            HTMLFrameSetElement: {Tags: ['frameset']}
+                                        },
+                                    Tags : {}
+
+                                },
+                            Custom   : { Constructors : {}, Tags : {} },
+                        }
+                }
+            );
+
+            const svg    = new Namespaces.Namespace
+            (
+                'svg',
+                {
+                    Uri: 'http://www.w3.org/2000/svg',
+                    NS: true,
+                    Base: SVGElement,
+                    Schema: 'http://www.w3.org/2000/svg',
+                    Documentation: {w3c: 'https://www.w3.org/TR/SVG2/'},
+                    Types :
+                        {
+                            Standard:
+                                {
+                                    Interfaces :
+                                        {
+                                            SVGAElement: {Tags: ['a']},
+                                            SVGAltGlyphDefElement: {Tags: ['altglyph']},
+                                            SVGAltGlyphElement: {Tags: ['altglyph']},
+                                            SVGAltGlyphItemElement: {Tags: ['altglyph']},
+                                            SVGAnimateColorElement: {Tags: ['animatecolor']},
+                                            SVGAnimateElement: {Tags: ['animate']},
+                                            SVGAnimateMotionElement: {Tags: ['animatemotion']},
+                                            SVGAnimateTransformElement: {Tags: ['animatetransform']},
+                                            SVGAnimationElement: {Tags: ['animate', 'animatemotion', 'animatetransform']},
+                                            SVGCircleElement: {Tags: ['circle']},
+                                            SVGClipPathElement: {Tags: ['clippath']},
+                                            SVGCursorElement: {Tags: ['cursor']},
+                                            SVGDefsElement: {Tags: ['defs']},
+                                            SVGDescElement: {Tags: ['desc']},
+                                            SVGEllipseElement: {Tags: ['ellipse']},
+                                            SVGFEBlendElement: {Tags: ['feblend']},
+                                            SVGFEColorMatrixElement: {Tags: ['fecolormatrix']},
+                                            SVGFEComponentTransferElement: {Tags: ['fecomponenttransfer']},
+                                            SVGFECompositeElement: {Tags: ['fecomposite']},
+                                            SVGFEConvolveMatrixElement: {Tags: ['feconvolvematrix']},
+                                            SVGFEDiffuseLightingElement: {Tags: ['fediffuselighting']},
+                                            SVGFEDisplacementMapElement: {Tags: ['fedispatchmap']},
+                                            SVGForeignObjectElement: {Tags: ['foreignobject']},
+                                            SVGGElement: {Tags: ['g']},
+                                            SVGGlyphElement: {Tags: ['glyph']},
+                                            SVGGlyphRefElement: {Tags: ['glyphref']},
+                                            SVGGradientElement: {Tags: ['lineargradient', 'radialgradient']},
+                                            SVGHKernElement: {Tags: ['hkern']},
+                                            SVGImageElement: {Tags: ['image']},
+                                            SVGLinearGradientElement: {Tags: ['lineargradient']},
+                                            SVGLineElement: {Tags: ['line']},
+                                            SVGMarkerElement: {Tags: ['marker']},
+                                            SVGMaskElement: {Tags: ['mask']},
+                                            SVGMetadataElement: {Tags: ['metadata']},
+                                            SVGMissingGlyphElement: {Tags: ['missing-glyph']},
+                                            SVGMPathElement: {Tags: ['mpath']},
+                                            SVGPathElement: {Tags: ['path']},
+                                            SVGPolygonElement: {Tags: ['polygon']},
+                                            SVGPolylineElement: {Tags: ['polyline']},
+                                            SVGRadialGradientElement: {Tags: ['radialgradient']},
+                                            SVGRectElement: {Tags: ['rect']},
+                                            SVGScriptElement: {Tags: ['script']},
+                                            SVGSetElement: {Tags: ['set']},
+                                            SVGStopElement: {Tags: ['stop']},
+                                            SVGStyleElement: {Tags: ['style']},
+                                            SVGSVGElement: {Tags: ['svg']},
+                                            SVGSwitchElement: {Tags: ['switch']},
+                                            SVGSymbolElement: {Tags: ['symbol']},
+                                            SVGTextContentElement: {Tags: ['text', 'tspan', 'tref', 'altglyph', 'textpath']},
+                                            SVGTextElement: {Tags: ['text']},
+                                            SVGTextPathElement: {Tags: ['textpath']},
+                                            SVGTextPositioningElement: {Tags: ['altglyph', 'text', 'tspan']},
+                                            SVGTitleElement: {Tags: ['title']},
+                                            SVGTRefElement: {Tags: ['tref']},
+                                            SVGTSpanElement: {Tags: ['tspan']},
+                                            SVGUseElement: {Tags: ['use']},
+                                            SVGViewElement: {Tags: ['view']},
+                                            SVGVKernElement: {Tags: ['vkern']}
+                                        },
+                                    Tags : {}
+                                    ,
+                                },
+                            Custom: { Constructors : {}, Tags : {} }
+                        }
+                }
+            );
+
+
+            const mathML = new Namespaces.Namespace
+            (
+                'mathML',
+                {
+                    Uri: 'http://www.w3.org/1998/Math/MathML',
+                    NS: true,
+                    Base: (typeof MathMLElement !== 'undefined' ? MathMLElement : HTMLElement),
+                    Schema: 'http://www.w3.org/1998/Math/MathML',
+                    Documentation: {w3c: 'https://www.w3.org/TR/MathML3/'},
+                    Types :
+                        {
+                            Standard:
+                                {
+                                    Interfaces :
+                                        {
+                                            MathMLElement:
+                                                {
+                                                    Tags:
+                                                        [
+                                                            'math', 'mi', 'mo', 'mn', 'ms', 'mspace', 'mtext',
+                                                            'mfrac', 'msqrt', 'mroot', 'mstyle', 'merror', 'mpadded', 'mphantom',
+                                                            'mrow', 'mfenced', 'menclose',
+                                                            'msub', 'msup', 'msubsup', 'munder', 'mover', 'munderover', 'mmultiscripts',
+                                                            'mtable', 'mtr', 'mtd', 'mlabeledtr',
+                                                            'maction',
+                                                        ]
+                                                },
+                                        },
+                                    Tags : {}
+                                },
+                            Custom: { Constructors : {}, Tags : {} }
+                        }
+                });
+
+            const x3d    = new Namespaces.Namespace
+            (
+                'x3d',
+                {
+                    Uri: 'http://www.web3d.org/specifications/x3d-namespace',
+                    NS: true,
+                    Base: HTMLElement,
+                    Schema: 'http://www.web3d.org/specifications/x3d-namespace',
+                    Documentation: {w3c: 'https://www.web3d.org/specifications/x3d-4.0/'},
+                    Types :
+                        {
+                            Standard:
+                                {
+                                    Interfaces : {},
+                                    Tags : {}
+                                },
+                            Custom: { Constructors : {}, Tags : {} }
+                        }
+                }
+            );
+
+            return { html, svg, mathML, x3d };
         }
     }
+
+    /** Functions Block */
+
+    export const Initialize = AriannA.Initialize;
+
+    /** @name        UUID
+     *  @public
+     *  @memberof    Core
+     *  @returns     {string} A fresh identifier.
+     *  @description Generate an RFC-shaped identifier. A FUNCTION and not a property, unlike the accessor
+     *               it replaces: every call returns a different value, and `Core.UUID()` says that out
+     *               loud while `Core.UUID` read like a stable field and invited being used as one.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export function UUID(): string
+    {
+        const b : string[] = [];
+
+        for (let i = 0; i < 9; i++)
+        {
+            b.push((Math.floor(1 + Math.random() * 0x10000)).toString(16).slice(1));
+        }
+
+        return `${b[1]}${b[2]}-${b[3]}-${b[4]}-${b[5]}-${b[6]}${b[7]}${b[8]}`;
+    }
+
+    /** @name        Root
+     *  @public
+     *  @memberof    Core
+     *  @returns     {Element | null} The document's root element, or `null` off-DOM.
+     *  @description The DOCUMENT root — `<html>` — not the observed one: the observer watches
+     *               `document.body`, because `<head>` is where the framework injects its own stylesheets
+     *               and watching it would feed those writes back into its own callback.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export function Root(): Element | null
+    {
+        return typeof document !== 'undefined' ? document.documentElement : null;
+    }
+
+    /** @name        Is
+     *  @public
+     *  @description Checks whether `value` satisfies the supplied native type tags or constructors.
+     *               Variadic matches use AND semantics, while a single array of matches uses OR
+     *               semantics. An empty match list returns `false`. Primitive type tags are tested
+     *               using `typeof`. The `'class'` tag recognizes JavaScript class constructors whose
+     *               source begins with the `class` keyword. The `'idl'` tag recognizes native DOM
+     *               element constructors belonging to the `Element` inheritance chain. Constructor
+     *               matches are resolved through the constructor names returned by
+     *               `GetPrototypeChain`.
+     *  @param       value Value, object or constructor to inspect.
+     *  @param       {...Types.Native} matches Native type tags, constructors, or a single array of
+     *               alternatives to test against `value`.
+     *  @returns     {boolean} `true` when every variadic match succeeds, or when at least one match
+     *               succeeds in the single-array OR form; otherwise `false`.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     *  @example     Core.Is(class A {}, 'class')                    // true
+     *  @example     Core.Is(1, 'number', Number)                    // true
+     *  @example     Core.Is([], [Array, Object])                    // true
+     *  @example     Core.Is(globalThis.HTMLElement, 'idl')          // true
+     */
+    export function Is(value: unknown, ...matches: string[] | Array<Types.Native> | readonly Types.Base[]): boolean
+    {
+        if (matches.length === 0) { return false }
+
+        const form   = matches.length === 1 && Array.isArray(matches[0]);
+        const types = (form ? matches[0] : matches) as readonly  Types.Native[];
+        const chain   = GetPrototypeChain(value as any);
+
+        for (const t of types)
+        {
+            let match = false;
+            if (typeof t === 'string')
+            {
+                const upper = t.toUpperCase();
+                if(typeof value === 'function')
+                {
+                    const d = Function.prototype.toString.call(value);
+
+                    if (upper === 'CLASS')
+                    {
+                        try { match = /^\s*class[\s{]/.test(d); }
+                        catch (e){ }
+                    }
+                    else if (upper === 'IDL')
+                    {
+                        try
+                        {
+                            const n  = /\[native code\]/.test(d);
+                            const e = globalThis.Element;
+                            match = n && (value === e || chain.includes(e.name));
+                        }
+                        catch (e){ }
+                    }
+                    else if (upper === 'IDL-PATCHED')
+                    {
+                        try
+                        {
+                            const e      = globalThis.Element;
+                            const native = /\[native code\]/.test(d) && (value === e || chain.includes(e.name));
+                            const g      = globalThis as Record<string, unknown>;
+                            const nm     = (value as { name?: string }).name ?? '';
+                            let   rec: { Standard?: boolean; Patched?: boolean } | undefined;
+
+                            if (nm && typeof g[nm] === 'function')
+                            {
+                                for (const ns of Object.values(Namespaces.Namespace.Namespaces))
+                                {
+                                    const r = ns?.Types?.Standard?.Interfaces?.get(nm);
+                                    if (r && r.Standard) { rec = r; break; }
+                                }
+                            }
+                            match = upper === 'IDL-PATCHED'
+                                ? !!(rec && rec.Patched)
+                                : native || !!rec;
+                        }
+                        catch (e){ }
+                    }
+                }
+                else { match = (typeof value === t); }
+            }
+            else if (typeof t === 'function')
+            {
+                if(value !== t)
+                {
+                    try { match = !!t.name && chain.includes(t.name); }
+                    catch { /* false */ }
+                }
+                else { match = true; }
+            }
+
+            if (form && match) return true;
+            if (!form && !match) return false;
+        }
+
+        return !form;
+    }
+
+    /** @name        Equals
+     *  @public
+     *  @description Deep equality across primitives, plain objects, arrays, RegExp, Date, and class
+     *               instances. Pass 2+ arguments, or a single array of elements. Objects compare by
+     *               own enumerable keys; functions by source string.
+     *  @param       {...unknown} args Elements to compare (or one array of elements).
+     *  @returns     {boolean} `true` when all elements are deeply equal.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     *  @example     Core.Equals({a:1}, {a:1})  // true
+     */
+    export function Equals(...args: unknown[]): boolean
+    {
+        let elements = args;
+        if (args.length === 1 && Array.isArray(args[0])) elements = args[0] as unknown[];
+        if (elements.length < 2) return true;
+
+        for (let i = elements.length - 1; i > 0; i--)
+        {
+            const x = elements[i];
+            const y = elements[i - 1];
+            if (Object.is(x, y)) continue;
+            if ((x === null || x === undefined) && (y === null || y === undefined)) continue;
+            if (x === null || y === null || x === undefined || y === undefined) return false;
+
+            const tx = typeof x, ty = typeof y;
+            if (tx !== ty) return false;
+
+            if (tx === 'object') {
+                if (x instanceof Date && y instanceof Date) { if (x.getTime() !== y.getTime()) return false; continue; }
+                if (x instanceof RegExp && y instanceof RegExp) { if (x.toString() !== y.toString()) return false; continue; }
+                if (Array.isArray(x) || Array.isArray(y)) {
+                    if (!Array.isArray(x) || !Array.isArray(y)) return false;
+                    if (x.length !== y.length) return false;
+                    for (let k = 0; k < x.length; k++) if (!Equals(x[k], y[k])) return false;
+                    continue;
+                }
+                const xo = x as Record<string, unknown>;
+                const yo = y as Record<string, unknown>;
+                const xk = Object.keys(xo);
+                const yk = Object.keys(yo);
+                if (xk.length !== yk.length) return false;
+                for (const k of xk) {
+                    if (!Object.prototype.hasOwnProperty.call(yo, k)) return false;
+                    if (!Equals(xo[k], yo[k])) return false;
+                }
+                continue;
+            }
+            if (tx === 'function') {
+                if ((x as () => unknown).toString() !== (y as () => unknown).toString()) return false;
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    /** @name        Empty
+     *  @public
+     *  @description True when an object has no own enumerable properties. Non-objects
+     *               (null / undefined / primitives) → `true`.
+     *  @param       {unknown} value Subject under test.
+     *  @returns     {boolean} `true` when empty (or not an object).
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export function Empty(value: unknown): boolean
+    {
+        if (value === null || value === undefined || typeof value !== 'object') return true;
+        for (const _ in value as object) return false;
+        return true;
+    }
+
+    /** @name        Has
+     *  @public
+     *  @description Check whether `target` has all the specified members. For an HTMLElement the
+     *               members are checked against attributes (`getAttribute`); otherwise against `in`
+     *               (own or inherited). An empty member list → `true`; a non-object target → `false`.
+     *  @param       {object | null | undefined} target Subject.
+     *  @param       {...string} members Member / attribute names required.
+     *  @returns     {boolean} `true` when all members are present.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export function Has(target: object | null | undefined, ...members: string[]): boolean
+    {
+        if (!target || typeof target !== 'object') return false;
+        if (members.length === 0) return true;
+        const isElement = typeof HTMLElement !== 'undefined' && target instanceof HTMLElement;
+        for (const m of members) {
+            if (isElement) { if ((target as HTMLElement).getAttribute(m) === null) return false; }
+            else           { if (!(m in (target as Record<string, unknown>))) return false; }
+        }
+        return true;
+    }
+
+    /** @name        Clone
+     *  @public
+     *  @template    T
+     *  @description Deep-clone a value: primitives (string / number / boolean / symbol / bigint)
+     *               return as-is; functions are re-created from source with own keys copied; a Node
+     *               is `cloneNode(true)`; Date / RegExp / Array / plain Object are cloned recursively.
+     *  @param       {T} value Value to clone.
+     *  @returns     {T} The clone.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export function Clone<T>(value: T): T
+    {
+        if (value === null || value === undefined) return value;
+        const t = typeof value;
+        if (t === 'string' || t === 'number' || t === 'boolean' || t === 'symbol' || t === 'bigint') return value;
+
+        if (t === 'function') {
+            const fn = value as unknown as () => unknown;
+            const out = new Function('return ' + fn.toString())() as () => unknown;
+            const fnRec = fn as unknown as Record<string, unknown>;
+            const outRec = out as unknown as Record<string, unknown>;
+            for (const k of Object.keys(fnRec)) outRec[k] = fnRec[k];
+            return out as unknown as T;
+        }
+        if (typeof Node !== 'undefined' && value instanceof Node) return value.cloneNode(true) as unknown as T;
+        if (value instanceof Date)   return new Date(value.getTime()) as unknown as T;
+        if (value instanceof RegExp) return new RegExp(value.source, value.flags) as unknown as T;
+        if (Array.isArray(value))    return value.map(v => Clone(v)) as unknown as T;
+        if (t === 'object') {
+            const obj = value as Record<string, unknown>;
+            const out: Record<string, unknown> = {};
+            for (const k of Object.keys(obj)) out[k] = Clone(obj[k]);
+            return out as unknown as T;
+        }
+        return value;
+    }
+
+    /** @name        Assign
+     *  @public
+     *  @template    T
+     *  @description Mix own enumerable properties from `sources` into `target`. Special-cases ES
+     *               classes: copies prototype methods onto `target.prototype` (skipping `constructor`),
+     *               and, when the class is constructable with no args, its instance fields onto the
+     *               prototype's parent. `null` / `undefined` sources are skipped.
+     *  @param       {T} target Destination object.
+     *  @param       {...unknown} sources Sources (plain objects or ES classes).
+     *  @returns     {T} The mutated `target`.
+     *  @throws      {TypeError} When `target` is `null` / `undefined`.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export function Assign<T extends object>(target: T, ...sources: unknown[]): T
+    {
+        if (target === null || target === undefined) throw new TypeError('Cannot convert first argument to object');
+        const to = Object(target) as Record<string, unknown>;
+        for (const source of sources) {
+            if (source === null || source === undefined) continue;
+            if (typeof source === 'function' && Is(source, 'class')) {
+                const ctor = source as new () => object;
+                const targetCtor = target as unknown as { prototype?: Record<string, unknown> };
+                if (!targetCtor.prototype) continue;
+                for (const k of Object.getOwnPropertyNames(ctor.prototype)) {
+                    if (k !== 'constructor') targetCtor.prototype[k] = (ctor.prototype as Record<string, unknown>)[k];
+                }
+                try {
+                    const instance = new ctor() as Record<string, unknown>;
+                    const proto = Object.getPrototypeOf(targetCtor.prototype) as Record<string, unknown> | null;
+                    if (proto) for (const k of Object.getOwnPropertyNames(instance)) if (k !== 'constructor') proto[k] = instance[k];
+                } catch { /* class with required ctor args — skip */ }
+                continue;
+            }
+            const src = Object(source) as Record<string, unknown>;
+            for (const k of Object.keys(src)) {
+                const desc = Object.getOwnPropertyDescriptor(src, k);
+                if (desc?.enumerable) to[k] = src[k];
+            }
+        }
+        return target;
+    }
+
+    /** @name        Replace
+     *  @public
+     *  @description Replace an Element in the DOM (single-root). A string replacement is parsed via a
+     *               `<template>` (first element/child taken); a Node replacement is detached from its
+     *               current parent first. No-op returning `undefined` when input is invalid.
+     *  @param       {Node | null | undefined} target Node to replace (must have a parent).
+     *  @param       {string | Node | null | undefined} replacement New content.
+     *  @returns     {Node | undefined} The inserted node, or `undefined` when input was invalid.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    export function Replace(target: Node | null | undefined, replacement: string | Node | null | undefined): Node | undefined
+    {
+        if (!target || !(target instanceof Node) || !target.parentNode) return undefined;
+        if (replacement === null || replacement === undefined) return undefined;
+        let next: Node | null = null;
+        if (typeof replacement === 'string') {
+            const tpl = document.createElement('template');
+            tpl.innerHTML = replacement;
+            next = tpl.content.firstElementChild ?? tpl.content.firstChild;
+        } else if (replacement instanceof Node) {
+            next = replacement;
+        }
+        if (!next) return undefined;
+        if (next.parentNode) next.parentNode.removeChild(next);
+        target.parentNode.replaceChild(next, target);
+        return next;
+    }
+
+    /** @name        Extends
+     *  @public
+     *  @description Mixin-style runtime class extension. Variadic: `Extends(A, B, C)` makes `A` extend
+     *               `B` and `B` extend `C` (left-to-right), via `setPrototypeOf` on both the prototype
+     *               and the constructor. SSR-safe; native built-ins that resist re-parenting are
+     *               skipped. Fewer than 2 args returns the first (or `undefined`).
+     *  @param       {...unknown} classes Constructors, from subclass to superclass.
+     *  @returns     {unknown} The first (most-derived) class.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     *  @example     Core.Extends(A, B);  // A inherits B's prototype
+     */
+    export function Extends(...classes: unknown[]): unknown
+    {
+        if (classes.length < 2) return classes[0];
+        for (let i = 0; i < classes.length - 1; i++) {
+            const Sub = classes[i];
+            const Super = classes[i + 1];
+            if (typeof Sub !== 'function' || typeof Super !== 'function') continue;
+            const SubF = Sub as unknown as { prototype: object };
+            const SuperF = Super as unknown as { prototype: object };
+            if (!SubF.prototype || !SuperF.prototype) continue;
+            try {
+                Object.setPrototypeOf(SubF.prototype, SuperF.prototype);
+                Object.setPrototypeOf(SubF, SuperF);
+            } catch { /* native built-ins may resist — skip */ }
+        }
+        return classes[0];
+    }
+
+    /** @name        GetPrototypeChain
+     *  @public
+     *  @description Return the complete prototype chain of an object or constructor as an ordered
+     *               array (most-derived first). The `mode` selects the element type:
+     *                 • `'s'`/`'STRINGS'` (default) — constructor names; an anonymous constructor
+     *                   (`name === ""`) is reported as the placeholder `"[Anonymous]"`.
+     *                 • `'f'`/`'FUNCTIONS'` — the constructor functions themselves; anonymous ones are
+     *                   kept (identity, not name, is what matters).
+     *                 • `'y'`/`'SYMBOLS'` — `Symbol.for(name)` global symbols; anonymous constructors
+     *                   are SKIPPED (every one would collapse onto `Symbol.for("")`).
+     *               Because 'y' skips anonymous links while 's'/'f' keep them, the symbols array can be
+     *               SHORTER than the other two for the same input — the three modes are index-aligned
+     *               only when no anonymous constructor appears in the chain. A `null` / `undefined`
+     *               target yields `[]` (of the requested element type) instead of throwing.
+     *  @param       {object | (new () => object) | null | undefined} value  Subject (instance or constructor).
+     *  @param       {'s' | 'STRINGS' | 'f' | 'FUNCTIONS' | 'y' | 'SYMBOLS'} [mode='s']  Output element type.
+     *  @returns     {string[] | Function[] | symbol[]}  Chain in the requested representation, most-derived first.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     *  @example
+     *   Core.GetPrototypeChain(document.createElement('input'))
+     *   // → ["HTMLInputElement","HTMLElement","Element","Node","EventTarget","Object"]
+     *  @example
+     *   Core.GetPrototypeChain(HTMLInputElement, 'f')
+     *   // → [HTMLInputElement, HTMLElement, Element, Node, EventTarget, Object]
+     *  @example
+     *   Core.GetPrototypeChain(el, 'y')
+     *   // → [Symbol.for("HTMLInputElement"), Symbol.for("HTMLElement"), …]
+     */
+    export function GetPrototypeChain(value: object | (new () => object) | null | undefined, mode?: 's' | 'STRINGS'): string[];
+    export function GetPrototypeChain(value: object | (new () => object) | null | undefined, mode: 'f' | 'FUNCTIONS'): Function[];
+    export function GetPrototypeChain(value: object | (new () => object) | null | undefined, mode: 'y' | 'SYMBOLS'): symbol[];
+    export function GetPrototypeChain
+    (
+        value: object | (new () => object) | null | undefined,
+        mode: 's' | 'STRINGS' | 'f' | 'FUNCTIONS' | 'y' | 'SYMBOLS' = 's',
+    ): string[] | Function[] | symbol[]
+    {
+        Services.Observer?.DrainAll();
+        const m = (mode as string).toLowerCase();
+        const f = (m === 'f' || m === 'functions');
+        const s = (m === 'y' || m === 'symbols');
+
+        const strings   : string[]   = [];
+        const functions : Function[] = [];
+        const symbols   : symbol[]    = [];
+
+        /*  A null/undefined target (e.g. a querySelector that found nothing) has no chain. Return empty
+            instead of letting Object.getPrototypeOf(null) throw "can't convert null to object". The empty
+            result still honors `mode`, so the return type matches the overload the caller resolved to.*/
+        if (value === null || value === undefined) { return f ? functions : s ? symbols : strings; }
+
+        const prototype     = (value as { prototype: object }).prototype;
+        let   proto: object | null = typeof value === 'function' ? prototype : Object.getPrototypeOf(value);
+
+        while (proto !== null)
+        {
+            const c = (proto as { constructor?: { name?: string } }).constructor;
+            if (c)
+            {
+                /*  One walk, three projections. Anonymous constructors (name === "") differ by mode:
+                    • 'f' keeps them — a distinct function reference, comparable by identity.
+                    • 's' keeps them, labelled "[Anonymous]" — readable, and keeps strings length-aligned
+                       with 'f'; the brackets distinguish it from a class actually named "Anonymous".
+                    • 'y' skips them — Symbol.for("") is information-free and would merge all anonymous types.*/
+                if (f)      { functions.push(c as Function); }
+                else if (s) { if (c.name) { symbols.push(Symbol.for(c.name)); } }
+                else        { strings.push(c.name || '[Anonymous]'); }
+            }
+            proto = Object.getPrototypeOf(proto);
+        }
+
+        /* Return the one array the chosen mode populated (the other two stay empty).*/
+       return f ? functions : s ? symbols : strings;
+   }
 }
-
-// ── Core public API ───────────────────────────────────────────────────────────
-
-/**
- * The Core singleton — frozen at build. The internal observer / boot state is
- * module-scoped (not properties of this object), so freezing the API surface
- * does not prevent Initialize()/Bootstrap() from mutating runtime state.
- *
- * @example
- *   import Core from './Core.ts';
- *   Core.GetDescriptor('div');
- *   Core.Define('my-btn', MyBtn, HTMLButtonElement);
- *   Core.Bootstrap();                 // after component modules load
- *   Core.Configuration.version.string // "1.0.0"
- */
-const Core = Object.freeze({
-    Configuration,
-    get version() { return Configuration.version; },   // back-compat alias
-    UUID             : UUID,
-    GetPrototypeChain,
-    Scopes,
-    Namespaces: namespaces,
-    GetDescriptor,
-    GetType,
-    GetConstructor,
-    GetInterface,
-    GetTags,
-    GetNamespace,
-    Define,
-    Create,
-    IsUpgraded,
-    Upgrade,
-    Initialize,
-    Bootstrap,
-    Ready,
-    get Initialized() { return Boot.initialized; },  // true once Initialize() has run
-    get Booted()      { return Boot.booted; },       // true once Bootstrap() has run
-    Events: Events.Events,
-    get Observer() { return [...observers][0] ?? null; },   // running global Observer (first registered)
-    Observers: observers,                 // registry of all Observer instances
-    Is,
-    Equals,
-    Empty,
-    Has,
-    Clone,
-    Assign,
-    Replace,
-    Extends,
-    Property: Property.Property,
-    get Root() { return typeof document !== 'undefined' ? document.documentElement : null; },
-});
-
-// Auto-Initialize on import (browser only). Bootstrap() is called by the loader
-// once the definition-bearing modules have resolved.
-if (typeof document !== 'undefined') Initialize();
 
 export default Core;

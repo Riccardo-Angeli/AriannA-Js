@@ -37,9 +37,26 @@
  */
 
 import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 import { AnimTrack, type ChannelGroup } from './AnimTrack.ts';
 
 export interface KeyframeEditorOptions {
@@ -90,7 +107,7 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
         if (opts.frameStep    != null) el.setAttribute('frame-step',  String(opts.frameStep));
         if (opts.trackHeight  != null) el.setAttribute('track-height', String(opts.trackHeight));
         if (opts.autoChannels)         el.setAttribute('auto-channels', '');
-        if (opts.current      != null) this.current$.set(opts.current);
+        if (opts.current      != null) this.current$.Set(opts.current);
     }
 
     build(): void {
@@ -125,7 +142,7 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
         const frameInput = document.createElement('input') as HTMLInputElement;
         frameInput.type = 'number';
         frameInput.className = 'kfe-frame-input';
-        frameInput.value = String(this.current$.peek());
+        frameInput.value = String(this.current$.Peek());
         const lblStart = document.createElement('span'); lblStart.className = 'kfe-frame-lbl';
         lblStart.textContent = 'Start ' + frameStart;
         const lblEnd   = document.createElement('span'); lblEnd.className   = 'kfe-frame-lbl';
@@ -171,7 +188,7 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
         // Playhead overlay
         const playhead = document.createElement('div');
         playhead.className = 'kfe-playhead';
-        playhead.style.left = `calc(var(--track-head-width, 160px) + ${(this.current$.peek() - frameStart) * framePx}px)`;
+        playhead.style.left = `calc(var(--track-head-width, 160px) + ${(this.current$.Peek() - frameStart) * framePx}px)`;
         this.#playhead = playhead;
 
         root.append(tb, ruler, body, playhead);
@@ -185,7 +202,7 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
 
         // Reactive playhead position + hot keyframe
         effect(() => {
-            const f = this.current$.get();
+            const f = this.current$.Get();
             if (this.#playhead) {
                 this.#playhead.style.left = `calc(var(--track-head-width, 160px) + ${(f - frameStart) * framePx}px)`;
             }
@@ -200,14 +217,14 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
         });
         btnFirst.addEventListener('click', () => this.setFrame(frameStart));
         btnLast .addEventListener('click', () => this.setFrame(frameEnd));
-        btnPrev .addEventListener('click', () => this.setFrame(this.current$.peek() - 1));
-        btnNext .addEventListener('click', () => this.setFrame(this.current$.peek() + 1));
+        btnPrev .addEventListener('click', () => this.setFrame(this.current$.Peek() - 1));
+        btnNext .addEventListener('click', () => this.setFrame(this.current$.Peek() + 1));
         btnPlay .addEventListener('click', () => this.togglePlay());
 
         // Fire update event whenever DOM changes
         const observer = new MutationObserver(() => {
             self.fire('arianna:keyframe-editor-update', { detail: { source: this }, bubbles: false });
-            this.#updateHotKeyframes(this.current$.peek());
+            this.#updateHotKeyframes(this.current$.Peek());
         });
         observer.observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ['frame', 'value', 'selected', 'hidden'] });
 
@@ -216,7 +233,7 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
         // initial update event
         queueMicrotask(() => {
             self.fire('arianna:keyframe-editor-update', { detail: { source: this }, bubbles: false });
-            this.#updateHotKeyframes(this.current$.peek());
+            this.#updateHotKeyframes(this.current$.Peek());
         });
     }
 
@@ -254,7 +271,7 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
         const start = parseInt(self.attrSignal('frame-start')?.peek() ?? '0',  10) || 0;
         const end   = parseInt(self.attrSignal('frame-end')?.peek()   ?? '100',10) || 100;
         const cl    = Math.max(start, Math.min(end, Math.round(f)));
-        this.current$.set(cl);
+        this.current$.Set(cl);
         self.render().setAttribute('current', String(cl));
         self.fire('arianna:keyframe-editor-playhead', { detail: { frame: cl, source: this }, bubbles: true });
         return this;
@@ -274,7 +291,7 @@ export class KeyframeEditor extends Component('arianna-keyframe-editor', HTMLEle
             const dt = (now - this.#lastTime) / 1000;
             this.#lastTime = now;
             const dFrames = dt * this.#fps;
-            const next = this.current$.peek() + dFrames;
+            const next = this.current$.Peek() + dFrames;
             const end = parseInt(((this as unknown as { attrSignal(name: string): Signal<string | null> | undefined }).attrSignal('frame-end')?.peek()) ?? '100', 10) || 100;
             const start = parseInt(((this as unknown as { attrSignal(name: string): Signal<string | null> | undefined }).attrSignal('frame-start')?.peek()) ?? '0', 10) || 0;
             if (next > end) this.setFrame(start);

@@ -22,9 +22,26 @@
  */
 
 import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface BarDatum {
     label : string;
@@ -84,13 +101,13 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
         this.#svg = svg;
         root.appendChild(svg);
 
-        effect(() => { this.data$.get(); this.#redraw(); });
+        effect(() => { this.data$.Get(); this.#redraw(); });
 
         self.Sheet = BarChart.DefaultSheet();
     }
 
-    set data(rows: BarDatum[]) { this.data$.set(rows); }
-    get data(): BarDatum[]     { return this.data$.get(); }
+    set data(rows: BarDatum[]) { this.data$.Set(rows); }
+    get data(): BarDatum[]     { return this.data$.Get(); }
 
     #redraw(): void {
         const self = this as unknown as {
@@ -105,7 +122,7 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
         const root = self.render();
         const w = parseInt(svg.getAttribute('width')  ?? '480', 10);
         const h = parseInt(svg.getAttribute('height') ?? '280', 10);
-        const data = this.data$.peek();
+        const data = this.data$.Peek();
         if (!data.length) return;
 
         const showGrid   = self.attrSignal('show-grid')?.peek() !== 'false';

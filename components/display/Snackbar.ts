@@ -34,8 +34,10 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type SnackbarPosition = 'top-left' | 'top-center' | 'top-right'
                               | 'bottom-left' | 'bottom-center' | 'bottom-right';

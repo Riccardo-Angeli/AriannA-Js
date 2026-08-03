@@ -30,7 +30,7 @@
  *
  * The AriannA component surface (`attrSignal`, `fire`, `render`, `Sheet`,
  * `template`, lifecycle hooks) is declared by the `AriannaElement` interface
- * in `core/Component.ts` itself — the factory's return type uses it, so
+ * in `core/Components.ts` itself — the factory's return type uses it, so
  * subclasses inherit the surface automatically with no separate ambient
  * declaration file needed.
  *

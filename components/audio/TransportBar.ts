@@ -23,9 +23,26 @@
  */
 
 import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface TransportBarOptions {
     duration?  : number;     // seconds
@@ -64,10 +81,10 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
         if (opts.showVolume === false) el.setAttribute('show-volume', 'false');
         if (opts.showStop   === false) el.setAttribute('show-stop',   'false');
         if (opts.showSkip)             el.setAttribute('show-skip',   '');
-        if (opts.duration != null) this.duration$.set(opts.duration);
-        if (opts.current  != null) this.current$.set(opts.current);
-        if (opts.playing)          this.playing$.set(true);
-        if (opts.volume   != null) this.volume$.set(opts.volume);
+        if (opts.duration != null) this.duration$.Set(opts.duration);
+        if (opts.current  != null) this.current$.Set(opts.current);
+        if (opts.playing)          this.playing$.Set(true);
+        if (opts.volume   != null) this.volume$.Set(opts.volume);
     }
 
     build(): void {
@@ -143,51 +160,51 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
 
         // Reactive bindings
         effect(() => {
-            btnPlay.textContent = this.playing$.get() ? '❚❚' : '▶';
+            btnPlay.textContent = this.playing$.Get() ? '❚❚' : '▶';
         });
         effect(() => {
-            const cur = this.current$.get();
-            const dur = this.duration$.get();
+            const cur = this.current$.Get();
+            const dur = this.duration$.Get();
             time.textContent = `${fmtTime(cur)} / ${fmtTime(dur)}`;
             if (dur > 0 && !seek.matches(':active') && document.activeElement !== seek) {
                 seek.value = String(Math.round((cur / dur) * 1000));
             }
         });
         effect(() => {
-            vol.value = String(Math.round(this.volume$.get() * 1000));
+            vol.value = String(Math.round(this.volume$.Get() * 1000));
         });
 
         // Event wiring
         btnPlay.addEventListener('click', () => {
-            const next = !this.playing$.get();
-            this.playing$.set(next);
+            const next = !this.playing$.Get();
+            this.playing$.Set(next);
             self.fire(next ? 'arianna:transport-play' : 'arianna:transport-pause',
                 { detail: { source: this }, bubbles: true });
         });
         btnStop.addEventListener('click', () => {
-            this.playing$.set(false);
-            this.current$.set(0);
+            this.playing$.Set(false);
+            this.current$.Set(0);
             self.fire('arianna:transport-stop', { detail: { source: this }, bubbles: true });
         });
         btnSkipBack.addEventListener('click', () => {
-            const t = Math.max(0, this.current$.get() - 10);
-            this.current$.set(t);
+            const t = Math.max(0, this.current$.Get() - 10);
+            this.current$.Set(t);
             self.fire('arianna:transport-seek', { detail: { time: t, source: this }, bubbles: true });
         });
         btnSkipFwd.addEventListener('click', () => {
-            const t = Math.min(this.duration$.get(), this.current$.get() + 10);
-            this.current$.set(t);
+            const t = Math.min(this.duration$.Get(), this.current$.Get() + 10);
+            this.current$.Set(t);
             self.fire('arianna:transport-seek', { detail: { time: t, source: this }, bubbles: true });
         });
         seek.addEventListener('input', () => {
-            const dur = this.duration$.get();
+            const dur = this.duration$.Get();
             const t = (parseInt(seek.value, 10) / 1000) * dur;
-            this.current$.set(t);
+            this.current$.Set(t);
             self.fire('arianna:transport-seek', { detail: { time: t, source: this }, bubbles: true });
         });
         vol.addEventListener('input', () => {
             const v = parseInt(vol.value, 10) / 1000;
-            this.volume$.set(v);
+            this.volume$.Set(v);
             self.fire('arianna:transport-volume', { detail: { value: v, source: this }, bubbles: true });
         });
 
@@ -203,10 +220,10 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
     }
 
     /** Push external state in from the audio source. */
-    setCurrentTime(s: number): this { this.current$.set(s); return this; }
-    setDuration(s: number): this    { this.duration$.set(s); return this; }
-    setPlaying(p: boolean): this    { this.playing$.set(p); return this; }
-    setVolume(v: number): this      { this.volume$.set(Math.max(0, Math.min(1, v))); return this; }
+    setCurrentTime(s: number): this { this.current$.Set(s); return this; }
+    setDuration(s: number): this    { this.duration$.Set(s); return this; }
+    setPlaying(p: boolean): this    { this.playing$.Set(p); return this; }
+    setVolume(v: number): this      { this.volume$.Set(Math.max(0, Math.min(1, v))); return this; }
 
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([

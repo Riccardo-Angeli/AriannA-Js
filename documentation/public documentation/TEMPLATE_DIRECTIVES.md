@@ -10,7 +10,7 @@ Templates are strings of HTML augmented with directives. They appear in three co
 
 ```ts
 // (a) Class property — Vue-style (recommended)
-class MyCmp extends Component(...) {
+class MyCmp extends Components(...) {
     template = `
         <button @click="this.onClick">{{ this.label() }}</button>
     `;
@@ -35,12 +35,12 @@ All three use the same directive set. The parser is `core/Template.ts`.
 
 Inside any directive value (between `"..."` of attributes, or inside `{{ }}`):
 
-- **`this`** refers to the **component instance** when the template is owned by a Component
+- **`this`** refers to the **component instance** when the template is owned by a Components
 - **`this`** refers to the **scope object** when the template is bootstrapped via `Directive.bootstrap(root, scope)`
 - Local JavaScript variables from the surrounding `build()` function are **NOT** accessible — the template parser does not capture closures
 
 ```ts
-class MyCmp extends Component(...) {
+class MyCmp extends Components(...) {
     template = `<span>{{ this.greeting() }}</span>`;
 
     greeting = signal('Hello');
@@ -337,7 +337,7 @@ Less ergonomic than `@click="..."` but useful when the event name is computed.
 ## 14. Slots — shadow DOM projection
 
 ```html
-<!-- Component template -->
+<!-- Components template -->
 <div class="card">
     <slot name="header"></slot>
     <div class="body">

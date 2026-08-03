@@ -64,10 +64,21 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
+import { escapeHtml } from '../../core/SSR.ts';   // SOT — riusa l'utility pubblica invece di ridefinirla
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -162,11 +173,6 @@ interface ColToggleEntry {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function escapeHtml(s: string): string {
-    return s.replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    }[c]!));
-}
 
 /** Escape CSV cell — wrap in quotes if needed, double internal quotes. */
 function csvCell(v: unknown): string {
@@ -284,13 +290,13 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
 
         // Computed columns: filter out hidden ones for rendering purposes.
         const visibleCols = (): TableColumn[] => {
-            const v = this.visibility$.get();
-            return this.columns$.get().filter(c => v[c.key] !== false && c.visible !== false);
+            const v = this.visibility$.Get();
+            return this.columns$.Get().filter(c => v[c.key] !== false && c.visible !== false);
         };
 
         this.headers = (): HeaderCell[] => {
-            const stack = this.sortStack$.get();
-            const widths = this.widthsOverride$.get();
+            const stack = this.sortStack$.Get();
+            const widths = this.widthsOverride$.Get();
             return visibleCols().map(col => {
                 const sortable  = !!col.sortable;
                 const resizable = col.resizable !== false && this.hasColumnResize();
@@ -330,11 +336,11 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
         this.totalPages = (): number => {
             const ps = this.pageSize;
             if (ps <= 0) return 1;
-            return Math.max(1, Math.ceil(this.totalCount$.get() / ps));
+            return Math.max(1, Math.ceil(this.totalCount$.Get() / ps));
         };
         this.pageButtons = (): PageBtn[] => {
             const tp = this.totalPages();
-            const cur = this.page$.get();
+            const cur = this.page$.Get();
             const out: PageBtn[] = [];
             out.push({ label: '‹', page: cur - 1, active: false, disabled: cur <= 1, isDots: false });
             const start = Math.max(1, cur - 1);
@@ -356,28 +362,28 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
 
         // ── Column toggle menu ──────────────────────────────────────────────
         this.columnEntries = (): ColToggleEntry[] => {
-            const v = this.visibility$.get();
-            return this.columns$.get().map(col => ({
+            const v = this.visibility$.Get();
+            return this.columns$.Get().map(col => ({
                 col,
                 visible: v[col.key] !== false && col.visible !== false,
             }));
         };
 
         // ── Other reactive helpers ──────────────────────────────────────────
-        this.allRows           = () => this.displayRows$.get();
+        this.allRows           = () => this.displayRows$.Get();
         this.hasMultiplePages  = () => this.totalPages() > 1;
         this.hasColumnToggle   = () => this.hasAttribute('column-toggle');
         this.hasColumnResize   = () => this.getAttribute('column-resize') !== 'false';
-        this.toggleMenuOpen    = () => this.toggleOpen$.get();
+        this.toggleMenuOpen    = () => this.toggleOpen$.Get();
         this.isSelectable      = () => {
             const m = this.getAttribute('selectable');
             return m !== null && m !== 'none';
         };
         this.isMultiSelect     = () => this.getAttribute('selectable') === 'multi';
         this.isSearchable      = () => this.hasAttribute('searchable');
-        this.isLoading         = () => this.loading$.get();
+        this.isLoading         = () => this.loading$.Get();
         this.totalLabel        = () => {
-            const t = this.totalCount$.get();
+            const t = this.totalCount$.Get();
             return t === 1 ? '1 row' : `${t} rows`;
         };
 
@@ -385,7 +391,7 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
         this.onHeaderClick = (col: TableColumn, e: Event) => {
             if (!col.sortable) return;
             const me = e as MouseEvent;
-            const stack = [...this.sortStack$.get()];
+            const stack = [...this.sortStack$.Get()];
             const idx = stack.findIndex(s => s.key === col.key);
 
             if (me.shiftKey) {
@@ -406,8 +412,8 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
                     stack.push({ key: col.key, dir: 'asc' });
                 }
             }
-            this.sortStack$.set(stack);
-            this.page$.set(1);
+            this.sortStack$.Set(stack);
+            this.page$.Set(1);
             this.dispatchEvent(new CustomEvent('arianna:sort', {
                 bubbles: true, detail: { sorts: stack },
             }));
@@ -418,8 +424,8 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
             const v = (e.target as HTMLInputElement).value;
             clearTimeout(this.#lastSearchTimer);
             this.#lastSearchTimer = window.setTimeout(() => {
-                this.query$.set(v);
-                this.page$.set(1);
+                this.query$.Set(v);
+                this.page$.Set(1);
                 this.dispatchEvent(new CustomEvent('arianna:search', {
                     bubbles: true, detail: { query: v },
                 }));
@@ -430,7 +436,7 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
         this.onRowClick = (dr: DisplayRow, e: Event) => {
             if (!this.isSelectable()) return;
             const me = e as MouseEvent;
-            const cur = new Set(this.selected$.get());
+            const cur = new Set(this.selected$.Get());
             if (this.isMultiSelect()) {
                 if (me.shiftKey && cur.size > 0) {
                     // Range select from last → this index
@@ -449,8 +455,8 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
                 cur.clear();
                 cur.add(dr.index);
             }
-            this.selected$.set(cur);
-            const selectedRows = [...cur].map(i => this.rows$.get()[i]).filter(r => r !== undefined);
+            this.selected$.Set(cur);
+            const selectedRows = [...cur].map(i => this.rows$.Get()[i]).filter(r => r !== undefined);
             this.dispatchEvent(new CustomEvent('arianna:select', {
                 bubbles: true, detail: { rows: selectedRows, indices: [...cur] },
             }));
@@ -459,7 +465,7 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
 
         this.onPageClick = (btn: PageBtn) => {
             if (btn.disabled || btn.isDots) return;
-            this.page$.set(btn.page);
+            this.page$.Set(btn.page);
             this.dispatchEvent(new CustomEvent('arianna:page', {
                 bubbles: true, detail: { page: btn.page },
             }));
@@ -468,11 +474,11 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
 
         this.onToggleMenu = (e: Event) => {
             e.stopPropagation();
-            const wasOpen = this.toggleOpen$.get();
-            this.toggleOpen$.set(!wasOpen);
+            const wasOpen = this.toggleOpen$.Get();
+            this.toggleOpen$.Set(!wasOpen);
             if (!wasOpen) {
                 this.#toggleOutside = (ev: Event) => {
-                    if (!this.contains(ev.target as Node)) this.toggleOpen$.set(false);
+                    if (!this.contains(ev.target as Node)) this.toggleOpen$.Set(false);
                 };
                 setTimeout(() => document.addEventListener('click', this.#toggleOutside!), 0);
             } else if (this.#toggleOutside) {
@@ -482,8 +488,8 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
         };
 
         this.onColumnToggle = (key: string, visible: boolean) => {
-            const v = { ...this.visibility$.get(), [key]: visible };
-            this.visibility$.set(v);
+            const v = { ...this.visibility$.Get(), [key]: visible };
+            this.visibility$.Set(v);
             this.dispatchEvent(new CustomEvent('arianna:toggle-column', {
                 bubbles: true, detail: { key, visible },
             }));
@@ -502,15 +508,15 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
 
             const onMove = (mv: MouseEvent) => {
                 const newW = Math.max(minW, startW + (mv.clientX - startX));
-                const widths = { ...this.widthsOverride$.get(), [col.key]: newW };
-                this.widthsOverride$.set(widths);
+                const widths = { ...this.widthsOverride$.Get(), [col.key]: newW };
+                this.widthsOverride$.Set(widths);
             };
             const onUp = () => {
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup',   onUp);
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
-                const w = this.widthsOverride$.get()[col.key];
+                const w = this.widthsOverride$.Get()[col.key];
                 this.dispatchEvent(new CustomEvent('arianna:resize-column', {
                     bubbles: true, detail: { key: col.key, width: w },
                 }));
@@ -598,18 +604,18 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
     // ── Public API ───────────────────────────────────────────────────────────
 
     set columns(v: TableColumn[]) {
-        this.columns$.set(v ?? []);
+        this.columns$.Set(v ?? []);
         this.#recompute();
     }
-    get columns(): TableColumn[] { return this.columns$.get(); }
+    get columns(): TableColumn[] { return this.columns$.Get(); }
 
     set rows(v: Row[]) {
-        this.rows$.set(v ?? []);
-        this.selected$.set(new Set());
-        this.page$.set(1);
+        this.rows$.Set(v ?? []);
+        this.selected$.Set(new Set());
+        this.page$.Set(1);
         this.#recompute();
     }
-    get rows(): Row[] { return this.rows$.get(); }
+    get rows(): Row[] { return this.rows$.Get(); }
 
     /**
      * Set a server-side fetcher. When set, every sort/search/page change
@@ -623,65 +629,65 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
     get fetcher(): Fetcher | null { return this.#fetcher; }
 
     getSelected(): Row[] {
-        const all = this.rows$.get();
-        return [...this.selected$.get()].map(i => all[i]).filter(r => r !== undefined);
+        const all = this.rows$.Get();
+        return [...this.selected$.Get()].map(i => all[i]).filter(r => r !== undefined);
     }
-    clearSelection(): this { this.selected$.set(new Set()); this.#recompute(); return this; }
+    clearSelection(): this { this.selected$.Set(new Set()); this.#recompute(); return this; }
     selectAll(): this {
         if (!this.isMultiSelect()) return this;
         const sel = new Set<number>();
-        this.rows$.get().forEach((_, i) => sel.add(i));
-        this.selected$.set(sel);
+        this.rows$.Get().forEach((_, i) => sel.add(i));
+        this.selected$.Set(sel);
         this.#recompute();
         return this;
     }
 
     setSort(key: string, dir: SortDir = 'asc'): this {
-        this.sortStack$.set([{ key, dir }]);
-        this.page$.set(1);
+        this.sortStack$.Set([{ key, dir }]);
+        this.page$.Set(1);
         this.#recompute();
         return this;
     }
     /** Add a sort level on top of the existing stack (multi-col). */
     addSort(key: string, dir: SortDir = 'asc'): this {
-        const stack = [...this.sortStack$.get(), { key, dir }];
-        this.sortStack$.set(stack);
+        const stack = [...this.sortStack$.Get(), { key, dir }];
+        this.sortStack$.Set(stack);
         this.#recompute();
         return this;
     }
     clearSort(): this {
-        this.sortStack$.set([]);
+        this.sortStack$.Set([]);
         this.#recompute();
         return this;
     }
 
     search(query: string): this {
-        this.query$.set(query);
-        this.page$.set(1);
+        this.query$.Set(query);
+        this.page$.Set(1);
         this.#recompute();
         return this;
     }
 
     goToPage(p: number): this {
         const clamped = Math.max(1, Math.min(this.totalPages(), p));
-        this.page$.set(clamped);
+        this.page$.Set(clamped);
         this.#recompute();
         return this;
     }
 
     /** Show/hide a column programmatically. */
     setColumnVisible(key: string, visible: boolean): this {
-        const v = { ...this.visibility$.get(), [key]: visible };
-        this.visibility$.set(v);
+        const v = { ...this.visibility$.Get(), [key]: visible };
+        this.visibility$.Set(v);
         return this;
     }
 
     /** Set a column's width override (px). Pass `null` to clear. */
     setColumnWidth(key: string, width: number | null): this {
-        const widths = { ...this.widthsOverride$.get() };
+        const widths = { ...this.widthsOverride$.Get() };
         if (width === null) delete widths[key];
         else                widths[key] = width;
-        this.widthsOverride$.set(widths);
+        this.widthsOverride$.Set(widths);
         return this;
     }
 
@@ -693,14 +699,14 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
      * Returns the CSV string and triggers a browser download.
      */
     exportCSV(filename = 'table-export.csv'): string {
-        const cols = this.columns$.get().filter(c =>
-            this.visibility$.get()[c.key] !== false && c.visible !== false,
+        const cols = this.columns$.Get().filter(c =>
+            this.visibility$.Get()[c.key] !== false && c.visible !== false,
         );
 
         // In server-side mode we only have the current page; warn but proceed.
         const sourceRows = this.#fetcher
-            ? this.displayRows$.get().map(d => d.raw)
-            : this.#processClientSide(this.rows$.get(), false);
+            ? this.displayRows$.Get().map(d => d.raw)
+            : this.#processClientSide(this.rows$.Get(), false);
 
         const header = cols.map(c => csvCell(c.label)).join(',');
         const body = sourceRows.map(row =>
@@ -781,23 +787,23 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
      *   • Otherwise main thread
      */
     #runClientSide(): void {
-        const rows  = this.rows$.get();
+        const rows  = this.rows$.Get();
         const useWorker = this.hasAttribute('worker')
             && rows.length >= this.workerThreshold
             && this.#workerEligible();
 
         if (useWorker) {
-            this.loading$.set(true);
+            this.loading$.Set(true);
             this.#runWorker(rows);
         } else {
             const filteredSorted = this.#processClientSide(rows, false);
-            this.totalCount$.set(filteredSorted.length);
+            this.totalCount$.Set(filteredSorted.length);
             this.#renderPage(filteredSorted);
         }
     }
 
     #workerEligible(): boolean {
-        return this.columns$.get().every(c => !c.render && !c.value && !c.sort);
+        return this.columns$.Get().every(c => !c.render && !c.value && !c.sort);
     }
 
     /** Worker code can't access app functions, so for custom render/value/
@@ -808,31 +814,31 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
                 this.#worker = new Worker(getWorkerUrl());
                 this.#worker.onmessage = (e) => {
                     const { rows: out, total } = e.data;
-                    this.totalCount$.set(total);
+                    this.totalCount$.Set(total);
                     this.#renderPage(out);
-                    this.loading$.set(false);
+                    this.loading$.Set(false);
                 };
                 this.#worker.onerror = (err) => {
                     console.warn('[Table] worker error, falling back:', err);
                     const filteredSorted = this.#processClientSide(rows, false);
-                    this.totalCount$.set(filteredSorted.length);
+                    this.totalCount$.Set(filteredSorted.length);
                     this.#renderPage(filteredSorted);
-                    this.loading$.set(false);
+                    this.loading$.Set(false);
                 };
             } catch (e) {
                 console.warn('[Table] cannot spawn worker, falling back:', e);
                 const filteredSorted = this.#processClientSide(rows, false);
-                this.totalCount$.set(filteredSorted.length);
+                this.totalCount$.Set(filteredSorted.length);
                 this.#renderPage(filteredSorted);
-                this.loading$.set(false);
+                this.loading$.Set(false);
                 return;
             }
         }
         this.#worker.postMessage({
             rows,
-            query  : this.query$.get(),
-            sort   : this.sortStack$.get(),
-            columns: this.columns$.get().map(c => ({ key: c.key })),
+            query  : this.query$.Get(),
+            sort   : this.sortStack$.Get(),
+            columns: this.columns$.Get().map(c => ({ key: c.key })),
         });
     }
 
@@ -842,23 +848,23 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
     #runServerSide(): void {
         if (!this.#fetcher) return;
         const params: FetchParams = {
-            page    : this.page$.get(),
+            page    : this.page$.Get(),
             pageSize: this.pageSize,
-            sort    : this.sortStack$.get(),
-            query   : this.query$.get(),
+            sort    : this.sortStack$.Get(),
+            query   : this.query$.Get(),
         };
         const cacheKey = JSON.stringify(params);
         const cached = this.#cache.get(cacheKey);
         if (cached) {
-            this.totalCount$.set(cached.total);
+            this.totalCount$.Set(cached.total);
             this.#renderRows(cached.rows);
             return;
         }
-        this.loading$.set(true);
+        this.loading$.Set(true);
         this.#fetcher(params)
             .then(result => {
                 this.#cache.set(cacheKey, result);
-                this.totalCount$.set(result.total);
+                this.totalCount$.Set(result.total);
                 this.#renderRows(result.rows);
                 this.dispatchEvent(new CustomEvent('arianna:fetch', {
                     bubbles: true, detail: { rows: result.rows, total: result.total },
@@ -867,9 +873,9 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
             .catch(err => {
                 console.warn('[Table] fetch failed:', err);
                 this.#renderRows([]);
-                this.totalCount$.set(0);
+                this.totalCount$.Set(0);
             })
-            .finally(() => this.loading$.set(false));
+            .finally(() => this.loading$.Set(false));
     }
 
     /**
@@ -877,9 +883,9 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
      * for CSV export).
      */
     #processClientSide(rows: Row[], _alreadyPaged: boolean): Row[] {
-        const cols  = this.columns$.get();
-        const q     = this.query$.get();
-        const sorts = this.sortStack$.get();
+        const cols  = this.columns$.Get();
+        const q     = this.query$.Get();
+        const sorts = this.sortStack$.Get();
 
         // Filter
         let filtered = rows;
@@ -921,12 +927,12 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
      */
     #renderPage(filtered: Row[]): void {
         const ps = this.pageSize;
-        const pg = this.page$.get();
+        const pg = this.page$.Get();
         const start = (pg - 1) * ps;
         const sliced = ps > 0 ? filtered.slice(start, start + ps) : filtered;
 
         // We need to keep original-row indices for selection tracking
-        const all = this.rows$.get();
+        const all = this.rows$.Get();
         const indexMap = new Map<Row, number>();
         all.forEach((r, i) => indexMap.set(r, i));
 
@@ -935,10 +941,10 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
 
     /** Final stage: build DisplayRow[] for the current view. */
     #renderRows(rows: Row[], indexMap?: Map<Row, number>): void {
-        const cols = this.columns$.get().filter(c =>
-            this.visibility$.get()[c.key] !== false && c.visible !== false,
+        const cols = this.columns$.Get().filter(c =>
+            this.visibility$.Get()[c.key] !== false && c.visible !== false,
         );
-        const sel = this.selected$.get();
+        const sel = this.selected$.Get();
 
         const out: DisplayRow[] = rows.map((row, viewIdx) => {
             const originalIdx = indexMap ? (indexMap.get(row) ?? viewIdx) : viewIdx;
@@ -961,7 +967,7 @@ export class Table extends Component('arianna-table', HTMLElement, {}, {
             };
         });
 
-        this.displayRows$.set(out);
+        this.displayRows$.Set(out);
     }
 
     // ── Attrs ────────────────────────────────────────────────────────────────

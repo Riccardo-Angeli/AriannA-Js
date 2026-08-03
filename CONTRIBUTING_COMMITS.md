@@ -48,15 +48,15 @@ Use the folder or module name as scope.
 | Scope | Maps to |
 |-------|---------|
 | `core` | `core/Core.ts`, `core/index.ts` |
-| `observable` | `core/Observable.ts` |
+| `observable` | `core/Observables.ts` |
 | `state` | `core/State.ts` |
 | `real` | `core/Real.ts` |
 | `virtual` | `core/Virtual.ts` |
 | `rule` | `core/Rule.ts` |
 | `stylesheet` | `core/Stylesheet.ts` |
-| `directive` | `core/Directive.ts` |
+| `directive` | `core/Directives.ts` |
 | `context` | `core/Context.ts` |
-| `namespace` | `core/Namespace.ts` |
+| `namespace` | `core/Core.ts` |
 | `ssr` | `core/SSR.ts` |
 | `workers` | `core/Workers.ts` |
 | `jsx` | `core/jsx/` |

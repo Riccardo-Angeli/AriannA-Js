@@ -22,10 +22,20 @@
 
 import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface RGB { r: number; g: number; b: number; }
 export interface HSL { h: number; s: number; l: number; }
@@ -58,12 +68,12 @@ export class ColorPicker extends Component('arianna-color-picker-pro', HTMLEleme
         // Reactive geometry: dot positions, gradients, input values
         this.svBg = () => `linear-gradient(to top, rgba(0,0,0,1), rgba(0,0,0,0)),
                           linear-gradient(to right, rgba(255,255,255,1), rgba(255,255,255,0)),
-                          hsl(${this.state$.get().h}, 100%, 50%)`;
+                          hsl(${this.state$.Get().h}, 100%, 50%)`;
         this.svDotStyle = () => {
-            const s = this.state$.get();
+            const s = this.state$.Get();
             return `left:${s.s}%; top:${100 - s.l}%`;
         };
-        this.hueDotStyle = () => `top:${(this.state$.get().h / 360) * 100}%`;
+        this.hueDotStyle = () => `top:${(this.state$.Get().h / 360) * 100}%`;
         this.previewStyle = () => {
             const c = this.#color();
             return c.a < 1 ? `background: rgba(${c.r},${c.g},${c.b},${c.a})` : `background: ${c.hex}`;
@@ -73,10 +83,10 @@ export class ColorPicker extends Component('arianna-color-picker-pro', HTMLEleme
         this.rVal = () => String(this.#color().r);
         this.gVal = () => String(this.#color().g);
         this.bVal = () => String(this.#color().b);
-        this.hVal = () => String(Math.round(this.state$.get().h));
-        this.sVal = () => String(Math.round(this.state$.get().s));
-        this.lVal = () => String(Math.round(this.state$.get().l));
-        this.aVal = () => String(this.state$.get().a);
+        this.hVal = () => String(Math.round(this.state$.Get().h));
+        this.sVal = () => String(Math.round(this.state$.Get().s));
+        this.lVal = () => String(Math.round(this.state$.Get().l));
+        this.aVal = () => String(this.state$.Get().a);
 
         // SV square drag: pointermove + buttons-down updates h/s/l
         this.onSvPointer = (e: Event) => {
@@ -87,8 +97,8 @@ export class ColorPicker extends Component('arianna-color-picker-pro', HTMLEleme
             const rect = (me.currentTarget as HTMLElement).getBoundingClientRect();
             const x = Math.max(0, Math.min(rect.width,  me.clientX - rect.left));
             const y = Math.max(0, Math.min(rect.height, me.clientY - rect.top));
-            const cur = this.state$.get();
-            this.state$.set({
+            const cur = this.state$.Get();
+            this.state$.Set({
                 ...cur,
                 s: (x / rect.width) * 100,
                 l: (1 - y / rect.height) * 100,
@@ -102,14 +112,14 @@ export class ColorPicker extends Component('arianna-color-picker-pro', HTMLEleme
             } else if (!(me.buttons & 1)) return;
             const rect = (me.currentTarget as HTMLElement).getBoundingClientRect();
             const y = Math.max(0, Math.min(rect.height, me.clientY - rect.top));
-            const cur = this.state$.get();
-            this.state$.set({ ...cur, h: (y / rect.height) * 360 });
+            const cur = this.state$.Get();
+            this.state$.Set({ ...cur, h: (y / rect.height) * 360 });
             this.#emit();
         };
 
         this.onHexChange = (e: Event) => {
             const v = (e.target as HTMLInputElement).value.trim();
-            if (parseHex(v)) this.setColor(v);
+            if (parseHexRgba(v)) this.setColor(v);
         };
         this.onRgbChange = () => {
             const r = parseInt((this.querySelector('[data-r="r"]') as HTMLInputElement)?.value ?? '0', 10) || 0;
@@ -125,8 +135,8 @@ export class ColorPicker extends Component('arianna-color-picker-pro', HTMLEleme
         };
         this.onAlphaInput = (e: Event) => {
             const a = parseFloat((e.target as HTMLInputElement).value);
-            const cur = this.state$.get();
-            this.state$.set({ ...cur, a: Math.max(0, Math.min(1, a)) });
+            const cur = this.state$.Get();
+            this.state$.Set({ ...cur, a: Math.max(0, Math.min(1, a)) });
             this.#emit();
         };
 
@@ -178,10 +188,10 @@ export class ColorPicker extends Component('arianna-color-picker-pro', HTMLEleme
     getColor(): Color { return this.#color(); }
 
     setColor(c: string | Partial<RGB> | Partial<HSL> | { a?: number }): this {
-        const cur = this.state$.get();
+        const cur = this.state$.Get();
         const next: PickerState = { ...cur };
         if (typeof c === 'string') {
-            const p = parseHex(c);
+            const p = parseHexRgba(c);
             if (p) {
                 const hsl = rgbToHsl(p.r, p.g, p.b);
                 next.h = hsl.h; next.s = hsl.s; next.l = hsl.l;
@@ -204,13 +214,13 @@ export class ColorPicker extends Component('arianna-color-picker-pro', HTMLEleme
                 next.a = Math.max(0, Math.min(1, c.a));
             }
         }
-        this.state$.set(next);
+        this.state$.Set(next);
         this.#emit();
         return this;
     }
 
     #color(): Color {
-        const s = this.state$.get();
+        const s = this.state$.Get();
         const rgb = hslToRgb(s.h, s.s, s.l);
         return {
             hex: rgbToHex(rgb.r, rgb.g, rgb.b),
@@ -338,7 +348,7 @@ export class ColorPicker extends Component('arianna-color-picker-pro', HTMLEleme
 
 // ── Pure color math (exported) ─────────────────────────────────────────────
 
-export function parseHex(s: string): { r: number; g: number; b: number; a: number } | null
+export function parseHexRgba(s: string): { r: number; g: number; b: number; a: number } | null
 {
     if (!s) return null;
     let h = s.trim().toLowerCase();

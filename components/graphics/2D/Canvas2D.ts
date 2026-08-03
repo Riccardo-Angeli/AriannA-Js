@@ -28,12 +28,22 @@
  * Attrs:  width, height, pan-x, pan-y, zoom, zoom-min, zoom-max, grid-size, show-rulers, show-grid
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface Vec2 { x: number; y: number; }
 
@@ -85,10 +95,10 @@ export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
         this.gridBgStyle = () => {
             if (!showGrid()) return '';
             const gs = parseFloat(gridAttr.get() ?? '20') || 20;
-            const z  = this.viewport$.get().zoom;
+            const z  = this.viewport$.Get().zoom;
             const pz = gs * z;
-            const px = this.viewport$.get().panX;
-            const py = this.viewport$.get().panY;
+            const px = this.viewport$.Get().panX;
+            const py = this.viewport$.Get().panY;
             return `background-image:
                         linear-gradient(to right,  var(--arianna-border, #d8d8d8) 1px, transparent 1px),
                         linear-gradient(to bottom, var(--arianna-border, #d8d8d8) 1px, transparent 1px);
@@ -96,13 +106,13 @@ export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
                     background-position: ${px}px ${py}px`;
         };
         this.worldStyle = () => {
-            const v = this.viewport$.get();
+            const v = this.viewport$.Get();
             return `transform: translate(${v.panX}px, ${v.panY}px) scale(${v.zoom});
                     transform-origin: 0 0`;
         };
 
         this.showRulers = showRulers;
-        this.zoomLabel = () => `${(this.viewport$.get().zoom * 100).toFixed(0)}%`;
+        this.zoomLabel = () => `${(this.viewport$.Get().zoom * 100).toFixed(0)}%`;
 
         // ── Handlers ────────────────────────────────────────────────────
         this.onWheel = (e: Event) => {
@@ -114,7 +124,7 @@ export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
                 const rect = (we.currentTarget as HTMLElement).getBoundingClientRect();
                 const px = we.clientX - rect.left;
                 const py = we.clientY - rect.top;
-                this.zoomAt(this.viewport$.get().zoom * factor, { x: px, y: py });
+                this.zoomAt(this.viewport$.Get().zoom * factor, { x: px, y: py });
             } else if (we.shiftKey) {
                 we.preventDefault();
                 this.panBy(-we.deltaY, 0);
@@ -174,21 +184,21 @@ export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
     // ── Public API ───────────────────────────────────────────────────────────
 
     panTo(x: number, y: number): this {
-        const v = this.viewport$.get();
-        this.viewport$.set({ ...v, panX: x, panY: y });
+        const v = this.viewport$.Get();
+        this.viewport$.Set({ ...v, panX: x, panY: y });
         this.#fireViewport();
         return this;
     }
     panBy(dx: number, dy: number): this {
-        const v = this.viewport$.get();
+        const v = this.viewport$.Get();
         return this.panTo(v.panX + dx, v.panY + dy);
     }
     zoomTo(z: number): this {
         const mn = parseFloat(this.getAttribute('zoom-min') ?? '0.05') || 0.05;
         const mx = parseFloat(this.getAttribute('zoom-max') ?? '32')   || 32;
         const clamped = Math.max(mn, Math.min(mx, z));
-        const v = this.viewport$.get();
-        this.viewport$.set({ ...v, zoom: clamped });
+        const v = this.viewport$.Get();
+        this.viewport$.Set({ ...v, zoom: clamped });
         this.#fireViewport();
         return this;
     }
@@ -197,22 +207,22 @@ export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
         const mn = parseFloat(this.getAttribute('zoom-min') ?? '0.05') || 0.05;
         const mx = parseFloat(this.getAttribute('zoom-max') ?? '32')   || 32;
         const newZ = Math.max(mn, Math.min(mx, z));
-        const cur = this.viewport$.get();
+        const cur = this.viewport$.Get();
         // World point under screenPt should be preserved
         const wx = (screenPt.x - cur.panX) / cur.zoom;
         const wy = (screenPt.y - cur.panY) / cur.zoom;
         const newPanX = screenPt.x - wx * newZ;
         const newPanY = screenPt.y - wy * newZ;
-        this.viewport$.set({ panX: newPanX, panY: newPanY, zoom: newZ });
+        this.viewport$.Set({ panX: newPanX, panY: newPanY, zoom: newZ });
         this.#fireViewport();
         return this;
     }
     screenToWorld(p: Vec2): Vec2 {
-        const v = this.viewport$.get();
+        const v = this.viewport$.Get();
         return { x: (p.x - v.panX) / v.zoom, y: (p.y - v.panY) / v.zoom };
     }
     worldToScreen(p: Vec2): Vec2 {
-        const v = this.viewport$.get();
+        const v = this.viewport$.Get();
         return { x: p.x * v.zoom + v.panX, y: p.y * v.zoom + v.panY };
     }
     fitContent(): this {
@@ -222,13 +232,13 @@ export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
         const wRect = w.getBoundingClientRect();
         const sRect = stage.getBoundingClientRect();
         if (wRect.width === 0 || wRect.height === 0) return this;
-        const sx = sRect.width  / (wRect.width  / this.viewport$.get().zoom);
-        const sy = sRect.height / (wRect.height / this.viewport$.get().zoom);
+        const sx = sRect.width  / (wRect.width  / this.viewport$.Get().zoom);
+        const sy = sRect.height / (wRect.height / this.viewport$.Get().zoom);
         const z = Math.min(sx, sy) * 0.9;
         return this.zoomTo(z);
     }
 
-    getViewport(): ViewportState { return { ...this.viewport$.get() }; }
+    getViewport(): ViewportState { return { ...this.viewport$.Get() }; }
 
     onCreated()       {}
     onBeforeMount()   {}
@@ -245,7 +255,7 @@ export class Canvas2D extends Component('arianna-canvas-2d', HTMLElement, {}, {
     onUnmount()       {}
 
     #fireViewport(): void {
-        const v = this.viewport$.get();
+        const v = this.viewport$.Get();
         this.dispatchEvent(new CustomEvent('arianna:viewport', {
             bubbles: true, detail: { ...v },
         }));

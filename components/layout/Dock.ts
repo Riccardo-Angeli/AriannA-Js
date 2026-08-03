@@ -34,10 +34,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type DockStyle = 'macos' | 'windows';
 
@@ -96,8 +106,8 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
         this.isWindows    = () => this.dockStyle() === 'windows';
         this.startBtnLabel = () => startLabel.get() ?? '';
 
-        this.allItems = () => this.items$.get();
-        this.trayItems = () => this.tray$.get();
+        this.allItems = () => this.items$.Get();
+        this.trayItems = () => this.tray$.Get();
 
         this.iconCls = (icon: string) => {
             const k = classifyIcon(icon);
@@ -161,8 +171,8 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
             this.#unmagnify();
         };
 
-        this.clockTime = () => this.clock$.get().time;
-        this.clockDate = () => this.clock$.get().date;
+        this.clockTime = () => this.clock$.Get().time;
+        this.clockDate = () => this.clock$.Get().date;
 
         this.template = html`
             <!-- macOS layout -->
@@ -232,24 +242,24 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = Dock.DefaultSheet();
     }
 
-    set items(v: DockItem[]) { this.items$.set(v ?? []); }
-    get items(): DockItem[]  { return this.items$.get(); }
+    set items(v: DockItem[]) { this.items$.Set(v ?? []); }
+    get items(): DockItem[]  { return this.items$.Get(); }
 
-    set tray(v: DockItem[]) { this.tray$.set(v ?? []); }
-    get tray(): DockItem[]  { return this.tray$.get(); }
+    set tray(v: DockItem[]) { this.tray$.Set(v ?? []); }
+    get tray(): DockItem[]  { return this.tray$.Get(); }
 
-    addItem(item: DockItem): this { this.items$.set([...this.items$.get(), item]); return this; }
-    removeItem(id: string): this  { this.items$.set(this.items$.get().filter(i => i.id !== id)); return this; }
+    addItem(item: DockItem): this { this.items$.Set([...this.items$.Get(), item]); return this; }
+    removeItem(id: string): this  { this.items$.Set(this.items$.Get().filter(i => i.id !== id)); return this; }
     updateItem(id: string, patch: Partial<DockItem>): this {
-        this.items$.set(this.items$.get().map(i => i.id === id ? { ...i, ...patch } : i));
+        this.items$.Set(this.items$.Get().map(i => i.id === id ? { ...i, ...patch } : i));
         return this;
     }
-    clearItems(): this { this.items$.set([]); return this; }
+    clearItems(): this { this.items$.Set([]); return this; }
 
     setRunning(id: string, on: boolean): this { return this.updateItem(id, { running: on }); }
     setBadge(id: string, n: number): this     { return this.updateItem(id, { badge: n > 0 ? n : undefined }); }
     setActive(id: string): this {
-        this.items$.set(this.items$.get().map(i => ({ ...i, active: i.id === id })));
+        this.items$.Set(this.items$.Get().map(i => ({ ...i, active: i.id === id })));
         return this;
     }
 
@@ -286,7 +296,7 @@ export class Dock extends Component('arianna-dock', HTMLElement, {}, {
     {
         const tick = () => {
             const d = new Date();
-            this.clock$.set({
+            this.clock$.Set({
                 time: d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
                 date: d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: 'numeric' }),
             });

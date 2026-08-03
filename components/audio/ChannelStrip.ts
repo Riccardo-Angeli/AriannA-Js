@@ -29,9 +29,26 @@
 
 import { AudioComponent, type AudioComponentOptions } from './AudioComponent.ts';
 import { Component } from '../../core/Component.ts';
-import { signal, effect, type Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule } from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+const effect = (fn: () => void): (() => void) =>
+{
+    const e = Reactivity.CreateEffect(fn);
+
+    return () => e.Stop();
+};
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface ChannelStripOptions extends AudioComponentOptions {
     name?    : string;
@@ -67,10 +84,10 @@ export class ChannelStrip extends AudioComponent {
         if (opts.muted)             el.setAttribute('muted',  '');
         if (opts.soloed)            el.setAttribute('soloed', '');
         if (opts.meter === false)   el.setAttribute('meter',  'false');
-        if (opts.gain  != null) this.gain$.set(opts.gain);
-        if (opts.pan   != null) this.pan$.set(opts.pan);
-        if (opts.muted)         this.muted$.set(true);
-        if (opts.soloed)        this.soloed$.set(true);
+        if (opts.gain  != null) this.gain$.Set(opts.gain);
+        if (opts.pan   != null) this.pan$.Set(opts.pan);
+        if (opts.muted)         this.muted$.Set(true);
+        if (opts.soloed)        this.soloed$.Set(true);
     }
 
     build(): void {
@@ -116,7 +133,7 @@ export class ChannelStrip extends AudioComponent {
         gain.min = '0';
         gain.max = '1500';      // up to +3.5dB (1.5x)
         gain.step = '1';
-        gain.value = String(Math.round(this.gain$.get() * 1000));
+        gain.value = String(Math.round(this.gain$.Get() * 1000));
         const gainVal = document.createElement('span');
         gainVal.className = 'cs-fader-val';
         gainWrap.appendChild(gainLabel);
@@ -135,7 +152,7 @@ export class ChannelStrip extends AudioComponent {
         pan.min = '-1000';
         pan.max = '1000';
         pan.step = '1';
-        pan.value = String(Math.round(this.pan$.get() * 1000));
+        pan.value = String(Math.round(this.pan$.Get() * 1000));
         const panVal = document.createElement('span');
         panVal.className = 'cs-fader-val';
         panWrap.appendChild(panLabel);
@@ -167,46 +184,46 @@ export class ChannelStrip extends AudioComponent {
 
         // Reactive bindings
         effect(() => {
-            const g = this.gain$.get();
+            const g = this.gain$.Get();
             if (gain.value !== String(Math.round(g * 1000))) gain.value = String(Math.round(g * 1000));
             gainVal.textContent = g === 0 ? '-∞' : (20 * Math.log10(g)).toFixed(1) + ' dB';
-            if (this.#gain) this.#gain.gain.value = this.muted$.get() ? 0 : g;
+            if (this.#gain) this.#gain.gain.value = this.muted$.Get() ? 0 : g;
         });
         effect(() => {
-            const p = this.pan$.get();
+            const p = this.pan$.Get();
             if (pan.value !== String(Math.round(p * 1000))) pan.value = String(Math.round(p * 1000));
             const lbl = p === 0 ? 'C' : (p < 0 ? `L${Math.round(-p * 100)}` : `R${Math.round(p * 100)}`);
             panVal.textContent = lbl;
             if (this.#pan) this.#pan.pan.value = p;
         });
         effect(() => {
-            const m = this.muted$.get();
+            const m = this.muted$.Get();
             btnMute.classList.toggle('active', m);
-            if (this.#gain) this.#gain.gain.value = m ? 0 : this.gain$.get();
+            if (this.#gain) this.#gain.gain.value = m ? 0 : this.gain$.Get();
         });
         effect(() => {
-            btnSolo.classList.toggle('active', this.soloed$.get());
+            btnSolo.classList.toggle('active', this.soloed$.Get());
         });
 
         // Event handlers
         gain.addEventListener('input', () => {
             const v = parseInt(gain.value, 10) / 1000;
-            this.gain$.set(v);
+            this.gain$.Set(v);
             self.fire('arianna:strip-gain', { detail: { value: v, source: this }, bubbles: true });
         });
         pan.addEventListener('input', () => {
             const v = parseInt(pan.value, 10) / 1000;
-            this.pan$.set(v);
+            this.pan$.Set(v);
             self.fire('arianna:strip-pan', { detail: { value: v, source: this }, bubbles: true });
         });
         btnMute.addEventListener('click', () => {
-            const v = !this.muted$.get();
-            this.muted$.set(v);
+            const v = !this.muted$.Get();
+            this.muted$.Set(v);
             self.fire('arianna:strip-mute', { detail: { value: v, source: this }, bubbles: true });
         });
         btnSolo.addEventListener('click', () => {
-            const v = !this.soloed$.get();
-            this.soloed$.set(v);
+            const v = !this.soloed$.Get();
+            this.soloed$.Set(v);
             self.fire('arianna:strip-solo', { detail: { value: v, source: this }, bubbles: true });
         });
 
@@ -220,8 +237,8 @@ export class ChannelStrip extends AudioComponent {
         this.#pan      = ctx.createStereoPanner();
         this.#analyser = ctx.createAnalyser();
         this.#analyser.fftSize = 256;
-        this.#gain.gain.value = this.muted$.get() ? 0 : this.gain$.get();
-        this.#pan.pan.value   = this.pan$.get();
+        this.#gain.gain.value = this.muted$.Get() ? 0 : this.gain$.Get();
+        this.#pan.pan.value   = this.pan$.Get();
         this.#gain.connect(this.#pan);
         this.#pan.connect(this.#analyser);
         this._input  = this.#gain;
@@ -257,15 +274,15 @@ export class ChannelStrip extends AudioComponent {
     }
 
     /** Public API */
-    setGain(v: number): this   { this.gain$.set(Math.max(0, v)); return this; }
-    setPan(v: number): this    { this.pan$.set(Math.max(-1, Math.min(1, v))); return this; }
-    setMuted(v: boolean): this { this.muted$.set(v); return this; }
-    setSoloed(v: boolean): this { this.soloed$.set(v); return this; }
+    setGain(v: number): this   { this.gain$.Set(Math.max(0, v)); return this; }
+    setPan(v: number): this    { this.pan$.Set(Math.max(-1, Math.min(1, v))); return this; }
+    setMuted(v: boolean): this { this.muted$.Set(v); return this; }
+    setSoloed(v: boolean): this { this.soloed$.Set(v); return this; }
 
-    get gain(): number   { return this.gain$.get(); }
-    get pan(): number    { return this.pan$.get(); }
-    get muted(): boolean { return this.muted$.get(); }
-    get soloed(): boolean { return this.soloed$.get(); }
+    get gain(): number   { return this.gain$.Get(); }
+    get pan(): number    { return this.pan$.Get(); }
+    get muted(): boolean { return this.muted$.Get(); }
+    get soloed(): boolean { return this.soloed$.Get(); }
 
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([

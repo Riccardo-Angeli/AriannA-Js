@@ -23,16 +23,16 @@
 
 import type { default as _Core, TypeDescriptor, NamespaceDescriptor } from '../core/Core.ts';
 import type { default as _Observable, Signal, SignalMono, ReadonlySignal,
-              AriannAEvent, ListenerOptions } from '../core/Observable.ts';
+              AriannAEvent, ListenerOptions } from '../core/Observables.ts';
 import type { default as _State, StateEvent } from '../core/State.ts';
 import type { default as _Real, RealTarget, RealDef } from '../core/Real.ts';
 import type { default as _Virtual, VirtualNode } from '../core/Virtual.ts';
 import type { Component as _Component, ComponentDef, ComponentOptions } from '../core/Component.ts';
-import type { default as _Directive, ComponentMeta } from '../core/Directive.ts';
+import type { default as _Directive, ComponentMeta } from '../core/Directives.ts';
 import type { Rule as _Rule, CssState as _CssState, CSSProperties } from '../core/Rule.ts';
 import type { default as _Sheet } from '../core/Stylesheet.ts';
 import type { default as _Context, ContextEvent } from '../core/Context.ts';
-import type { default as _Namespace } from '../core/Namespace.ts';
+import type { default as _Namespace } from '../core/Core.ts';
 
 // ── New May-2026 component groups ─────────────────────────────────────────
 import type { Calendar      as _Calendar      } from '../components/inputs/Calendar.ts';

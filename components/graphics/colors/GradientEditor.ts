@@ -28,9 +28,17 @@
  *   }
  */
 
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { parseHex, rgbToHex } from './ColorPicker.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { parseHexRgba, rgbToHex } from './ColorPicker.ts';
 
 export interface RGBA { r: number; g: number; b: number; a: number; }
 
@@ -102,30 +110,30 @@ export function makeStopState() {
     const selected$ = signal<number>(0);
 
     function addStop(t: number, color?: RGBA): GradientStop {
-        const cur = stops$.get().slice();
+        const cur = stops$.Get().slice();
         const c = color ?? sampleAt(cur, t);
         const stop: GradientStop = { t: clamp01(t), color: { ...c } };
         cur.push(stop);
         sortStops(cur);
         const idx = cur.indexOf(stop);
-        stops$.set(cur);
-        selected$.set(idx);
+        stops$.Set(cur);
+        selected$.Set(idx);
         return stop;
     }
 
     function removeStop(idx: number): void {
-        const cur = stops$.get();
+        const cur = stops$.Get();
         if (cur.length <= 2) return;
         if (idx < 0 || idx >= cur.length) return;
         const next = cur.slice();
         next.splice(idx, 1);
-        stops$.set(next);
-        const sel = selected$.get();
-        if (sel >= next.length) selected$.set(next.length - 1);
+        stops$.Set(next);
+        const sel = selected$.Get();
+        if (sel >= next.length) selected$.Set(next.length - 1);
     }
 
     function updateStop(idx: number, patch: Partial<GradientStop>): void {
-        const cur = stops$.get();
+        const cur = stops$.Get();
         const s = cur[idx];
         if (!s) return;
         const updated: GradientStop = { ...s };
@@ -135,14 +143,14 @@ export function makeStopState() {
         const next = cur.slice();
         next[idx] = updated;
         sortStops(next);
-        stops$.set(next);
+        stops$.Set(next);
     }
 
     function setStops(s: GradientStop[]): void {
         const cleaned = s.map(x => ({ ...x, color: { ...x.color } }));
         sortStops(cleaned);
-        stops$.set(cleaned);
-        if (selected$.get() >= cleaned.length) selected$.set(0);
+        stops$.Set(cleaned);
+        if (selected$.Get() >= cleaned.length) selected$.Set(0);
     }
 
     return { stops$, selected$, addStop, removeStop, updateStop, setStops };
@@ -154,7 +162,7 @@ export function colorFieldHex(color: RGBA): string {
 }
 
 export function parseColorString(s: string): RGBA | null {
-    const p = parseHex(s);
+    const p = parseHexRgba(s);
     if (!p) return null;
     return { r: p.r, g: p.g, b: p.b, a: p.a ?? 1 };
 }

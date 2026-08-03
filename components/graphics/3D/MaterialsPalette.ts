@@ -28,10 +28,20 @@
 
 import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type MaterialKind =
     | 'basic' | 'lambert' | 'phong' | 'standard' | 'physical'
@@ -107,15 +117,15 @@ export class MaterialsPalette extends Component('arianna-materials-palette', HTM
         this.hasShininess  = () => this.curKind() === 'phong';
         this.hasIor        = () => this.curKind() === 'physical';
 
-        this.colorVal     = () => this.material$.get().color     ?? '#cccccc';
-        this.emissiveVal  = () => this.material$.get().emissive  ?? '#000000';
-        this.opacityVal   = () => String(this.material$.get().opacity   ?? 1);
-        this.metalnessVal = () => String(this.material$.get().metalness ?? 0);
-        this.roughnessVal = () => String(this.material$.get().roughness ?? 0.5);
-        this.clearcoatVal = () => String(this.material$.get().clearcoat ?? 0);
-        this.transmissionVal = () => String(this.material$.get().transmission ?? 0);
-        this.shininessVal = () => String(this.material$.get().shininess ?? 30);
-        this.iorVal       = () => String(this.material$.get().ior ?? 1.5);
+        this.colorVal     = () => this.material$.Get().color     ?? '#cccccc';
+        this.emissiveVal  = () => this.material$.Get().emissive  ?? '#000000';
+        this.opacityVal   = () => String(this.material$.Get().opacity   ?? 1);
+        this.metalnessVal = () => String(this.material$.Get().metalness ?? 0);
+        this.roughnessVal = () => String(this.material$.Get().roughness ?? 0.5);
+        this.clearcoatVal = () => String(this.material$.Get().clearcoat ?? 0);
+        this.transmissionVal = () => String(this.material$.Get().transmission ?? 0);
+        this.shininessVal = () => String(this.material$.Get().shininess ?? 30);
+        this.iorVal       = () => String(this.material$.Get().ior ?? 1.5);
 
         this.onKindClick = (e: Event) => {
             const btn = e.currentTarget as HTMLButtonElement;
@@ -198,24 +208,24 @@ export class MaterialsPalette extends Component('arianna-materials-palette', HTM
     setKind(kind: MaterialKind): this {
         this.setAttribute('kind', kind);
         // Reset material to defaults for the new kind, preserving common shared fields
-        const cur = this.material$.get();
+        const cur = this.material$.Get();
         const next: MaterialDef = { ...DEFAULTS[kind] };
         if (cur.color) next.color = cur.color;
         if (cur.opacity !== undefined) next.opacity = cur.opacity;
-        this.material$.set(next);
+        this.material$.Set(next);
         this.#fire();
         return this;
     }
     setParam(param: keyof MaterialDef, value: string | number | boolean): this {
-        const cur = this.material$.get();
-        this.material$.set({ ...cur, [param]: value });
+        const cur = this.material$.Get();
+        this.material$.Set({ ...cur, [param]: value });
         this.#fire();
         return this;
     }
-    getMaterial(): MaterialDef { return { ...this.material$.get() }; }
+    getMaterial(): MaterialDef { return { ...this.material$.Get() }; }
     setMaterial(m: MaterialDef): this {
         if (m.kind) this.setAttribute('kind', m.kind);
-        this.material$.set({ ...m });
+        this.material$.Set({ ...m });
         this.#fire();
         return this;
     }

@@ -32,10 +32,20 @@
 
 import { Component } from '../../../core/Component.ts';
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export interface Layer {
     id        : string;
@@ -87,13 +97,13 @@ export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, 
                     if (l.children && (l.expanded ?? true)) walk(l.children, depth + 1);
                 }
             };
-            walk(this.layers$.get(), 0);
+            walk(this.layers$.Get(), 0);
             return out;
         };
 
         this.rowCls = (l: FlatLayer): string =>
             'ar-lp__row'
-            + (this.selected$.get() === l.id ? ' ar-lp__row--sel' : '')
+            + (this.selected$.Get() === l.id ? ' ar-lp__row--sel' : '')
             + (l.locked ? ' ar-lp__row--locked' : '')
             + (!l.visible ? ' ar-lp__row--hidden' : '');
 
@@ -123,17 +133,17 @@ export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, 
             const id = btn.dataset.id;
             if (id) this.toggleExpand(id);
         };
-        this.onAdd = () => this.addLayer({ name: `Layer ${this.layers$.get().length + 1}` });
+        this.onAdd = () => this.addLayer({ name: `Layer ${this.layers$.Get().length + 1}` });
         this.onRemove = () => {
-            const sel = this.selected$.get();
+            const sel = this.selected$.Get();
             if (sel) this.removeLayer(sel);
         };
         this.onMoveUp = () => {
-            const sel = this.selected$.get();
+            const sel = this.selected$.Get();
             if (sel) this.moveLayer(sel, -1);
         };
         this.onMoveDown = () => {
-            const sel = this.selected$.get();
+            const sel = this.selected$.Get();
             if (sel) this.moveLayer(sel, 1);
         };
 
@@ -170,23 +180,23 @@ export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, 
     // ── Public API ───────────────────────────────────────────────────────────
 
     setLayers(layers: Layer[]): this {
-        this.layers$.set(layers.map(l => this.#cloneLayer(l)));
-        if (this.selected$.get() && !this.#findById(this.selected$.get()!)) this.selected$.set(null);
+        this.layers$.Set(layers.map(l => this.#cloneLayer(l)));
+        if (this.selected$.Get() && !this.#findById(this.selected$.Get()!)) this.selected$.Set(null);
         this.#fireChange();
         return this;
     }
     getLayers(): Layer[] {
-        return this.layers$.get().map(l => this.#cloneLayer(l));
+        return this.layers$.Get().map(l => this.#cloneLayer(l));
     }
 
     selectLayer(id: string): this {
-        this.selected$.set(id);
+        this.selected$.Set(id);
         this.dispatchEvent(new CustomEvent('arianna:layer-select', {
             bubbles: true, detail: { id, layer: this.#findById(id) },
         }));
         return this;
     }
-    getSelected(): string | null { return this.selected$.get(); }
+    getSelected(): string | null { return this.selected$.Get(); }
 
     addLayer(partial: Partial<Layer>): Layer {
         const l: Layer = {
@@ -197,10 +207,10 @@ export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, 
             opacity: partial.opacity ?? 1,
             ...(partial.children ? { children: partial.children.map(c => this.#cloneLayer(c)) } : {}),
         };
-        const next = this.layers$.get().slice();
+        const next = this.layers$.Get().slice();
         next.push(l);
-        this.layers$.set(next);
-        this.selected$.set(l.id);
+        this.layers$.Set(next);
+        this.selected$.Set(l.id);
         this.#fireChange();
         return l;
     }
@@ -212,9 +222,9 @@ export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, 
                 return true;
             });
         };
-        const next = removeIn(this.layers$.get().slice());
-        this.layers$.set(next);
-        if (this.selected$.get() === id) this.selected$.set(null);
+        const next = removeIn(this.layers$.Get().slice());
+        this.layers$.Set(next);
+        if (this.selected$.Get() === id) this.selected$.Set(null);
         this.#fireChange();
         return this;
     }
@@ -240,14 +250,14 @@ export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, 
     }
     moveLayer(id: string, dir: -1 | 1): this {
         // Only moves at the top level for simplicity
-        const list = this.layers$.get().slice();
+        const list = this.layers$.Get().slice();
         const idx = list.findIndex(l => l.id === id);
         if (idx === -1) return this;
         const next = idx + dir;
         if (next < 0 || next >= list.length) return this;
         const [moved] = list.splice(idx, 1);
         list.splice(next, 0, moved!);
-        this.layers$.set(list);
+        this.layers$.Set(list);
         this.#fireChange();
         return this;
     }
@@ -271,7 +281,7 @@ export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, 
             }
             return null;
         };
-        return walk(this.layers$.get());
+        return walk(this.layers$.Get());
     }
     #updateLayer(id: string, patch: (l: Layer) => Layer): void {
         const walk = (list: Layer[]): Layer[] => list.map(l => {
@@ -279,7 +289,7 @@ export class LayersPanel extends Component('arianna-layers-panel', HTMLElement, 
             if (l.children) return { ...l, children: walk(l.children) };
             return l;
         });
-        this.layers$.set(walk(this.layers$.get()));
+        this.layers$.Set(walk(this.layers$.Get()));
         this.#fireChange();
     }
     #fireChange(): void {

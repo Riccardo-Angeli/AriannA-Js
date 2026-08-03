@@ -54,10 +54,20 @@
 
 import { Component } from '../../core/Component.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 import { ApplePay }   from './ApplePay.ts';
 import { GooglePay }  from './GooglePay.ts';
@@ -127,8 +137,8 @@ export class PaymentGateway extends Component('arianna-payment-gateway', HTMLEle
         this.headerTitle = () => titleAttr.get() ?? 'Choose how to pay';
 
         this.methodList = (): Array<{ id: PaymentMethodId; label: string; icon: string; cls: string; selected: boolean }> => {
-            const cfg = this.methods$.get();
-            const sel = this.selected$.get();
+            const cfg = this.methods$.Get();
+            const sel = this.selected$.Get();
             return METHOD_META
                 .filter(m => cfg[m.id])
                 .map(m => ({
@@ -173,19 +183,19 @@ export class PaymentGateway extends Component('arianna-payment-gateway', HTMLEle
     // ── Public API ───────────────────────────────────────────────────────────
 
     setMethods(cfg: PaymentGatewayMethodConfig): this {
-        this.methods$.set({ ...cfg });
+        this.methods$.Set({ ...cfg });
         // Pick first method as initial if none selected yet
-        if (!this.selected$.get()) {
+        if (!this.selected$.Get()) {
             const first = METHOD_META.find(m => cfg[m.id]);
             if (first) this.selectMethod(first.id);
         }
         return this;
     }
 
-    getMethods(): PaymentGatewayMethodConfig { return { ...this.methods$.get() }; }
+    getMethods(): PaymentGatewayMethodConfig { return { ...this.methods$.Get() }; }
 
     selectMethod(id: PaymentMethodId): this {
-        this.selected$.set(id);
+        this.selected$.Set(id);
         this.dispatchEvent(new CustomEvent('arianna:method-select', {
             bubbles: true, detail: { method: id },
         }));
@@ -194,11 +204,11 @@ export class PaymentGateway extends Component('arianna-payment-gateway', HTMLEle
         return this;
     }
 
-    getSelected(): PaymentMethodId | null { return this.selected$.get(); }
+    getSelected(): PaymentMethodId | null { return this.selected$.Get(); }
 
     /** Programmatically trigger payment on the currently-selected method. */
     async pay(): Promise<void> {
-        const sel = this.selected$.get();
+        const sel = this.selected$.Get();
         if (!sel) return;
         const inst = this.#instances[sel];
         if (!inst) return;
@@ -215,7 +225,7 @@ export class PaymentGateway extends Component('arianna-payment-gateway', HTMLEle
 
         const amount   = parseFloat(this.getAttribute('amount') ?? '0') || 0;
         const currency = this.getAttribute('currency') ?? 'EUR';
-        const cfg = this.methods$.get();
+        const cfg = this.methods$.Get();
 
         let el: Element | null = null;
         switch (id) {

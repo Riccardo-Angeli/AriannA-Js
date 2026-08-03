@@ -22,12 +22,22 @@
  * Attrs: width, height
  */
 
-import { Component } from '../../core/Component.ts';
+import { Component } from '../../core/Components.ts';
 import { html }      from '../../core/Template.ts';
-import { signal }    from '../../core/Observable.ts';
-import type { Signal } from '../../core/Observable.ts';
-import { Stylesheet } from '../../core/Stylesheet.ts';
-import { Rule }      from '../../core/Rule.ts';
+import { Reactivity } from '../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 import { _svg, _fmt, _esc } from './helpers.ts';
 
 export interface LineChartSeries {
@@ -63,7 +73,7 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
         const hAttr = this.attrSignal('height');
 
         this.svgHtml = (): string => {
-            const series = this.series$.get();
+            const series = this.series$.Get();
             if (!series.length) return '';
 
             const w = parseInt(wAttr.get() ?? '600', 10) || 600;
@@ -129,8 +139,8 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
         (this as unknown as { Sheet: Stylesheet | null }).Sheet = LineChart.DefaultSheet();
     }
 
-    set series(v: LineChartSeries[]) { this.series$.set(v ?? []); }
-    get series(): LineChartSeries[]  { return this.series$.get(); }
+    set series(v: LineChartSeries[]) { this.series$.Set(v ?? []); }
+    get series(): LineChartSeries[]  { return this.series$.Get(); }
 
     onCreated()       {}
     onBeforeMount()   {}

@@ -430,7 +430,7 @@ AriannA's aim: make Standard DOM behave as ergonomically as JSX **without** JSX 
 
 ## §0.12. What I am about to implement (detailed architecture)
 
-**Scope: `Component.ts` only** (plus `Namespace.ts` upgrade path, plus these docs). `Real.ts` and `Virtual.ts` are NOT touched — they are the complete, independent foundation (photons).
+**Scope: `Component.ts` only** (plus `Core.ts` upgrade path, plus these docs). `Real.ts` and `Virtual.ts` are NOT touched — they are the complete, independent foundation (photons).
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -479,7 +479,7 @@ AriannA's aim: make Standard DOM behave as ergonomically as JSX **without** JSX 
 
 `_installFacilities` operates on the **element** (`this`): runs `build()` with `this = element`, reads `this.template`, installs Shadow/Sheet/State, and populates the sealed shadow only through Stylesheet/Rule + Templating (§0.6.2). Shadow modes (open default native-or-light, closed via native customElements, iframe backend) are per §0.6.3 / SHADOW.md. The default-open policy is what permits non-standard tags.
 
-**Phase plan:** finish and test the CORE (Component.ts + Namespace.ts + docs) to an impeccable standard FIRST; adjust the 140 components in Phase 2. Because the component IS the element, most native `this.*` usage in those components keeps working; Phase 2 is limited to (a) reactivity done via one-shot native writes and (b) raw shadow/slot manipulation (§0.6.1 hierarchy).
+**Phase plan:** finish and test the CORE (Component.ts + Core.ts + docs) to an impeccable standard FIRST; adjust the 140 components in Phase 2. Because the component IS the element, most native `this.*` usage in those components keeps working; Phase 2 is limited to (a) reactivity done via one-shot native writes and (b) raw shadow/slot manipulation (§0.6.1 hierarchy).
 
 ## §0.13. Reconciliation note: Part 0 and Parts I–V now AGREE
 

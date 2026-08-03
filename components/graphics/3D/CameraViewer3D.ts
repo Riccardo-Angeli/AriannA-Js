@@ -32,12 +32,22 @@
  * Attrs: width, height, show-axes, show-labels, active-pane, maximized-pane
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import { html }      from '../../../core/Template.ts';
-import { signal }    from '../../../core/Observable.ts';
-import type { Signal } from '../../../core/Observable.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
-import { Rule }      from '../../../core/Rule.ts';
+import { Reactivity } from '../../../core/Reactive.ts';
+
+/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
+   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
+   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
+   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
+   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
+   Map, Effect" with the same name printed twice. */
+const signal = Reactivity.CreateSignal;
+type Signal<T> = Reactivity.Types.SignalContract<T>;
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 
 export type PaneId = 'top' | 'front' | 'side' | 'perspective';
 export type ProjectionKind = 'orthographic' | 'perspective';
@@ -112,7 +122,7 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
         this.panes = (): Array<{ id: PaneId; label: string; cls: string; camLabel: string }> => {
             const active = activeAttr.get();
             const max    = maxAttr.get();
-            const cams = this.cameras$.get();
+            const cams = this.cameras$.Get();
             return PANE_INFO.map(p => ({
                 id: p.id,
                 label: p.label,
@@ -138,11 +148,11 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
             const we = e as WheelEvent;
             we.preventDefault();
             const pane = (we.currentTarget as HTMLElement).dataset.pane as PaneId;
-            const cur = this.cameras$.get();
+            const cur = this.cameras$.Get();
             const c = cur[pane];
             const factor = we.deltaY > 0 ? 0.92 : 1.08;
             const next = { ...cur, [pane]: { ...c, zoom: Math.max(0.1, Math.min(64, c.zoom * factor)) } };
-            this.cameras$.set(next);
+            this.cameras$.Set(next);
             this.#fireCamera(pane);
         };
         this.onPanePointerMove = (e: Event) => {
@@ -150,7 +160,7 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
             const pe = e as PointerEvent;
             if (!(pe.buttons & 1) || !pe.altKey) return;
             const pane = (pe.currentTarget as HTMLElement).dataset.pane as PaneId;
-            const cur = this.cameras$.get();
+            const cur = this.cameras$.Get();
             const c = cur[pane];
             const dx = pe.movementX * 0.01;
             const dy = pe.movementY * 0.01;
@@ -158,7 +168,7 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
                 ...c,
                 position: { x: c.position.x - dx, y: c.position.y + dy, z: c.position.z },
             };
-            this.cameras$.set({ ...cur, [pane]: newCam });
+            this.cameras$.Set({ ...cur, [pane]: newCam });
             this.#fireCamera(pane);
         };
 
@@ -203,18 +213,18 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
         return {
             id, label: PANE_INFO.find(p => p.id === id)!.label,
             surface, overlay,
-            camera: this.cameras$.get()[id],
+            camera: this.cameras$.Get()[id],
         };
     }
 
     setCamera(pane: PaneId, camera: Partial<Camera>): this {
-        const cur = this.cameras$.get();
+        const cur = this.cameras$.Get();
         const next = { ...cur, [pane]: { ...cur[pane], ...camera } };
-        this.cameras$.set(next);
+        this.cameras$.Set(next);
         this.#fireCamera(pane);
         return this;
     }
-    getCamera(pane: PaneId): Camera { return { ...this.cameras$.get()[pane] }; }
+    getCamera(pane: PaneId): Camera { return { ...this.cameras$.Get()[pane] }; }
 
     setActivePane(pane: PaneId): this {
         this.setAttribute('active-pane', pane);
@@ -240,7 +250,7 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
     #fireCamera(pane: PaneId): void {
         this.dispatchEvent(new CustomEvent('arianna:camera', {
             bubbles: true,
-            detail: { pane, camera: { ...this.cameras$.get()[pane] } },
+            detail: { pane, camera: { ...this.cameras$.Get()[pane] } },
         }));
     }
 

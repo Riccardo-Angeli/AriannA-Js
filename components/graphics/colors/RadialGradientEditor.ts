@@ -16,7 +16,10 @@
  */
 
 import { Component } from '../../../core/Component.ts';
-import { Stylesheet } from '../../../core/Stylesheet.ts';
+import { Css } from '../../../core/Css.ts';
+const { Rule, Stylesheet } = Css;
+type Rule = Css.Rule;
+type Stylesheet = Css.Stylesheet;
 import { html }      from '../../../core/Template.ts';
 import { LinearGradientEditor } from './LinearGradientEditor.ts';
 import {
@@ -58,7 +61,7 @@ export class RadialGradientEditor extends Component('arianna-radial-gradient-edi
         const interp = (): 'srgb' | 'oklab' | 'oklch' | 'hsl' =>
             (interpAttr.get() as 'srgb' | 'oklab' | 'oklch' | 'hsl' | null) ?? 'srgb';
 
-        this.stripBg   = () => `background: linear-gradient(to right, ${stopsToCss(this.state.stops$.get())})`;
+        this.stripBg   = () => `background: linear-gradient(to right, ${stopsToCss(this.state.stops$.Get())})`;
         this.previewBg = () => `background: ${this.toCSS()}`;
 
         this.shapeIs = (v: string) => shape() === v;
@@ -70,8 +73,8 @@ export class RadialGradientEditor extends Component('arianna-radial-gradient-edi
         this.centerDotStyle = () => `left: ${cx()}%; top: ${cy()}%`;
 
         this.pins = () => {
-            const sel = this.state.selected$.get();
-            return this.state.stops$.get().map((s, i) => ({
+            const sel = this.state.selected$.Get();
+            return this.state.stops$.Get().map((s, i) => ({
                 left: `left: ${s.t * 100}%; background: ${colorFieldHex(s.color)}`,
                 cls : 'ar-grad__pin' + (i === sel ? ' ar-grad__pin--sel' : ''),
                 title: `${colorFieldHex(s.color)} @ ${(s.t * 100).toFixed(1)}%`,
@@ -79,8 +82,8 @@ export class RadialGradientEditor extends Component('arianna-radial-gradient-edi
             }));
         };
 
-        this.hasSel = () => this.state.stops$.get().length > 0;
-        this.selStop = () => this.state.stops$.get()[this.state.selected$.get()] ?? this.state.stops$.get()[0]!;
+        this.hasSel = () => this.state.stops$.Get().length > 0;
+        this.selStop = () => this.state.stops$.Get()[this.state.selected$.Get()] ?? this.state.stops$.Get()[0]!;
         this.selHex = () => colorFieldHex(this.selStop().color);
         this.selT   = () => (this.selStop().t * 100).toFixed(1);
         this.selA   = () => (this.selStop().color.a ?? 1).toFixed(2);
@@ -102,7 +105,7 @@ export class RadialGradientEditor extends Component('arianna-radial-gradient-edi
             const idx = parseInt(pin.dataset.idx ?? '0', 10);
             if (me.type === 'pointerdown') {
                 pin.setPointerCapture?.(me.pointerId);
-                this.state.selected$.set(idx);
+                this.state.selected$.Set(idx);
             } else if (!(me.buttons & 1)) return;
             const strip = pin.parentElement?.previousElementSibling as HTMLElement | null;
             if (!strip) return;
@@ -141,25 +144,25 @@ export class RadialGradientEditor extends Component('arianna-radial-gradient-edi
             const c = parseColorString(v);
             if (c) {
                 const cur = this.selStop();
-                this.state.updateStop(this.state.selected$.get(), { color: { ...c, a: cur.color.a } });
+                this.state.updateStop(this.state.selected$.Get(), { color: { ...c, a: cur.color.a } });
                 this.#fire();
             }
         };
         this.onSelPosChange = (e: Event) => {
-            this.state.updateStop(this.state.selected$.get(), {
+            this.state.updateStop(this.state.selected$.Get(), {
                 t: clamp01(parseFloat((e.target as HTMLInputElement).value) / 100),
             });
             this.#fire();
         };
         this.onSelAlphaChange = (e: Event) => {
             const cur = this.selStop();
-            this.state.updateStop(this.state.selected$.get(), {
+            this.state.updateStop(this.state.selected$.Get(), {
                 color: { ...cur.color, a: Math.max(0, Math.min(1, parseFloat((e.target as HTMLInputElement).value))) },
             });
             this.#fire();
         };
         this.onRemove = () => {
-            this.state.removeStop(this.state.selected$.get());
+            this.state.removeStop(this.state.selected$.Get());
             this.#fire();
         };
 
@@ -265,10 +268,10 @@ export class RadialGradientEditor extends Component('arianna-radial-gradient-edi
     }
 
     setStops(s: GradientStop[]): this { this.state.setStops(s); this.#fire(); return this; }
-    getStops(): GradientStop[] { return this.state.stops$.get().map(x => ({ ...x, color: { ...x.color } })); }
+    getStops(): GradientStop[] { return this.state.stops$.Get().map(x => ({ ...x, color: { ...x.color } })); }
 
     toCSS(): string {
-        const stops  = stopsToCss(this.state.stops$.get());
+        const stops  = stopsToCss(this.state.stops$.Get());
         const interp = this.getInterp();
         const space  = interp === 'srgb' ? '' : ` in ${interp}`;
         const c      = this.getCenter();

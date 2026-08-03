@@ -12,7 +12,7 @@
  * Attrs (declarative): for, axis, merge, threshold, enabled
  */
 
-import { Component } from '../../../core/Component.ts';
+import { Component } from '../../../core/Components.ts';
 import {
     Modifier3D, Modifier3DElement,
     _cloneGeom, _recomputeNormals, _vLen, _vSub,
