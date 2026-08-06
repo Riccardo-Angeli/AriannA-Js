@@ -50,6 +50,7 @@
  * Sinks queued before render are flushed at render time; effects queued
  * after are wired immediately. Mount/unmount manages DOM parentage.
  */
+
 import { Core }        from './Core.ts';
 import { Namespaces }  from './Namespaces.ts';
 import { Events }      from './Events.ts';
@@ -125,7 +126,11 @@ export namespace Virtuals
                 virtual
             );
 
-            if(Core.AriannA.Configuration?.debug)
+            if
+            (
+                Core.AriannA.Configuration?.debug &&
+                !Virtual.Instances.includes(virtual)
+            )
             {
                 Virtual.Instances.push(virtual);
             }
@@ -273,6 +278,7 @@ export namespace Virtuals
                 null;
 
         #loaded      = false;
+        #destroyed   = false;
         #rendered    = false;
 
         /** Pending DOM-event listeners, flushed at render() time. */
@@ -1022,6 +1028,11 @@ export namespace Virtuals
         /** Detach from the DOM (effects + sinks remain alive — see destroy()). */
         unmount(): this
         {
+            if(!this.#mounted)
+            {
+                return this;
+            }
+
             if(this.#deferredUnmount)
             {
                 this.#deferredUnmount();
@@ -1626,6 +1637,14 @@ export namespace Virtuals
         /** Dispose every active effect, clear sinks, detach the Sheet. */
         destroy(): this
         {
+            if(this.#destroyed)
+            {
+                return this;
+            }
+
+            this.#destroyed =
+                true;
+
             this.unmount();
 
             for(const child of [...this.#children])
