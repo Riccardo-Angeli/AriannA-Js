@@ -13,23 +13,135 @@ import Virtual      from './Virtual.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Jsx
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Jsx contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Jsx
 {
+    /** @name        Mode
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Mode.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Mode            = SchemaTypes.Jsx.Mode;
+    /** @name        Key
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Key.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Key             = SchemaTypes.Jsx.Key;
+    /** @name        Primitive
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Primitive.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Primitive       = SchemaTypes.Jsx.Primitive;
+    /** @name        ElementType
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ElementType.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ElementType     = SchemaTypes.Jsx.ElementType;
+    /** @name        Node
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Node.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Node            = SchemaTypes.Jsx.Node;
-    export type Children        = SchemaTypes.Jsx.Children;
-    export type Props           = SchemaTypes.Jsx.Props;
-    export type Fragment        = SchemaInterfaces.Jsx.Fragment;
-    export type Ref<T = unknown> = SchemaInterfaces.Jsx.Ref<T>;
-    export type Component<P = Props> = SchemaInterfaces.Jsx.Component<P>;
+    /** @name        Children
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Children.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export type Children                 = SchemaTypes.Jsx.Children;
+    /** @name        Props
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Props.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export type Props                    = SchemaTypes.Jsx.Props;
+    /** @name        Fragment
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Fragment.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export type Fragment                 = SchemaInterfaces.Jsx.Fragment;
+    /** @name        Ref
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Ref.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export type Ref<T = unknown>         = SchemaInterfaces.Jsx.Ref<T>;
+    /** @name        Component
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Component.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export type Component<P = Props>     = SchemaInterfaces.Jsx.Component<P>;
+    /** @name        ComponentType
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ComponentType.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ComponentType<P = Props> = SchemaInterfaces.Jsx.ComponentType<P>;
-    export type RootContract    = SchemaInterfaces.Jsx.Root;
-    export type ConvertOptions  = SchemaInterfaces.Jsx.ConvertOptions;
-    export type ConvertResult   = SchemaInterfaces.Jsx.ConvertResult;
-    export type ServiceContract = SchemaInterfaces.Jsx.Service;
+    /** @name        RootContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for RootContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export type RootContract             = SchemaInterfaces.Jsx.Root;
+    /** @name        ConvertOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ConvertOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export type ConvertOptions           = SchemaInterfaces.Jsx.ConvertOptions;
+    /** @name        ConvertResult
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ConvertResult.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export type ConvertResult            = SchemaInterfaces.Jsx.ConvertResult;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export type ServiceContract          = SchemaInterfaces.Jsx.Service;
 
     const FragmentType = Symbol.for('AriannA.JSX.Fragment');
 
