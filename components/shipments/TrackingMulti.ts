@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/shipments/TrackingMulti
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -33,13 +37,8 @@
  *   arianna:carrier-detected  detail: { carrier: CarrierId | null, candidates: CarrierId[] }
  *   (plus inner tracker events bubble through naturally)
  *
- * Attrs: tracking-number, carrier (force), show-input, locale
+ * Attributes: tracking-number, carrier (force), show-input, locale
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -47,78 +46,77 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
-import { DHLTracker }   from './DHLTracker.ts';
-import { UPSTracker }   from './UPSTracker.ts';
+import { Component, Css, Reactivity, Templates, Components } from '../../core/index.ts';
+import { DHLTracker } from './DHLTracker.ts';
+import { UPSTracker } from './UPSTracker.ts';
 import { FedExTracker } from './FedExTracker.ts';
-import { BRTTracker }   from './BRTTracker.ts';
+import { BRTTracker } from './BRTTracker.ts';
 import type { TrackingEvent } from './Tracker.ts';
-
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
 export type CarrierId = 'dhl' | 'ups' | 'fedex' | 'brt';
-
 interface CarrierEntry {
-    id      : CarrierId;
-    name    : string;
-    pattern : RegExp;
-    make    : () => HTMLElement & {
+    id: CarrierId;
+    name: string;
+    pattern: RegExp;
+    make: () => HTMLElement & {
         setTrackingNumber(n: string): unknown;
         setEvents(events: TrackingEvent[]): unknown;
     };
 }
-
 const CARRIERS: CarrierEntry[] = [
-    { id: 'ups',   name: 'UPS',   pattern: /^1Z[0-9A-Z]{16}$/i,           make: () => new UPSTracker()   as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
-    { id: 'fedex', name: 'FedEx', pattern: /^(\d{12}|\d{15}|\d{20})$/,    make: () => new FedExTracker() as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
-    { id: 'dhl',   name: 'DHL',   pattern: /^(\d{10,11}|[A-Z]{3}\d{7})$/i, make: () => new DHLTracker()   as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
-    { id: 'brt',   name: 'BRT',   pattern: /^\d{10,12}$/,                  make: () => new BRTTracker()   as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
+    { id: 'ups', name: 'UPS', pattern: /^1Z[0-9A-Z]{16}$/i, make: () => new UPSTracker() as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
+    { id: 'fedex', name: 'FedEx', pattern: /^(\d{12}|\d{15}|\d{20})$/, make: () => new FedExTracker() as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
+    { id: 'dhl', name: 'DHL', pattern: /^(\d{10,11}|[A-Z]{3}\d{7})$/i, make: () => new DHLTracker() as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
+    { id: 'brt', name: 'BRT', pattern: /^\d{10,12}$/, make: () => new BRTTracker() as unknown as CarrierEntry['make'] extends () => infer R ? R : never },
 ];
-
 export interface TrackingMultiOptions {
-    trackingNumber? : string;
-    carrier?        : CarrierId;
-    showInput?      : boolean;
-    locale?         : string;
-    events?         : TrackingEvent[];
+    trackingNumber?: string;
+    carrier?: CarrierId;
+    showInput?: boolean;
+    locale?: string;
+    events?: TrackingEvent[];
 }
-
-export class TrackingMulti extends Component('arianna-tracking-multi', HTMLElement, {}, {
-    attrs : ['tracking-number', 'carrier', 'show-input', 'locale'],
+@Component('arianna-tracking-multi', {}, {
+    Attributes: ['tracking-number', 'carrier', 'show-input', 'locale'],
 })
-{
+export class TrackingMulti extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible template slot installed by @Component. */
+    declare template: unknown;
     candidates$: Signal<CarrierId[]> = signal<CarrierId[]>([]);
-    pending$   : Signal<TrackingEvent[] | null> = signal<TrackingEvent[] | null>(null);
-
-    #activeTracker: (HTMLElement & { setTrackingNumber(n: string): unknown; setEvents(events: TrackingEvent[]): unknown }) | null = null;
-
-    build(_opts: TrackingMultiOptions = {})
-    {
-        const numberAttr  = this.attributeSignal('tracking-number');
-        const carrierAttr = this.attributeSignal('carrier');
-
+    pending$: Signal<TrackingEvent[] | null> = signal<TrackingEvent[] | null>(null);
+    #activeTracker: (HTMLElement & {
+        setTrackingNumber(n: string): unknown;
+        setEvents(events: TrackingEvent[]): unknown;
+    }) | null = null;
+    onConnected(_opts: TrackingMultiOptions = {}) {
+        const numberAttr = this.signal().attribute('tracking-number');
+        const carrierAttr = this.signal().attribute('carrier');
         this.showInput = () => this.getAttribute('show-input') !== 'false';
-        this.inputVal  = () => numberAttr.Get() ?? '';
-
+        this.inputVal = () => numberAttr.Get() ?? '';
         this.hasMultiple = () => {
             const cands = this.candidates$.Get();
             const forced = carrierAttr.Get();
             return cands.length > 1 && !forced;
         };
-
-        this.candidatesList = (): Array<{ id: CarrierId; name: string; selected: boolean }> => {
+        this.candidatesList = (): Array<{
+            id: CarrierId;
+            name: string;
+            selected: boolean;
+        }> => {
             const sel = carrierAttr.Get();
             return this.candidates$.Get().map(id => ({
                 id, name: CARRIERS.find(c => c.id === id)!.name,
                 selected: sel === id,
             }));
         };
-
         this.activeCarrier = () => carrierAttr.Get() as CarrierId | null;
-
         // ── Handlers ────────────────────────────────────────────────────
         this.onInput = (e: Event) => {
             this.setAttribute('tracking-number', (e.target as HTMLInputElement).value);
@@ -127,15 +125,16 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
             this.#detect();
         };
         this.onKeyDown = (e: Event) => {
-            if ((e as KeyboardEvent).key === 'Enter') this.#detect();
+            if ((e as KeyboardEvent).key === 'Enter')
+                this.#detect();
         };
         this.onCandidatePick = (e: Event) => {
             const btn = e.currentTarget as HTMLButtonElement;
             const id = btn.dataset.id as CarrierId;
-            if (id) this.setCarrier(id);
+            if (id)
+                this.setCarrier(id);
         };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-trkm">
                 <div class="ar-trkm__inputrow" a-if="this.showInput()">
                     <input type="text" class="ar-trkm__input"
@@ -159,19 +158,17 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
                 <div class="ar-trkm__mount" data-r="mount"></div>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = TrackingMulti.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = TrackingMulti.DefaultSheet();
     }
-
     // ── Public API ───────────────────────────────────────────────────────────
-
     setTrackingNumber(n: string): this {
         this.setAttribute('tracking-number', n);
         this.#detect();
         return this;
     }
     getTrackingNumber(): string { return this.getAttribute('tracking-number') ?? ''; }
-
     setCarrier(id: CarrierId): this {
         this.setAttribute('carrier', id);
         this.#mountActive();
@@ -180,24 +177,24 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
     getCarrier(): CarrierId | null {
         return (this.getAttribute('carrier') as CarrierId | null);
     }
-
     setEvents(events: TrackingEvent[]): this {
         if (this.#activeTracker) {
             this.#activeTracker.setEvents(events);
-        } else {
+        }
+        else {
             this.pending$.Set(events);
         }
         return this;
     }
-
     /** Currently-mounted inner tracker, if any. */
     getActive(): HTMLElement | null { return this.#activeTracker; }
-
     // ── Internal ─────────────────────────────────────────────────────────────
-
     #detect(): void {
         const n = (this.getAttribute('tracking-number') ?? '').trim();
-        if (!n) { this.candidates$.Set([]); return; }
+        if (!n) {
+            this.candidates$.Set([]);
+            return;
+        }
         const matches = CARRIERS.filter(c => c.pattern.test(n)).map(c => c.id);
         this.candidates$.Set(matches);
         // If forced carrier set, keep it; else if exactly one match, use it
@@ -205,11 +202,13 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
         if (!forced) {
             if (matches.length === 1) {
                 this.setCarrier(matches[0]!);
-            } else if (matches.length === 0) {
+            }
+            else if (matches.length === 0) {
                 this.removeAttribute('carrier');
                 this.#unmountActive();
             }
-        } else {
+        }
+        else {
             this.#mountActive();
         }
         this.dispatchEvent(new CustomEvent('arianna:carrier-detected', {
@@ -217,23 +216,27 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
             detail: { carrier: this.getAttribute('carrier'), candidates: matches },
         }));
     }
-
     #mountActive(): void {
         const host = this.querySelector<HTMLElement>('[data-r="mount"]');
-        if (!host) return;
+        if (!host)
+            return;
         this.#unmountActive();
         const id = this.getAttribute('carrier') as CarrierId | null;
-        if (!id) return;
+        if (!id)
+            return;
         const entry = CARRIERS.find(c => c.id === id);
-        if (!entry) return;
+        if (!entry)
+            return;
         const tracker = entry.make() as HTMLElement & {
             setTrackingNumber(n: string): unknown;
             setEvents(events: TrackingEvent[]): unknown;
         };
         const num = this.getAttribute('tracking-number');
-        if (num) tracker.setTrackingNumber(num);
+        if (num)
+            tracker.setTrackingNumber(num);
         const loc = this.getAttribute('locale');
-        if (loc) (tracker as HTMLElement).setAttribute('locale', loc);
+        if (loc)
+            (tracker as HTMLElement).setAttribute('locale', loc);
         host.appendChild(tracker);
         this.#activeTracker = tracker;
         // Flush pending events if any
@@ -245,114 +248,118 @@ export class TrackingMulti extends Component('arianna-tracking-multi', HTMLEleme
             });
         }
     }
-
     #unmountActive(): void {
         if (this.#activeTracker) {
             this.#activeTracker.remove();
             this.#activeTracker = null;
         }
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
+    onCreated() { }
+    onBeforeMount() { }
     onMount() {
         // Initial detection if number provided via attribute
         if (this.getAttribute('tracking-number')) {
             queueMicrotask(() => this.#detect());
         }
     }
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
     onUnmount() {
         this.#unmountActive();
     }
-
-    private showInput      : () => boolean = () => true;
-    private inputVal       : () => string = () => '';
-    private hasMultiple    : () => boolean = () => false;
-    private candidatesList : () => Array<{ id: CarrierId; name: string; selected: boolean }> = () => [];
-    private activeCarrier  : () => CarrierId | null = () => null;
-    private onInput        : (e: Event) => void = () => {};
-    private onTrack        : (e: Event) => void = () => {};
-    private onKeyDown      : (e: Event) => void = () => {};
-    private onCandidatePick: (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    display: 'block',
-                    fontFamily: '-apple-system, system-ui, sans-serif',
-                    fontSize: '13px',
-                    color: 'var(--arianna-text, #1f2328)',
-                    maxWidth: '480px',
-                }),
-                new Rule('.ar-trkm', {
-                    display: 'flex', flexDirection: 'column', gap: '10px',
-                }),
-                new Rule('.ar-trkm__inputrow', {
-                    display: 'flex', gap: '8px',
-                }),
-                new Rule('.ar-trkm__input', {
-                    flex: '1',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    padding: '9px 12px',
-                    font: '13px ui-monospace, monospace',
-                    borderRadius: '6px',
-                }),
-                new Rule('.ar-trkm__input:focus', {
-                    outline: 'none',
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
-                }),
-                new Rule('.ar-trkm__track', {
-                    padding: '9px 16px',
-                    background: 'var(--arianna-primary, #1f6feb)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                }),
-                new Rule('.ar-trkm__track:hover', { background: 'var(--arianna-primary-hover, #1858c4)' }),
-                new Rule('.ar-trkm__picker', {
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: '6px',
-                    padding: '10px 12px',
-                }),
-                new Rule('.ar-trkm__picker-msg', {
-                    fontSize: '12px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    marginBottom: '8px',
-                }),
-                new Rule('.ar-trkm__picker-options', {
-                    display: 'flex', gap: '6px', flexWrap: 'wrap',
-                }),
-                new Rule('.ar-trkm__cand', {
-                    padding: '5px 10px',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                }),
-                new Rule('.ar-trkm__cand:hover', {
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
-                    color: 'var(--arianna-primary, #1f6feb)',
-                }),
-            ]
-        );
+    private showInput: () => boolean = () => true;
+    private inputVal: () => string = () => '';
+    private hasMultiple: () => boolean = () => false;
+    private candidatesList: () => Array<{
+        id: CarrierId;
+        name: string;
+        selected: boolean;
+    }> = () => [];
+    private activeCarrier: () => CarrierId | null = () => null;
+    private onInput: (e: Event) => void = () => { };
+    private onTrack: (e: Event) => void = () => { };
+    private onKeyDown: (e: Event) => void = () => { };
+    private onCandidatePick: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                display: 'block',
+                fontFamily: '-apple-system, system-ui, sans-serif',
+                fontSize: '13px',
+                color: 'var(--arianna-text, #1f2328)',
+                maxWidth: '480px',
+            }),
+            new Rule('.ar-trkm', {
+                display: 'flex', flexDirection: 'column', gap: '10px',
+            }),
+            new Rule('.ar-trkm__inputrow', {
+                display: 'flex', gap: '8px',
+            }),
+            new Rule('.ar-trkm__input', {
+                flex: '1',
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                color: 'var(--arianna-text, #1f2328)',
+                padding: '9px 12px',
+                font: '13px ui-monospace, monospace',
+                borderRadius: '6px',
+            }),
+            new Rule('.ar-trkm__input:focus', {
+                outline: 'none',
+                borderColor: 'var(--arianna-primary, #1f6feb)',
+            }),
+            new Rule('.ar-trkm__track', {
+                padding: '9px 16px',
+                background: 'var(--arianna-primary, #1f6feb)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: '600',
+                cursor: 'pointer',
+            }),
+            new Rule('.ar-trkm__track:hover', { background: 'var(--arianna-primary-hover, #1858c4)' }),
+            new Rule('.ar-trkm__picker', {
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: '6px',
+                padding: '10px 12px',
+            }),
+            new Rule('.ar-trkm__picker-msg', {
+                fontSize: '12px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                marginBottom: '8px',
+            }),
+            new Rule('.ar-trkm__picker-options', {
+                display: 'flex', gap: '6px', flexWrap: 'wrap',
+            }),
+            new Rule('.ar-trkm__cand', {
+                padding: '5px 10px',
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+            }),
+            new Rule('.ar-trkm__cand:hover', {
+                borderColor: 'var(--arianna-primary, #1f6feb)',
+                color: 'var(--arianna-primary, #1f6feb)',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'TrackingMulti', {
-        value: TrackingMulti, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * TrackingMulti namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace TrackingMulti {
+    export namespace Types {
+        export type CarrierIdType = CarrierId;
+    }
+    export namespace Interfaces {
+        export interface CarrierEntryContract extends CarrierEntry {
+        }
+        export interface Options extends TrackingMultiOptions {
+        }
+    }
 }
-
 export default TrackingMulti;

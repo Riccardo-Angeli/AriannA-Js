@@ -1,3 +1,9 @@
+import { Component, Css, Reactivity } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/audio/AudioTrackEditor
  * @author    Riccardo Angeli
@@ -42,10 +48,6 @@
  *   arianna:part-select      { part }
  *   arianna:editor-playhead  { beat }
  */
-
-import { Component } from '../../core/Components.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -53,81 +55,83 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
-const BEAT_PX_DEFAULT = 20;     // px per beat at zoom = 1
-const BEATS_PER_BAR    = 4;
-
+const BEAT_PX_DEFAULT = 20; // px per beat at zoom = 1
+const BEATS_PER_BAR = 4;
 // ── AudioPart ────────────────────────────────────────────────────────────
-
 export interface AudioPartOptions {
-    start?  : number;   // beats
-    length? : number;   // beats
-    label?  : string;
-    color?  : string;
+    start?: number; // beats
+    length?: number; // beats
+    label?: string;
+    color?: string;
 }
-
-export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, {
-    attrs : ['start', 'length', 'label', 'color', 'selected'],
+@Component('arianna-audio-part', {}, {
+    Attributes: ['start', 'length', 'label', 'color', 'selected'],
 })
-{
-    readonly start$ : Signal<number> = signal(0);
+export class AudioPart extends HTMLElement {
+    readonly start$: Signal<number> = signal(0);
     readonly length$: Signal<number> = signal(4);
-    readonly color$ : Signal<string> = signal('');
-
+    readonly color$: Signal<string> = signal('');
     constructor(opts: AudioPartOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
+        super();
+        const self = this as unknown as {
+            render(): HTMLElement;
+        };
         const el = self.render();
-        if (opts.start  != null) el.setAttribute('start',  String(opts.start));
-        if (opts.length != null) el.setAttribute('length', String(opts.length));
-        if (opts.label)          el.setAttribute('label',  opts.label);
-        if (opts.color)          el.setAttribute('color',  opts.color);
-        if (opts.start  != null) this.start$.Set(opts.start);
-        if (opts.length != null) this.length$.Set(opts.length);
-        if (opts.color)          this.color$.Set(opts.color);
+        if (opts.start != null)
+            el.setAttribute('start', String(opts.start));
+        if (opts.length != null)
+            el.setAttribute('length', String(opts.length));
+        if (opts.label)
+            el.setAttribute('label', opts.label);
+        if (opts.color)
+            el.setAttribute('color', opts.color);
+        if (opts.start != null)
+            this.start$.Set(opts.start);
+        if (opts.length != null)
+            this.length$.Set(opts.length);
+        if (opts.color)
+            this.color$.Set(opts.color);
     }
-
-    build(): void {
+    onConnected(): void {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const el = self.render();
-        if (el.querySelector('.ap-label')) return;
-
+        if (el.querySelector('.ap-label'))
+            return;
         const label = document.createElement('span');
         label.className = 'ap-label';
         const grip = document.createElement('span');
         grip.className = 'ap-grip';
         el.appendChild(label);
         el.appendChild(grip);
-
-        const sStart  = self.attributeSignal('start');
-        const sLen    = self.attributeSignal('length');
-        const sLabel  = self.attributeSignal('label');
-        const sColor  = self.attributeSignal('color');
-
+        const sStart = self.signal().attribute('start');
+        const sLen = self.signal().attribute('length');
+        const sLabel = self.signal().attribute('label');
+        const sColor = self.signal().attribute('color');
         effect(() => {
             const v = sStart?.Get();
-            if (v != null) this.start$.Set(parseFloat(v) || 0);
+            if (v != null)
+                this.start$.Set(parseFloat(v) || 0);
             el.style.left = `calc(${this.start$.Get()} * var(--beat-px, ${BEAT_PX_DEFAULT}px))`;
         });
         effect(() => {
             const v = sLen?.Get();
-            if (v != null) this.length$.Set(parseFloat(v) || 1);
+            if (v != null)
+                this.length$.Set(parseFloat(v) || 1);
             el.style.width = `calc(${this.length$.Get()} * var(--beat-px, ${BEAT_PX_DEFAULT}px))`;
         });
         effect(() => { label.textContent = sLabel?.Get() ?? ''; });
@@ -135,24 +139,23 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
             const c = sColor?.Get() ?? this.color$.Get();
             el.style.background = c || 'var(--ar-primary, #7eb8f7)';
         });
-
         // Drag to move / resize
         let dragKind: 'move' | 'resize' | null = null;
         let startX = 0, origStart = 0, origLen = 0;
-
         el.addEventListener('pointerdown', (e: PointerEvent) => {
             const targetIsGrip = (e.target as HTMLElement).classList.contains('ap-grip');
             dragKind = targetIsGrip ? 'resize' : 'move';
             startX = e.clientX;
             origStart = this.start$.Peek();
-            origLen   = this.length$.Peek();
+            origLen = this.length$.Peek();
             el.setPointerCapture(e.pointerId);
             // Select
             el.setAttribute('selected', '');
             self.fire('arianna:part-select', { detail: { part: this, source: this }, bubbles: true });
         });
         el.addEventListener('pointermove', (e: PointerEvent) => {
-            if (!dragKind) return;
+            if (!dragKind)
+                return;
             const beatPx = this.#getBeatPx(el);
             const dBeats = (e.clientX - startX) / beatPx;
             if (dragKind === 'move') {
@@ -160,7 +163,8 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
                 this.start$.Set(next);
                 el.setAttribute('start', String(next));
                 self.fire('arianna:part-move', { detail: { part: this, start: next, source: this }, bubbles: true });
-            } else {
+            }
+            else {
                 const next = Math.max(0.25, Math.round((origLen + dBeats) * 4) / 4);
                 this.length$.Set(next);
                 el.setAttribute('length', String(next));
@@ -171,230 +175,235 @@ export class AudioPart extends Component('arianna-audio-part', HTMLElement, {}, 
             el.releasePointerCapture(e.pointerId);
             dragKind = null;
         });
-
         self.Sheet = AudioPart.DefaultSheet();
     }
-
     #getBeatPx(el: HTMLElement): number {
         const cs = getComputedStyle(el);
         const v = parseFloat(cs.getPropertyValue('--beat-px'));
         return isFinite(v) && v > 0 ? v : BEAT_PX_DEFAULT;
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                background  : 'var(--ar-primary, #7eb8f7)',
-                border      : '1px solid rgba(0,0,0,0.3)',
+                background: 'var(--ar-primary, #7eb8f7)',
+                border: '1px solid rgba(0,0,0,0.3)',
                 borderRadius: '3px',
-                color       : '#000',
-                cursor      : 'grab',
-                display     : 'block',
-                fontSize    : '0.7rem',
-                overflow    : 'hidden',
-                padding     : '2px 6px',
-                position    : 'absolute',
-                top         : '4px',
-                bottom      : '4px',
-                userSelect  : 'none',
-                whiteSpace  : 'nowrap',
+                color: '#000',
+                cursor: 'grab',
+                display: 'block',
+                fontSize: '0.7rem',
+                overflow: 'hidden',
+                padding: '2px 6px',
+                position: 'absolute',
+                top: '4px',
+                bottom: '4px',
+                userSelect: 'none',
+                whiteSpace: 'nowrap',
             }),
             new Rule(':host([selected])', {
                 boxShadow: '0 0 0 2px var(--ar-warning, #ff9800)',
-                zIndex   : '2',
+                zIndex: '2',
             }),
             new Rule(':host .ap-label', {
-                pointerEvents : 'none',
+                pointerEvents: 'none',
             }),
             new Rule(':host .ap-grip', {
-                bottom    : '0',
-                cursor    : 'ew-resize',
-                position  : 'absolute',
-                right     : '0',
-                top       : '0',
-                width     : '6px',
+                bottom: '0',
+                cursor: 'ew-resize',
+                position: 'absolute',
+                right: '0',
+                top: '0',
+                width: '6px',
             }),
         ]);
     }
 }
-
 // ── AudioTrack ───────────────────────────────────────────────────────────
-
 export interface AudioTrackOptions {
-    name?  : string;
-    muted? : boolean;
+    name?: string;
+    muted?: boolean;
     soloed?: boolean;
-    color? : string;
+    color?: string;
 }
-
-export class AudioTrack extends Component('arianna-audio-track', HTMLElement, {}, {
-    attrs : ['name', 'muted', 'soloed', 'color'],
-    bus   : 'arianna-audio-track-editor',
+@Component('arianna-audio-track', {}, {
+    Attributes: ['name', 'muted', 'soloed', 'color'],
+    bus: 'arianna-audio-track-editor',
 })
-{
+export class AudioTrack extends HTMLElement {
     constructor(opts: AudioTrackOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
+        super();
+        const self = this as unknown as {
+            render(): HTMLElement;
+        };
         const el = self.render();
-        if (opts.name)   el.setAttribute('name',   opts.name);
-        if (opts.muted)  el.setAttribute('muted',  '');
-        if (opts.soloed) el.setAttribute('soloed', '');
-        if (opts.color)  el.setAttribute('color',  opts.color);
+        if (opts.name)
+            el.setAttribute('name', opts.name);
+        if (opts.muted)
+            el.setAttribute('muted', '');
+        if (opts.soloed)
+            el.setAttribute('soloed', '');
+        if (opts.color)
+            el.setAttribute('color', opts.color);
     }
-
-    build(): void {
+    onConnected(): void {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const el = self.render();
-        if (el.querySelector('.at-head')) return;
-
+        if (el.querySelector('.at-head'))
+            return;
         // Header
         const head = document.createElement('div');
         head.className = 'at-head';
-
         const name = document.createElement('span');
         name.className = 'at-name';
-        const sName = self.attributeSignal('name');
+        const sName = self.signal().attribute('name');
         effect(() => { name.textContent = sName?.Get() ?? 'Track'; });
-
         const btnMute = document.createElement('button');
-        btnMute.type = 'button'; btnMute.className = 'at-btn at-mute'; btnMute.textContent = 'M';
+        btnMute.type = 'button';
+        btnMute.className = 'at-btn at-mute';
+        btnMute.textContent = 'M';
         const btnSolo = document.createElement('button');
-        btnSolo.type = 'button'; btnSolo.className = 'at-btn at-solo'; btnSolo.textContent = 'S';
-
+        btnSolo.type = 'button';
+        btnSolo.className = 'at-btn at-solo';
+        btnSolo.textContent = 'S';
         head.append(name, btnMute, btnSolo);
-
         // Lane (where parts live)
         const lane = document.createElement('div');
         lane.className = 'at-lane';
-
         // Move any pre-existing AudioPart children into the lane
         Array.from(el.querySelectorAll('arianna-audio-part'))
-             .forEach(p => lane.appendChild(p));
-
+            .forEach(p => lane.appendChild(p));
         el.appendChild(head);
         el.appendChild(lane);
-
         // Mute / Solo handlers
         btnMute.addEventListener('click', () => {
             const v = !el.hasAttribute('muted');
-            if (v) el.setAttribute('muted', ''); else el.removeAttribute('muted');
+            if (v)
+                el.setAttribute('muted', '');
+            else
+                el.removeAttribute('muted');
             self.fire('arianna:track-mute', { detail: { track: this, value: v, source: this }, bubbles: true });
         });
         btnSolo.addEventListener('click', () => {
             const v = !el.hasAttribute('soloed');
-            if (v) el.setAttribute('soloed', ''); else el.removeAttribute('soloed');
+            if (v)
+                el.setAttribute('soloed', '');
+            else
+                el.removeAttribute('soloed');
             self.fire('arianna:track-solo', { detail: { track: this, value: v, source: this }, bubbles: true });
         });
-
         effect(() => { btnMute.classList.toggle('active', el.hasAttribute('muted')); });
         effect(() => { btnSolo.classList.toggle('active', el.hasAttribute('soloed')); });
-
         self.Sheet = AudioTrack.DefaultSheet();
     }
-
     /** Add a part to this track's lane (places into the lane container). */
     addPart(p: AudioPart): this {
-        const self = this as unknown as { render(): HTMLElement };
+        const self = this as unknown as {
+            render(): HTMLElement;
+        };
         const lane = self.render().querySelector('.at-lane');
-        if (!lane) return this;
-        const partEl = (p as unknown as { render(): HTMLElement }).render();
+        if (!lane)
+            return this;
+        const partEl = (p as unknown as {
+            render(): HTMLElement;
+        }).render();
         lane.appendChild(partEl);
         return this;
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
                 borderBottom: '1px solid var(--ar-border, #2a2a2a)',
-                display     : 'grid',
+                display: 'grid',
                 gridTemplateColumns: '160px 1fr',
-                height      : '56px',
+                height: '56px',
             }),
             new Rule(':host .at-head', {
-                alignItems   : 'center',
-                background   : 'var(--ar-bg2, #161616)',
-                borderRight  : '1px solid var(--ar-border, #2a2a2a)',
-                display      : 'flex',
-                gap          : '4px',
-                padding      : '0 8px',
+                alignItems: 'center',
+                background: 'var(--ar-bg2, #161616)',
+                borderRight: '1px solid var(--ar-border, #2a2a2a)',
+                display: 'flex',
+                gap: '4px',
+                padding: '0 8px',
             }),
             new Rule(':host .at-name', {
-                color    : 'var(--ar-text, #e0e0e0)',
-                flex     : '1',
-                fontSize : '0.78rem',
-                overflow : 'hidden',
+                color: 'var(--ar-text, #e0e0e0)',
+                flex: '1',
+                fontSize: '0.78rem',
+                overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
             }),
             new Rule(':host .at-btn', {
-                background  : 'var(--ar-bg3, #1e1e1e)',
-                border      : '1px solid var(--ar-border, #2a2a2a)',
+                background: 'var(--ar-bg3, #1e1e1e)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
-                color       : 'var(--ar-text, #e0e0e0)',
-                cursor      : 'pointer',
-                font        : 'inherit',
-                fontSize    : '0.68rem',
-                minWidth    : '24px',
-                padding     : '2px 6px',
+                color: 'var(--ar-text, #e0e0e0)',
+                cursor: 'pointer',
+                font: 'inherit',
+                fontSize: '0.68rem',
+                minWidth: '24px',
+                padding: '2px 6px',
             }),
             new Rule(':host .at-mute.active', { background: 'var(--ar-danger, #f44336)', color: '#fff' }),
             new Rule(':host .at-solo.active', { background: 'var(--ar-warning, #ff9800)', color: '#fff' }),
             new Rule(':host([muted]) .at-lane', { opacity: '0.4' }),
             new Rule(':host .at-lane', {
                 background: 'var(--ar-bg, #0d0d0d)',
-                position  : 'relative',
+                position: 'relative',
             }),
         ]);
     }
 }
-
 // ── AudioTrackEditor (root) ──────────────────────────────────────────────
-
 export interface AudioTrackEditorOptions {
-    bars?       : number;
+    bars?: number;
     beatsPerBar?: number;
-    beatPx?     : number;
+    beatPx?: number;
 }
-
-export class AudioTrackEditor extends Component('arianna-audio-track-editor', HTMLElement, {}, {
-    attrs : ['bars', 'beats-per-bar', 'beat-px'],
+@Component('arianna-audio-track-editor', {}, {
+    Attributes: ['bars', 'beats-per-bar', 'beat-px'],
 })
-{
-    readonly playhead$: Signal<number> = signal(0);    // in beats
-
-    #bars        = 16;
+export class AudioTrackEditor extends HTMLElement {
+    readonly playhead$: Signal<number> = signal(0); // in beats
+    #bars = 16;
     #beatsPerBar = BEATS_PER_BAR;
-    #beatPx      = BEAT_PX_DEFAULT;
-
+    #beatPx = BEAT_PX_DEFAULT;
     constructor(opts: AudioTrackEditorOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
+        super();
+        const self = this as unknown as {
+            render(): HTMLElement;
+        };
         const el = self.render();
-        if (opts.bars        != null) el.setAttribute('bars',          String(opts.bars));
-        if (opts.beatsPerBar != null) el.setAttribute('beats-per-bar', String(opts.beatsPerBar));
-        if (opts.beatPx      != null) el.setAttribute('beat-px',       String(opts.beatPx));
+        if (opts.bars != null)
+            el.setAttribute('bars', String(opts.bars));
+        if (opts.beatsPerBar != null)
+            el.setAttribute('beats-per-bar', String(opts.beatsPerBar));
+        if (opts.beatPx != null)
+            el.setAttribute('beat-px', String(opts.beatPx));
     }
-
-    build(): void {
+    onConnected(): void {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const root = self.render();
-        if (root.querySelector('.ate-ruler')) return;
-
-        this.#bars        = parseInt(self.attributeSignal('bars')?.Peek()          ?? '16', 10) || 16;
-        this.#beatsPerBar = parseInt(self.attributeSignal('beats-per-bar')?.Peek() ?? '4',  10) || 4;
-        this.#beatPx      = parseInt(self.attributeSignal('beat-px')?.Peek()       ?? String(BEAT_PX_DEFAULT), 10) || BEAT_PX_DEFAULT;
+        if (root.querySelector('.ate-ruler'))
+            return;
+        this.#bars = parseInt(self.signal().attribute('bars')?.Peek() ?? '16', 10) || 16;
+        this.#beatsPerBar = parseInt(self.signal().attribute('beats-per-bar')?.Peek() ?? '4', 10) || 4;
+        this.#beatPx = parseInt(self.signal().attribute('beat-px')?.Peek() ?? String(BEAT_PX_DEFAULT), 10) || BEAT_PX_DEFAULT;
         root.style.setProperty('--beat-px', this.#beatPx + 'px');
-
         // Ruler (top bar with bar numbers)
         const ruler = document.createElement('div');
         ruler.className = 'ate-ruler';
@@ -412,14 +421,12 @@ export class AudioTrackEditor extends Component('arianna-audio-track-editor', HT
         const totalWidth = this.#bars * this.#beatsPerBar * this.#beatPx;
         rulerInner.style.width = totalWidth + 'px';
         ruler.append(corner, rulerInner);
-
         // Body — tracks
         const body = document.createElement('div');
         body.className = 'ate-body';
         // Move pre-existing tracks
         Array.from(root.querySelectorAll('arianna-audio-track'))
-             .forEach(t => body.appendChild(t));
-
+            .forEach(t => body.appendChild(t));
         // Playhead overlay
         const playhead = document.createElement('div');
         playhead.className = 'ate-playhead';
@@ -427,87 +434,100 @@ export class AudioTrackEditor extends Component('arianna-audio-track-editor', HT
             const b = this.playhead$.Get();
             playhead.style.left = (160 + b * this.#beatPx) + 'px';
         });
-
         root.append(ruler, body, playhead);
-
         self.Sheet = AudioTrackEditor.DefaultSheet();
     }
-
     /** Set the playhead in beats. */
     setPlayhead(beats: number): this {
-        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+        };
         this.playhead$.Set(beats);
         self.fire('arianna:editor-playhead', { detail: { beat: beats, source: this }, bubbles: true });
         return this;
     }
-
     /** All AudioTrack children registered to this editor (via bus). */
     get tracks(): AudioTrack[] {
-        const self = this as unknown as { _children: AudioTrack[] };
+        const self = this as unknown as {
+            _children: AudioTrack[];
+        };
         return self._children;
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                background  : 'var(--ar-bg, #0d0d0d)',
-                border      : '1px solid var(--ar-border, #2a2a2a)',
+                background: 'var(--ar-bg, #0d0d0d)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
-                color       : 'var(--ar-text, #e0e0e0)',
-                display     : 'block',
-                font        : 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
-                overflow    : 'hidden',
-                position    : 'relative',
-                userSelect  : 'none',
+                color: 'var(--ar-text, #e0e0e0)',
+                display: 'block',
+                font: 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
+                overflow: 'hidden',
+                position: 'relative',
+                userSelect: 'none',
             }),
             new Rule(':host .ate-ruler', {
-                background : 'var(--ar-bg2, #161616)',
+                background: 'var(--ar-bg2, #161616)',
                 borderBottom: '1px solid var(--ar-border, #2a2a2a)',
-                display    : 'grid',
+                display: 'grid',
                 gridTemplateColumns: '160px 1fr',
-                height     : '24px',
-                overflow   : 'hidden',
+                height: '24px',
+                overflow: 'hidden',
             }),
             new Rule(':host .ate-corner', {
-                background : 'var(--ar-bg2, #161616)',
+                background: 'var(--ar-bg2, #161616)',
                 borderRight: '1px solid var(--ar-border, #2a2a2a)',
             }),
             new Rule(':host .ate-ruler-inner', {
                 position: 'relative',
             }),
             new Rule(':host .ate-tick', {
-                color    : 'var(--ar-muted, #888)',
-                fontSize : '0.66rem',
-                position : 'absolute',
-                top      : '4px',
+                color: 'var(--ar-muted, #888)',
+                fontSize: '0.66rem',
+                position: 'absolute',
+                top: '4px',
             }),
             new Rule(':host .ate-body', {
-                display : 'block',
+                display: 'block',
                 maxHeight: '380px',
                 overflow: 'auto',
             }),
             new Rule(':host .ate-playhead', {
-                background    : 'var(--ar-danger, #f44336)',
-                bottom        : '0',
-                pointerEvents : 'none',
-                position      : 'absolute',
-                top           : '24px',
-                width         : '2px',
+                background: 'var(--ar-danger, #f44336)',
+                bottom: '0',
+                pointerEvents: 'none',
+                position: 'absolute',
+                top: '24px',
+                width: '2px',
             }),
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'AudioTrackEditor', {
-        value: AudioTrackEditor, writable: false, enumerable: false, configurable: false,
-    });
-    Object.defineProperty(window, 'AudioTrack', {
-        value: AudioTrack, writable: false, enumerable: false, configurable: false,
-    });
-    Object.defineProperty(window, 'AudioPart', {
-        value: AudioPart, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * AudioPart namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace AudioPart {
+    export namespace Interfaces {
+        export interface Options extends AudioPartOptions {
+        }
+    }
 }
-
+/* ──────────────────────────────────────────────────────────────────────────
+ * AudioTrack namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace AudioTrack {
+    export namespace Interfaces {
+        export interface Options extends AudioTrackOptions {
+        }
+    }
+}
+/* ──────────────────────────────────────────────────────────────────────────
+ * AudioTrackEditor namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace AudioTrackEditor {
+    export namespace Interfaces {
+        export interface Options extends AudioTrackEditorOptions {
+        }
+    }
+}
 export default AudioTrackEditor;

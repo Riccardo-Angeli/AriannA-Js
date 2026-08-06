@@ -36,14 +36,10 @@
  *   For full interactive OSS: `<arianna-maplibre-map>`
  *   Avoid:                    `<arianna-bing-map>` (use azure or maplibre)
  */
-
-export { MapEmbed }       from './MapEmbed.ts';
-export { GoogleMap }      from './GoogleMap.ts';
-export { OpenStreetMap }  from './OpenStreetMap.ts';
-export { AppleMap }       from './AppleMap.ts';
-export { AzureMap }       from './AzureMap.ts';
-export { MapLibreMap }    from './MapLibreMap.ts';
-
-export type {
-    LatLng, MapProvider, MapEmbedOptions,
-} from './MapEmbed.ts';
+export { MapEmbed } from './MapEmbed.ts';
+export { GoogleMap } from './GoogleMap.ts';
+export { OpenStreetMap } from './OpenStreetMap.ts';
+export { AppleMap } from './AppleMap.ts';
+export { AzureMap } from './AzureMap.ts';
+export { MapLibreMap } from './MapLibreMap.ts';
+export type { LatLng, MapProvider, MapEmbedOptions, } from './MapEmbed.ts';

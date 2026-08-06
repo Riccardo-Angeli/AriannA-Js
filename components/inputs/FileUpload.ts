@@ -1,3 +1,10 @@
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/inputs/FileUpload
  * @author    Riccardo Angeli
@@ -13,13 +20,8 @@
  *                        hint="PNG, JPG up to 10MB"></arianna-file-upload>
  *
  * Events: arianna:change  detail: { files }
- * Attrs:  accept, multiple, label, hint, disabled
+ * Attributes:  accept, multiple, label, hint, disabled
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -27,56 +29,52 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface FileUploadOptions {
-    accept?   : string;
-    multiple? : boolean;
-    label?    : string;
-    hint?     : string;
-    disabled? : boolean;
+    accept?: string;
+    multiple?: boolean;
+    label?: string;
+    hint?: string;
+    disabled?: boolean;
 }
-
 interface FileView {
-    name   : string;
-    sizeKB : string;
+    name: string;
+    sizeKB: string;
 }
-
-export class FileUpload extends Component('arianna-file-upload', HTMLElement, {}, {
-    attrs : ['accept', 'multiple', 'label', 'hint', 'disabled'],
+@Component('arianna-file-upload', {}, {
+    Attributes: ['accept', 'multiple', 'label', 'hint', 'disabled'],
 })
-{
-    files$    : Signal<File[]>  = signal<File[]>([]);
-    dragging$ : Signal<boolean> = signal<boolean>(false);
-
-    build(_opts: FileUploadOptions = {})
-    {
-        const accept = this.attributeSignal('accept');
-        const label  = this.attributeSignal('label');
-        const hint   = this.attributeSignal('hint');
-
-        this.acceptVal  = () => accept.Get() ?? '';
+export class FileUpload extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    files$: Signal<File[]> = signal<File[]>([]);
+    dragging$: Signal<boolean> = signal<boolean>(false);
+    onConnected(_opts: FileUploadOptions = {}) {
+        const accept = this.signal().attribute('accept');
+        const label = this.signal().attribute('label');
+        const hint = this.signal().attribute('hint');
+        this.acceptVal = () => accept.Get() ?? '';
         this.isMultiple = () => this.hasAttribute('multiple');
         this.isDisabled = () => this.hasAttribute('disabled');
-        this.labelText  = () => label.Get() ?? 'Drop files here or click to browse';
-        this.hintText   = () => hint.Get() ?? '';
-        this.hasHint    = () => !!hint.Get();
-        this.zoneClass  = () => 'ar-fileupload__zone'
+        this.labelText = () => label.Get() ?? 'Drop files here or click to browse';
+        this.hintText = () => hint.Get() ?? '';
+        this.hasHint = () => !!hint.Get();
+        this.zoneClass = () => 'ar-fileupload__zone'
             + (this.dragging$.Get() ? ' ar-fileupload__zone--over' : '');
-
         this.fileViews = (): FileView[] => this.files$.Get().map(f => ({
-            name  : f.name,
+            name: f.name,
             sizeKB: (f.size / 1024).toFixed(1),
         }));
         this.hasFiles = () => this.files$.Get().length > 0;
-
         this.onInputChange = (e: Event) => {
             const inp = e.target as HTMLInputElement;
-            if (inp.files) this.#setFiles(Array.from(inp.files));
+            if (inp.files)
+                this.#setFiles(Array.from(inp.files));
         };
         this.onDragOver = (e: Event) => {
             e.preventDefault();
@@ -87,10 +85,10 @@ export class FileUpload extends Component('arianna-file-upload', HTMLElement, {}
             e.preventDefault();
             this.dragging$.Set(false);
             const de = e as DragEvent;
-            if (de.dataTransfer?.files) this.#setFiles(Array.from(de.dataTransfer.files));
+            if (de.dataTransfer?.files)
+                this.#setFiles(Array.from(de.dataTransfer.files));
         };
-
-        this.template = html`
+        this.template = html `
             <div :class="this.zoneClass()"
                  @dragover="this.onDragOver"
                  @dragleave="this.onDragLeave"
@@ -109,102 +107,99 @@ export class FileUpload extends Component('arianna-file-upload', HTMLElement, {}
                 <li class="ar-fileupload__file" a-for="f in this.fileViews()">{{ f.name }} ({{ f.sizeKB }} KB)</li>
             </ul>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = FileUpload.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = FileUpload.DefaultSheet();
     }
-
     /** Programmatically clear the file selection. */
     clear(): this { this.files$.Set([]); return this; }
-
     /** Current files list (snapshot). */
     get files(): File[] { return this.files$.Get(); }
-
-    #setFiles(files: File[]): void
-    {
+    #setFiles(files: File[]): void {
         this.files$.Set(files);
         this.dispatchEvent(new CustomEvent('arianna:change', {
             bubbles: true, detail: { files },
         }));
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    private acceptVal   : () => string = () => '';
-    private isMultiple  : () => boolean = () => false;
-    private isDisabled  : () => boolean = () => false;
-    private labelText   : () => string = () => '';
-    private hintText    : () => string = () => '';
-    private hasHint     : () => boolean = () => false;
-    private zoneClass   : () => string = () => '';
-    private fileViews   : () => FileView[] = () => [];
-    private hasFiles    : () => boolean = () => false;
-    private onInputChange: (e: Event) => void = () => {};
-    private onDragOver  : (e: Event) => void = () => {};
-    private onDragLeave : () => void = () => {};
-    private onDrop      : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '8px' }),
-                new Rule('.ar-fileupload__zone', {
-                    alignItems  : 'center',
-                    border      : '2px dashed var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius-lg, 8px)',
-                    cursor      : 'pointer',
-                    display     : 'flex',
-                    flexDirection: 'column',
-                    gap         : '6px',
-                    padding     : '28px 16px',
-                    position    : 'relative',
-                    textAlign   : 'center',
-                    transition  : 'border-color 0.18s ease, background 0.18s ease',
-                }),
-                new Rule('.ar-fileupload__zone:hover, .ar-fileupload__zone--over', {
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
-                    background : 'rgba(31,111,235,0.04)',
-                }),
-                new Rule('.ar-fileupload__icon',  { fontSize: '2rem' }),
-                new Rule('.ar-fileupload__label', { fontSize: '0.83rem' }),
-                new Rule('.ar-fileupload__hint',  { color: 'var(--arianna-muted, #6e6b62)', fontSize: '0.74rem' }),
-                new Rule('.ar-fileupload__input', {
-                    cursor  : 'pointer',
-                    height  : '100%',
-                    left    : '0',
-                    opacity : '0',
-                    position: 'absolute',
-                    top     : '0',
-                    width   : '100%',
-                }),
-                new Rule('.ar-fileupload__list', {
-                    listStyle: 'none',
-                    margin   : '0',
-                    padding  : '0',
-                    display  : 'flex',
-                    flexDirection: 'column',
-                    gap      : '4px',
-                }),
-                new Rule('.ar-fileupload__file', {
-                    background  : 'var(--arianna-bg-3, #f3f3f3)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius-sm, 4px)',
-                    fontSize    : '0.78rem',
-                    padding     : '4px 10px',
-                }),
-            ]
-        );
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    private acceptVal: () => string = () => '';
+    private isMultiple: () => boolean = () => false;
+    private isDisabled: () => boolean = () => false;
+    private labelText: () => string = () => '';
+    private hintText: () => string = () => '';
+    private hasHint: () => boolean = () => false;
+    private zoneClass: () => string = () => '';
+    private fileViews: () => FileView[] = () => [];
+    private hasFiles: () => boolean = () => false;
+    private onInputChange: (e: Event) => void = () => { };
+    private onDragOver: (e: Event) => void = () => { };
+    private onDragLeave: () => void = () => { };
+    private onDrop: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '8px' }),
+            new Rule('.ar-fileupload__zone', {
+                alignItems: 'center',
+                border: '2px dashed var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius-lg, 8px)',
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                padding: '28px 16px',
+                position: 'relative',
+                textAlign: 'center',
+                transition: 'border-color 0.18s ease, background 0.18s ease',
+            }),
+            new Rule('.ar-fileupload__zone:hover, .ar-fileupload__zone--over', {
+                borderColor: 'var(--arianna-primary, #1f6feb)',
+                background: 'rgba(31,111,235,0.04)',
+            }),
+            new Rule('.ar-fileupload__icon', { fontSize: '2rem' }),
+            new Rule('.ar-fileupload__label', { fontSize: '0.83rem' }),
+            new Rule('.ar-fileupload__hint', { color: 'var(--arianna-muted, #6e6b62)', fontSize: '0.74rem' }),
+            new Rule('.ar-fileupload__input', {
+                cursor: 'pointer',
+                height: '100%',
+                left: '0',
+                opacity: '0',
+                position: 'absolute',
+                top: '0',
+                width: '100%',
+            }),
+            new Rule('.ar-fileupload__list', {
+                listStyle: 'none',
+                margin: '0',
+                padding: '0',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+            }),
+            new Rule('.ar-fileupload__file', {
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius-sm, 4px)',
+                fontSize: '0.78rem',
+                padding: '4px 10px',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'FileUpload', { value: FileUpload, writable: false, enumerable: false, configurable: false });
+/* ──────────────────────────────────────────────────────────────────────────
+ * FileUpload namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace FileUpload {
+    export namespace Interfaces {
+        export interface Options extends FileUploadOptions {
+        }
+        export interface FileViewContract extends FileView {
+        }
+    }
 }
-
 export default FileUpload;

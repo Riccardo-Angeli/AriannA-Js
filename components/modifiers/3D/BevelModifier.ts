@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/modifiers/3D/BevelModifier
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -9,29 +13,21 @@
  * @example HTML
  *   <arianna-bevel for="m1" amount="0.05" segments="2"></arianna-bevel>
  *
- * Attrs (declarative): for, amount, segments, enabled
+ * Attributes (declarative): for, amount, segments, enabled
  */
-
-import { Component } from '../../../core/Components.ts';
-import {
-    Modifier3D, Modifier3DElement,
-    _cloneGeom, _recomputeNormals,
-    _vNorm, _vCross, _vSub, _vAdd, _vScale,
-    type MeshLike,
-} from './Base.ts';
-
+import { Component } from '../../../core/index.ts';
+import { Modifier3D, Modifier3DElement, _cloneGeom, _recomputeNormals, _vNorm, _vCross, _vSub, _vAdd, _vScale, type MeshLike, } from './Base.ts';
 export class BevelModifier extends Modifier3D {
-    #amount  : number;
+    #amount: number;
     #segments: number;
-
     constructor(mesh: MeshLike, amount = 0.05, segments = 2) {
         super(mesh);
-        this.#amount   = amount;
+        this.#amount = amount;
         this.#segments = segments;
     }
-
     apply(): this {
-        if (!this.enabled) return this;
+        if (!this.enabled)
+            return this;
         const g = _cloneGeom(this.mesh.geometry);
         const bevelVerts = [];
         for (let i = 0; i < g.indices.length; i += 3) {
@@ -49,21 +45,24 @@ export class BevelModifier extends Modifier3D {
         return this;
     }
 }
-
-export class BevelModifierElement extends (Component('arianna-bevel', HTMLElement, {}, {
-    attrs : ['for', 'amount', 'segments', 'enabled'],
-}) as typeof Modifier3DElement) {
+@Component('arianna-bevel', {}, {
+    Attributes: ['for', 'amount', 'segments', 'enabled'],
+})
+export class BevelModifierElement extends Modifier3DElement {
     protected createModifier(mesh: MeshLike): Modifier3D {
-        const amount   = parseFloat(this.getAttribute('amount')   ?? '0.05') || 0.05;
-        const segments = parseInt  (this.getAttribute('segments') ?? '2', 10) || 2;
+        const amount = parseFloat(this.getAttribute('amount') ?? '0.05') || 0.05;
+        const segments = parseInt(this.getAttribute('segments') ?? '2', 10) || 2;
         return new BevelModifier(mesh, amount, segments);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'BevelModifier', {
-        value: BevelModifier, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * BevelModifier namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace BevelModifier {
 }
-
+/* ──────────────────────────────────────────────────────────────────────────
+ * BevelModifierElement namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace BevelModifierElement {
+}
 export default BevelModifier;

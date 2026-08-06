@@ -23,28 +23,17 @@
  *   player.append(document.body);
  *   strip.append(document.body);
  */
-
 export { AudioComponent } from './AudioComponent.ts';
 export type { AudioComponentOptions } from './AudioComponent.ts';
-
 export { TransportBar } from './TransportBar.ts';
 export type { TransportBarOptions } from './TransportBar.ts';
-
 export { AudioPlayer } from './AudioPlayer.ts';
 export type { AudioPlayerOptions } from './AudioPlayer.ts';
-
 export { ChannelStrip } from './ChannelStrip.ts';
 export type { ChannelStripOptions } from './ChannelStrip.ts';
-
 export { AudioEditor } from './AudioEditor.ts';
 export type { AudioEditorOptions } from './AudioEditor.ts';
-
 export { PianoRoll } from './PianoRoll.ts';
 export type { PianoRollOptions, PianoNote } from './PianoRoll.ts';
-
 export { AudioTrackEditor, AudioTrack, AudioPart } from './AudioTrackEditor.ts';
-export type {
-    AudioTrackEditorOptions,
-    AudioTrackOptions,
-    AudioPartOptions,
-} from './AudioTrackEditor.ts';
+export type { AudioTrackEditorOptions, AudioTrackOptions, AudioPartOptions, } from './AudioTrackEditor.ts';

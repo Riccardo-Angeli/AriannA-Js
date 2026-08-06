@@ -1,3 +1,10 @@
+import { Component, Css, Reactivity, Templates, Components } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/video/VideoTrackEditor
  * @author    Riccardo Angeli
@@ -39,13 +46,8 @@
  *   arianna:editor-select   detail: { clip: VideoClip | null }
  *   arianna:editor-time     detail: { time: number }
  *
- * Attrs: duration, time, tracks (count), pixels-per-second, snap-ms
+ * Attributes: duration, time, tracks (count), pixels-per-second, snap-ms
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -53,109 +55,113 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface VideoClip {
-    id      : string;
-    track   : number;
-    start   : number;     // seconds, on timeline
-    duration: number;     // seconds
-    source  : string;     // URL or asset reference
-    name    : string;
+    id: string;
+    track: number;
+    start: number; // seconds, on timeline
+    duration: number; // seconds
+    source: string; // URL or asset reference
+    name: string;
     /** Offset inside the source media when trimmed at the left edge. */
-    sourceIn?  : number;
+    sourceIn?: number;
 }
-
 interface DragState {
-    clipId : string;
-    mode   : 'move' | 'trim-left' | 'trim-right';
-    startX : number;
-    origStart    : number;
-    origDuration : number;
-    origIn       : number;
+    clipId: string;
+    mode: 'move' | 'trim-left' | 'trim-right';
+    startX: number;
+    origStart: number;
+    origDuration: number;
+    origIn: number;
 }
-
-export class VideoTrackEditor extends Component('arianna-video-track-editor', HTMLElement, {}, {
-    attrs : ['duration', 'time', 'tracks', 'pixels-per-second', 'snap-ms'],
+@Component('arianna-video-track-editor', {}, {
+    Attributes: ['duration', 'time', 'tracks', 'pixels-per-second', 'snap-ms'],
 })
-{
-    clips$    : Signal<VideoClip[]> = signal<VideoClip[]>([]);
-    selected$ : Signal<string | null> = signal<string | null>(null);
-    time$     : Signal<number> = signal<number>(0);
-    playing$  : Signal<boolean> = signal<boolean>(false);
-
-    #drag    : DragState | null = null;
+export class VideoTrackEditor extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible template slot installed by @Component. */
+    declare template: unknown;
+    clips$: Signal<VideoClip[]> = signal<VideoClip[]>([]);
+    selected$: Signal<string | null> = signal<string | null>(null);
+    time$: Signal<number> = signal<number>(0);
+    playing$: Signal<boolean> = signal<boolean>(false);
+    #drag: DragState | null = null;
     #rafTimer: number | null = null;
-
     static #formatTime(seconds: number): string {
-        if (!isFinite(seconds) || seconds < 0) return '0:00.0';
+        if (!isFinite(seconds) || seconds < 0)
+            return '0:00.0';
         const s = Math.floor(seconds % 60);
         const m = Math.floor(seconds / 60);
         const tenths = Math.floor((seconds % 1) * 10);
         return `${m}:${String(s).padStart(2, '0')}.${tenths}`;
     }
     #playStart: number = 0;
-
-    build(_opts: object = {})
-    {
-        const durAttr = this.attributeSignal('duration');
-        const tracksAttr = this.attributeSignal('tracks');
-        const ppsAttr = this.attributeSignal('pixels-per-second');
-
+    onConnected(_opts: object = {}) {
+        const durAttr = this.signal().attribute('duration');
+        const tracksAttr = this.signal().attribute('tracks');
+        const ppsAttr = this.signal().attribute('pixels-per-second');
         this.duration = () => parseFloat(durAttr.Get() ?? '60') || 60;
         this.trackCount = () => parseInt(tracksAttr.Get() ?? '2', 10) || 2;
         this.pps = () => parseFloat(ppsAttr.Get() ?? '20') || 20;
         this.snapMs = () => parseInt(this.getAttribute('snap-ms') ?? '100', 10) || 100;
-
         this.totalWidth = () => `${this.duration() * this.pps()}px`;
-
-        this.rulerMarks = (): Array<{ label: string; left: string }> => {
+        this.rulerMarks = (): Array<{
+            label: string;
+            left: string;
+        }> => {
             const dur = this.duration();
             const pps = this.pps();
             const step = dur <= 30 ? 1 : dur <= 120 ? 5 : 10;
-            const marks: Array<{ label: string; left: string }> = [];
+            const marks: Array<{
+                label: string;
+                left: string;
+            }> = [];
             for (let s = 0; s <= dur; s += step) {
                 marks.push({ label: `${s}s`, left: `${s * pps}px` });
             }
             return marks;
         };
-
-        this.trackList = (): Array<{ idx: number; label: string }> => {
+        this.trackList = (): Array<{
+            idx: number;
+            label: string;
+        }> => {
             const n = this.trackCount();
             return Array.from({ length: n }, (_, i) => ({ idx: i, label: `V${i + 1}` }));
         };
-
-        this.clipsForTrack = (idx: number): Array<VideoClip & { left: string; width: string; cls: string }> => {
+        this.clipsForTrack = (idx: number): Array<VideoClip & {
+            left: string;
+            width: string;
+            cls: string;
+        }> => {
             const pps = this.pps();
             const sel = this.selected$.Get();
             return this.clips$.Get()
                 .filter(c => c.track === idx)
                 .map(c => ({
-                    ...c,
-                    left : `${c.start * pps}px`,
-                    width: `${c.duration * pps}px`,
-                    cls  : 'ar-vte__clip' + (sel === c.id ? ' ar-vte__clip--selected' : ''),
-                }));
+                ...c,
+                left: `${c.start * pps}px`,
+                width: `${c.duration * pps}px`,
+                cls: 'ar-vte__clip' + (sel === c.id ? ' ar-vte__clip--selected' : ''),
+            }));
         };
-
         this.playheadStyle = () => `left: ${this.time$.Get() * this.pps()}px`;
         this.timeLabel = () => VideoTrackEditor.#formatTime(this.time$.Get());
         this.durLabel = () => VideoTrackEditor.#formatTime(this.duration());
         this.playLabel = () => this.playing$.Get() ? '❙❙' : '▶';
-
         this.transportPct = () => {
             const d = this.duration();
             return d > 0 ? String((this.time$.Get() / d) * 100) : '0';
         };
-
         // ── Handlers ────────────────────────────────────────────────────
         this.onPlay = () => {
-            if (this.playing$.Get()) this.pause();
-            else this.play();
+            if (this.playing$.Get())
+                this.pause();
+            else
+                this.play();
         };
         this.onStop = () => {
             this.pause();
@@ -165,14 +171,15 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
             const pct = parseFloat((e.target as HTMLInputElement).value);
             this.seek((pct / 100) * this.duration());
         };
-
         this.onClipPointerDown = (e: Event) => {
             const ev = e as PointerEvent;
             const target = ev.currentTarget as HTMLElement;
             const id = target.dataset.id;
-            if (!id) return;
+            if (!id)
+                return;
             const clip = this.clips$.Get().find(c => c.id === id);
-            if (!clip) return;
+            if (!clip)
+                return;
             this.selected$.Set(id);
             this.dispatchEvent(new CustomEvent('arianna:editor-select', {
                 bubbles: true, detail: { clip: { ...clip } },
@@ -180,23 +187,22 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
             // Pick mode based on hit location within the clip box
             const rect = target.getBoundingClientRect();
             const x = ev.clientX - rect.left;
-            const mode: DragState['mode'] =
-                  x < 6 ? 'trim-left'
+            const mode: DragState['mode'] = x < 6 ? 'trim-left'
                 : x > rect.width - 6 ? 'trim-right'
-                : 'move';
+                    : 'move';
             this.#drag = {
-                clipId       : id,
+                clipId: id,
                 mode,
-                startX       : ev.clientX,
-                origStart    : clip.start,
-                origDuration : clip.duration,
-                origIn       : clip.sourceIn ?? 0,
+                startX: ev.clientX,
+                origStart: clip.start,
+                origDuration: clip.duration,
+                origIn: clip.sourceIn ?? 0,
             };
             target.setPointerCapture(ev.pointerId);
         };
-
         this.onClipPointerMove = (e: Event) => {
-            if (!this.#drag) return;
+            if (!this.#drag)
+                return;
             const ev = e as PointerEvent;
             const dx = ev.clientX - this.#drag.startX;
             const dt = dx / this.pps();
@@ -204,53 +210,52 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
             const snapped = Math.round(dt / snap) * snap;
             this.#applyDrag(snapped);
         };
-
         this.onClipPointerUp = (e: Event) => {
-            if (!this.#drag) return;
+            if (!this.#drag)
+                return;
             const ev = e as PointerEvent;
             (ev.currentTarget as HTMLElement).releasePointerCapture(ev.pointerId);
             this.#drag = null;
             this.#fireChange();
         };
-
         this.onRulerClick = (e: Event) => {
             const ev = e as PointerEvent;
             const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
             const x = ev.clientX - rect.left;
             this.seek(x / this.pps());
         };
-
         this.onDeleteSelected = () => {
             const sel = this.selected$.Get();
-            if (!sel) return;
+            if (!sel)
+                return;
             this.clips$.Set(this.clips$.Get().filter(c => c.id !== sel));
             this.selected$.Set(null);
             this.#fireChange();
         };
-
         this.onSplitAtPlayhead = () => {
             const sel = this.selected$.Get();
             const t = this.time$.Get();
             const clips = this.clips$.Get();
             const c = clips.find(x => x.id === sel);
-            if (!c) return;
-            if (t <= c.start || t >= c.start + c.duration) return;
+            if (!c)
+                return;
+            if (t <= c.start || t >= c.start + c.duration)
+                return;
             const cutOffset = t - c.start;
             const left: VideoClip = {
                 ...c, duration: cutOffset,
             };
             const right: VideoClip = {
                 ...c,
-                id      : `${c.id}-b-${Date.now()}`,
-                start   : t,
+                id: `${c.id}-b-${Date.now()}`,
+                start: t,
                 duration: c.duration - cutOffset,
                 sourceIn: (c.sourceIn ?? 0) + cutOffset,
             };
             this.clips$.Set([...clips.filter(x => x.id !== sel), left, right]);
             this.#fireChange();
         };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-vte">
                 <div class="ar-vte__transport">
                     <button type="button" class="ar-vte__btn" @click="this.onPlay">{{ this.playLabel() }}</button>
@@ -292,19 +297,17 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
                 </div>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = VideoTrackEditor.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = VideoTrackEditor.DefaultSheet();
     }
-
     // ── Public API ───────────────────────────────────────────────────────────
-
     setClips(clips: VideoClip[]): this {
         this.clips$.Set(clips.map(c => ({ ...c })));
         this.#fireChange();
         return this;
     }
     getClips(): VideoClip[] { return this.clips$.Get().map(c => ({ ...c })); }
-
     addClip(clip: VideoClip): this {
         this.clips$.Set([...this.clips$.Get(), { ...clip }]);
         this.#fireChange();
@@ -312,11 +315,11 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
     }
     removeClip(id: string): this {
         this.clips$.Set(this.clips$.Get().filter(c => c.id !== id));
-        if (this.selected$.Get() === id) this.selected$.Set(null);
+        if (this.selected$.Get() === id)
+            this.selected$.Set(null);
         this.#fireChange();
         return this;
     }
-
     seek(time: number): this {
         const clamped = Math.max(0, Math.min(this.duration(), time));
         this.time$.Set(clamped);
@@ -326,13 +329,14 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
         return this;
     }
     getTime(): number { return this.time$.Get(); }
-
     play(): this {
-        if (this.playing$.Get()) return this;
+        if (this.playing$.Get())
+            return this;
         this.playing$.Set(true);
         this.#playStart = performance.now() - this.time$.Get() * 1000;
         const tick = () => {
-            if (!this.playing$.Get()) return;
+            if (!this.playing$.Get())
+                return;
             const elapsed = (performance.now() - this.#playStart) / 1000;
             if (elapsed >= this.duration()) {
                 this.seek(this.duration());
@@ -353,15 +357,15 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
         }
         return this;
     }
-
     // ── Internal ─────────────────────────────────────────────────────────────
-
     #applyDrag(snappedDt: number): void {
-        if (!this.#drag) return;
+        if (!this.#drag)
+            return;
         const d = this.#drag;
         const clips = this.clips$.Get();
         const idx = clips.findIndex(c => c.id === d.clipId);
-        if (idx < 0) return;
+        if (idx < 0)
+            return;
         const c = clips[idx]!;
         const dur = this.duration();
         let next: VideoClip;
@@ -394,197 +398,205 @@ export class VideoTrackEditor extends Component('arianna-video-track-editor', HT
         out[idx] = next;
         this.clips$.Set(out);
     }
-
     #fireChange(): void {
         this.dispatchEvent(new CustomEvent('arianna:editor-change', {
             bubbles: true, detail: { clips: this.getClips() },
         }));
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
     onUnmount() {
-        if (this.#rafTimer != null) cancelAnimationFrame(this.#rafTimer);
+        if (this.#rafTimer != null)
+            cancelAnimationFrame(this.#rafTimer);
     }
-
-    private duration       : () => number = () => 60;
-    private trackCount     : () => number = () => 2;
-    private pps            : () => number = () => 20;
-    private snapMs         : () => number = () => 100;
-    private totalWidth     : () => string = () => '1200px';
-    private rulerMarks     : () => Array<{ label: string; left: string }> = () => [];
-    private trackList      : () => Array<{ idx: number; label: string }> = () => [];
-    private clipsForTrack  : (idx: number) => Array<VideoClip & { left: string; width: string; cls: string }> = () => [];
-    private playheadStyle  : () => string = () => 'left: 0';
-    private timeLabel      : () => string = () => '0:00.0';
-    private durLabel       : () => string = () => '0:00.0';
-    private playLabel      : () => string = () => '▶';
-    private transportPct   : () => string = () => '0';
-    private onPlay         : (e: Event) => void = () => {};
-    private onStop         : (e: Event) => void = () => {};
-    private onTransportInput: (e: Event) => void = () => {};
-    private onClipPointerDown: (e: Event) => void = () => {};
-    private onClipPointerMove: (e: Event) => void = () => {};
-    private onClipPointerUp  : (e: Event) => void = () => {};
-    private onRulerClick   : (e: Event) => void = () => {};
-    private onDeleteSelected: (e: Event) => void = () => {};
-    private onSplitAtPlayhead: (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    display: 'block',
-                    fontFamily: '-apple-system, system-ui, sans-serif',
-                    fontSize: '12px',
-                    color: 'var(--arianna-text, #1f2328)',
-                    background: 'var(--arianna-bg-2, #ebebeb)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    overflow: 'hidden',
-                }),
-                new Rule('.ar-vte', { display: 'flex', flexDirection: 'column' }),
-                new Rule('.ar-vte__transport', {
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    padding: '6px 10px',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                }),
-                new Rule('.ar-vte__btn', {
-                    width: '28px', height: '24px',
-                    background: 'transparent',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: '3px',
-                    cursor: 'pointer',
-                    color: 'var(--arianna-text, #1f2328)',
-                    display: 'inline-flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    fontSize: '12px',
-                }),
-                new Rule('.ar-vte__btn:hover', { background: 'var(--arianna-bg-2, #ebebeb)' }),
-                new Rule('.ar-vte__time', {
-                    fontFamily: 'ui-monospace, monospace',
-                    fontSize: '11px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    minWidth: '110px',
-                }),
-                new Rule('.ar-vte__transport-bar', { flex: '1', minWidth: '0' }),
-                new Rule('.ar-vte__timeline', {
-                    position: 'relative',
-                    overflowX: 'auto',
-                    overflowY: 'hidden',
-                }),
-                new Rule('.ar-vte__ruler', {
-                    position: 'relative',
-                    height: '20px',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    cursor: 'pointer',
-                    minWidth: 'var(--ar-vte-w, 1200px)',
-                }),
-                new Rule('.ar-vte__ruler-mark', {
-                    position: 'absolute',
-                    top: '2px',
-                    fontSize: '10px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    fontFamily: 'ui-monospace, monospace',
-                    transform: 'translateX(-50%)',
-                    pointerEvents: 'none',
-                }),
-                new Rule('.ar-vte__ruler-mark::before', {
-                    content: '""',
-                    position: 'absolute',
-                    bottom: '-3px',
-                    left: '50%',
-                    width: '1px', height: '3px',
-                    background: 'var(--arianna-muted, #6e6b62)',
-                }),
-                new Rule('.ar-vte__tracks', {
-                    display: 'flex', flexDirection: 'column',
-                    minWidth: 'var(--ar-vte-w, 1200px)',
-                }),
-                new Rule('.ar-vte__track', {
-                    display: 'flex',
-                    height: '36px',
-                    borderBottom: '1px solid var(--arianna-bg-3, #f3f3f3)',
-                }),
-                new Rule('.ar-vte__track-label', {
-                    width: '32px',
-                    flexShrink: '0',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                    borderRight: '1px solid var(--arianna-border, #d8d8d8)',
-                    display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    fontSize: '11px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    fontWeight: '600',
-                    position: 'sticky',
-                    left: '0',
-                    zIndex: '2',
-                }),
-                new Rule('.ar-vte__track-lane', {
-                    flex: '1',
-                    position: 'relative',
-                    background: 'var(--arianna-bg, #fff)',
-                }),
-                new Rule('.ar-vte__clip', {
-                    position: 'absolute',
-                    top: '4px', bottom: '4px',
-                    background: 'linear-gradient(180deg, rgba(31,111,235,0.7) 0%, rgba(31,111,235,0.5) 100%)',
-                    border: '1px solid var(--arianna-primary, #1f6feb)',
-                    borderRadius: '3px',
-                    color: '#fff',
-                    fontSize: '11px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '0 8px',
-                    cursor: 'grab',
-                    overflow: 'hidden',
-                    userSelect: 'none',
-                }),
-                new Rule('.ar-vte__clip:active', { cursor: 'grabbing' }),
-                new Rule('.ar-vte__clip--selected', {
-                    background: 'linear-gradient(180deg, rgba(255,128,0,0.7) 0%, rgba(255,128,0,0.5) 100%)',
-                    border: '1px solid #ff8000',
-                    boxShadow: '0 0 0 2px rgba(255,128,0,0.3)',
-                }),
-                new Rule('.ar-vte__clip-handle', {
-                    position: 'absolute', top: '0', bottom: '0',
-                    width: '6px',
-                    cursor: 'ew-resize',
-                }),
-                new Rule('.ar-vte__clip-handle--left',  { left: '0' }),
-                new Rule('.ar-vte__clip-handle--right', { right: '0' }),
-                new Rule('.ar-vte__clip-label', {
-                    flex: '1',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    pointerEvents: 'none',
-                }),
-                new Rule('.ar-vte__playhead', {
-                    position: 'absolute',
-                    top: '0', bottom: '0',
-                    width: '2px',
-                    background: '#ff0000',
-                    pointerEvents: 'none',
-                    zIndex: '3',
-                }),
-                new Rule('input[type="range"]', { accentColor: 'var(--arianna-primary, #1f6feb)' }),
-            ]
-        );
+    private duration: () => number = () => 60;
+    private trackCount: () => number = () => 2;
+    private pps: () => number = () => 20;
+    private snapMs: () => number = () => 100;
+    private totalWidth: () => string = () => '1200px';
+    private rulerMarks: () => Array<{
+        label: string;
+        left: string;
+    }> = () => [];
+    private trackList: () => Array<{
+        idx: number;
+        label: string;
+    }> = () => [];
+    private clipsForTrack: (idx: number) => Array<VideoClip & {
+        left: string;
+        width: string;
+        cls: string;
+    }> = () => [];
+    private playheadStyle: () => string = () => 'left: 0';
+    private timeLabel: () => string = () => '0:00.0';
+    private durLabel: () => string = () => '0:00.0';
+    private playLabel: () => string = () => '▶';
+    private transportPct: () => string = () => '0';
+    private onPlay: (e: Event) => void = () => { };
+    private onStop: (e: Event) => void = () => { };
+    private onTransportInput: (e: Event) => void = () => { };
+    private onClipPointerDown: (e: Event) => void = () => { };
+    private onClipPointerMove: (e: Event) => void = () => { };
+    private onClipPointerUp: (e: Event) => void = () => { };
+    private onRulerClick: (e: Event) => void = () => { };
+    private onDeleteSelected: (e: Event) => void = () => { };
+    private onSplitAtPlayhead: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                display: 'block',
+                fontFamily: '-apple-system, system-ui, sans-serif',
+                fontSize: '12px',
+                color: 'var(--arianna-text, #1f2328)',
+                background: 'var(--arianna-bg-2, #ebebeb)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                overflow: 'hidden',
+            }),
+            new Rule('.ar-vte', { display: 'flex', flexDirection: 'column' }),
+            new Rule('.ar-vte__transport', {
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '6px 10px',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+            }),
+            new Rule('.ar-vte__btn', {
+                width: '28px', height: '24px',
+                background: 'transparent',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                color: 'var(--arianna-text, #1f2328)',
+                display: 'inline-flex',
+                alignItems: 'center', justifyContent: 'center',
+                fontSize: '12px',
+            }),
+            new Rule('.ar-vte__btn:hover', { background: 'var(--arianna-bg-2, #ebebeb)' }),
+            new Rule('.ar-vte__time', {
+                fontFamily: 'ui-monospace, monospace',
+                fontSize: '11px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                minWidth: '110px',
+            }),
+            new Rule('.ar-vte__transport-bar', { flex: '1', minWidth: '0' }),
+            new Rule('.ar-vte__timeline', {
+                position: 'relative',
+                overflowX: 'auto',
+                overflowY: 'hidden',
+            }),
+            new Rule('.ar-vte__ruler', {
+                position: 'relative',
+                height: '20px',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                cursor: 'pointer',
+                minWidth: 'var(--ar-vte-w, 1200px)',
+            }),
+            new Rule('.ar-vte__ruler-mark', {
+                position: 'absolute',
+                top: '2px',
+                fontSize: '10px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                fontFamily: 'ui-monospace, monospace',
+                transform: 'translateX(-50%)',
+                pointerEvents: 'none',
+            }),
+            new Rule('.ar-vte__ruler-mark::before', {
+                content: '""',
+                position: 'absolute',
+                bottom: '-3px',
+                left: '50%',
+                width: '1px', height: '3px',
+                background: 'var(--arianna-muted, #6e6b62)',
+            }),
+            new Rule('.ar-vte__tracks', {
+                display: 'flex', flexDirection: 'column',
+                minWidth: 'var(--ar-vte-w, 1200px)',
+            }),
+            new Rule('.ar-vte__track', {
+                display: 'flex',
+                height: '36px',
+                borderBottom: '1px solid var(--arianna-bg-3, #f3f3f3)',
+            }),
+            new Rule('.ar-vte__track-label', {
+                width: '32px',
+                flexShrink: '0',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                borderRight: '1px solid var(--arianna-border, #d8d8d8)',
+                display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                fontSize: '11px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                fontWeight: '600',
+                position: 'sticky',
+                left: '0',
+                zIndex: '2',
+            }),
+            new Rule('.ar-vte__track-lane', {
+                flex: '1',
+                position: 'relative',
+                background: 'var(--arianna-bg, #fff)',
+            }),
+            new Rule('.ar-vte__clip', {
+                position: 'absolute',
+                top: '4px', bottom: '4px',
+                background: 'linear-gradient(180deg, rgba(31,111,235,0.7) 0%, rgba(31,111,235,0.5) 100%)',
+                border: '1px solid var(--arianna-primary, #1f6feb)',
+                borderRadius: '3px',
+                color: '#fff',
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 8px',
+                cursor: 'grab',
+                overflow: 'hidden',
+                userSelect: 'none',
+            }),
+            new Rule('.ar-vte__clip:active', { cursor: 'grabbing' }),
+            new Rule('.ar-vte__clip--selected', {
+                background: 'linear-gradient(180deg, rgba(255,128,0,0.7) 0%, rgba(255,128,0,0.5) 100%)',
+                border: '1px solid #ff8000',
+                boxShadow: '0 0 0 2px rgba(255,128,0,0.3)',
+            }),
+            new Rule('.ar-vte__clip-handle', {
+                position: 'absolute', top: '0', bottom: '0',
+                width: '6px',
+                cursor: 'ew-resize',
+            }),
+            new Rule('.ar-vte__clip-handle--left', { left: '0' }),
+            new Rule('.ar-vte__clip-handle--right', { right: '0' }),
+            new Rule('.ar-vte__clip-label', {
+                flex: '1',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+            }),
+            new Rule('.ar-vte__playhead', {
+                position: 'absolute',
+                top: '0', bottom: '0',
+                width: '2px',
+                background: '#ff0000',
+                pointerEvents: 'none',
+                zIndex: '3',
+            }),
+            new Rule('input[type="range"]', { accentColor: 'var(--arianna-primary, #1f6feb)' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'VideoTrackEditor', {
-        value: VideoTrackEditor, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * VideoTrackEditor namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace VideoTrackEditor {
+    export namespace Interfaces {
+        export interface VideoClipContract extends VideoClip {
+        }
+        export interface DragStateContract extends DragState {
+        }
+    }
 }
-
 export default VideoTrackEditor;

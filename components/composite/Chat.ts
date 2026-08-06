@@ -1,3 +1,9 @@
+import { Component, Css, Reactivity } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/composite/Chat
  * @author    Riccardo Angeli
@@ -37,10 +43,6 @@
  *   arianna:chat-attach   { conversationId, files }
  *   arianna:chat-typing   { conversationId, typing }
  */
-
-import { Component } from '../../core/Components.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -48,54 +50,49 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface ChatUser {
-    id     : string;
-    name   : string;
+    id: string;
+    name: string;
     avatar?: string;
     online?: boolean;
 }
-
 export type MessageStatus = 'sent' | 'delivered' | 'read';
-
 export interface ChatMessage {
-    id        : string;
-    author    : string;       // user id
-    text?     : string;
-    image?    : string;       // url
-    file?     : { name: string; url: string; size?: number };
-    ts        : number;       // ms epoch
-    status?   : MessageStatus;
-    replyTo?  : string;       // message id
-    reactions?: Record<string, number>;   // emoji → count
-    system?   : boolean;
+    id: string;
+    author: string; // user id
+    text?: string;
+    image?: string; // url
+    file?: {
+        name: string;
+        url: string;
+        size?: number;
+    };
+    ts: number; // ms epoch
+    status?: MessageStatus;
+    replyTo?: string; // message id
+    reactions?: Record<string, number>; // emoji → count
+    system?: boolean;
 }
-
 export interface ChatConversation {
-    id        : string;
-    peer      : ChatUser;     // 1:1; for groups use displayName/avatar of group
-    title?    : string;       // override for groups
-    unread?   : number;
-    messages? : ChatMessage[];
-    typing?   : boolean;
+    id: string;
+    peer: ChatUser; // 1:1; for groups use displayName/avatar of group
+    title?: string; // override for groups
+    unread?: number;
+    messages?: ChatMessage[];
+    typing?: boolean;
 }
-
 export interface ChatOptions {
-    me?            : ChatUser;
-    conversations? : ChatConversation[];
+    me?: ChatUser;
+    conversations?: ChatConversation[];
 }
-
 function fmtChatTime(ts: number): string {
     const d = new Date(ts);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -103,45 +100,42 @@ function fmtChatTime(ts: number): string {
 // riga 82:  function fmtTime(ts: number): string {      →  function fmtChatTime(ts: number): string {
 // riga 254: time.textContent = fmtTime(m.ts);           →  time.textContent = fmtChatTime(m.ts);
 // riga 347: time.textContent = fmtTime(m.ts);           →  time.textContent = fmtChatTime(m.ts);
-export class Chat extends Component('arianna-chat', HTMLElement, {}, {
-    attrs : [],
+@Component('arianna-chat', {}, {
+    Attributes: [],
 })
-{
-    readonly conversations$ : Signal<ChatConversation[]> = signal<ChatConversation[]>([]);
-    readonly activeId$      : Signal<string | null>      = signal<string | null>(null);
-    readonly me$            : Signal<ChatUser>           = signal<ChatUser>({ id: 'me', name: 'Me' });
-    readonly replyTo$       : Signal<string | null>      = signal<string | null>(null);
-
-    #sidebar? : HTMLDivElement;
-    #thread?  : HTMLDivElement;
-    #header?  : HTMLDivElement;
+export class Chat extends HTMLElement {
+    readonly conversations$: Signal<ChatConversation[]> = signal<ChatConversation[]>([]);
+    readonly activeId$: Signal<string | null> = signal<string | null>(null);
+    readonly me$: Signal<ChatUser> = signal<ChatUser>({ id: 'me', name: 'Me' });
+    readonly replyTo$: Signal<string | null> = signal<string | null>(null);
+    #sidebar?: HTMLDivElement;
+    #thread?: HTMLDivElement;
+    #header?: HTMLDivElement;
     #composer?: HTMLDivElement;
-    #input?   : HTMLTextAreaElement;
+    #input?: HTMLTextAreaElement;
     #replyBar?: HTMLDivElement;
-
     constructor(opts: ChatOptions = {}) {
-        super(opts as never);
-        if (opts.me)            this.me$.Set(opts.me);
-        if (opts.conversations) this.conversations$.Set(opts.conversations);
+        super();
+        if (opts.me)
+            this.me$.Set(opts.me);
+        if (opts.conversations)
+            this.conversations$.Set(opts.conversations);
     }
-
-    build(): void {
+    onConnected(): void {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
             Sheet: Stylesheet | null;
         };
         const root = self.render();
-        if (root.querySelector('.ch-wrap')) return;
-
+        if (root.querySelector('.ch-wrap'))
+            return;
         const wrap = document.createElement('div');
         wrap.className = 'ch-wrap';
-
         // Sidebar
         const sidebar = document.createElement('div');
         sidebar.className = 'ch-sidebar';
         this.#sidebar = sidebar;
-
         // Right column
         const right = document.createElement('div');
         right.className = 'ch-right';
@@ -158,35 +152,36 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         const composer = document.createElement('div');
         composer.className = 'ch-composer';
         this.#composer = composer;
-
         const fileBtn = document.createElement('button');
-        fileBtn.type = 'button'; fileBtn.className = 'ch-icon-btn'; fileBtn.textContent = '📎';
+        fileBtn.type = 'button';
+        fileBtn.className = 'ch-icon-btn';
+        fileBtn.textContent = '📎';
         fileBtn.title = 'attach file';
         const fileInput = document.createElement('input') as HTMLInputElement;
-        fileInput.type = 'file'; fileInput.multiple = true; fileInput.style.display = 'none';
-
+        fileInput.type = 'file';
+        fileInput.multiple = true;
+        fileInput.style.display = 'none';
         const input = document.createElement('textarea');
         input.className = 'ch-input';
         input.rows = 1;
         input.placeholder = 'Type a message…';
         this.#input = input;
-
         const emojiBtn = document.createElement('button');
-        emojiBtn.type = 'button'; emojiBtn.className = 'ch-icon-btn'; emojiBtn.textContent = '😊';
-
+        emojiBtn.type = 'button';
+        emojiBtn.className = 'ch-icon-btn';
+        emojiBtn.textContent = '😊';
         const sendBtn = document.createElement('button');
-        sendBtn.type = 'button'; sendBtn.className = 'ch-send'; sendBtn.textContent = 'Send';
-
+        sendBtn.type = 'button';
+        sendBtn.className = 'ch-send';
+        sendBtn.textContent = 'Send';
         composer.append(fileBtn, fileInput, input, emojiBtn, sendBtn);
         right.append(header, thread, replyBar, composer);
         wrap.append(sidebar, right);
         root.appendChild(wrap);
-
         // Reactive renders
         effect(() => this.#renderSidebar());
         effect(() => { this.activeId$.Get(); this.#renderHeader(); this.#renderThread(); });
         effect(() => { this.replyTo$.Get(); this.#renderReplyBar(); });
-
         // Composer wiring
         sendBtn.addEventListener('click', () => this.#sendCurrent());
         input.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -201,46 +196,50 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
             input.style.height = Math.min(input.scrollHeight, 96) + 'px';
             // typing event
             const cid = this.activeId$.Peek();
-            if (cid) self.fire('arianna:chat-typing', { detail: { conversationId: cid, typing: input.value.length > 0, source: this }, bubbles: true });
+            if (cid)
+                self.fire('arianna:chat-typing', { detail: { conversationId: cid, typing: input.value.length > 0, source: this }, bubbles: true });
         });
         fileBtn.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', () => {
             const cid = this.activeId$.Peek();
-            if (!cid || !fileInput.files?.length) return;
+            if (!cid || !fileInput.files?.length)
+                return;
             self.fire('arianna:chat-attach', { detail: { conversationId: cid, files: Array.from(fileInput.files), source: this }, bubbles: true });
             fileInput.value = '';
         });
-
         self.Sheet = Chat.DefaultSheet();
     }
-
     #sendCurrent(): void {
         const input = this.#input;
-        const cid   = this.activeId$.Peek();
-        if (!input || !cid) return;
+        const cid = this.activeId$.Peek();
+        if (!input || !cid)
+            return;
         const text = input.value.trim();
-        if (!text) return;
-        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        if (!text)
+            return;
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+        };
         const replyTo = this.replyTo$.Peek() ?? undefined;
         self.fire('arianna:chat-send', { detail: { conversationId: cid, text, replyTo, source: this }, bubbles: true });
         // Optimistic local insert
         const me = this.me$.Peek();
         this.addMessage(cid, {
-            id     : 'local-' + Date.now().toString(36),
-            author : me.id,
+            id: 'local-' + Date.now().toString(36),
+            author: me.id,
             text,
-            ts     : Date.now(),
-            status : 'sent',
+            ts: Date.now(),
+            status: 'sent',
             replyTo,
         });
         input.value = '';
         input.style.height = 'auto';
         this.replyTo$.Set(null);
     }
-
     #renderSidebar(): void {
         const sidebar = this.#sidebar;
-        if (!sidebar) return;
+        if (!sidebar)
+            return;
         sidebar.innerHTML = '';
         const conversations = [...this.conversations$.Get()].sort((a, b) => {
             const la = a.messages?.[a.messages.length - 1]?.ts ?? 0;
@@ -250,11 +249,13 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         for (const c of conversations) {
             const it = document.createElement('div');
             it.className = 'ch-conv-item';
-            if (c.id === this.activeId$.Peek()) it.classList.add('active');
+            if (c.id === this.activeId$.Peek())
+                it.classList.add('active');
             const avatar = document.createElement('div');
             avatar.className = 'ch-avatar';
             avatar.textContent = (c.peer.avatar ? '' : (c.peer.name[0] ?? '?').toUpperCase());
-            if (c.peer.avatar) avatar.style.backgroundImage = `url("${c.peer.avatar}")`;
+            if (c.peer.avatar)
+                avatar.style.backgroundImage = `url("${c.peer.avatar}")`;
             const meta = document.createElement('div');
             meta.className = 'ch-conv-meta';
             const name = document.createElement('div');
@@ -284,19 +285,22 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
             sidebar.appendChild(it);
         }
     }
-
     #renderHeader(): void {
         const header = this.#header;
-        if (!header) return;
+        if (!header)
+            return;
         header.innerHTML = '';
         const id = this.activeId$.Peek();
-        if (!id) return;
+        if (!id)
+            return;
         const c = this.conversations$.Peek().find(x => x.id === id);
-        if (!c) return;
+        if (!c)
+            return;
         const avatar = document.createElement('div');
         avatar.className = 'ch-avatar ch-avatar-sm';
         avatar.textContent = (c.peer.name[0] ?? '?').toUpperCase();
-        if (c.peer.avatar) avatar.style.backgroundImage = `url("${c.peer.avatar}")`;
+        if (c.peer.avatar)
+            avatar.style.backgroundImage = `url("${c.peer.avatar}")`;
         const name = document.createElement('div');
         name.className = 'ch-header-name';
         name.textContent = c.title ?? c.peer.name;
@@ -305,18 +309,20 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         presence.textContent = c.peer.online ? 'online' : '';
         header.append(avatar, name, presence);
     }
-
     #renderThread(): void {
         const thread = this.#thread;
-        if (!thread) return;
+        if (!thread)
+            return;
         thread.innerHTML = '';
         const id = this.activeId$.Peek();
-        if (!id) return;
+        if (!id)
+            return;
         const c = this.conversations$.Peek().find(x => x.id === id);
-        if (!c || !c.messages?.length) return;
+        if (!c || !c.messages?.length)
+            return;
         const me = this.me$.Peek();
         let prevAuthor: string | null = null;
-        let prevTs    = 0;
+        let prevTs = 0;
         for (const m of c.messages) {
             if (m.system) {
                 const sys = document.createElement('div');
@@ -327,10 +333,9 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 continue;
             }
             const mine = m.author === me.id;
-            const grouped = prevAuthor === m.author && (m.ts - prevTs) < 60_000;
+            const grouped = prevAuthor === m.author && (m.ts - prevTs) < 60000;
             const bubble = document.createElement('div');
             bubble.className = 'ch-msg ' + (mine ? 'ch-mine' : 'ch-theirs') + (grouped ? ' grouped' : '');
-
             if (m.replyTo) {
                 const ref = c.messages.find(x => x.id === m.replyTo);
                 if (ref) {
@@ -355,7 +360,8 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
             if (m.file) {
                 const f = document.createElement('a');
                 f.className = 'ch-file';
-                f.href = m.file.url; f.target = '_blank';
+                f.href = m.file.url;
+                f.target = '_blank';
                 f.textContent = `📎 ${m.file.name}`;
                 bubble.appendChild(f);
             }
@@ -372,12 +378,10 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 footer.appendChild(tick);
             }
             bubble.appendChild(footer);
-
             bubble.addEventListener('dblclick', () => this.replyTo$.Set(m.id));
-
             thread.appendChild(bubble);
             prevAuthor = m.author;
-            prevTs     = m.ts;
+            prevTs = m.ts;
         }
         if (c.typing) {
             const t = document.createElement('div');
@@ -387,16 +391,22 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         }
         thread.scrollTop = thread.scrollHeight;
     }
-
     #renderReplyBar(): void {
         const bar = this.#replyBar;
-        if (!bar) return;
-        const id  = this.replyTo$.Peek();
+        if (!bar)
+            return;
+        const id = this.replyTo$.Peek();
         const cid = this.activeId$.Peek();
-        if (!id || !cid) { bar.style.display = 'none'; return; }
+        if (!id || !cid) {
+            bar.style.display = 'none';
+            return;
+        }
         const c = this.conversations$.Peek().find(x => x.id === cid);
         const m = c?.messages?.find(x => x.id === id);
-        if (!m) { bar.style.display = 'none'; return; }
+        if (!m) {
+            bar.style.display = 'none';
+            return;
+        }
         bar.style.display = 'flex';
         bar.innerHTML = '';
         const q = document.createElement('div');
@@ -409,31 +419,30 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         close.addEventListener('click', () => this.replyTo$.Set(null));
         bar.append(q, close);
     }
-
     // ── Public API ────────────────────────────────────────────────────────
-
     setMe(u: ChatUser): this { this.me$.Set(u); return this; }
-
     addConversation(c: ChatConversation): this {
         c.messages ??= [];
         this.conversations$.Set([...this.conversations$.Peek(), c]);
-        if (!this.activeId$.Peek()) this.activeId$.Set(c.id);
+        if (!this.activeId$.Peek())
+            this.activeId$.Set(c.id);
         return this;
     }
-
     selectConversation(id: string): this {
         this.activeId$.Set(id);
         // Mark as read
         const list = this.conversations$.Peek().map(c => c.id === id ? { ...c, unread: 0 } : c);
         this.conversations$.Set(list);
-        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+        };
         self.fire('arianna:chat-select', { detail: { conversationId: id, source: this }, bubbles: true });
         return this;
     }
-
     addMessage(conversationId: string, msg: ChatMessage): this {
         const list = this.conversations$.Peek().map(c => {
-            if (c.id !== conversationId) return c;
+            if (c.id !== conversationId)
+                return c;
             const msgs = [...(c.messages ?? []), msg];
             const me = this.me$.Peek();
             const isIncoming = msg.author !== me.id;
@@ -445,80 +454,78 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         this.conversations$.Set(list);
         return this;
     }
-
     setMessageStatus(conversationId: string, messageId: string, status: MessageStatus): this {
         const list = this.conversations$.Peek().map(c => {
-            if (c.id !== conversationId) return c;
+            if (c.id !== conversationId)
+                return c;
             const msgs = (c.messages ?? []).map(m => m.id === messageId ? { ...m, status } : m);
             return { ...c, messages: msgs };
         });
         this.conversations$.Set(list);
         return this;
     }
-
     setPeerTyping(conversationId: string, typing: boolean): this {
         const list = this.conversations$.Peek().map(c => c.id === conversationId ? { ...c, typing } : c);
         this.conversations$.Set(list);
         return this;
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                background  : 'var(--ar-bg, #fff)',
-                border      : '1px solid var(--ar-border, #d0d0d0)',
+                background: 'var(--ar-bg, #fff)',
+                border: '1px solid var(--ar-border, #d0d0d0)',
                 borderRadius: 'var(--ar-radius, 5px)',
-                color       : 'var(--ar-text, #1a1a1a)',
-                display     : 'block',
-                font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
-                height      : '520px',
-                overflow    : 'hidden',
+                color: 'var(--ar-text, #1a1a1a)',
+                display: 'block',
+                font: 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
+                height: '520px',
+                overflow: 'hidden',
             }),
             new Rule(':host .ch-wrap', { display: 'grid', gridTemplateColumns: '260px 1fr', height: '100%' }),
             new Rule(':host .ch-sidebar', {
-                background : 'var(--ar-bg2, #f5f5f5)',
+                background: 'var(--ar-bg2, #f5f5f5)',
                 borderRight: '1px solid var(--ar-border, #d0d0d0)',
-                overflow   : 'auto',
+                overflow: 'auto',
             }),
             new Rule(':host .ch-conv-item', {
-                alignItems  : 'center',
+                alignItems: 'center',
                 borderBottom: '1px solid var(--ar-border, #e0e0e0)',
-                cursor      : 'pointer',
-                display     : 'grid',
-                gap         : '8px',
+                cursor: 'pointer',
+                display: 'grid',
+                gap: '8px',
                 gridTemplateColumns: '40px 1fr auto',
-                padding     : '8px 10px',
+                padding: '8px 10px',
             }),
             new Rule(':host .ch-conv-item:hover', { background: 'var(--ar-bg3, #eee)' }),
             new Rule(':host .ch-conv-item.active', { background: 'var(--ar-bg4, #e0e0e0)' }),
             new Rule(':host .ch-avatar', {
-                alignItems     : 'center',
-                background     : 'var(--ar-primary, #1565c0)',
+                alignItems: 'center',
+                background: 'var(--ar-primary, #1565c0)',
                 backgroundPosition: 'center',
-                backgroundSize : 'cover',
-                borderRadius   : '50%',
-                color          : '#fff',
-                display        : 'flex',
-                fontWeight     : '600',
-                height         : '40px',
-                justifyContent : 'center',
-                width          : '40px',
+                backgroundSize: 'cover',
+                borderRadius: '50%',
+                color: '#fff',
+                display: 'flex',
+                fontWeight: '600',
+                height: '40px',
+                justifyContent: 'center',
+                width: '40px',
             }),
             new Rule(':host .ch-avatar-sm', { height: '32px', width: '32px', fontSize: '0.78rem' }),
             new Rule(':host .ch-conv-meta', { overflow: 'hidden' }),
             new Rule(':host .ch-conv-name', { fontWeight: '600', fontSize: '0.86rem' }),
             new Rule(':host .ch-conv-last', {
-                color    : 'var(--ar-muted, #666)',
-                fontSize : '0.78rem',
-                overflow : 'hidden',
+                color: 'var(--ar-muted, #666)',
+                fontSize: '0.78rem',
+                overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
             }),
             new Rule(':host .ch-conv-right', {
                 alignItems: 'flex-end',
-                display   : 'flex',
+                display: 'flex',
                 flexDirection: 'column',
-                gap       : '4px',
+                gap: '4px',
             }),
             new Rule(':host .ch-conv-time', { color: 'var(--ar-muted, #888)', fontSize: '0.7rem' }),
             new Rule(':host .ch-badge', {
@@ -559,9 +566,9 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
             }),
             new Rule(':host .ch-msg.grouped', { marginTop: '-2px' }),
             new Rule(':host .ch-theirs', { alignSelf: 'flex-start' }),
-            new Rule(':host .ch-mine',   { alignSelf: 'flex-end', background: 'var(--ar-primary, #1565c0)', color: '#fff' }),
-            new Rule(':host .ch-text',   { fontSize: '0.86rem', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }),
-            new Rule(':host .ch-quote',  {
+            new Rule(':host .ch-mine', { alignSelf: 'flex-end', background: 'var(--ar-primary, #1565c0)', color: '#fff' }),
+            new Rule(':host .ch-text', { fontSize: '0.86rem', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }),
+            new Rule(':host .ch-quote', {
                 borderLeft: '3px solid var(--ar-muted, #888)',
                 color: 'var(--ar-muted, #666)',
                 fontSize: '0.74rem',
@@ -569,8 +576,8 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 opacity: '0.85',
                 padding: '2px 6px',
             }),
-            new Rule(':host .ch-image',  { borderRadius: '4px', maxWidth: '100%' }),
-            new Rule(':host .ch-file',   { color: 'inherit', textDecoration: 'underline', fontSize: '0.82rem' }),
+            new Rule(':host .ch-image', { borderRadius: '4px', maxWidth: '100%' }),
+            new Rule(':host .ch-file', { color: 'inherit', textDecoration: 'underline', fontSize: '0.82rem' }),
             new Rule(':host .ch-msg-footer', {
                 alignItems: 'center',
                 display: 'flex',
@@ -579,7 +586,7 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
                 marginTop: '2px',
             }),
             new Rule(':host .ch-msg-time', { fontSize: '0.66rem', opacity: '0.7' }),
-            new Rule(':host .ch-tick',     { fontSize: '0.7rem' }),
+            new Rule(':host .ch-tick', { fontSize: '0.7rem' }),
             new Rule(':host .ch-tick-read', { color: '#4dd0e1' }),
             new Rule(':host .ch-sys', {
                 alignSelf: 'center',
@@ -658,11 +665,23 @@ export class Chat extends Component('arianna-chat', HTMLElement, {}, {
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Chat', {
-        value: Chat, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Chat namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Chat {
+    export namespace Types {
+        export type MessageStatusType = MessageStatus;
+    }
+    export namespace Interfaces {
+        export interface User extends ChatUser {
+        }
+        export interface Message extends ChatMessage {
+        }
+        export interface Conversation extends ChatConversation {
+        }
+        export interface Options extends ChatOptions {
+        }
+    }
+    export const FmtChatTime = fmtChatTime;
 }
-
 export default Chat;

@@ -1,3 +1,10 @@
+import { Component, Components, Css, Reactivity, Templates } from '../../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/graphics/2D/BezierEditor
  * @author    Riccardo Angeli
@@ -19,13 +26,8 @@
  *   <arianna-bezier-editor width="600" height="400" mode="pen"></arianna-bezier-editor>
  *
  * Events: arianna:change  detail: { anchors, closed, d }
- * Attrs:  width, height, mode (pen|edit|delete), closed
+ * Attributes:  width, height, mode (pen|edit|delete), closed
  */
-
-import { Component } from '../../../core/Components.ts';
-import { html }      from '../../../core/Template.ts';
-import { Reactivity } from '../../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -33,58 +35,70 @@ import { Reactivity } from '../../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
-export interface Vec2 { x: number; y: number; }
-
+export interface Vec2 {
+    x: number;
+    y: number;
+}
 export interface Anchor {
-    x    : number;
-    y    : number;
-    hIn  : Vec2;
-    hOut : Vec2;
-    kind : 'smooth' | 'asym' | 'corner';
+    x: number;
+    y: number;
+    hIn: Vec2;
+    hOut: Vec2;
+    kind: 'smooth' | 'asym' | 'corner';
 }
-
 export type BezierMode = 'pen' | 'edit' | 'delete';
-
 export interface BezierEditorOptions {
-    width?   : number;
-    height?  : number;
-    mode?    : BezierMode;
-    anchors? : Anchor[];
-    closed?  : boolean;
+    width?: number;
+    height?: number;
+    mode?: BezierMode;
+    anchors?: Anchor[];
+    closed?: boolean;
 }
-
-interface BezierState { anchors: Anchor[]; closed: boolean; }
-
-export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement, {}, {
-    attrs : ['width', 'height', 'mode', 'closed'],
+interface BezierState {
+    anchors: Anchor[];
+    closed: boolean;
+}
+@Component('arianna-bezier-editor', {}, {
+    Attributes: ['width', 'height', 'mode', 'closed'],
 })
-{
+export class BezierEditor extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     state$: Signal<BezierState> = signal<BezierState>({ anchors: [], closed: false });
-
-    build(_opts: BezierEditorOptions = {})
-    {
-        const wAttr = this.attributeSignal('width');
-        const hAttr = this.attributeSignal('height');
-
+    onConnected(_opts: BezierEditorOptions = {}) {
+        const wAttr = this.signal().attribute('width');
+        const hAttr = this.signal().attribute('height');
         this.viewBox = () => `0 0 ${this.#w()} ${this.#h()}`;
-        this.wStr    = () => String(this.#w());
-        this.hStr    = () => String(this.#h());
-        this.pathD   = () => this.toSVGPath();
-
-        this.anchorList = (): Array<{ cx: string; cy: string; idx: number; cls: string }> =>
-            this.state$.Get().anchors.map((a, i) => ({
-                cx: String(a.x), cy: String(a.y), idx: i,
-                cls: 'ar-bez__anchor',
-            }));
-
-        this.handleSegments = (): Array<{ x1: string; y1: string; x2: string; y2: string }> => {
-            const out: Array<{ x1: string; y1: string; x2: string; y2: string }> = [];
+        this.wStr = () => String(this.#w());
+        this.hStr = () => String(this.#h());
+        this.pathD = () => this.toSVGPath();
+        this.anchorList = (): Array<{
+            cx: string;
+            cy: string;
+            idx: number;
+            cls: string;
+        }> => this.state$.Get().anchors.map((a, i) => ({
+            cx: String(a.x), cy: String(a.y), idx: i,
+            cls: 'ar-bez__anchor',
+        }));
+        this.handleSegments = (): Array<{
+            x1: string;
+            y1: string;
+            x2: string;
+            y2: string;
+        }> => {
+            const out: Array<{
+                x1: string;
+                y1: string;
+                x2: string;
+                y2: string;
+            }> = [];
             for (const a of this.state$.Get().anchors) {
                 if (a.hIn.x !== 0 || a.hIn.y !== 0) {
                     out.push({
@@ -101,9 +115,18 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
             }
             return out;
         };
-
-        this.handleDots = (): Array<{ cx: string; cy: string; idx: number; side: 'in' | 'out' }> => {
-            const out: Array<{ cx: string; cy: string; idx: number; side: 'in' | 'out' }> = [];
+        this.handleDots = (): Array<{
+            cx: string;
+            cy: string;
+            idx: number;
+            side: 'in' | 'out';
+        }> => {
+            const out: Array<{
+                cx: string;
+                cy: string;
+                idx: number;
+                side: 'in' | 'out';
+            }> = [];
             this.state$.Get().anchors.forEach((a, i) => {
                 if (a.hIn.x !== 0 || a.hIn.y !== 0) {
                     out.push({ cx: String(a.x + a.hIn.x), cy: String(a.y + a.hIn.y), idx: i, side: 'in' });
@@ -114,13 +137,13 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
             });
             return out;
         };
-
         // ── Handlers ────────────────────────────────────────────────────
         this.onSvgPointerDown = (e: Event) => {
             const me = e as PointerEvent;
             const target = me.target as SVGElement;
             // Ignore if clicking on an anchor or handle
-            if (target.classList.contains('ar-bez__anchor') || target.classList.contains('ar-bez__handle-dot')) return;
+            if (target.classList.contains('ar-bez__anchor') || target.classList.contains('ar-bez__handle-dot'))
+                return;
             const svg = me.currentTarget as SVGSVGElement;
             const pt = this.#localPoint(svg, me);
             const mode = (this.getAttribute('mode') ?? 'pen') as BezierMode;
@@ -131,7 +154,6 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
                 // If there's a previous anchor, the new hIn mirrors the previous hOut visually
                 this.state$.Set({ ...cur, anchors: [...cur.anchors, anchor] });
                 this.#fire();
-
                 // Pen drag — set hOut while pointer moves before release
                 svg.setPointerCapture?.(me.pointerId);
                 this.#penDragIdx = cur.anchors.length;
@@ -140,15 +162,17 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
         };
         this.onSvgPointerMove = (e: Event) => {
             const me = e as PointerEvent;
-            if (this.#penDragIdx == null) return;
+            if (this.#penDragIdx == null)
+                return;
             const svg = me.currentTarget as SVGSVGElement;
             const pt = this.#localPoint(svg, me);
             const cur = this.state$.Get();
             const a = cur.anchors[this.#penDragIdx];
-            if (!a || !this.#penDragOrigin) return;
+            if (!a || !this.#penDragOrigin)
+                return;
             const next = cur.anchors.slice();
             const hOut = { x: pt.x - this.#penDragOrigin.x, y: pt.y - this.#penDragOrigin.y };
-            const hIn  = { x: -hOut.x, y: -hOut.y };
+            const hIn = { x: -hOut.x, y: -hOut.y };
             next[this.#penDragIdx] = { ...a, hOut, hIn, kind: 'smooth' };
             this.state$.Set({ ...cur, anchors: next });
             this.#fire();
@@ -157,7 +181,6 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
             this.#penDragIdx = null;
             this.#penDragOrigin = null;
         };
-
         this.onAnchorPointerDown = (e: Event) => {
             const me = e as PointerEvent;
             me.stopPropagation();
@@ -173,21 +196,23 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
             this.#anchorDragIdx = idx;
         };
         this.onAnchorPointerMove = (e: Event) => {
-            if (this.#anchorDragIdx == null) return;
+            if (this.#anchorDragIdx == null)
+                return;
             const me = e as PointerEvent;
             const svg = (me.currentTarget as SVGElement).ownerSVGElement;
-            if (!svg) return;
+            if (!svg)
+                return;
             const pt = this.#localPoint(svg, me);
             const cur = this.state$.Get();
             const a = cur.anchors[this.#anchorDragIdx];
-            if (!a) return;
+            if (!a)
+                return;
             const next = cur.anchors.slice();
             next[this.#anchorDragIdx] = { ...a, x: pt.x, y: pt.y };
             this.state$.Set({ ...cur, anchors: next });
             this.#fire();
         };
         this.onAnchorPointerUp = () => { this.#anchorDragIdx = null; };
-
         this.onHandlePointerDown = (e: Event) => {
             const me = e as PointerEvent;
             me.stopPropagation();
@@ -195,37 +220,45 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
             target.setPointerCapture?.(me.pointerId);
             this.#handleDragIdx = parseInt(target.dataset.idx ?? '0', 10);
             this.#handleDragSide = (target.dataset.side as 'in' | 'out') ?? 'out';
-            this.#handleDragAlt  = me.altKey;
+            this.#handleDragAlt = me.altKey;
         };
         this.onHandlePointerMove = (e: Event) => {
-            if (this.#handleDragIdx == null) return;
+            if (this.#handleDragIdx == null)
+                return;
             const me = e as PointerEvent;
             const svg = (me.currentTarget as SVGElement).ownerSVGElement;
-            if (!svg) return;
+            if (!svg)
+                return;
             const pt = this.#localPoint(svg, me);
             const cur = this.state$.Get();
             const a = cur.anchors[this.#handleDragIdx];
-            if (!a) return;
+            if (!a)
+                return;
             const next = cur.anchors.slice();
             const delta = { x: pt.x - a.x, y: pt.y - a.y };
             let updated: Anchor;
             if (this.#handleDragSide === 'out') {
                 if (this.#handleDragAlt || a.kind === 'corner') {
                     updated = { ...a, hOut: delta, kind: 'corner' };
-                } else if (a.kind === 'smooth') {
+                }
+                else if (a.kind === 'smooth') {
                     updated = { ...a, hOut: delta, hIn: { x: -delta.x, y: -delta.y } };
-                } else {
+                }
+                else {
                     // asym: keep direction mirrored but magnitude independent
                     const mag = Math.hypot(a.hIn.x, a.hIn.y) || Math.hypot(delta.x, delta.y);
                     const dirLen = Math.hypot(delta.x, delta.y) || 1;
                     updated = { ...a, hOut: delta, hIn: { x: -delta.x * mag / dirLen, y: -delta.y * mag / dirLen } };
                 }
-            } else {
+            }
+            else {
                 if (this.#handleDragAlt || a.kind === 'corner') {
                     updated = { ...a, hIn: delta, kind: 'corner' };
-                } else if (a.kind === 'smooth') {
+                }
+                else if (a.kind === 'smooth') {
                     updated = { ...a, hIn: delta, hOut: { x: -delta.x, y: -delta.y } };
-                } else {
+                }
+                else {
                     const mag = Math.hypot(a.hOut.x, a.hOut.y) || Math.hypot(delta.x, delta.y);
                     const dirLen = Math.hypot(delta.x, delta.y) || 1;
                     updated = { ...a, hIn: delta, hOut: { x: -delta.x * mag / dirLen, y: -delta.y * mag / dirLen } };
@@ -240,8 +273,7 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
             this.#handleDragSide = null;
             this.#handleDragAlt = false;
         };
-
-        this.template = html`
+        this.template = html `
             <svg :viewBox="this.viewBox()"
                  :width="this.wStr()" :height="this.hStr()"
                  xmlns="http://www.w3.org/2000/svg"
@@ -269,15 +301,13 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
                         @pointerup="this.onAnchorPointerUp"></circle>
             </svg>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = BezierEditor.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = BezierEditor.DefaultSheet();
     }
-
     // ── Public API ───────────────────────────────────────────────────────────
-
     setMode(mode: BezierMode): this { this.setAttribute('mode', mode); return this; }
     getMode(): BezierMode { return (this.getAttribute('mode') as BezierMode) || 'pen'; }
-
     closePath(): this {
         const cur = this.state$.Get();
         this.state$.Set({ ...cur, closed: true });
@@ -292,11 +322,16 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
         this.#fire();
         return this;
     }
-
-    addAnchor(opts: { x: number; y: number; hIn?: Vec2; hOut?: Vec2; kind?: Anchor['kind'] }): Anchor {
+    addAnchor(opts: {
+        x: number;
+        y: number;
+        hIn?: Vec2;
+        hOut?: Vec2;
+        kind?: Anchor['kind'];
+    }): Anchor {
         const a: Anchor = {
             x: opts.x, y: opts.y,
-            hIn:  opts.hIn  ?? { x: 0, y: 0 },
+            hIn: opts.hIn ?? { x: 0, y: 0 },
             hOut: opts.hOut ?? { x: 0, y: 0 },
             kind: opts.kind ?? 'corner',
         };
@@ -305,27 +340,25 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
         this.#fire();
         return a;
     }
-
     removeAnchor(idx: number): this {
         const cur = this.state$.Get();
-        if (idx < 0 || idx >= cur.anchors.length) return this;
+        if (idx < 0 || idx >= cur.anchors.length)
+            return this;
         const next = cur.anchors.slice();
         next.splice(idx, 1);
         this.state$.Set({ ...cur, anchors: next });
         this.#fire();
         return this;
     }
-
     setAnchors(anchors: Anchor[]): this {
         this.state$.Set({ ...this.state$.Get(), anchors: anchors.map(a => ({
-            x: a.x, y: a.y,
-            hIn: { ...a.hIn }, hOut: { ...a.hOut },
-            kind: a.kind,
-        })) });
+                x: a.x, y: a.y,
+                hIn: { ...a.hIn }, hOut: { ...a.hOut },
+                kind: a.kind,
+            })) });
         this.#fire();
         return this;
     }
-
     getAnchors(): Anchor[] {
         return this.state$.Get().anchors.map(a => ({
             x: a.x, y: a.y,
@@ -333,18 +366,18 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
             kind: a.kind,
         }));
     }
-
     toSVGPath(): string {
         const cur = this.state$.Get();
         const anchors = cur.anchors;
-        if (anchors.length === 0) return '';
+        if (anchors.length === 0)
+            return '';
         const parts: string[] = [];
         parts.push(`M${anchors[0]!.x},${anchors[0]!.y}`);
         for (let i = 1; i < anchors.length; i++) {
             const a = anchors[i - 1]!;
             const b = anchors[i]!;
             const c1x = a.x + a.hOut.x, c1y = a.y + a.hOut.y;
-            const c2x = b.x + b.hIn.x,  c2y = b.y + b.hIn.y;
+            const c2x = b.x + b.hIn.x, c2y = b.y + b.hIn.y;
             parts.push(`C${c1x},${c1y} ${c2x},${c2y} ${b.x},${b.y}`);
         }
         if (cur.closed && anchors.length > 1) {
@@ -356,27 +389,24 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
         }
         return parts.join(' ');
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    #w(): number { return parseInt(this.getAttribute('width')  ?? '600', 10) || 600; }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    #w(): number { return parseInt(this.getAttribute('width') ?? '600', 10) || 600; }
     #h(): number { return parseInt(this.getAttribute('height') ?? '400', 10) || 400; }
-
     #localPoint(svg: SVGSVGElement | null, e: PointerEvent): Vec2 {
-        if (!svg) return { x: 0, y: 0 };
+        if (!svg)
+            return { x: 0, y: 0 };
         const rect = svg.getBoundingClientRect();
         const vbW = this.#w(), vbH = this.#h();
-        const x = ((e.clientX - rect.left) / rect.width)  * vbW;
-        const y = ((e.clientY - rect.top)  / rect.height) * vbH;
+        const x = ((e.clientX - rect.left) / rect.width) * vbW;
+        const y = ((e.clientY - rect.top) / rect.height) * vbH;
         return { x, y };
     }
-
     #fire(): void {
         const cur = this.state$.Get();
         this.dispatchEvent(new CustomEvent('arianna:change', {
@@ -384,72 +414,92 @@ export class BezierEditor extends Component('arianna-bezier-editor', HTMLElement
             detail: { anchors: this.getAnchors(), closed: cur.closed, d: this.toSVGPath() },
         }));
     }
-
     #penDragIdx: number | null = null;
     #penDragOrigin: Vec2 | null = null;
     #anchorDragIdx: number | null = null;
     #handleDragIdx: number | null = null;
     #handleDragSide: 'in' | 'out' | null = null;
     #handleDragAlt = false;
-
-    private viewBox        : () => string = () => '0 0 600 400';
-    private wStr           : () => string = () => '600';
-    private hStr           : () => string = () => '400';
-    private pathD          : () => string = () => '';
-    private anchorList     : () => Array<{ cx: string; cy: string; idx: number; cls: string }> = () => [];
-    private handleSegments : () => Array<{ x1: string; y1: string; x2: string; y2: string }> = () => [];
-    private handleDots     : () => Array<{ cx: string; cy: string; idx: number; side: 'in' | 'out' }> = () => [];
-    private onSvgPointerDown   : (e: Event) => void = () => {};
-    private onSvgPointerMove   : (e: Event) => void = () => {};
-    private onSvgPointerUp     : (e: Event) => void = () => {};
-    private onAnchorPointerDown: (e: Event) => void = () => {};
-    private onAnchorPointerMove: (e: Event) => void = () => {};
-    private onAnchorPointerUp  : (e: Event) => void = () => {};
-    private onHandlePointerDown: (e: Event) => void = () => {};
-    private onHandlePointerMove: (e: Event) => void = () => {};
-    private onHandlePointerUp  : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    display: 'inline-block',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                }),
-                new Rule('.ar-bez__svg', { display: 'block', touchAction: 'none', cursor: 'crosshair' }),
-                new Rule('.ar-bez__path', {
-                    stroke: 'var(--arianna-text, #1f2328)',
-                    strokeWidth: '1.5',
-                }),
-                new Rule('.ar-bez__handle-line', {
-                    stroke: 'var(--arianna-muted, #6e6b62)',
-                    strokeWidth: '0.5',
-                    strokeDasharray: '2,2',
-                }),
-                new Rule('.ar-bez__handle-dot', {
-                    fill: 'var(--arianna-bg, #fff)',
-                    stroke: 'var(--arianna-primary, #1f6feb)',
-                    strokeWidth: '1.5',
-                    cursor: 'grab',
-                }),
-                new Rule('.ar-bez__anchor', {
-                    fill: 'var(--arianna-primary, #1f6feb)',
-                    stroke: '#fff',
-                    strokeWidth: '2',
-                    cursor: 'grab',
-                }),
-            ]
-        );
+    private viewBox: () => string = () => '0 0 600 400';
+    private wStr: () => string = () => '600';
+    private hStr: () => string = () => '400';
+    private pathD: () => string = () => '';
+    private anchorList: () => Array<{
+        cx: string;
+        cy: string;
+        idx: number;
+        cls: string;
+    }> = () => [];
+    private handleSegments: () => Array<{
+        x1: string;
+        y1: string;
+        x2: string;
+        y2: string;
+    }> = () => [];
+    private handleDots: () => Array<{
+        cx: string;
+        cy: string;
+        idx: number;
+        side: 'in' | 'out';
+    }> = () => [];
+    private onSvgPointerDown: (e: Event) => void = () => { };
+    private onSvgPointerMove: (e: Event) => void = () => { };
+    private onSvgPointerUp: (e: Event) => void = () => { };
+    private onAnchorPointerDown: (e: Event) => void = () => { };
+    private onAnchorPointerMove: (e: Event) => void = () => { };
+    private onAnchorPointerUp: (e: Event) => void = () => { };
+    private onHandlePointerDown: (e: Event) => void = () => { };
+    private onHandlePointerMove: (e: Event) => void = () => { };
+    private onHandlePointerUp: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                display: 'inline-block',
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+            }),
+            new Rule('.ar-bez__svg', { display: 'block', touchAction: 'none', cursor: 'crosshair' }),
+            new Rule('.ar-bez__path', {
+                stroke: 'var(--arianna-text, #1f2328)',
+                strokeWidth: '1.5',
+            }),
+            new Rule('.ar-bez__handle-line', {
+                stroke: 'var(--arianna-muted, #6e6b62)',
+                strokeWidth: '0.5',
+                strokeDasharray: '2,2',
+            }),
+            new Rule('.ar-bez__handle-dot', {
+                fill: 'var(--arianna-bg, #fff)',
+                stroke: 'var(--arianna-primary, #1f6feb)',
+                strokeWidth: '1.5',
+                cursor: 'grab',
+            }),
+            new Rule('.ar-bez__anchor', {
+                fill: 'var(--arianna-primary, #1f6feb)',
+                stroke: '#fff',
+                strokeWidth: '2',
+                cursor: 'grab',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'BezierEditor', {
-        value: BezierEditor, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * BezierEditor namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace BezierEditor {
+    export namespace Types {
+        export type BezierModeType = BezierMode;
+    }
+    export namespace Interfaces {
+        export interface Vec2Contract extends Vec2 {
+        }
+        export interface AnchorContract extends Anchor {
+        }
+        export interface Options extends BezierEditorOptions {
+        }
+        export interface BezierStateContract extends BezierState {
+        }
+    }
 }
-
 export default BezierEditor;

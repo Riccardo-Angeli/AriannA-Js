@@ -1,5 +1,5 @@
 /**
- * @module    core/Namespace
+ * @module    core/Core
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
@@ -20,7 +20,7 @@
  * In v2 `Namespace` is the **import-free data root** of the framework: it owns
  * the type model and nothing it depends on points back up to it.
  *
- *   - Namespace.Descriptors — runtime registry shapes (`Type`, `Namespace`): the
+ *   - Interfaces.Namespaces — runtime registry shapes (`Type`, `Namespace`): the
  *                             records stored in the live registry maps and read
  *                             on the hot path.
  *   - Namespace.IR          — the serializable IR model (Node, Style, Binding,
@@ -109,8 +109,11 @@
  *      the user's class prototype spliced in front
  *   3. Reinstalls the wrapper at window[ifaceName]
  */
-import { Namespaces }    from "./Namespaces.ts";
-import type { Observer } from './Observer.ts';
+import { Namespaces } from './Namespaces.ts';
+
+import type { Types as SchemaTypes }             from './schema/Types.ts';
+import type { Interfaces as SchemaInterfaces }   from './schema/Interfaces.ts';
+import type { Observers }                        from './Observer.ts';
 
 /**
  * @namespace Core
@@ -119,7 +122,7 @@ import type { Observer } from './Observer.ts';
  * @license   MIT / Commercial (dual license)
  *
  * @description Type-only contracts for the Namespace data root: the runtime
- *              registry descriptors (`Namespace.Descriptors`) and the
+ *              registry descriptors (`Interfaces.Namespaces`) and the
  *              serializable IR model (`Namespace.IR`).
  *
  *              The data root imports nothing — `Element`, `Map`, `Record` are
@@ -131,6 +134,21 @@ import type { Observer } from './Observer.ts';
  */
 export namespace Core
 {
+    export type ContextService    = SchemaInterfaces.Core.ContextService;
+    export type CssService        = SchemaInterfaces.Core.CssService;
+    export type DirectivesService = SchemaInterfaces.Core.DirectivesService;
+    export type EventService      = SchemaInterfaces.Core.EventService;
+    export type Native            = SchemaTypes.Native;
+    export type ObservableService = Services.Types.ReactivityService;
+    export type ObserverService   = SchemaInterfaces.Core.ObserverService;
+    export type Packages          = SchemaTypes.Packages;
+    export type ReactivityService = SchemaInterfaces.Core.ReactivityService;
+    export type RealService       = SchemaInterfaces.Core.RealService;
+    export type ShadowService     = SchemaInterfaces.Core.ShadowService;
+    export type StateService      = SchemaInterfaces.Core.StateService;
+    export type TemplatesService  = SchemaInterfaces.Core.TemplatesService;
+    export type VirtualService    = SchemaInterfaces.Core.VirtualService;
+
     /** Constants Block */
 
     /** @name        Scopes
@@ -166,7 +184,7 @@ export namespace Core
      *  @description The service registry — the single "quasi zero-import" seam of the kernel. Holds a
      *               private `services` Map, the operations over it (Register / Resolve / Has / Revoke /
      *               Providers / Call), the `Service` class producers instantiate to self-register, the
-     *               structural service SHAPE types (`Types.CssService` / `EventService` / `ObservableService`),
+     *               structural service SHAPE types (`CssService` / `EventService` / `ObservableService`),
      *               and the lazy accessor getters (`Events` / `Observables` / `Css`). Feature modules
      *               (Events.ts, Observables.ts, Css.ts) register their container here at namespace init
      *               and resolve one another THROUGH this registry — never importing each other directly.
@@ -229,7 +247,7 @@ export namespace Core
             {
                 /** @name        Create
                  *  @public
-                 *  @memberof    Core.Services.Types.ObserverService
+                 *  @memberof    Core.Services.ObserverService
                  *  @param       {MutationCallback} [callback] Reports each batch the browser delivers; the
                  *               default is kept when omitted.
                  *  @param       {Partial<MutationObserverInit>} [configuration] Merged OVER the defaults,
@@ -249,7 +267,7 @@ export namespace Core
 
                 /** @name        DrainAll
                  *  @public
-                 *  @memberof    Core.Services.Types.ObserverService
+                 *  @memberof    Core.Services.ObserverService
                  *  @returns     {void}
                  *  @description Flush EVERY live observer synchronously. Static by nature — it acts on the
                  *               registry, not on one instance — which is why it survives here while the
@@ -370,7 +388,7 @@ export namespace Core
              *  @memberof    Core.Services.Types
              *  @type        {{ create(arg: unknown): Real }}
              *  @description Local shape of the `'real'` service as consumed here: `create` builds a Real primitive
-             *               from an element or tag. Mirrors `Core.Services.Types.RealService` (typed structurally
+             *               from an element or tag. Mirrors `Core.Services.RealService` (typed structurally
              *               in Core to avoid importing Real); here `Real` is in scope, so the return is concrete.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
@@ -461,6 +479,18 @@ export namespace Core
             {  };
         }
 
+        export type ObserverService   = Types.ObserverService;
+        export type EventService      = Types.EventService;
+        export type ReactivityService = Types.ReactivityService;
+        export type CssService        = Types.CssService;
+        export type RealService       = Types.RealService;
+        export type ShadowService     = Types.ShadowService;
+        export type StateService      = Types.StateService;
+        export type VirtualService    = Types.VirtualService;
+        export type TemplatesService  = Types.TemplatesService;
+        export type ContextService    = Types.ContextService;
+        export type DirectivesService = Types.DirectivesService;
+
         /* Services Static Services Properties */
 
         /** @name        Object.defineProperties (service accessors)
@@ -488,15 +518,15 @@ export namespace Core
             {
                 Observer:
                 {
-                    get(): Services.Types.ObserverService | undefined
-                    { return Services.Resolve<Services.Types.ObserverService>('observer'); },
+                    get(): Services.ObserverService | undefined
+                    { return Services.Resolve<Services.ObserverService>('observer'); },
                     enumerable: false, configurable: true,
                 },
                 /** @name        Events
                  *  @public
                  *  @readonly
                  *  @memberof    Core.Services
-                 *  @type        {Services.Types.EventService | undefined}
+                 *  @type        {Services.EventService | undefined}
                  *  @description Lazy accessor for the 'events' service container (registered by Events.ts).
                  *               Resolved per access; `undefined` until the producer registers.
                  *  @author      Riccardo Angeli
@@ -505,15 +535,15 @@ export namespace Core
                  */
                 Events:
                 {
-                    get(): Services.Types.EventService | undefined
-                    { return Services.Resolve<Services.Types.EventService>('events'); },
+                    get(): Services.EventService | undefined
+                    { return Services.Resolve<Services.EventService>('events'); },
                     enumerable: false, configurable: true,
                 },
                 /** @name        Observables
                  *  @public
                  *  @readonly
                  *  @memberof    Core.Services
-                 *  @type        {Services.Types.ObservableService | undefined}
+                 *  @type        {Services.ObservableService | undefined}
                  *  @description Lazy accessor for the 'observable' service container (registered by
                  *               Observables.ts). Resolved per access; `undefined` until registered.
                  *  @author      Riccardo Angeli
@@ -522,15 +552,15 @@ export namespace Core
                  */
                 Reactive:
                 {
-                    get(): Services.Types.ReactivityService | undefined
-                    { return Services.Resolve<Services.Types.ReactivityService>('reactive'); },
+                    get(): Services.ReactivityService | undefined
+                    { return Services.Resolve<Services.ReactivityService>('reactive'); },
                     enumerable: false, configurable: true,
                 },
                 /** @name        Css
                  *  @public
                  *  @readonly
                  *  @memberof    Core.Services
-                 *  @type        {Services.Types.CssService | undefined}
+                 *  @type        {Services.CssService | undefined}
                  *  @description Lazy accessor for the 'css' service container (registered by Css.ts).
                  *               Resolved per access; `undefined` until registered.
                  *  @author      Riccardo Angeli
@@ -539,30 +569,30 @@ export namespace Core
                  */
                 Css:
                 {
-                    get(): Services.Types.CssService | undefined
-                    { return Services.Resolve<Services.Types.CssService>('css'); },
+                    get(): Services.CssService | undefined
+                    { return Services.Resolve<Services.CssService>('css'); },
                     enumerable: false, configurable: true,
                 },
                 /** @name Real
                  *  @public
                  *  @readonly
                  *  @memberof Core.Services
-                 *  @type {Services.Types.RealService | undefined}
+                 *  @type {Services.RealService | undefined}
                  *  @description Lazy accessor for the 'real' service; resolved per access, undefined until registered.
                  *  @author Riccardo Angeli
                  *  @copyright Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license MIT / Commercial (dual license) */
                 Real:
                 {
-                    get(): Services.Types.RealService | undefined
-                    { return Services.Resolve<Services.Types.RealService>('real'); },
+                    get(): Services.RealService | undefined
+                    { return Services.Resolve<Services.RealService>('real'); },
                     enumerable: false, configurable: true,
                 },
                 /** @name        Shadow
                  *  @public
                  *  @readonly
                  *  @memberof    Core.Services
-                 *  @type        {Services.Types.ShadowService | undefined}
+                 *  @type        {Services.ShadowService | undefined}
                  *  @description Lazy accessor for the 'shadow' service — resolved from the registry on every
                  *               access (never cached), so a provider registered after this file loads is still
                  *               seen; `undefined` until the Shadow module registers it.
@@ -572,15 +602,15 @@ export namespace Core
                  */
                 Shadow:
                 {
-                    get(): Services.Types.ShadowService | undefined
-                    { return Services.Resolve<Services.Types.ShadowService>('shadow'); },
+                    get(): Services.ShadowService | undefined
+                    { return Services.Resolve<Services.ShadowService>('shadow'); },
                     enumerable: false, configurable: true,
                 },
                 /** @name        State
                  *  @public
                  *  @readonly
                  *  @memberof    Core.Services
-                 *  @type        {Services.Types.StateService | undefined}
+                 *  @type        {Services.StateService | undefined}
                  *  @description Lazy accessor for the 'state' service — resolved from the registry on every
                  *               access (never cached), so a provider registered after this file loads is still
                  *               seen; `undefined` until the State module registers it.
@@ -590,15 +620,15 @@ export namespace Core
                  */
                 State:
                 {
-                    get(): Services.Types.StateService | undefined
-                    { return Services.Resolve<Services.Types.StateService>('state'); },
+                    get(): Services.StateService | undefined
+                    { return Services.Resolve<Services.StateService>('state'); },
                     enumerable: false, configurable: true,
                 },
                 /** @name        Virtual
                  *  @public
                  *  @readonly
                  *  @memberof    Core.Services
-                 *  @type        {Services.Types.VirtualService | undefined}
+                 *  @type        {Services.VirtualService | undefined}
                  *  @description Lazy accessor for the 'virtual' service — resolved from the registry on every
                  *               access (never cached), so a provider registered after this file loads is still
                  *               seen; `undefined` until the Virtual module registers it.
@@ -608,15 +638,15 @@ export namespace Core
                  */
                 Virtual:
                 {
-                    get(): Services.Types.VirtualService | undefined
-                    { return Services.Resolve<Services.Types.VirtualService>('virtual'); },
+                    get(): Services.VirtualService | undefined
+                    { return Services.Resolve<Services.VirtualService>('virtual'); },
                     enumerable: false, configurable: true,
                 },
                 /** @name        Templates
                  *  @public
                  *  @readonly
                  *  @memberof    Core.Services
-                 *  @type        {Services.Types.TemplatesService | undefined}
+                 *  @type        {Services.TemplatesService | undefined}
                  *  @description Lazy accessor for the 'templates' service — resolved from the registry on every
                  *               access (never cached), so a provider registered after this file loads is still
                  *               seen; `undefined` until the Templates module registers it.
@@ -626,15 +656,15 @@ export namespace Core
                  */
                 Templates:
                 {
-                    get(): Services.Types.TemplatesService | undefined
-                    { return Services.Resolve<Services.Types.TemplatesService>('templates'); },
+                    get(): Services.TemplatesService | undefined
+                    { return Services.Resolve<Services.TemplatesService>('templates'); },
                     enumerable: false, configurable: true,
                 },
                 /** @name        Context
                  *  @public
                  *  @readonly
                  *  @memberof    Core.Services
-                 *  @type        {Services.Types.ContextService | undefined}
+                 *  @type        {Services.ContextService | undefined}
                  *  @description Lazy accessor for the 'context' service — resolved from the registry on every
                  *               access (never cached), so a provider registered after this file loads is still
                  *               seen; `undefined` until the Context module registers it.
@@ -644,15 +674,15 @@ export namespace Core
                  */
                 Context:
                 {
-                    get(): Services.Types.ContextService | undefined
-                    { return Services.Resolve<Services.Types.ContextService>('context'); },
+                    get(): Services.ContextService | undefined
+                    { return Services.Resolve<Services.ContextService>('context'); },
                     enumerable: false, configurable: true,
                 },
                 /** @name        Directives
                  *  @public
                  *  @readonly
                  *  @memberof    Core.Services
-                 *  @type        {Services.Types.DirectivesService | undefined}
+                 *  @type        {Services.DirectivesService | undefined}
                  *  @description Lazy accessor for the 'directives' service — resolved from the registry on every
                  *               access (never cached), so a provider registered after this file loads is still
                  *               seen; `undefined` until the Directives module registers it.
@@ -662,19 +692,19 @@ export namespace Core
                  */
                 Directives:
                 {
-                    get(): Services.Types.DirectivesService | undefined
-                    { return Services.Resolve<Services.Types.DirectivesService>('directives'); },
+                    get(): Services.DirectivesService | undefined
+                    { return Services.Resolve<Services.DirectivesService>('directives'); },
                     enumerable: false, configurable: true,
                 }
             }
         );
 
-        export declare const Observer:    Services.Types.ObserverService   | undefined;
+        export declare const Observer:    Services.ObserverService   | undefined;
         /** @name        Events
          *  @public
          *  @readonly
          *  @memberof    Core.Services
-         *  @type        {Services.Types.EventService | undefined}
+         *  @type        {Services.EventService | undefined}
          *  @description Ambient type declaration for the runtime getter installed above — lets TypeScript
          *               see `Core.Services.Events` (the `defineProperties` getter supplies the value).
          *               `declare` emits no code, so there is no conflict with the runtime definition.
@@ -682,36 +712,36 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        export declare const Events:      Services.Types.EventService      | undefined;
+        export declare const Events:      Services.EventService      | undefined;
         /** @name        Observables
          *  @public
          *  @readonly
          *  @memberof    Core.Services
-         *  @type        {Services.Types.ObservableService | undefined}
+         *  @type        {Services.ObservableService | undefined}
          *  @description Ambient type declaration for the runtime getter installed above — lets TypeScript
          *               see `Core.Services.Observables`. `declare` emits no code.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        export declare const Reactivity:  Services.Types.ReactivityService | undefined;
+        export declare const Reactivity:  Services.ReactivityService | undefined;
         /** @name        Css
          *  @public
          *  @readonly
          *  @memberof    Core.Services
-         *  @type        {Services.Types.CssService | undefined}
+         *  @type        {Services.CssService | undefined}
          *  @description Ambient type declaration for the runtime getter installed above — lets TypeScript
          *               see `Core.Services.Css`. `declare` emits no code.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        export declare const Css:         Services.Types.CssService        | undefined;
+        export declare const Css:         Services.CssService        | undefined;
         /** @name        Real
          *  @public
          *  @readonly
          *  @memberof    Core.Services
-         *  @type        {Services.Types.RealService | undefined}
+         *  @type        {Services.RealService | undefined}
          *  @description Ambient type declaration for the runtime `Real` getter installed via
          *               `Object.defineProperties` above — it lets TypeScript see `Core.Services.Real`
          *               while the getter supplies the value at run time (`declare` emits no code, so there
@@ -721,12 +751,12 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        export declare const Real:        Services.Types.RealService       | undefined;
+        export declare const Real:        Services.RealService       | undefined;
         /** @name        Shadow
          *  @public
          *  @readonly
          *  @memberof    Core.Services
-         *  @type        {Services.Types.ShadowService | undefined}
+         *  @type        {Services.ShadowService | undefined}
          *  @description Ambient declaration for the runtime Shadow getter installed via
          *               `Object.defineProperties` — lets TypeScript see `Core.Services.Shadow` while the
          *               getter supplies the value at run time (`declare` emits no code). Resolves the
@@ -735,12 +765,12 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        export declare const Shadow:      Services.Types.ShadowService     | undefined;
+        export declare const Shadow:      Services.ShadowService     | undefined;
         /** @name        State
          *  @public
          *  @readonly
          *  @memberof    Core.Services
-         *  @type        {Services.Types.StateService | undefined}
+         *  @type        {Services.StateService | undefined}
          *  @description Ambient declaration for the runtime State getter installed via
          *               `Object.defineProperties` — lets TypeScript see `Core.Services.State` while the
          *               getter supplies the value at run time (`declare` emits no code). Resolves the
@@ -749,12 +779,12 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        export declare const State:       Services.Types.StateService      | undefined;
+        export declare const State:       Services.StateService      | undefined;
         /** @name        Virtual
          *  @public
          *  @readonly
          *  @memberof    Core.Services
-         *  @type        {Services.Types.VirtualService | undefined}
+         *  @type        {Services.VirtualService | undefined}
          *  @description Ambient declaration for the runtime Virtual getter installed via
          *               `Object.defineProperties` — lets TypeScript see `Core.Services.Virtual` while the
          *               getter supplies the value at run time (`declare` emits no code). Resolves the
@@ -763,12 +793,12 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        export declare const Virtual:     Services.Types.VirtualService    | undefined;
+        export declare const Virtual:     Services.VirtualService    | undefined;
         /** @name        Templates
          *  @public
          *  @readonly
          *  @memberof    Core.Services
-         *  @type        {Services.Types.TemplatesService | undefined}
+         *  @type        {Services.TemplatesService | undefined}
          *  @description Ambient declaration for the runtime Templates getter installed via
          *               `Object.defineProperties` — lets TypeScript see `Core.Services.Templates` while the
          *               getter supplies the value at run time (`declare` emits no code). Resolves the
@@ -777,12 +807,12 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        export declare const Templates:   Services.Types.TemplatesService  | undefined;
+        export declare const Templates:   Services.TemplatesService  | undefined;
         /** @name        Context
          *  @public
          *  @readonly
          *  @memberof    Core.Services
-         *  @type        {Services.Types.ContextService | undefined}
+         *  @type        {Services.ContextService | undefined}
          *  @description Ambient declaration for the runtime Context getter installed via
          *               `Object.defineProperties` — lets TypeScript see `Core.Services.Context` while the
          *               getter supplies the value at run time (`declare` emits no code). Resolves the
@@ -791,12 +821,12 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        export declare const Context:     Services.Types.ContextService    | undefined;
+        export declare const Context:     Services.ContextService    | undefined;
         /** @name        Directives
          *  @public
          *  @readonly
          *  @memberof    Core.Services
-         *  @type        {Services.Types.DirectivesService | undefined}
+         *  @type        {Services.DirectivesService | undefined}
          *  @description Ambient declaration for the runtime Directives getter installed via
          *               `Object.defineProperties` — lets TypeScript see `Core.Services.Directives` while the
          *               getter supplies the value at run time (`declare` emits no code). Resolves the
@@ -805,7 +835,7 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        export declare const Directives:  Services.Types.DirectivesService | undefined;
+        export declare const Directives:  Services.DirectivesService | undefined;
 
         /* Services Static Namespace Functions */
 
@@ -902,20 +932,7 @@ export namespace Core
         {
             static
             {
-                if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Service'))
-                {
-                    Object.defineProperty
-                    (
-                        window,
-                        'Service',
-                        {
-                            enumerable: true,
-                            configurable: false,
-                            writable: false,
-                            value: Service
-                        }
-                    );
-                }
+                /* Window publication removed by AriannA 2 conventions. */
             }
 
             /**
@@ -930,737 +947,16 @@ export namespace Core
              * */
             public readonly Name : string;
             /** @name Container @public @readonly @type {Record<string, unknown>} @description The registered container. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
-            public readonly Container : Record<string, unknown>;
+            public readonly Container : T;
 
             /** @name constructor @public @description Validate, store, and register the container into the shared Services map (last-write-wins). @param {string} name Non-empty key. @param {Record<string, unknown>} container Capability container. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
-            constructor(name: string, container: Record<string, unknown>)
+            constructor(name: string, container: T)
             {
                 if (!name || typeof name !== 'string')          throw new TypeError('Service: name must be a non-empty string.');
                 if (!container || typeof container !== 'object') throw new TypeError('Service: container must be an object.');
                 this.Name = name; this.Container = container;
-                Services.Register(name, container);
+                Services.Register(name, container as Record<string, unknown>);
             }
-        }
-    }
-
-    /** @namespace   Types
-     *  @memberof    Core
-     *  @description Shared structural type aliases used across the kernel — the
-     *               constructor/interface shapes that the descriptors and `Define`
-     *               rely on. Names are distinct from the descriptor's field names
-     *               (`Constructor`/`Interface`) to avoid self-referential overlap.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license)
-     */
-    export namespace Types
-    {
-        /** @name        Primitive
-         *  @public
-         *  @type        {'string' | 'number' | 'boolean' | 'function' | 'object'}
-         *  @memberof    Core.Types
-         *  @namespace   Core
-         *  @description The `typeof`-checkable primitive tags shared by `Is()` and
-         *               `Property` — the true common denominator of the two validators.
-         *               Composed into `Type` and `Native` instead of being repeated.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         */
-        export type Primitive   = 'string' | 'number' | 'boolean' | 'function' | 'object' | 'symbol';
-
-        /** @name        Constructor
-         *  @public
-         *  @type        {(new (...args: unknown[]) => unknown) | ((...args: unknown[]) => unknown)}
-         *  @memberof    Core.Types
-         *  @namespace   Core
-         *  @description A user-supplied constructor: a class (construct-style) or a
-         *               function constructor / factory (call-style). Its return is
-         *               NOT necessarily an `Element` — it may yield a wrapper, a
-         *               Real, any object. Superset of `IDLInterface` (an IDL
-         *               interface is also a valid `Ctor`).
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         */
-        export type Constructor = (new (...args: unknown[]) => unknown) | ((...args: unknown[]) => unknown);
-
-        /** @name        Type
-         *  @public
-         *  @type        {Primitive | 'integer' | 'array' | 'any' | ((v: unknown) => boolean)}
-         *  @memberof    Core.Types
-         *  @namespace   Core
-         *  @description Runtime validation marker used by `Property`: the primitive tags
-         *               plus `integer` / `array` / `any`, or a user predicate. Matches
-         *               exactly the cases of `Property._matchesType` (exhaustive switch).
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         */
-        export type Type        = Primitive | 'integer' | 'array' | 'any' | ((v: unknown) => boolean);
-
-        /** @name        IDL
-         *  @public
-         *  @type        {new (...args: unknown[]) => Element}
-         *  @memberof    Core.Types
-         *  @namespace   Core
-         *  @description The constructor of a native DOM interface — `HTMLElement`,
-         *               `HTMLDivElement`, `SVGSVGElement`, `MathMLElement`, and every
-         *               other built-in whose instances are `Element`s. A CONSTRUCTOR
-         *               type (`.prototype`, `.name`, callable with `new`), NOT the
-         *               `Element` instance it produces: the two are duals, and the
-         *               distinction matters wherever a type is consumed by reference
-         *               (a `Base` to extend, a value to splice) rather than by instance.
-         *               Named as a domain concept so `Base`, `IsNative`, and friends read
-         *               in terms of "native interface" instead of a bare constructor
-         *               signature — and so a non-DOM target can redefine what a native
-         *               interface IS in one place, without the DOM leaking into every
-         *               signature. Distinct from `Native` (the string tags `Is()` tests)
-         *               and from `Declaration === 'NATIVE'` (how a type was declared):
-         *               `IDL` is the constructor's TYPE, the other two are a tag set and
-         *               a registry value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         */
-        export type IDL         = new (...args: unknown[]) => Element;
-
-        /** @name        Native
-         *  @public
-         *  @type        { Primitive | 'symbol' | 'class' | 'idl' | Constructor }
-         *  @memberof    Core.Types
-         *  @namespace   Core
-         *  @description Type tags accepted by `Is()`: the primitive tags plus `symbol`,
-         *               `class` (function whose source starts with `class`), or a
-         *               `Constructor` to test with `instanceof`.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         */
-        export type Native      = Primitive | 'class' | 'idl' | 'idl-patched' | Constructor;
-
-        /** @name        Base
-         *  @public
-         *  @type        {IDL | symbol | Function}
-         *  @memberof    Core.Types
-         *  @namespace   Core
-         *  @description The base a Custom type extends. Accepts three shapes: a native
-         *               DOM IDL constructor (`HTMLElement`, `SVGSVGElement`, … — the
-         *               usual case), a `symbol` (a registered/branded base looked up in
-         *               the type registry rather than passed by reference), or a plain
-         *               `Function` (a user constructor/factory serving as base). Broader
-         *               than `IDL` — it does not require the base to be construct-style or
-         *               to yield an `Element` — and orthogonal to `Constructor`, which is
-         *               the implementation being defined, not what it extends.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         */
-        export type Base        = IDL | symbol | Constructor
-
-        /** @name        Declaration
-         *  @public
-         *  @type        {'CLASS' | 'FUNCTION' | 'IDL'}
-         *  @memberof    Core.Types
-         *  @namespace   Core
-         *  @description Declaration form of a type's backing value — how it was written,
-         *               independent of what it extends. `'CLASS'` is a `class` (construct-
-         *               style, its constructor runs on `new`); `'FUNCTION'` is a plain
-         *               function constructor / factory (call-style, its body runs via
-         *               apply on the node); `'IDL'` is a native DOM interface constructor
-         *               (`HTMLDivElement`, `SVGSVGElement`, …). `GetDeclaration` resolves
-         *               all three from a live constructor.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         */
-        export type Declaration = 'CLASS' | 'FUNCTION' | 'IDL';
-
-        /** @name        Packages
-         *  @public
-         *  @memberof    Core
-         *  @type        {string | readonly string[] | { base?: string; core?: boolean | string; additionals?: boolean | string; components?: boolean | string; bundles?: readonly string[]; mirror?: boolean }}
-         *  @description Boot spec accepted by `Bootstrap` / `AriannA`. A single keyword/URL string, a list
-         *               of them, or an object selecting the standard bundles (`core` / `additionals` /
-         *               `components`) plus extra `bundles`, a resolution `base`, and a `mirror` flag.
-         *               Keywords resolve to `${base}arianna.js` (core) or `${base}arianna-<kw>.js`.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         */
-        export type Packages =
-            | string
-            | readonly string[]
-            | {
-            /** Base URL for keyword resolution. Default '/release/dist/'. */
-            base?: string;
-            /** Load core: `true` → keyword, `string` → explicit URL. */
-            core?: boolean | string;
-            /** Load additionals: `true` → keyword, `string` → explicit URL. */
-            additionals?: boolean | string;
-            /** Load components: `true` → keyword, `string` → explicit URL. */
-            components?: boolean | string;
-            /** Extra explicit bundle keywords / URLs. */
-            bundles?: readonly string[];
-            /** Mirror the loaded modules' exports onto window. Default `true`. */
-            mirror?: boolean;
-        };
-
-        /** @name        TypeOptions
-         *  @public
-         *  @type        {{ Css?: string; Attrs?: string[]; Shadow?: 'open'|'closed'|false; Bus?: string; Render?: 'real'|'virtual'; Template?: {...}; Slot?: 'Internal'|'External' }}
-         *  @memberof    Core.Types
-         *  @namespace   Core
-         *  @description The optional configuration a caller hands to Reserve/Define for a Custom
-         *               type. These are the AUTHORING shapes (a `shadow` string, a single `bus`
-         *               name), which Reserve normalizes into the descriptor's richer runtime
-         *               shapes (a `Shadow` object, a `Brokers` array). Every field is optional;
-         *               an omitted field leaves its descriptor counterpart at the empty default.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         */
-        export interface TypeOptions
-        {
-            /** Scoped CSS for the type, as a raw string (compiled by the css service at use). */
-            Css?      : string;
-            /** Observed attribute names → become the descriptor's `Attributes`. */
-            Attrs?    : string[];
-            /** Shadow projection: 'open'/'closed' attaches a shadow root; false opts out (light DOM). */
-            Shadow?   : 'open' | 'closed' | false;
-            /** Event-bus name for parent/child registration → wrapped into the descriptor's `Brokers`. */
-            Bus?      : string;
-            /** JSX render mode for this type → wrapped into the descriptor's `Render`. */
-            Render?   : 'real' | 'virtual';
-            /** Declarative template spec, passed through to the descriptor's `Template`. */
-            Template? : { Ref?: string; Html?: string; Mode?: 'clone' | 'compile' };
-            /** Backing-node slotting for form/label/AOM cases, passed through to `Slot`. */
-            Slot?     : 'Internal' | 'External';
-        }
-    }
-
-    /** @namespace Descriptors
-     *  @memberof  Namespace
-     *  @author    Riccardo Angeli
-     *  @copyright Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license MIT / Commercial (dual license)
-     *  @description Runtime registry descriptors — the shapes stored in the live
-     *               registry maps and read on the hot path.
-     */
-    export namespace Descriptors
-    {
-        /** URL schema/spec (in html coincide con Uri) */
-        export interface Namespace
-        {
-            /** @name        Name
-             *  @public
-             *  @type        {string}
-             *  @description Namespace name: 'html' | 'svg' | 'mathML' | 'x3d' | ….
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Name          : string;
-            /** @name        Uri
-             *  @public
-             *  @type        {string}
-             *  @description URI used by `createElementNS` (e.g.
-             *               'http://www.w3.org/2000/svg').
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Uri           : string;
-            /** @name        NS
-             *  @public
-             *  @type        {boolean}
-             *  @description Namespaced flag: `true` → `createElementNS(Uri, tag)`,
-             *               `false` → `createElement` (html).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            NS            : boolean;
-            /** @name        Base
-             *  @public
-             *  @type        {(new (...args: unknown[]) => Element) | null}
-             *  @description Native base constructor (HTMLElement, SVGElement,
-             *               MathMLElement, …); `null` when none applies.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Base          : (new (...args: unknown[]) => Element) | null;
-            /** @name        Schema
-             *  @public
-             *  @type        {string}
-             *  @description Schema/spec URL (coincides with `Uri` for html).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Schema        : string;
-            /** @name        Documentation
-             *  @public
-             *  @type        {{ w3c: string }}
-             *  @description Reference documentation links for the namespace.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Documentation : { w3c: string };
-            /** @name        Types
-             *  @public
-             *  @type        {{ Standard: Record<string, { Tags: string[] }>; Custom: Record<string, { Tags: string[] }> }}
-             *  @description Declarative seed of the namespace's types, split in two: `Standard`
-             *               (pre-registered native interfaces → their tags, e.g.
-             *               { HTMLDivElement: { Tags: ['div'] }, … }) and `Custom` (user-defined
-             *               types, empty at seed time). Serializable config/identity — the live
-             *               materialized registry (Interfaces/Tags of descriptors) lives on the
-             *               Namespace class, not here.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Types         :
-            {
-                /** @name        Standard
-                 *  @public
-                 *  @namespace   Descriptor
-                 *  @memberOf    Namespace
-                 *  @type        {{ Interfaces: Record<string, Descriptors.Type>; Tags: Record<string, Descriptors.Type> }}
-                 *  @description Built-in namespace interfaces, materialized at construction
-                 *               from the descriptor seed. `Interfaces`: interface name →
-                 *               descriptor; `Tags`: tag → descriptor.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license)
-                 */
-                Standard : { Interfaces: Record<string, { Tags : string[] } >; Tags: Record<string, string> };
-                /** @name        Custom
-                 *  @public
-                 *  @namespace   Descriptor
-                 *  @memberOf    Namespace
-                 *  @type        {{ Interfaces: Record<string, Descriptors.Type>; Tags: Record<string, Descriptors.Type> }}
-                 *  @description User-defined types registered at runtime via Define. Empty
-                 *               at construction; same shape as `Standard`.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license)
-                 */
-                Custom   : { Constructors: Record<string, { Tags : string[] } >; Tags: Record<string, string> };
-            };
-            /** @name        Enabled
-             *  @public
-             *  @type        {boolean}
-             *  @description Operational flag: the namespace is active and serving Create/Update/Define.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Enabled       : boolean,
-            /** @name        Disabled
-             *  @public
-             *  @type        {boolean}
-             *  @description Operational flag: the namespace is inactive. Inverse of `Enabled`.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Disabled      : boolean,
-            /** @name        State
-             *  @public
-             *  @type        {boolean}
-             *  @description Validity of the namespace descriptor itself (`true` = healthy/usable),
-             *               analogous to `Type.State`; distinct from the operational `Enabled`/`Disabled`.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            State         : boolean,
-            /** @name        Loading
-             *  @public
-             *  @type        {boolean}
-             *  @description Async-load status — `true` while this namespace's deferred
-             *               resources (e.g. its component ESM modules) are being
-             *               fetched and registered. The *in-progress* edge: pairs with
-             *               `Loaded` (the *completed* edge). Both are `false` before any
-             *               load starts. Orthogonal to `Enabled` (operational/serving).
-             *  @default     false
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Loading     : boolean;
-            /** @name        Loaded
-             *  @public
-             *  @type        {boolean}
-             *  @description Async-load status — `true` once this namespace's deferred
-             *               resources have finished loading and registering. The
-             *               *completed* edge, distinct from `Loading` (in progress).
-             *               Also distinct from `Enabled`: a namespace can be `Loaded`
-             *               yet `Disabled` (loaded but not serving Create/Upgrade/Define).
-             *  @default     false
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Loaded      : boolean;
-            /** @name        Root
-             *  @public
-             *  @type        {Element | null}
-             *  @description Root element under which this namespace mounts and observes
-             *               its elements; `null` when unbound (e.g. SSR before attach,
-             *               or document-wide observation). Per-namespace — distinct from
-             *               the facade's `Core.Root`, which is the whole document root
-             *               (`document.documentElement`).
-             *  @default     null
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Root        : Window | null
-        }
-
-        /** @author    Riccardo Angeli
-         *  @copyright Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license MIT / Commercial (dual license)
-         *  @interface Type
-         *  @memberof  Core.Descriptors
-         *  @description Descriptor of a type in the namespace registry (formerly
-         *               `TypeDescriptor`).
-         *
-         *               It carries two independent, complementary status axes:
-         *               `State` concerns the descriptor itself — the outcome of its
-         *               construction/registration (intact, degraded, unusable) — while
-         *               `Supported`/`Defined` concern the type relative to its
-         *               namespace (native interface present in the environment / type
-         *               registered).
-         *
-         *               The optional triplet `Slot`/`Properties`/`Methods` appears only
-         *               for fragile native forms (those with internal slots) and
-         *               travels together: the presence of any one marks the type as
-         *               fragile; their absence means a direct native extension.
-         */
-        export interface Type
-        {
-            /** @name        Name
-             *  @public
-             *  @type        {string}
-             *  @description Identifying name of the type — the DOM interface name for
-             *               standard types, the custom name otherwise.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Name        : string,
-            /** @name        Tags
-             *  @public
-             *  @type        {string[]}
-             *  @description Tags that instantiate this type. A type may own several
-             *               (e.g. `h1`…`h6` all map to HTMLHeadingElement).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Tags        : string[],
-            /** @name        Namespace
-             *  @public
-             *  @type        {Namespace}
-             *  @description Owning namespace (identity: html / svg / mathML / x3d / …).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Namespace   : string,
-            /** @name        Constructor
-             *  @public
-             *  @type        {Constructor | null}
-             *  @description Effective constructor used to instantiate the type — a class
-             *               or a function. Its return is NOT necessarily an `Element`
-             *               (it may yield a wrapper, a Real, any object). `null` when
-             *               unresolved.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Constructor : Types.Constructor | null,
-            /** @name        Interface
-             *  @public
-             *  @type        {Interface | null}
-             *  @description Reference native DOM interface (HTMLDivElement, SVGSVGElement,
-             *               …) — always an `Element` constructor. `null` when absent from
-             *               the environment.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Interface   : Types.Constructor | false |null,
-            /** @name        Base
-             *  @public
-             *  @type        {Types.Constructor | false | null}
-             *  @description The base as DECLARED at Define time. Differs from `Interface` when the
-             *               declared super is a user class: `Interface` is the first patched IDL
-             *               found by climbing (what the element is minted from), `Base` is the
-             *               constructor the user named (what the prototype is grafted onto).
-             *               `false`/`null` when the two coincide. Kept in sync with
-             *               `Namespaces.Descriptors.Type`.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Base        : Types.Constructor | false | null,
-            /** @name        Prototype
-             *  @public
-             *  @type        {object | null}
-             *  @description Prototype captured at registration, used for the prototype
-             *               splice during upgrade; `null` when not available.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Prototype   : object | null,
-            /** @name        Supported
-             *  @public
-             *  @type        {boolean}
-             *  @description Type status within the namespace: the native interface is
-             *               supported by the environment.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Supported   : boolean,
-            /** @name        Defined
-             *  @public
-             *  @type        {boolean}
-             *  @description Type status within the namespace: the type is registered /
-             *               defined.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Defined     : boolean,
-            /** @name        Patched
-             *  @public
-             *  @type        {boolean}
-             *  @description Whether this type's native constructor has been wrapped by
-             *               `_patchNative` (super()-capable). Distinct from `Defined`,
-             *               which only marks the type as registered and is `true` for
-             *               every supported native regardless of patching — so it can't
-             *               gate the patch. Idempotency marker: the patch pass skips a
-             *               native whose `Patched` is already `true`. Live runtime field,
-             *               not emitted by the serializer.
-             *  @default     false
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Patched     : boolean,
-            /** @name        Upgraded
-             *  @public
-             *  @type        {boolean}
-             *  @description Whether this type's native constructor has been wrapped by
-             *               `_patchNative` (super()-capable). Distinct from `Defined`,
-             *               which only marks the type as registered and is `true` for
-             *               every supported native regardless of patching — so it can't
-             *               gate the patch. Idempotency marker: the patch pass skips a
-             *               native whose `Patched` is already `true`. Live runtime field,
-             *               not emitted by the serializer.
-             *  @default     false
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Upgraded    : boolean,
-            /** @name        Declaration
-             *  @public
-             *  @type        {'FUNCTION' | 'CLASS' | 'CUSTOM'}
-             *  @description Declaration form: function, class with `extends`, or custom
-             *               element.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Declaration : Types.Declaration,
-            /** @name        Type
-             *  @public
-             *  @type        {'STANDARD' | 'CUSTOM'}
-             *  @description Type category: a namespace standard or a user custom type.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Type        : 'STANDARD' | 'CUSTOM',
-            /** @name        Standard
-             *  @public
-             *  @type        {boolean}
-             *  @description Convenience boolean: `true` for a namespace standard
-             *               (mirrors `Type === 'STANDARD'`).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Standard    : boolean,
-            /** @name        Custom
-             *  @public
-             *  @type        {boolean}
-             *  @description Convenience boolean: `true` for a user custom type (mirrors
-             *               `Type === 'CUSTOM'`).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Custom      : boolean,
-            /** @name        Component
-             *  @public
-             *  @type        {boolean}
-             *  @description Convenience boolean: `true` when this custom type was defined through the
-             *               Component (Layer 2) factory. Orthogonal to both `Type` and `Declaration`:
-             *               a Component is `Type: 'CUSTOM'`, `Declaration: 'CLASS'`, `Component: true`
-             *               — the flag carries the layer distinction WITHOUT extending either enum
-             *               (no `'COMPONENT'` Type value, no Component Declaration form, mirroring how
-             *               a class is a `Declaration` not a `Type`). COEXISTS with `Custom`: a
-             *               Component descriptor has BOTH `Custom: true` and `Component: true`; plain
-             *               customs have `Component: false`. Set by the Component factory after Reserve
-             *               (`descriptor.Component = true`), before Promote.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Component   : boolean,
-            /** @name        Css
-             *  @public
-             *  @type        {string}
-             *  @description Compiled CSS for this type — the single source of truth for its
-             *               styling (replaces the former flat `Style` map). Holds everything:
-             *               flat declarations, `@media`, `@keyframes`, pseudo-states, nested
-             *               selectors. Applied by injecting a `<style>` block. `''` when the
-             *               type has no style (standard natives fall back to UA styles). The
-             *               merge of base + custom styles happens upstream in `Define`, before
-             *               compilation, so the descriptor always holds the final fused text.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Stylesheet  : string | null;
-            /** @name        Methods
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of methods forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Shadow?     : { Mode: 'open'|'closed', Setting?: any, Css?: boolean, DelegatesFocus?: boolean },
-            /** @name        Methods
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of methods forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Template?   : { Ref?: string, Html?: string, Mode?: 'clone'|'compile' } | null,
-            /** @name        Native
-             *  @public
-             *  @type        {boolean}
-             *  @description Registration path: `true` via the browser-native
-             *               `customElements.define`, `false` via the AriannA registry.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Native      : boolean,
-            /** @name        Chain
-             *  @public
-             *  @type        {Map<string, unknown>}
-             *  @description Prototype chain captured at registration (name → constructor).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Chain?      : string[],
-            /** @name        Slot
-             *  @public
-             *  @type        {'Internal' | 'External'=}
-             *  @description Placement of the backing native for forms with internal
-             *               slots: `Internal` → inside a shadow root (isolated;
-             *               presentational: canvas/img/video/audio), `External` → in
-             *               light DOM (participates in form/label/AOM:
-             *               input/select/textarea). Absent ⟹ the type is not fragile
-             *               (it extends the native directly). The install logic
-             *               (compose inner native + forward) lives in Real / an IoC
-             *               installer, not here.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Slot?       : 'Internal' | 'External' | null,
-            /** @name        State
-             *  @public
-             *  @type        {'Fail' | 'Warn' | 'Success'}
-             *  @description Status of the descriptor itself (construction/registration
-             *               outcome): `Success` intact, `Warn` degraded but usable,
-             *               `Fail` unusable. Orthogonal to `Supported`/`Defined`, which
-             *               describe the type within its namespace.
-             *  @default     'Success'
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            State       : 'Fail' | 'Warn' | 'Success' | 'Pending' | null,
-            /** @name        Properties
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of properties forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Attributes? : string[] | null,
-            /** @name        Properties
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of properties forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Render?     : string[] | null,
-            /** @name        Properties
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of properties forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Properties? : string[] | null,
-            /** @name        Methods
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of methods forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Methods?    : string[] | null
-            /** @name        Properties
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of properties forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Brokers?    : string[] | null,
         }
     }
 
@@ -2039,7 +1335,7 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        static #observer    : Observer | null      = null;
+        static #observer    : Observers.Observer | null      = null;
 
         /** @name        #globals
          *  @private
@@ -2057,7 +1353,7 @@ export namespace Core
         /** @name        constructor
          *  @public
          *  @memberof    Core.Boot.AriannA
-         *  @param       {Types.Packages} [packages={}] Which optional bundles to pull and whether to mirror
+         *  @param       {Packages} [packages={}] Which optional bundles to pull and whether to mirror
          *               their exports. Left out, it reaches `#packages` as `{}` — the same thing a bare
          *               `new AriannA()` asks for, which today resolves to no URLs at all.
          *  @description Bring the framework up: seed the namespaces and start the observer synchronously,
@@ -2073,7 +1369,7 @@ export namespace Core
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        constructor(packages?: Types.Packages)
+        constructor(packages?: Packages)
         {
             AriannA.Initialize();
             AriannA.#ready ??= AriannA.Boot(packages);
@@ -2102,7 +1398,7 @@ export namespace Core
          *  @private
          *  @static
          *  @memberof    Core.Boot.AriannA
-         *  @param       {Types.Packages} spec The package specification.
+         *  @param       {Packages} spec The package specification.
          *  @returns     {{ urls: string[]; mirror: boolean }} Module URLs to import, and whether to mirror.
          *  @description Resolve a package spec to a list of bundle URLs. STUB: returns no URLs at all, so
          *               `Boot` currently imports nothing and `#mirror` never runs.
@@ -2110,7 +1406,7 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        static #packages(spec: Types.Packages): { urls: string[]; mirror: boolean }
+        static #packages(spec: Packages): { urls: string[]; mirror: boolean }
         {
             void spec;
 
@@ -2191,7 +1487,7 @@ export namespace Core
          *  @public
          *  @static
          *  @memberof    Core.Boot.AriannA
-         *  @param       {Types.Packages} [spec] Which optional bundles to pull and whether to mirror their
+         *  @param       {Packages} [spec] Which optional bundles to pull and whether to mirror their
          *               exports onto the global scope.
          *  @returns     {Promise<void>} Settles once the bundles are in and 'arianna-ready' has fired.
          *  @description Phase two: pull the optional bundles and announce readiness. Runs at most once.
@@ -2203,7 +1499,7 @@ export namespace Core
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        static async Boot(spec?: Types.Packages): Promise<void>
+        static async Boot(spec?: Packages): Promise<void>
         {
             AriannA.Initialize();
 
@@ -2284,16 +1580,51 @@ export namespace Core
             if (!service) return;
 
             const stage    = document.body ?? document.documentElement;
-            const observer = Services.Observer?.Create() as Observer;
+            const observer = Services.Observer?.Create() as Observers.Observer;
             const base     = observer.Callback!;
 
             observer?.connect(stage);
 
             observer.Callback = function (mutations: MutationRecord[], observer: MutationObserver): void
             {
+                /* Il service 'component' e' l'unico che conosce Reactivity e i Signal:
+                 * il kernel gli inoltra gli eventi e non sa cosa ne faccia. */
+                const cs = Core.Services.Resolve('component') as
+                    {
+                        AttributeChanged?(n: Element, name: string, old: string | null, value: string | null): void;
+                        Connected?(n: Element): void;
+                        Disconnected?(n: Element): void;
+                    } | undefined;
+
                 for (const m of mutations)
                 {
+                    /* ATTRIBUTI — l'Observer globale ha gia' `attributes: true` e
+                     * `attributeOldValue: true`: l'informazione arrivava e veniva scartata
+                     * da un `continue`. Nessun secondo MutationObserver: uno solo, esteso. */
+                    if (m.type === 'attributes')
+                    {
+                        if (m.target instanceof Element && m.attributeName)
+                        {
+                            cs?.AttributeChanged?.
+                            (
+                                m.target,
+                                m.attributeName,
+                                m.oldValue ?? null,
+                                m.target.getAttribute(m.attributeName)
+                            );
+                        }
+
+                        continue;
+                    }
+
                     if (m.type !== 'childList') continue;
+
+                    /* DISCONNESSIONE — simmetrica a `onConnected`, che senza questa non
+                     * aveva mai una controparte. */
+                    for (const node of m.removedNodes)
+                    {
+                        if (node instanceof Element) { cs?.Disconnected?.(node); }
+                    }
 
                     for (const node of m.addedNodes)
                     {
@@ -2302,11 +1633,18 @@ export namespace Core
                         const d = Namespaces.Namespace.Resolve(node);
 
                         if (!d || !d.Custom || !d.Defined) continue;
-                        if (Object.getPrototypeOf(node) === d.Prototype) continue;
 
-                        const n = Namespaces.Namespace.Namespaces[d.Namespace];
+                        if (Object.getPrototypeOf(node) !== d.Prototype)
+                        {
+                            const n = Namespaces.Namespace.Namespaces[d.Namespace];
 
-                        if (n) n.Upgrade(node, d);
+                            if (n) n.Upgrade(node, d);
+                        }
+
+                        /* CONNESSIONE — sempre, anche per i nodi gia' costruiti con il
+                         * prototype corretto. Saltarla impediva Template, Shadow e lifecycle
+                         * sui percorsi `new`, Namespace.Create, Real e Virtual. */
+                        cs?.Connected?.(node);
                     }
                 }
 
@@ -2315,7 +1653,7 @@ export namespace Core
 
             observer.sweep(stage);
 
-            AriannA.#observer    = observer as Observer;
+            AriannA.#observer    = observer as Observers.Observer;
             AriannA.#initialized = true;
         }
 
@@ -2626,7 +1964,7 @@ export namespace Core
      *               matches are resolved through the constructor names returned by
      *               `GetPrototypeChain`.
      *  @param       value Value, object or constructor to inspect.
-     *  @param       {...Types.Native} matches Native type tags, constructors, or a single array of
+     *  @param       {...Native} matches Native type tags, constructors, or a single array of
      *               alternatives to test against `value`.
      *  @returns     {boolean} `true` when every variadic match succeeds, or when at least one match
      *               succeeds in the single-array OR form; otherwise `false`.
@@ -2638,12 +1976,12 @@ export namespace Core
      *  @example     Core.Is([], [Array, Object])                    // true
      *  @example     Core.Is(globalThis.HTMLElement, 'idl')          // true
      */
-    export function Is(value: unknown, ...matches: string[] | Array<Types.Native> | readonly Types.Base[]): boolean
+    export function Is(value: unknown, ...matches: string[] | Array<Native> | readonly SchemaTypes.Base[]): boolean
     {
         if (matches.length === 0) { return false }
 
         const form   = matches.length === 1 && Array.isArray(matches[0]);
-        const types = (form ? matches[0] : matches) as readonly  Types.Native[];
+        const types = (form ? matches[0] : matches) as readonly  Native[];
         const chain   = GetPrototypeChain(value as any);
 
         for (const t of types)

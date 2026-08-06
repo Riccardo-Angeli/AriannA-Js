@@ -25,18 +25,13 @@
  *   const trX = ed.querySelector("arianna-anim-track[channel='loc-x']") as HTMLElement;
  *   if (trX) trX.appendChild(new Keyframe({ frame: 24, value: 5 }));
  */
-
-export { Keyframe }         from './Keyframe.ts';
+export { Keyframe } from './Keyframe.ts';
 export type { KeyframeOptions, KeyframeInterpolation } from './Keyframe.ts';
-
-export { AnimTrack }        from './AnimTrack.ts';
-export type { AnimTrackOptions, ChannelGroup }        from './AnimTrack.ts';
-
-export { KeyframeEditor }   from './KeyframeEditor.ts';
-export type { KeyframeEditorOptions }                 from './KeyframeEditor.ts';
-
-export { CurveEditor }      from './CurveEditor.ts';
-export type { CurveEditorOptions }                    from './CurveEditor.ts';
-
-export { OnionStage }       from './OnionStage.ts';
-export type { OnionStageOptions, SnapshotProvider }   from './OnionStage.ts';
+export { AnimTrack } from './AnimTrack.ts';
+export type { AnimTrackOptions, ChannelGroup } from './AnimTrack.ts';
+export { KeyframeEditor } from './KeyframeEditor.ts';
+export type { KeyframeEditorOptions } from './KeyframeEditor.ts';
+export { CurveEditor } from './CurveEditor.ts';
+export type { CurveEditorOptions } from './CurveEditor.ts';
+export { OnionStage } from './OnionStage.ts';
+export type { OnionStageOptions, SnapshotProvider } from './OnionStage.ts';

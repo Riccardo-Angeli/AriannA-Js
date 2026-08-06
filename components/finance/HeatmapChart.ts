@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/finance/HeatmapChart
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -18,13 +22,8 @@
  * @example HTML
  *   <arianna-heatmap-chart width="500" height="500"></arianna-heatmap-chart>
  *
- * Attrs: width, height
+ * Attributes: width, height
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -32,45 +31,44 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _svg, _fmt, _esc } from './helpers.ts';
-
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
 export interface HeatmapChartOptions {
-    labels? : string[];
-    matrix? : number[][];
-    width?  : number;
-    height? : number;
+    labels?: string[];
+    matrix?: number[][];
+    width?: number;
+    height?: number;
 }
-
-export class HeatmapChart extends Component('arianna-heatmap-chart', HTMLElement, {}, {
-    attrs : ['width', 'height'],
+@Component('arianna-heatmap-chart', {}, {
+    Attributes: ['width', 'height'],
 })
-{
-    labels$: Signal<string[]>   = signal<string[]>([]);
+export class HeatmapChart extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    labels$: Signal<string[]> = signal<string[]>([]);
     matrix$: Signal<number[][]> = signal<number[][]>([]);
-
-    build(_opts: HeatmapChartOptions = {})
-    {
-        const wAttr = this.attributeSignal('width');
-        const hAttr = this.attributeSignal('height');
-
+    onConnected(_opts: HeatmapChartOptions = {}) {
+        const wAttr = this.signal().attribute('width');
+        const hAttr = this.signal().attribute('height');
         this.svgHtml = (): string => {
             const labels = this.labels$.Get();
             const matrix = this.matrix$.Get();
-            if (!labels.length || !matrix.length) return '';
-
+            if (!labels.length || !matrix.length)
+                return '';
             const w = parseInt(wAttr.Get() ?? '500', 10) || 500;
             const h = parseInt(hAttr.Get() ?? '500', 10) || 500;
-
             const n = labels.length;
-            const pad   = 60;
+            const pad = 60;
             const cellW = (w - pad) / n;
             const cellH = (h - pad) / n;
-
             let cells = '', axes = '';
             for (let i = 0; i < n; i++) {
                 for (let j = 0; j < n; j++) {
@@ -80,11 +78,12 @@ export class HeatmapChart extends Component('arianna-heatmap-chart', HTMLElement
                     if (v < 0) {
                         const t = Math.min(1, -v);
                         r = Math.round(239 * t + 245 * (1 - t));
-                        g = Math.round( 83 * t + 245 * (1 - t));
-                        b = Math.round( 80 * t + 245 * (1 - t));
-                    } else {
+                        g = Math.round(83 * t + 245 * (1 - t));
+                        b = Math.round(80 * t + 245 * (1 - t));
+                    }
+                    else {
                         const t = Math.min(1, v);
-                        r = Math.round( 38 * t + 245 * (1 - t));
+                        r = Math.round(38 * t + 245 * (1 - t));
                         g = Math.round(166 * t + 245 * (1 - t));
                         b = Math.round(154 * t + 245 * (1 - t));
                     }
@@ -122,60 +121,53 @@ export class HeatmapChart extends Component('arianna-heatmap-chart', HTMLElement
                     'text-anchor': 'end',
                 }, _esc(labels[i] ?? ''));
             }
-
             return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
-                 + axes + cells
-                 + `</svg>`;
+                + axes + cells
+                + `</svg>`;
         };
-
-        this.template = html`<div class="ar-heatmap" a-html="this.svgHtml()"></div>`;
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = HeatmapChart.DefaultSheet();
+        this.template = html `<div class="ar-heatmap" a-html="this.svgHtml()"></div>`;
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = HeatmapChart.DefaultSheet();
     }
-
     /** Convenience: set labels and matrix together. */
     setData(labels: string[], matrix: number[][]): this {
         this.labels$.Set(labels ?? []);
         this.matrix$.Set(matrix ?? []);
         return this;
     }
-
     set labels(v: string[]) { this.labels$.Set(v ?? []); }
-    get labels(): string[]  { return this.labels$.Get(); }
-
+    get labels(): string[] { return this.labels$.Get(); }
     set matrix(v: number[][]) { this.matrix$.Set(v ?? []); }
-    get matrix(): number[][]  { return this.matrix$.Get(); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    get matrix(): number[][] { return this.matrix$.Get(); }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     private svgHtml: () => string = () => '';
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    display     : 'inline-block',
-                    padding     : '4px',
-                }),
-                new Rule(':host svg', { display: 'block' }),
-            ]
-        );
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                display: 'inline-block',
+                padding: '4px',
+            }),
+            new Rule(':host svg', { display: 'block' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'HeatmapChart', {
-        value: HeatmapChart, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * HeatmapChart namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace HeatmapChart {
+    export namespace Interfaces {
+        export interface Options extends HeatmapChartOptions {
+        }
+    }
 }
-
 export default HeatmapChart;

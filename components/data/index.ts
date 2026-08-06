@@ -14,15 +14,7 @@
  * Tags registered:
  *   arianna-tree-view, (arianna-table via layout/Table re-export)
  */
-
-export { Table }    from './Table.ts';
+export { Table } from './Table.ts';
 export { TreeView } from './TreeView.ts';
-
-export type {
-    Row, SortDir, SortState, SelectMode,
-    TableColumn, TableOptions,
-} from './Table.ts';
-
-export type {
-    TreeNode, TreeViewOptions,
-} from './TreeView.ts';
+export type { Row, SortDir, SortState, SelectMode, TableColumn, TableOptions, } from './Table.ts';
+export type { TreeNode, TreeViewOptions, } from './TreeView.ts';

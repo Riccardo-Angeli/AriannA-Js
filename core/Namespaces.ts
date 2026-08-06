@@ -1,562 +1,23 @@
 import { Core } from "./Core.ts";
 
+import type { Types as SchemaTypes } from './schema/Types.ts';
+import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
+
 export namespace Namespaces
 {
-    /** @namespace   Types
-     *  @memberof    Core
-     *  @description Shared structural type aliases used across the kernel — the
-     *               constructor/interface shapes that the descriptors and `Define`
-     *               rely on. Names are distinct from the descriptor's field names
-     *               (`Constructor`/`Interface`) to avoid self-referential overlap.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license)
-     */
-    export namespace Types
-    {
-
-    }
-
-    /** @namespace Descriptors
-     *  @memberof  Namespace
-     *  @author    Riccardo Angeli
-     *  @copyright Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license MIT / Commercial (dual license)
-     *  @description Runtime registry descriptors — the shapes stored in the live
-     *               registry maps and read on the hot path.
-     */
-    export namespace Descriptors
-    {
-        /** URL schema/spec (in html coincide con Uri) */
-        export interface Namespace
-        {
-            /** @name        Name
-             *  @public
-             *  @type        {string}
-             *  @description Namespace name: 'html' | 'svg' | 'mathML' | 'x3d' | ….
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Name          : string;
-            /** @name        Uri
-             *  @public
-             *  @type        {string}
-             *  @description URI used by `createElementNS` (e.g.
-             *               'http://www.w3.org/2000/svg').
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Uri           : string;
-            /** @name        NS
-             *  @public
-             *  @type        {boolean}
-             *  @description Namespaced flag: `true` → `createElementNS(Uri, tag)`,
-             *               `false` → `createElement` (html).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            NS            : boolean;
-            /** @name        Base
-             *  @public
-             *  @type        {(new (...args: unknown[]) => Element) | null}
-             *  @description Native base constructor (HTMLElement, SVGElement,
-             *               MathMLElement, …); `null` when none applies.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Base          : (new (...args: unknown[]) => Element) | null;
-            /** @name        Schema
-             *  @public
-             *  @type        {string}
-             *  @description Schema/spec URL (coincides with `Uri` for html).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Schema        : string;
-            /** @name        Documentation
-             *  @public
-             *  @type        {{ w3c: string }}
-             *  @description Reference documentation links for the namespace.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Documentation : { w3c: string };
-            /** @name        Types
-             *  @public
-             *  @type        {{ Standard: Record<string, { Tags: string[] }>; Custom: Record<string, { Tags: string[] }> }}
-             *  @description Declarative seed of the namespace's types, split in two: `Standard`
-             *               (pre-registered native interfaces → their tags, e.g.
-             *               { HTMLDivElement: { Tags: ['div'] }, … }) and `Custom` (user-defined
-             *               types, empty at seed time). Serializable config/identity — the live
-             *               materialized registry (Interfaces/Tags of descriptors) lives on the
-             *               Namespace class, not here.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Types         :
-                {
-                    /** @name        Standard
-                     *  @public
-                     *  @namespace   Descriptor
-                     *  @memberOf    Namespace
-                     *  @type        {{ Interfaces: Record<string, Descriptors.Type>; Tags: Record<string, Descriptors.Type> }}
-                     *  @description Built-in namespace interfaces, materialized at construction
-                     *               from the descriptor seed. `Interfaces`: interface name →
-                     *               descriptor; `Tags`: tag → descriptor.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license)
-                     */
-                    Standard : { Interfaces: Record<string, { Tags : string[] } >; Tags: Record<string, string> };
-                    /** @name        Custom
-                     *  @public
-                     *  @namespace   Descriptor
-                     *  @memberOf    Namespace
-                     *  @type        {{ Interfaces: Record<string, Descriptors.Type>; Tags: Record<string, Descriptors.Type> }}
-                     *  @description User-defined types registered at runtime via Define. Empty
-                     *               at construction; same shape as `Standard`.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license)
-                     */
-                    Custom   : { Constructors: Record<string, { Tags : string[] } >; Tags: Record<string, string> };
-                };
-            /** @name        Enabled
-             *  @public
-             *  @type        {boolean}
-             *  @description Operational flag: the namespace is active and serving Create/Update/Define.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Enabled       : boolean,
-            /** @name        Disabled
-             *  @public
-             *  @type        {boolean}
-             *  @description Operational flag: the namespace is inactive. Inverse of `Enabled`.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Disabled      : boolean,
-            /** @name        State
-             *  @public
-             *  @type        {boolean}
-             *  @description Validity of the namespace descriptor itself (`true` = healthy/usable),
-             *               analogous to `Type.State`; distinct from the operational `Enabled`/`Disabled`.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            State         : boolean,
-            /** @name        Loading
-             *  @public
-             *  @type        {boolean}
-             *  @description Async-load status — `true` while this namespace's deferred
-             *               resources (e.g. its component ESM modules) are being
-             *               fetched and registered. The *in-progress* edge: pairs with
-             *               `Loaded` (the *completed* edge). Both are `false` before any
-             *               load starts. Orthogonal to `Enabled` (operational/serving).
-             *  @default     false
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Loading     : boolean;
-            /** @name        Loaded
-             *  @public
-             *  @type        {boolean}
-             *  @description Async-load status — `true` once this namespace's deferred
-             *               resources have finished loading and registering. The
-             *               *completed* edge, distinct from `Loading` (in progress).
-             *               Also distinct from `Enabled`: a namespace can be `Loaded`
-             *               yet `Disabled` (loaded but not serving Create/Upgrade/Define).
-             *  @default     false
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Loaded      : boolean;
-            /** @name        Root
-             *  @public
-             *  @type        {Element | null}
-             *  @description Root element under which this namespace mounts and observes
-             *               its elements; `null` when unbound (e.g. SSR before attach,
-             *               or document-wide observation). Per-namespace — distinct from
-             *               the facade's `Core.Root`, which is the whole document root
-             *               (`document.documentElement`).
-             *  @default     null
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Root        : Window | null
-        }
-
-        /** @author    Riccardo Angeli
-         *  @copyright Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license MIT / Commercial (dual license)
-         *  @interface Type
-         *  @memberof  Core.Descriptors
-         *  @description Descriptor of a type in the namespace registry (formerly
-         *               `TypeDescriptor`).
-         *
-         *               It carries two independent, complementary status axes:
-         *               `State` concerns the descriptor itself — the outcome of its
-         *               construction/registration (intact, degraded, unusable) — while
-         *               `Supported`/`Defined` concern the type relative to its
-         *               namespace (native interface present in the environment / type
-         *               registered).
-         *
-         *               The optional triplet `Slot`/`Properties`/`Methods` appears only
-         *               for fragile native forms (those with internal slots) and
-         *               travels together: the presence of any one marks the type as
-         *               fragile; their absence means a direct native extension.
-         */
-        export interface Type
-        {
-            /** @name        Name
-             *  @public
-             *  @type        {string}
-             *  @description Identifying name of the type — the DOM interface name for
-             *               standard types, the custom name otherwise.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Name        : string,
-            /** @name        Tags
-             *  @public
-             *  @type        {string[]}
-             *  @description Tags that instantiate this type. A type may own several
-             *               (e.g. `h1`…`h6` all map to HTMLHeadingElement).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Tags        : string[],
-            /** @name        Namespace
-             *  @public
-             *  @type        {Namespace}
-             *  @description Owning namespace (identity: html / svg / mathML / x3d / …).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Namespace   : string,
-            /** @name        Constructor
-             *  @public
-             *  @type        {Constructor | null}
-             *  @description Effective constructor used to instantiate the type — a class
-             *               or a function. Its return is NOT necessarily an `Element`
-             *               (it may yield a wrapper, a Real, any object). `null` when
-             *               unresolved.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Constructor : Core.Types.Constructor | null,
-            /** @name        Interface
-             *  @public
-             *  @type        {Interface | null}
-             *  @description Reference native DOM interface (HTMLDivElement, SVGSVGElement,
-             *               …) — always an `Element` constructor. `null` when absent from
-             *               the environment.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Interface   : Core.Types.Constructor | false |null,
-            /** @name        Base
-             *  @public
-             *  @type        {Core.Types.Constructor | false | null}
-             *  @description The base as DECLARED at Define time, which is not always the native
-             *               `Interface`. When the declared super is a user class — `class Base
-             *               extends HTMLDivElement`, or a multi-level L1→L2→L3 chain — the two
-             *               diverge: `Interface` is the first patched IDL found by climbing
-             *               (what the element is minted from, since only a native tag can be
-             *               created), while `Base` is the constructor the user actually named
-             *               (what the prototype must be grafted onto).
-             *
-             *               They were the same field before, and `Promote` grafted a FUNCTION
-             *               constructor straight onto `Interface.prototype` — skipping every
-             *               intermediate user class, so their methods silently vanished from the
-             *               element. A CLASS was unaffected, since its own chain already carries
-             *               them and `Prototype` records it whole.
-             *
-             *               `false`/`null` when the declared base IS the native interface, in
-             *               which case `Interface` alone is the answer.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Base        : Core.Types.Constructor | false | null,
-            /** @name        Prototype
-             *  @public
-             *  @type        {object | null}
-             *  @description Prototype captured at registration, used for the prototype
-             *               splice during upgrade; `null` when not available.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Prototype   : object | null,
-            /** @name        Supported
-             *  @public
-             *  @type        {boolean}
-             *  @description Type status within the namespace: the native interface is
-             *               supported by the environment.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Supported   : boolean,
-            /** @name        Defined
-             *  @public
-             *  @type        {boolean}
-             *  @description Type status within the namespace: the type is registered /
-             *               defined.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Defined     : boolean,
-            /** @name        Patched
-             *  @public
-             *  @type        {boolean}
-             *  @description Whether this type's native constructor has been wrapped by
-             *               `_patchNative` (super()-capable). Distinct from `Defined`,
-             *               which only marks the type as registered and is `true` for
-             *               every supported native regardless of patching — so it can't
-             *               gate the patch. Idempotency marker: the patch pass skips a
-             *               native whose `Patched` is already `true`. Live runtime field,
-             *               not emitted by the serializer.
-             *  @default     false
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Patched     : boolean,
-            /** @name        Upgraded
-             *  @public
-             *  @type        {boolean}
-             *  @description Whether this type's native constructor has been wrapped by
-             *               `_patchNative` (super()-capable). Distinct from `Defined`,
-             *               which only marks the type as registered and is `true` for
-             *               every supported native regardless of patching — so it can't
-             *               gate the patch. Idempotency marker: the patch pass skips a
-             *               native whose `Patched` is already `true`. Live runtime field,
-             *               not emitted by the serializer.
-             *  @default     false
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Upgraded    : boolean,
-            /** @name        Declaration
-             *  @public
-             *  @type        {'FUNCTION' | 'CLASS' | 'CUSTOM'}
-             *  @description Declaration form: function, class with `extends`, or custom
-             *               element.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Declaration : Core.Types.Declaration,
-            /** @name        Type
-             *  @public
-             *  @type        {'STANDARD' | 'CUSTOM'}
-             *  @description Type category: a namespace standard or a user custom type.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Type        : 'STANDARD' | 'CUSTOM',
-            /** @name        Standard
-             *  @public
-             *  @type        {boolean}
-             *  @description Convenience boolean: `true` for a namespace standard
-             *               (mirrors `Type === 'STANDARD'`).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Standard    : boolean,
-            /** @name        Custom
-             *  @public
-             *  @type        {boolean}
-             *  @description Convenience boolean: `true` for a user custom type (mirrors
-             *               `Type === 'CUSTOM'`).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Custom      : boolean,
-            /** @name        Component
-             *  @public
-             *  @type        {boolean}
-             *  @description Convenience boolean: `true` when this custom type was defined through the
-             *               Component (Layer 2) factory. Orthogonal to both `Type` and `Declaration`:
-             *               a Component is `Type: 'CUSTOM'`, `Declaration: 'CLASS'`, `Component: true`
-             *               — the flag carries the layer distinction WITHOUT extending either enum
-             *               (no `'COMPONENT'` Type value, no Component Declaration form, mirroring how
-             *               a class is a `Declaration` not a `Type`). COEXISTS with `Custom`: a
-             *               Component descriptor has BOTH `Custom: true` and `Component: true`; plain
-             *               customs have `Component: false`. Set by the Component factory after Reserve
-             *               (`descriptor.Component = true`), before Promote.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Component   : boolean,
-            /** @name        Css
-             *  @public
-             *  @type        {string}
-             *  @description Compiled CSS for this type — the single source of truth for its
-             *               styling (replaces the former flat `Style` map). Holds everything:
-             *               flat declarations, `@media`, `@keyframes`, pseudo-states, nested
-             *               selectors. Applied by injecting a `<style>` block. `''` when the
-             *               type has no style (standard natives fall back to UA styles). The
-             *               merge of base + custom styles happens upstream in `Define`, before
-             *               compilation, so the descriptor always holds the final fused text.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Stylesheet  : string | null;
-            /** @name        Methods
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of methods forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Shadow?     : { Mode: 'open'|'closed', Setting?: any, Css?: boolean, DelegatesFocus?: boolean },
-            /** @name        Methods
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of methods forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Template?   : { Ref?: string, Html?: string, Mode?: 'clone'|'compile' } | null,
-            /** @name        Native
-             *  @public
-             *  @type        {boolean}
-             *  @description Registration path: `true` via the browser-native
-             *               `customElements.define`, `false` via the AriannA registry.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Native      : boolean,
-            /** @name        Chain
-             *  @public
-             *  @type        {Map<string, unknown>}
-             *  @description Prototype chain captured at registration (name → constructor).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Chain?      : string[],
-            /** @name        Slot
-             *  @public
-             *  @type        {'Internal' | 'External'=}
-             *  @description Placement of the backing native for forms with internal
-             *               slots: `Internal` → inside a shadow root (isolated;
-             *               presentational: canvas/img/video/audio), `External` → in
-             *               light DOM (participates in form/label/AOM:
-             *               input/select/textarea). Absent ⟹ the type is not fragile
-             *               (it extends the native directly). The install logic
-             *               (compose inner native + forward) lives in Real / an IoC
-             *               installer, not here.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Slot?       : 'Internal' | 'External' | null,
-            /** @name        State
-             *  @public
-             *  @type        {'Fail' | 'Warn' | 'Success'}
-             *  @description Status of the descriptor itself (construction/registration
-             *               outcome): `Success` intact, `Warn` degraded but usable,
-             *               `Fail` unusable. Orthogonal to `Supported`/`Defined`, which
-             *               describe the type within its namespace.
-             *  @default     'Success'
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            State       : 'Fail' | 'Warn' | 'Success' | 'Pending' | null,
-            /** @name        Properties
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of properties forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Attributes? : string[] | null,
-            /** @name        Properties
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of properties forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Render?     : string[] | null,
-            /** @name        Properties
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of properties forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Properties? : string[] | null,
-            /** @name        Methods
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of methods forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Methods?    : string[] | null
-            /** @name        Properties
-             *  @public
-             *  @type        {string[]=}
-             *  @description Names of properties forwarded to the inner native element
-             *               (fragile forms only).
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license)
-             */
-            Brokers?    : string[] | null,
-        }
-    }
+    export type SchemaType     = SchemaInterfaces.Namespaces.Type;
+    export type Descriptor     = SchemaInterfaces.Namespaces.Namespace;
+    export type RegistryBucket = SchemaInterfaces.Namespaces.RegistryBucket;
+    export type Base           = SchemaTypes.Base;
+    export type Constructor    = SchemaTypes.Constructor;
+    export type IDL            = SchemaTypes.IDL;
+    export type TypeOptions    = SchemaTypes.TypeOptions;
 
     /** @class       Namespace
      *  @memberof    Core
      *  @classdesc   Per-namespace registry engine (html / svg / mathML / x3d / …). Holds the
      *               namespace identity (`Name` / `Uri` / `NS` / `Base` / `Schema`) and the live,
-     *               runtime-mutable type tables (`Types.Standard` / `Types.Custom`, plus the flat
+     *               runtime-mutable type tables (`Standard` / `Custom`, plus the flat
      *               `Tags` mirror), and owns the per-namespace operations: `GetDescriptor`, `Create`
      *               (createElement vs createElementNS), `Define` (register a Custom type), `Upgrade`
      *               (prototype splice), and `Initialize` (native patching + Supported back-fill).
@@ -666,7 +127,7 @@ export namespace Namespaces
         /** @name        Types
          *  @public
          *  @readonly
-         *  @type        {{ Standard: { Interfaces: Record<string, Descriptors.Type>; Tags: Record<string, Descriptors.Type> }; Custom: { Interfaces: Record<string, Descriptors.Type>; Tags: Record<string, Descriptors.Type> } }}
+         *  @type        {{ Standard: { Interfaces: Record<string, SchemaType>; Tags: Record<string, SchemaType> }; Custom: { Interfaces: Record<string, SchemaType>; Tags: Record<string, SchemaType> } }}
          *  @description Live materialized registry of this namespace's types, split
          *               into `Standard` and `Custom`. Runtime-mutable mirror; the
          *               serializable seed lives in the descriptor's `Types`.
@@ -678,7 +139,7 @@ export namespace Namespaces
         {
             /** @name        Standard
              *  @public
-             *  @type        {{ Interfaces: Map<string, Descriptors.Type>; Tags: Map<string, Descriptors.Type> }}
+             *  @type        {{ Interfaces: Map<string, SchemaType>; Tags: Map<string, SchemaType> }}
              *  @memberof    Namespace.Types
              *  @namespace   Core
              *  @description Built-in namespace interfaces, materialized at construction
@@ -688,10 +149,10 @@ export namespace Namespaces
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license)
              */
-            Standard : { Interfaces: Map<string, Descriptors.Type>; Tags: Map<string, Descriptors.Type> };
+            Standard : { Interfaces: Map<string, SchemaType>; Tags: Map<string, SchemaType> };
             /** @name        Custom
              *  @public
-             *  @type        {{ Interfaces: Map<string, Descriptors.Type>; Tags: Map<string, Descriptors.Type> }}
+             *  @type        {{ Interfaces: Map<string, SchemaType>; Tags: Map<string, SchemaType> }}
              *  @memberof    Namespace.Types
              *  @namespace   Core
              *  @description User-defined types registered at runtime via `Define`. Empty
@@ -701,7 +162,37 @@ export namespace Namespaces
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license)
              */
-            Custom   : { Interfaces: Map<string, Descriptors.Type>; Tags: Map<string, Descriptors.Type> };
+            Custom   : { Interfaces: Map<string, SchemaType>; Tags: Map<string, SchemaType> };
+        }
+
+        get Standard(): RegistryBucket
+        {
+            const interfaces = this.Types.Standard.Interfaces;
+
+            return {
+                Interfaces       : interfaces,
+                SchemaInterfaces : interfaces,
+                Tags             : this.Types.Standard.Tags,
+                entries          : () => interfaces.entries(),
+                get              : key => interfaces.get(key),
+                set              : (key, value) => { interfaces.set(key, value); return this.Standard; },
+                values           : () => interfaces.values()
+            };
+        }
+
+        get Custom(): RegistryBucket
+        {
+            const interfaces = this.Types.Custom.Interfaces;
+
+            return {
+                Interfaces       : interfaces,
+                SchemaInterfaces : interfaces,
+                Tags             : this.Types.Custom.Tags,
+                entries          : () => interfaces.entries(),
+                get              : key => interfaces.get(key),
+                set              : (key, value) => { interfaces.set(key, value); return this.Custom; },
+                values           : () => interfaces.values()
+            };
         }
 
         /** @name        #typeStyles
@@ -786,14 +277,14 @@ export namespace Namespaces
         /** @name        Tags
          *  @public
          *  @readonly
-         *  @type        {Record<string, Descriptors.Type>}
-         *  @description Flat tag → descriptor mirror combining `Types.Standard.Tags`
-         *               and `Types.Custom.Tags` for fast single-lookup resolution.
+         *  @type        {Record<string, SchemaType>}
+         *  @description Flat tag → descriptor mirror combining `Standard.Tags`
+         *               and `Custom.Tags` for fast single-lookup resolution.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        readonly Tags : Record<string, Descriptors.Type> = {};
+        readonly Tags : Record<string, SchemaType> = {};
 
         /** @name        _initialized
          *  @private
@@ -811,21 +302,21 @@ export namespace Namespaces
         /** @name        Descriptor
          *  @public
          *  @readonly
-         *  @type        {Descriptors.Namespace}
+         *  @type        {Namespace}
          *  @description Computed on access: serialises the live registry into a
-         *               plain, serializable `Descriptors.Namespace` — `Types` as
+         *               plain, serializable `Namespace` — `Types` as
          *               seed maps, `Tags`/`Interfaces` as string refs (§8). The
          *               canonical replacement for `toDescriptor()`.
-         *  @returns     {Descriptors.Namespace} Serializable snapshot of this namespace.
+         *  @returns     {Namespace} Serializable snapshot of this namespace.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        get Descriptor() : Descriptors.Namespace
+        get Descriptor() : Namespace
         {
             const standard = Object.fromEntries
             (
-                [...this.Types.Standard.Interfaces.entries()].map
+                [...this.Standard.entries()].map
                 (
                     ([k, d]): [string, { Tags: string[] }] => [k, { Tags: [...d.Tags] }]
                 )
@@ -833,7 +324,7 @@ export namespace Namespaces
 
             const custom = Object.fromEntries
             (
-                [...this.Types.Custom.Interfaces.entries()].map
+                [...this.Custom.entries()].map
                 (
                     ([k, d]): [string, { Tags: string[] }] => [k, { Tags: [...d.Tags] }]
                 )
@@ -847,8 +338,8 @@ export namespace Namespaces
             const interfaces = Object.fromEntries
             (
                 [
-                    ...this.Types.Standard.Interfaces.entries(),
-                    ...this.Types.Custom.Interfaces.entries(),
+                    ...this.Standard.entries(),
+                    ...this.Custom.entries(),
                 ].map(([k, d]): [string, string] => [k, d.Name])
             );
 
@@ -868,7 +359,7 @@ export namespace Namespaces
                 Loading: false,
                 Loaded: this._initialized,
                 Root: window
-            } as unknown as Descriptors.Namespace;
+            } as unknown as Namespace;
         }
 
         static get Services() :  Map<string, Record<string, unknown>>
@@ -880,12 +371,12 @@ export namespace Namespaces
          *  @public
          *  @static
          *  @memberof    Namespaces.Namespace
-         *  @param       {string | Types.Base | Node | object} query What to look up: a tag name, a constructor,
+         *  @param       {string | Base | Node | object} query What to look up: a tag name, a constructor,
          *               a live Node, or a `{ Tag }` bag. A string is lower-cased before use; a Node is asked for
          *               `data-arianna-tag`, then `is`, then its own `nodeName`, in that order — the attributes
          *               come first because a customised built-in is a real `<button>` whose nodeName says
          *               nothing about which type it carries.
-         *  @returns     {Descriptors.Type | false} The first descriptor that answers, or `false`.
+         *  @returns     {SchemaType | false} The first descriptor that answers, or `false`.
          *  @description Resolve a descriptor across EVERY installed namespace — the cross-namespace counterpart
          *               of the instance method. `namespace.GetDescriptor(q)` asks one registry, this asks them
          *               all and returns the first hit, which is why it is static: it belongs to the class, not
@@ -905,7 +396,7 @@ export namespace Namespaces
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        static Resolve(query: string | Core.Types.Base | Node | object): Descriptors.Type | false
+        static Resolve(query: string | Base | Node | object): SchemaType | false
         {
             if (!query) return false;
 
@@ -947,13 +438,13 @@ export namespace Namespaces
             for (const name of Object.keys(Namespace.Namespaces))
             {
                 const ns  = Namespace.Namespaces[name];
-                const std = ns.Types.Standard;
-                const cst = ns.Types.Custom;
+                const std = ns.Standard;
+                const cst = ns.Custom;
 
                 const found = std.Tags.get(key)
-                    ?? std.Interfaces.get(key)
+                    ?? std.get(key)
                     ?? cst.Tags.get(key)
-                    ?? cst.Interfaces.get(key);
+                    ?? cst.get(key);
 
                 if (found) return found;
 
@@ -978,7 +469,7 @@ export namespace Namespaces
          *  @public
          *  @static
          *  @memberof    Namespaces.Namespace
-         *  @param       {string | Core.Types.Base | Node | object} query What to resolve.
+         *  @param       {string | Base | Node | object} query What to resolve.
          *  @returns     {Namespace} The namespace that owns it, falling back to `html`.
          *  @description Which registry owns a type. The fallback is not a guess: a tag nobody has claimed is
          *               an HTML tag, because that is the namespace a bare `document.createElement` mints in.
@@ -986,7 +477,7 @@ export namespace Namespaces
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        static Owner(query: string | Core.Types.Base | Node | object): Namespace
+        static Owner(query: string | Base | Node | object): Namespace
         {
             if (typeof query === 'string' && Namespace.Namespaces[query]) return Namespace.Namespaces[query];
 
@@ -1008,7 +499,7 @@ export namespace Namespaces
                     c = Object.getPrototypeOf(c)
                 )
                 {
-                    d = Namespace.Resolve(c as Core.Types.Base);
+                    d = Namespace.Resolve(c as Base);
                     if (d) break;
                 }
             }
@@ -1020,7 +511,7 @@ export namespace Namespaces
          *  @public
          *  @static
          *  @memberof    Namespaces.Namespace
-         *  @param       {string | Core.Types.Base} tag Tag or constructor to instantiate.
+         *  @param       {string | Base} tag Tag or constructor to instantiate.
          *  @param       {unknown[]} [args] Arguments for the type's own code.
          *  @returns     {Element | false} The live node, or false.
          *  @description Cross-namespace entry point: resolves the owner, then delegates to its instance
@@ -1030,7 +521,7 @@ export namespace Namespaces
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        static Create(tag: string | Core.Types.Base, args: unknown[] = []): Element | false
+        static Create(tag: string | Base, args: unknown[] = []): Element | false
         {
             return Namespace.Owner(tag).Create(tag, args);
         }
@@ -1049,10 +540,10 @@ export namespace Namespaces
         static Define
         (
             tag: string,
-            constructor: Core.Types.Constructor,
-            baseOrOptions?: Core.Types.Constructor | Core.Types.TypeOptions,
-            maybeOptions?: Core.Types.TypeOptions
-        ): Core.Types.Constructor | false
+            constructor: Constructor,
+            baseOrOptions?: Constructor | TypeOptions,
+            maybeOptions?: TypeOptions
+        ): Constructor | false
         {
             /* Resolve the base to pick the owning namespace: explicit arg, or the constructor's own extends */
             const b3 = baseOrOptions as { prototype?: unknown } | undefined;
@@ -1060,16 +551,16 @@ export namespace Namespaces
 
             const proto = (constructor as { prototype?: object }).prototype;
 
-            let inherited: Core.Types.Constructor | undefined = undefined;
+            let inherited: Constructor | undefined = undefined;
 
             if (proto)
             {
-                const sp  = Object.getPrototypeOf(proto) as { constructor?: Core.Types.Constructor };
+                const sp  = Object.getPrototypeOf(proto) as { constructor?: Constructor };
                 inherited = sp?.constructor;
             }
 
-            const base  = ee ? (baseOrOptions as Core.Types.Constructor) : inherited;
-            const owner = Namespace.Owner(base as string | Core.Types.Base | Node | object);
+            const base  = ee ? (baseOrOptions as Constructor) : inherited;
+            const owner = Namespace.Owner(base as string | Base | Node | object);
 
             return owner ? owner.Define(tag, constructor, baseOrOptions, maybeOptions) : false;
         }
@@ -1084,7 +575,7 @@ export namespace Namespaces
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        static Upgrade(node: Node, hint?: Descriptors.Type): Node
+        static Upgrade(node: Node, hint?: SchemaType): Node
         {
             if (!(node instanceof Element)) return node;
 
@@ -1105,13 +596,13 @@ export namespace Namespaces
          *               registry, and self-initialises (native patching + Supported
          *               back-fill). No external Register / Initialize ceremony.
          *  @param       {string} name — namespace identifier ('html', 'svg', …).
-         *  @param       {Partial<Core.Descriptors.Namespace>} [options] — seed config;
+         *  @param       {Partial<Namespace>} [options] — seed config;
          *               every field optional, defaults applied per field.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        constructor(name: string, options: Partial<Core.Descriptors.Namespace> = {})
+        constructor(name: string, options: Partial<Descriptor> = {})
         {
             this.Name           = name;
             this.Uri            = options.Uri    ?? '';
@@ -1123,19 +614,19 @@ export namespace Namespaces
                 {
                     Standard :
                         {
-                            Interfaces : new Map<string, Core.Descriptors.Type>(),
-                            Tags       : new Map<string, Core.Descriptors.Type>()
+                            Interfaces : new Map<string, SchemaType>(),
+                            Tags       : new Map<string, SchemaType>()
                         },
                     Custom   :
                         {
-                            Interfaces : new Map<string, Core.Descriptors.Type>(),
-                            Tags       : new Map<string, Core.Descriptors.Type>()
+                            Interfaces : new Map<string, SchemaType>(),
+                            Tags       : new Map<string, SchemaType>()
                         }
                 }
 
             if (options.Types?.Standard && options.Types?.Standard.Interfaces)
             {
-                const std= this.Types.Standard;
+                const std= this.Standard;
                 const interfaces = options.Types.Standard.Interfaces;
                 const names                         = Object.keys(interfaces);
                 const length                        = names.length;
@@ -1146,10 +637,10 @@ export namespace Namespaces
                     const name      = names[i];
                     const tags     = interfaces[name].Tags ?? [];          // per chiave
                     const resolved= g[name];
-                    const constructor = typeof resolved === 'function' ? resolved as Core.Types.Constructor : null;
-                    const parent      = constructor ? Object.getPrototypeOf(constructor) as Core.Types.IDL | null : null;
+                    const constructor = typeof resolved === 'function' ? resolved as Constructor : null;
+                    const parent      = constructor ? Object.getPrototypeOf(constructor) as IDL | null : null;
 
-                    const d : Core.Descriptors.Type =
+                    const d : SchemaType =
                         {
                             Name        : name,
                             Tags        : tags,
@@ -1178,11 +669,11 @@ export namespace Namespaces
                             Methods     : [],
                             Brokers     : null
                         };
-                    std.Interfaces.set(names[i], d);
+                    std.set(names[i], d);
 
                     for(let t = 0; t < d.Tags.length; t++)
                     {
-                        this.Types.Standard.Tags.set(d.Tags[t], d);
+                        this.Standard.Tags.set(d.Tags[t], d);
                     }
                 }
             }
@@ -1201,13 +692,13 @@ export namespace Namespaces
          *               `Interface`, searching Custom first then Standard.
          *  @param       {string | (new () => Element) | Element} query — tag name,
          *               constructor, or element instance to resolve.
-         *  @returns     {Descriptors.Type | false} The matching descriptor, or `false`
+         *  @returns     {SchemaType | false} The matching descriptor, or `false`
          *               when the query is empty or unresolved.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        GetDescriptor(query: string | Core.Types.Base | Element): Descriptors.Type | false
+        GetDescriptor(query: string | Base | Element): SchemaType | false
         {
             if (!query) return false;
 
@@ -1221,7 +712,7 @@ export namespace Namespaces
             {
                 const nk = (query as { name?: string }).name?.toLowerCase() ?? '';
 
-                for (const d of this.Types.Standard.Interfaces.values())
+                for (const d of this.Standard.values())
                 {
                     let ic = d.Constructor === query
                     let ii = d.Interface   === query;
@@ -1231,7 +722,7 @@ export namespace Namespaces
                     }
                 }
 
-                for (const d of this.Types.Custom.Interfaces.values())
+                for (const d of this.Custom.values())
                 {
                     let ic = d.Constructor === query
                     let ii = d.Interface   === query;
@@ -1245,10 +736,10 @@ export namespace Namespaces
             }
             else { return false; }
 
-            return this.Types.Standard.Tags.get(key)
-                ?? this.Types.Custom.Tags.get(key)
-                ?? this.Types.Standard.Interfaces.get(key)
-                ?? this.Types.Custom.Interfaces.get(key)
+            return this.Standard.Tags.get(key)
+                ?? this.Custom.Tags.get(key)
+                ?? this.Standard.get(key)
+                ?? this.Custom.get(key)
                 ?? false;
         }
 
@@ -1265,7 +756,7 @@ export namespace Namespaces
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        GetDeclaration(value: unknown): Core.Types.Declaration
+        GetDeclaration(value: unknown): SchemaTypes.Declaration
         {
             if (Core.Is(value as object, 'idl'))   return 'IDL';
             if (Core.Is(value as object, 'idl-patched'))   return 'IDL';
@@ -1275,7 +766,7 @@ export namespace Namespaces
 
         /** @name        #mirror
          *  @private
-         *  @param       {Descriptors.Type} d The Success descriptor to mirror into customElements.
+         *  @param       {SchemaType} d The Success descriptor to mirror into customElements.
          *  @returns     {void}
          *  @description Registers a native customElements mirror for a Custom type, but ONLY when the
          *               tag is a valid HTML autonomous custom element AND the author opts in via
@@ -1291,7 +782,7 @@ export namespace Namespaces
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        RegisterNativeCustomElement(d: Descriptors.Type): void
+        RegisterNativeCustomElement(d: SchemaType): void
         {
             const t                      = d.Tags[0];
             const b   = d.Interface;
@@ -1301,7 +792,7 @@ export namespace Namespaces
             const compliant = this.Name === 'html' && !this.NS
                 && typeof customElements !== 'undefined'
                 && typeof h === 'function'
-                && b === (h as unknown as Core.Types.Constructor)
+                && b === (h as unknown as Constructor)
                 && t.includes('-') && /^[a-z][a-z0-9._-]*$/.test(t)
                 && (d.Constructor as { CE?: boolean } | null)?.CE === true;
             if (!compliant) return;
@@ -1336,7 +827,7 @@ export namespace Namespaces
         /** @name        patch
          *  @private
          *  @param       {string} name The native interface name to wrap on `window` (e.g. `'HTMLDivElement'`).
-         *  @param       {Descriptors.Type} descriptor The Standard descriptor whose tag/prototype the wrapper mints.
+         *  @param       {SchemaType} descriptor The Standard descriptor whose tag/prototype the wrapper mints.
          *  @returns     {void}
          *  @description Wraps a native IDL constructor on `window` so `super()` inside an AriannA subclass
          *               mints a real, correctly-tagged element instead of throwing. The wrapper reads the
@@ -1349,7 +840,7 @@ export namespace Namespaces
          *  @memberof    Namespace
          *  @namespace   Core
          */
-        private PatchIDL(name: string, descriptor: Descriptors.Type): void
+        private PatchIDL(name: string, descriptor: SchemaType): void
         {
             const win = window as unknown as Record<string, unknown>;
             const idl = win[name] as (new () => Element) | undefined;
@@ -1368,7 +859,7 @@ export namespace Namespaces
                 {
                     /* new.target is the user class during super(); falls back to the native tag/proto */
                     const nt = new.target as unknown;
-                    const x  = nt as Core.Types.IDL | undefined;
+                    const x  = nt as IDL | undefined;
                     const xw = (x && (x as unknown) !== (wrapped as unknown));
                     const xd =  xw && (x as unknown) !== nx;
 
@@ -1386,7 +877,7 @@ export namespace Namespaces
                         {
                             for(let c: unknown = xc; c && c !== nx; c = Object.getPrototypeOf(c))
                             {
-                                const cd = ns.GetDescriptor(c as Core.Types.Base);
+                                const cd = ns.GetDescriptor(c as Base);
                                 if(cd && cd.Custom && cd.Tags[0])
                                 { t = cd.Tags[0]; break; }
                             }
@@ -1422,7 +913,7 @@ export namespace Namespaces
                     {
                         if(xd)
                         {
-                            const md = ns.GetDescriptor(x as Core.Types.Base);
+                            const md = ns.GetDescriptor(x as Base);
 
                             if(md && md.Custom && md.Name && node.classList)
                             {
@@ -1483,11 +974,11 @@ export namespace Namespaces
         /** @name        Create
          *  @public
          *  @memberof    Core.Namespace
-         *  @param       {string | Types.Base} TagOrConstructor The type to instantiate. A string is trimmed
+         *  @param       {string | Base} TagOrConstructor The type to instantiate. A string is trimmed
          *               and lower-cased before resolution, so `' DIV '` and `'div'` reach the same
          *               descriptor; a constructor is resolved to its own descriptor and then to the
          *               canonical `Tags[0]`, which is why passing a class never carries a tag alias while
-         *               passing a string can. Types.Base and not Types.IDL: a FUNCTION-form type is a plain
+         *               passing a string can. Base and not IDL: a FUNCTION-form type is a plain
          *               function with no construct signature, and it has to be accepted here just as much
          *               as a class does.
          *  @param       {unknown[]} [args] Arguments for the type's own code, defaulting to an empty array.
@@ -1513,9 +1004,8 @@ export namespace Namespaces
          *               node first, then the prototype is spliced, the type's class is added — the hook its
          *               CSS is scoped on — and the body is invoked with `apply`, legal because a FUNCTION,
          *               unlike a class constructor, can be run without `new`. Note what this deliberately
-         *               does NOT do: it does not go through `Upgrade`, so `build()` runs on the markup path
-         *               and not on this one. Construction and discovery are two different lifecycles here,
-         *               by design and not by omission.
+         *               does NOT do: it does not go through `Upgrade`. Construction and discovery remain
+         *               separate paths, while user initialization belongs to the declared constructor/body.
          *
          *               A standard tag is minted and returned as it is. Upgrade would not touch it anyway,
          *               and a custom already mirrored into `customElements` ran its own registered
@@ -1536,11 +1026,11 @@ export namespace Namespaces
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        Create(TagOrConstructor : string | Core.Types.Base, args: unknown[] = []) : Element | false
+        Create(TagOrConstructor : string | Base, args: unknown[] = []) : Element | false
         {
             if(TagOrConstructor)
             {
-                const a  : string | Core.Types.Base = TagOrConstructor;
+                const a  : string | Base = TagOrConstructor;
                 const ts = typeof a === 'string';
                 const tf = typeof a === 'function';
                 const d  = (ts || tf) ? this.GetDescriptor(a) : false;
@@ -1608,10 +1098,10 @@ export namespace Namespaces
         /** @name        Reserve
          *  @public
          *  @param       {string} Tag The custom element tag to register (trimmed and lower-cased).
-         *  @param       {Types.Constructor} Constructor The user class/function backing the type.
-         *  @param       {Types.Constructor} Base The native interface the type extends (must be an IDL).
-         *  @param       {Types.TypeOptions} Options Authoring configuration (css, attrs, shadow, bus, render, template, slot).
-         *  @returns     {Descriptors.Type | false} The committed Pending descriptor, or `false` when any guard rejects.
+         *  @param       {Constructor} Constructor The user class/function backing the type.
+         *  @param       {Constructor} Base The native interface the type extends (must be an IDL).
+         *  @param       {TypeOptions} Options Authoring configuration (Css, Attributes, Shadow, Bus, Render, Template, Slot).
+         *  @returns     {SchemaType | false} The committed Pending descriptor, or `false` when any guard rejects.
          *  @description The sole write point into the type registry, and the first half of the
          *               Reserve → Promote lifecycle. Builds a COMPLETE descriptor minus the two fields
          *               that depend on the live class — `Prototype` and `Chain`, left `null`/`[]` for
@@ -1639,15 +1129,15 @@ export namespace Namespaces
         private Reserve
         (
             Tag:string,
-            Constructor:Core.Types.Constructor,
-            Base: Core.Types.Constructor,
-            Options:Core.Types.TypeOptions
-        ):Descriptors.Type | false
+            Constructor:Constructor,
+            Base: Constructor,
+            Options:TypeOptions
+        ):SchemaType | false
         {
             const t: string            = Tag.trim().toLowerCase();
-            const c: Core.Types.Constructor = Constructor;
-            const b: Core.Types.Constructor = Base;
-            const o: Core.Types.TypeOptions = Options;
+            const c: Constructor = Constructor;
+            const b: Constructor = Base;
+            const o: TypeOptions = Options;
 
             if(t && c && b)
             {
@@ -1719,7 +1209,7 @@ export namespace Namespaces
                                          * to the namespace mismatch. Owner() no longer mispicks, so this
                                          * should not trigger; if it ever does, it now rejects like every
                                          * other guard here and says which interface and where. */
-                                        const ic = this.Types.Standard.Interfaces.get(ni.name);
+                                        const ic = this.Standard.get(ni.name);
 
                                         if(!ic)
                                         {
@@ -1799,14 +1289,14 @@ export namespace Namespaces
                                                     ? o.Bus
                                                     : [o.Bus];
 
-                                        type sht = Descriptors.Type['Shadow'];
-                                        type tpt = Descriptors.Type['Template'];
-                                        type slt = Descriptors.Type['Slot'];
-                                        type att = Descriptors.Type['Attributes'];
-                                        type rdt = Descriptors.Type['Render'];
-                                        type brt = Descriptors.Type['Brokers'];
+                                        type sht = SchemaType['Shadow'];
+                                        type tpt = SchemaType['Template'];
+                                        type slt = SchemaType['Slot'];
+                                        type att = SchemaType['Attributes'];
+                                        type rdt = SchemaType['Render'];
+                                        type brt = SchemaType['Brokers'];
 
-                                        const descriptor: Descriptors.Type =
+                                        const descriptor: SchemaType =
                                             {
                                                 Name        : n,
                                                 Tags        : [t],
@@ -1844,7 +1334,7 @@ export namespace Namespaces
                                                 Shadow      : shadow as sht,
                                                 Template    : (o.Template ?? null) as tpt,
                                                 Slot        : (o.Slot ?? null) as slt,
-                                                Attributes  : (o.Attrs ?? null) as att,
+                                                Attributes  : (o.Attributes ?? null) as att,
                                                 Render      : render as rdt,
                                                 Brokers     : brokers as brt,
 
@@ -1852,8 +1342,8 @@ export namespace Namespaces
                                                 Methods     : null
                                             };
 
-                                        this.Types.Custom.Interfaces.set(n, descriptor);
-                                        this.Types.Custom.Tags.set(t, descriptor);
+                                        this.Custom.set(n, descriptor);
+                                        this.Custom.Tags.set(t, descriptor);
 
                                         return descriptor;
                                     }
@@ -1869,8 +1359,8 @@ export namespace Namespaces
 
         /** @name        #Promote
          *  @private
-         *  @param       {Descriptors.Type} d The Pending descriptor produced by `#Reserve`.
-         *  @returns     {Descriptors.Type | false} The completed descriptor (State 'Success'), or
+         *  @param       {SchemaType} d The Pending descriptor produced by `#Reserve`.
+         *  @returns     {SchemaType | false} The completed descriptor (State 'Success'), or
          *               `false` when the descriptor is not promotable or the class chain is invalid.
          *  @description Second phase of `Define`, and the ONLY side-effecting one: everything that
          *               touches the DOM lives here, so `#Reserve` stays pure and SSR-safe. Splices the
@@ -1893,7 +1383,7 @@ export namespace Namespaces
          *  @memberof    Namespace
          *  @namespace   Core
          */
-        private Promote(d: Descriptors.Type): Descriptors.Type | false
+        private Promote(d: SchemaType): SchemaType | false
         {
             if(!d) return false;
             if(d.State === 'Success') return d;
@@ -1909,7 +1399,7 @@ export namespace Namespaces
              * methods with no error: `this.sayHi()` simply became "not a function" at runtime.
              * A CLASS was unharmed, since its own chain already links them and `Prototype`
              * records it whole; only the FUNCTION graft below needed the distinction. */
-            const b  = (d.Base || d.Interface) as Core.Types.Constructor;
+            const b  = (d.Base || d.Interface) as Constructor;
             const t  = d.Tags[0];
             const cp = c.prototype;
             const bp = b.prototype;
@@ -2071,14 +1561,14 @@ export namespace Namespaces
         /** @name        Define
          *  @public
          *  @param       {string} tag The custom element tag to register (lowercased vocabulary name).
-         *  @param       {Types.Constructor} constructor The user class or function backing the type.
-         *  @param       {Types.Constructor | Types.TypeOptions} [baseOrOptions] Two forms, discriminated at
+         *  @param       {Constructor} constructor The user class or function backing the type.
+         *  @param       {Constructor | TypeOptions} [baseOrOptions] Two forms, discriminated at
          *               runtime per §4.3: the EXPLICIT base — a constructor whose `.prototype instanceof
          *               Element` — or, when it is not such a constructor, the OPTIONS object (in which case
          *               the base is read from the constructor's own `extends`).
-         *  @param       {Types.TypeOptions} [maybeOptions] The options object, supplied only in the explicit
+         *  @param       {TypeOptions} [maybeOptions] The options object, supplied only in the explicit
          *               form (when arg 3 is the base).
-         *  @returns     {Types.Constructor | false} The user constructor, now promoted and live, or `false`
+         *  @returns     {Constructor | false} The user constructor, now promoted and live, or `false`
          *               when Reserve rejects the type (a guard fails) or no base can be resolved.
          *  @description The thin composition at the heart of the lifecycle: `Promote(Reserve(...))`. Define
          *               owns no registration logic of its own — it parses the two documented overloads,
@@ -2101,10 +1591,10 @@ export namespace Namespaces
         Define
         (
             tag: string,
-            constructor: Core.Types.Constructor,
-            baseOrOptions?: Core.Types.Constructor | Core.Types.TypeOptions,
-            maybeOptions?: Core.Types.TypeOptions
-        ): Core.Types.Constructor | false
+            constructor: Constructor,
+            baseOrOptions?: Constructor | TypeOptions,
+            maybeOptions?: TypeOptions
+        ): Constructor | false
         {
             if(typeof tag !== 'string' || typeof constructor !== 'function')
             {
@@ -2121,11 +1611,11 @@ export namespace Namespaces
              * own (Object-rooted) super. A function that reaches a patched IDL is a base; an
              * options bag is a plain object and never does. */
             const bi = typeof baseOrOptions === 'function' &&
-                       this.GetNativeInterface(baseOrOptions as Core.Types.Base) !== false;
+                       this.GetNativeInterface(baseOrOptions as Base) !== false;
             const cp  = constructor.prototype;
             const gc = cp ? Object.getPrototypeOf(cp) : null;
-            const sc = gc?.constructor as Core.Types.Constructor | undefined;
-            const b  = bi ? baseOrOptions as Core.Types.Constructor : sc;
+            const sc = gc?.constructor as Constructor | undefined;
+            const b  = bi ? baseOrOptions as Constructor : sc;
             const v  = (bi ? maybeOptions : baseOrOptions);
 
             /* Positional-CSS compatibility.
@@ -2137,7 +1627,7 @@ export namespace Namespaces
              * `o`, no TypeOptions key matched, Reserve compiled nothing, and the element
              * upgraded correctly but unstyled.
              *
-             * So: an object argument carrying NONE of the seven TypeOptions keys cannot be
+             * So: an object argument carrying NONE of the eight TypeOptions keys cannot be
              * an options bag — it is a style source. Wrap it as { Css }. Non-plain values
              * (a Css.Rule / Css.Stylesheet instance, an array of Rules, a raw CSS string)
              * are style sources too and take the same route. Reserve hands whatever this is
@@ -2145,25 +1635,80 @@ export namespace Namespaces
              *
              * An empty object stays an (empty) options bag: `{}` says "no options", not
              * "empty stylesheet", and treating it as CSS would be a pointless compile. */
-            const OPTION_KEYS = ['Css', 'Attrs', 'Shadow', 'Bus', 'Render', 'Template', 'Slot'];
+            const OPTION_KEYS = new Map<string, string>
+            (
+                [
+                    ['css',        'Css'],
+                    ['attributes', 'Attributes'],
+                    ['shadow',     'Shadow'],
+                    ['bus',        'Bus'],
+                    ['render',     'Render'],
+                    ['template',   'Template'],
+                    ['slot',       'Slot'],
+                    ['component',  'Component']
+                ]
+            );
 
-            const isOptions =
+            const isPlainObject =
                 v !== null &&
                 typeof v === 'object' &&
                 Object.getPrototypeOf(v) === Object.prototype &&
-                !Array.isArray(v) &&
-                (Object.keys(v).length === 0 || OPTION_KEYS.some(k => k in (v as object)));
+                !Array.isArray(v);
+
+            const source = isPlainObject
+                ? v as Record<string, unknown>
+                : undefined;
+
+            const isOptions =
+                source !== undefined &&
+                (
+                    Object.keys(source).length === 0 ||
+                    Object.keys(source).some(key => OPTION_KEYS.has(key.toLowerCase()))
+                );
+
+            const normalizeOptions =
+            (
+                input: Record<string, unknown>
+            ): TypeOptions =>
+            {
+                const normalized: Record<string, unknown> = {};
+                const assigned = new Set<string>();
+
+                for(const [key, value] of Object.entries(input))
+                {
+                    const canonical = OPTION_KEYS.get(key.toLowerCase());
+
+                    if(!canonical)
+                    {
+                        normalized[key] = value;
+                        continue;
+                    }
+
+                    if(assigned.has(canonical))
+                    {
+                        throw new TypeError
+                        (
+                            `[arianna] Duplicate option '${canonical}' supplied with different casing.`
+                        );
+                    }
+
+                    assigned.add(canonical);
+                    normalized[canonical] = value;
+                }
+
+                return normalized as TypeOptions;
+            };
 
             const o =
                 v === undefined || v === null
                     ? {}
-                    : isOptions
-                        ? (v as Core.Types.TypeOptions)
-                        : ({ Css: v } as unknown as Core.Types.TypeOptions);
+                    : isOptions && source
+                        ? normalizeOptions(source)
+                        : ({ Css: v } as unknown as TypeOptions);
 
             if(!t || !b) { return false; }
 
-            const d = this.Reserve(t, constructor, b, o) as Descriptors.Type;
+            const d = this.Reserve(t, constructor, b, o) as SchemaType;
 
             if(!d) { return false; }
 
@@ -2171,20 +1716,20 @@ export namespace Namespaces
 
             if (!p)
             {
-                this.Types.Custom.Interfaces.delete(d.Name);
-                this.Types.Custom.Tags.delete(d.Tags[0]);
+                this.Custom.SchemaInterfaces.delete(d.Name);
+                this.Custom.Tags.delete(d.Tags[0]);
 
                 return false;
             }
 
-            return p ? p.Constructor as Core.Types.Constructor : false;
+            return p ? p.Constructor as Constructor : false;
         }
 
         /** @name        Upgrade
          *  @public
          *  @param       {Element} node The node to promote. Anything that is not an Element is handed back
          *               untouched, so callers may pass whatever a MutationObserver gave them.
-         *  @param       {Descriptors.Type} [descriptor] The type to promote it to. Resolved from the node's
+         *  @param       {SchemaType} [descriptor] The type to promote it to. Resolved from the node's
          *               own tag when omitted — pass it when you already have it, which every internal caller
          *               does, to skip the registry lookup.
          *  @returns     {Element} The SAME node, always. Upgrade never substitutes: whatever came in is what
@@ -2216,11 +1761,10 @@ export namespace Namespaces
          *               node this Namespace has never seen. The lifecycle is skipped when the node has been
          *               through here before, which is per-instance state and therefore lives in a WeakSet,
          *               not on the descriptor: without it an element built by Create and then discovered by
-         *               the observer would run `build()` twice.
+         *               the observer would run post-upgrade hooks twice.
          *
-         *               `onCreated` and `build` are both called, in that order — not one or the other. They
-         *               are skipped only when they are literally the same function, which happens when a
-         *               type defines just one of them and inherits the other.
+         *               `onCreated`, when present, is called once after structural upgrade. User class
+         *               initialization remains exclusively in `constructor()`; there is no parallel post-construction lifecycle.
          *
          *               LIMIT, by design of the DOM and not of this method: a node cannot gain internal
          *               slots. Splicing HTMLButtonElement.prototype onto a node the parser built as
@@ -2234,7 +1778,7 @@ export namespace Namespaces
          *  @memberof    Namespace
          *  @namespace   Core
          */
-        Upgrade(node: Element, descriptor?: Descriptors.Type): Element | false
+        Upgrade(node: Element, descriptor?: SchemaType): Element | false
         {
             if(!(node instanceof Element)) return node;
             if(Namespace.#pending.has(node)) return node;
@@ -2281,7 +1825,7 @@ export namespace Namespaces
                     }
                     else if(d.Declaration === 'CLASS' && typeof d.Constructor === 'function')
                     {
-                        const nt = function Adopted() { } as unknown as Core.Types.IDL & { Adopt: Element };
+                        const nt = function Adopted() { } as unknown as IDL & { Adopt: Element };
 
                         nt.prototype = pr;
                         nt.Adopt     = node;
@@ -2314,7 +1858,6 @@ export namespace Namespaces
                     const hook = node as Element &
                         {
                             onCreated?: () => void;
-                            build?: () => void;
                         };
 
                     try
@@ -2324,18 +1867,6 @@ export namespace Namespaces
                     catch(e)
                     {
                         console.warn(`[arianna] onCreated failed for <${d.Tags[0]}>:`, e);
-                    }
-
-                    if(hook.build !== hook.onCreated)
-                    {
-                        try
-                        {
-                            hook.build?.call(node);
-                        }
-                        catch(e)
-                        {
-                            console.warn(`[arianna] build failed for <${d.Tags[0]}>:`, e);
-                        }
                     }
 
                     d.Upgraded = true;
@@ -2352,7 +1883,7 @@ export namespace Namespaces
          *  @description Materialise this namespace against the live environment (runs once, guarded by
          *               `_initialized`; no-op off-DOM). For each Standard interface: back-fills the
          *               descriptor with the real native constructor / interface / prototype and marks it
-         *               Supported + Defined; indexes every tag → descriptor in both `Types.Standard.Tags`
+         *               Supported + Defined; indexes every tag → descriptor in both `Standard.Tags`
          *               and the flat `Tags` mirror; and patches the native constructor once (idempotent
          *               via `descriptor.Patched`).
          *  @returns     {void}
@@ -2368,7 +1899,7 @@ export namespace Namespaces
 
             const win = window as unknown as Record<string, unknown>;
 
-            for (const [name, descriptor] of this.Types.Standard.Interfaces)
+            for (const [name, descriptor] of this.Standard.Interfaces)
             {
                 const native = win[name] as (new () => Element) | undefined;
 
@@ -2388,7 +1919,7 @@ export namespace Namespaces
 
                 for (const tag of descriptor.Tags)
                 {
-                    this.Types.Standard.Tags.set(tag, descriptor);
+                    this.Standard.Tags.set(tag, descriptor);
                     this.Tags[tag] = descriptor;
                 }
             }
@@ -2406,7 +1937,7 @@ export namespace Namespaces
          *  @memberof    Namespace
          *  @namespace   Core
          */
-        IsStandard(type: string | Core.Types.Base): boolean
+        IsStandard(type: string | Base): boolean
         {
             const descriptor = this.GetDescriptor(type);
             return descriptor ? descriptor.Standard : false;
@@ -2424,7 +1955,7 @@ export namespace Namespaces
          *  @memberof    Namespace
          *  @namespace   Core
          */
-        IsCustom(type: string | Core.Types.Base): boolean
+        IsCustom(type: string | Base): boolean
         {
             const descriptor = this.GetDescriptor(type);
             return descriptor ? descriptor.Custom : false;
@@ -2443,7 +1974,7 @@ export namespace Namespaces
          *  @memberof    Namespace
          *  @namespace   Core
          */
-        IsClass(type: string | Core.Types.Base): boolean
+        IsClass(type: string | Base): boolean
         {
             const descriptor = this.GetDescriptor(type);
             return descriptor ? descriptor.Declaration === 'CLASS' : false;
@@ -2462,7 +1993,7 @@ export namespace Namespaces
          *  @memberof    Namespace
          *  @namespace   Core
          */
-        IsIDL(type: string | Core.Types.Base): boolean
+        IsIDL(type: string | Base): boolean
         {
             const descriptor = this.GetDescriptor(type);
             return descriptor ? descriptor.Declaration === 'IDL' : false;
@@ -2483,7 +2014,7 @@ export namespace Namespaces
          *  @memberof    Namespace
          *  @namespace   Core
          */
-        IsInterface(type: string | Core.Types.Base): boolean
+        IsInterface(type: string | Base): boolean
         {
             const descriptor = this.GetDescriptor(type);
             if (!descriptor || !descriptor.Interface) return false;
@@ -2513,8 +2044,8 @@ export namespace Namespaces
 
         /** @name        GetNativeInterface
          *  @public
-         *  @param       {Types.Base} Constructor  Constructor (or IDL) to walk up from.
-         *  @returns     {Types.IDL | false}  The nearest native DOM interface in the
+         *  @param       {Base} Constructor  Constructor (or IDL) to walk up from.
+         *  @returns     {IDL | false}  The nearest native DOM interface in the
          *                                    constructor chain, or `false` if none.
          *  @description Walks the CONSTRUCTOR chain — `Object.getPrototypeOf` applied to
          *               the constructor itself, which climbs the `extends` links, NOT the
@@ -2535,7 +2066,7 @@ export namespace Namespaces
          *  @memberof    Namespace
          *  @namespace   Core
          */
-        GetNativeInterface(Constructor: Core.Types.Base): Core.Types.IDL | false
+        GetNativeInterface(Constructor: Base): IDL | false
         {
             for
             (
@@ -2543,7 +2074,7 @@ export namespace Namespaces
                 typeof c === 'function' && c !== Function.prototype;
                 c = Object.getPrototypeOf(c)
             )
-            { if (Core.Is(c, 'idl-patched')) return c as Core.Types.IDL; }
+            { if (Core.Is(c, 'idl-patched')) return c as IDL; }
             return false;
         }
     }

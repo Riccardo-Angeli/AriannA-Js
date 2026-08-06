@@ -1,3 +1,10 @@
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/layout/Accordion
  * @author    Riccardo Angeli
@@ -54,15 +61,10 @@
  *
  * Slots:  (none — programmatic items only)
  *
- * Attrs:
+ * Attributes:
  *   multiple, animated, icon ('chevron' | 'plus' | 'arrow' | 'none'),
  *   borderless, resizable, min-width, max-width
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -70,60 +72,53 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export type AccordionIconStyle = 'chevron' | 'plus' | 'arrow' | 'none';
-
 export interface AccordionItem {
-    id        : string;
-    title     : string;
-    content   : string;
-    open?     : boolean;
-    disabled? : boolean;
+    id: string;
+    title: string;
+    content: string;
+    open?: boolean;
+    disabled?: boolean;
 }
-
 export interface AccordionOptions {
-    items?      : AccordionItem[];
-    multiple?   : boolean;
-    animated?   : boolean;
-    icon?       : AccordionIconStyle;
-    borderless? : boolean;
-    resizable?  : boolean;
+    items?: AccordionItem[];
+    multiple?: boolean;
+    animated?: boolean;
+    icon?: AccordionIconStyle;
+    borderless?: boolean;
+    resizable?: boolean;
 }
-
 const TRANSITION = 'cubic-bezier(0.4, 0, 0.2, 1)';
-const DURATION   = 320; // ms
-
+const DURATION = 320; // ms
 interface PanelView {
-    item     : AccordionItem;
-    isOpen   : boolean;
+    item: AccordionItem;
+    isOpen: boolean;
     headerCls: string;
-    bodyCls  : string;
+    bodyCls: string;
 }
-
-export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
-    attrs : ['multiple', 'animated', 'icon', 'borderless', 'resizable', 'min-width', 'max-width'],
+@Component('arianna-accordion', {}, {
+    Attributes: ['multiple', 'animated', 'icon', 'borderless', 'resizable', 'min-width', 'max-width'],
 })
-{
-    items$    : Signal<AccordionItem[]>     = signal<AccordionItem[]>([]);
-    openIds$  : Signal<Set<string>>         = signal<Set<string>>(new Set());
-
-    build(_opts: AccordionOptions = {})
-    {
-        const icon = this.attributeSignal('icon');
-
-        this.isMultiple    = () => this.hasAttribute('multiple');
-        this.isAnimated    = () => this.getAttribute('animated') !== 'false';
-        this.isResizable   = () => this.hasAttribute('resizable');
-        this.iconStyle     = () => (icon.Get() ?? 'chevron') as AccordionIconStyle;
-        this.minW          = () => parseInt(this.getAttribute('min-width') ?? '180', 10) || 180;
-        this.maxW          = () => parseInt(this.getAttribute('max-width') ?? '900', 10) || 900;
+export class Accordion extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    items$: Signal<AccordionItem[]> = signal<AccordionItem[]>([]);
+    openIds$: Signal<Set<string>> = signal<Set<string>>(new Set());
+    onConnected(_opts: AccordionOptions = {}) {
+        const icon = this.signal().attribute('icon');
+        this.isMultiple = () => this.hasAttribute('multiple');
+        this.isAnimated = () => this.getAttribute('animated') !== 'false';
+        this.isResizable = () => this.hasAttribute('resizable');
+        this.iconStyle = () => (icon.Get() ?? 'chevron') as AccordionIconStyle;
+        this.minW = () => parseInt(this.getAttribute('min-width') ?? '180', 10) || 180;
+        this.maxW = () => parseInt(this.getAttribute('max-width') ?? '900', 10) || 900;
         this.resizerHandles = () => 'e';
-
         this.panels = (): PanelView[] => {
             const open = this.openIds$.Get();
             return this.items$.Get().map(item => {
@@ -132,14 +127,13 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
                     item,
                     isOpen,
                     headerCls: 'ar-accordion__header'
-                        + (isOpen          ? ' ar-accordion__header--open'     : '')
-                        + (item.disabled   ? ' ar-accordion__header--disabled' : ''),
-                    bodyCls:   'ar-accordion__body'
-                        + (isOpen          ? ' ar-accordion__body--open'       : ''),
+                        + (isOpen ? ' ar-accordion__header--open' : '')
+                        + (item.disabled ? ' ar-accordion__header--disabled' : ''),
+                    bodyCls: 'ar-accordion__body'
+                        + (isOpen ? ' ar-accordion__body--open' : ''),
                 };
             });
         };
-
         this.iconHtml = (isOpen: boolean): string => {
             const style = this.iconStyle();
             switch (style) {
@@ -154,13 +148,12 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
                     return '';
             }
         };
-
         this.onHeaderClick = (item: AccordionItem) => {
-            if (item.disabled) return;
+            if (item.disabled)
+                return;
             this.toggle(item.id);
         };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-accordion__panel" a-for="p in this.panels()" :data-id="p.item.id">
                 <button :class="p.headerCls"
                         :disabled="p.item.disabled"
@@ -180,16 +173,14 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
                              :max-width="String(this.maxW())"
                              allow-cross="false"></arianna-resizer>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Accordion.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Accordion.DefaultSheet();
     }
-
     // ── Public API (preserves legacy fluent surface) ─────────────────────────
-
     set items(v: AccordionItem[]) {
         const fullItems = v.map(i => ({ open: false, disabled: false, ...i }));
         this.items$.Set(fullItems);
-
         // Build initial open set from items[].open
         let open = new Set<string>(fullItems.filter(i => i.open && !i.disabled).map(i => i.id));
         // Enforce single mode
@@ -200,40 +191,34 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
         this.openIds$.Set(open);
     }
     get items(): AccordionItem[] { return this.items$.Get(); }
-
     open(id: string): this {
         const item = this.items$.Get().find(i => i.id === id);
-        if (!item || item.disabled || this.openIds$.Get().has(id)) return this;
-
+        if (!item || item.disabled || this.openIds$.Get().has(id))
+            return this;
         const newOpen = this.isMultiple() ? new Set(this.openIds$.Get()) : new Set<string>();
         newOpen.add(id);
         this.openIds$.Set(newOpen);
-
         this.#animateOpen(id);
         this.dispatchEvent(new CustomEvent('arianna:open', {
             bubbles: true, detail: { id, item },
         }));
         return this;
     }
-
     close(id: string): this {
         const item = this.items$.Get().find(i => i.id === id);
-        if (!item || item.disabled || !this.openIds$.Get().has(id)) return this;
-
+        if (!item || item.disabled || !this.openIds$.Get().has(id))
+            return this;
         // Snapshot pixel height BEFORE removing from open set so the CSS
         // transition has a defined "from" value rather than "auto" → 0.
         this.#animateClose(id);
-
         const newOpen = new Set(this.openIds$.Get());
         newOpen.delete(id);
         this.openIds$.Set(newOpen);
-
         this.dispatchEvent(new CustomEvent('arianna:close', {
             bubbles: true, detail: { id, item },
         }));
         return this;
     }
-
     toggle(id: string): this {
         const wasOpen = this.openIds$.Get().has(id);
         const result = wasOpen ? this.close(id) : this.open(id);
@@ -243,34 +228,27 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
         }));
         return result;
     }
-
     openAll(): this {
-        const all = new Set<string>(
-            this.items$.Get().filter(i => !i.disabled).map(i => i.id),
-        );
+        const all = new Set<string>(this.items$.Get().filter(i => !i.disabled).map(i => i.id));
         this.openIds$.Set(all);
         return this;
     }
-
     closeAll(): this {
         this.openIds$.Set(new Set());
         return this;
     }
-
     isOpen(id: string): boolean { return this.openIds$.Get().has(id); }
-
     openItems(): string[] { return [...this.openIds$.Get()]; }
-
     addItem(item: AccordionItem, index?: number): this {
         const full = { open: false, disabled: false, ...item };
         const items = [...this.items$.Get()];
         if (index !== undefined && index >= 0 && index < items.length) {
             items.splice(index, 0, full);
-        } else {
+        }
+        else {
             items.push(full);
         }
         this.items$.Set(items);
-
         if (full.open && !full.disabled) {
             const open = this.isMultiple() ? new Set(this.openIds$.Get()) : new Set<string>();
             open.add(full.id);
@@ -281,7 +259,6 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
         }));
         return this;
     }
-
     removeItem(id: string): this {
         const items = this.items$.Get().filter(i => i.id !== id);
         this.items$.Set(items);
@@ -293,44 +270,30 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
         }));
         return this;
     }
-
     setContent(id: string, contentHtml: string): this {
-        const items = this.items$.Get().map(i =>
-            i.id === id ? { ...i, content: contentHtml } : i,
-        );
+        const items = this.items$.Get().map(i => i.id === id ? { ...i, content: contentHtml } : i);
         this.items$.Set(items);
         return this;
     }
-
     setTitle(id: string, titleHtml: string): this {
-        const items = this.items$.Get().map(i =>
-            i.id === id ? { ...i, title: titleHtml } : i,
-        );
+        const items = this.items$.Get().map(i => i.id === id ? { ...i, title: titleHtml } : i);
         this.items$.Set(items);
         return this;
     }
-
     enable(id: string): this {
-        const items = this.items$.Get().map(i =>
-            i.id === id ? { ...i, disabled: false } : i,
-        );
+        const items = this.items$.Get().map(i => i.id === id ? { ...i, disabled: false } : i);
         this.items$.Set(items);
         return this;
     }
-
     disable(id: string): this {
-        const items = this.items$.Get().map(i =>
-            i.id === id ? { ...i, disabled: true } : i,
-        );
+        const items = this.items$.Get().map(i => i.id === id ? { ...i, disabled: true } : i);
         this.items$.Set(items);
         const open = new Set(this.openIds$.Get());
         open.delete(id);
         this.openIds$.Set(open);
         return this;
     }
-
     // ── Animation engine ─────────────────────────────────────────────────────
-
     /**
      * Open animation: 0 → measured height → 'none'.
      *
@@ -340,30 +303,27 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
      * remove the inline max-height so dynamic content can later grow.
      */
     #animateOpen(id: string): void {
-        if (!this.isAnimated()) return;
-
+        if (!this.isAnimated())
+            return;
         // Wait for template patch
         requestAnimationFrame(() => {
-            const body = this.querySelector<HTMLElement>(
-                `.ar-accordion__panel[data-id="${id}"] > .ar-accordion__body`,
-            );
-            if (!body) return;
-
+            const body = this.querySelector<HTMLElement>(`.ar-accordion__panel[data-id="${id}"] > .ar-accordion__body`);
+            if (!body)
+                return;
             const target = body.scrollHeight;
             body.style.maxHeight = '0px';
             // force reflow
             void body.offsetHeight;
             body.style.maxHeight = target + 'px';
-
             const onEnd = (e: TransitionEvent) => {
-                if (e.propertyName !== 'max-height') return;
+                if (e.propertyName !== 'max-height')
+                    return;
                 body.style.maxHeight = 'none';
                 body.removeEventListener('transitionend', onEnd);
             };
             body.addEventListener('transitionend', onEnd);
         });
     }
-
     /**
      * Close animation: 'none' → snapshot px → 0.
      *
@@ -372,13 +332,11 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
      * re-render). We do it synchronously before the state flip in `close()`.
      */
     #animateClose(id: string): void {
-        if (!this.isAnimated()) return;
-
-        const body = this.querySelector<HTMLElement>(
-            `.ar-accordion__panel[data-id="${id}"] > .ar-accordion__body`,
-        );
-        if (!body) return;
-
+        if (!this.isAnimated())
+            return;
+        const body = this.querySelector<HTMLElement>(`.ar-accordion__panel[data-id="${id}"] > .ar-accordion__body`);
+        if (!body)
+            return;
         const current = body.scrollHeight;
         body.style.maxHeight = current + 'px';
         // force reflow before signal-driven re-render kicks in
@@ -386,151 +344,144 @@ export class Accordion extends Component('arianna-accordion', HTMLElement, {}, {
         // Next frame: the template patch may have replaced the body node;
         // re-query and animate down.
         requestAnimationFrame(() => {
-            const b = this.querySelector<HTMLElement>(
-                `.ar-accordion__panel[data-id="${id}"] > .ar-accordion__body`,
-            );
-            if (!b) return;
+            const b = this.querySelector<HTMLElement>(`.ar-accordion__panel[data-id="${id}"] > .ar-accordion__body`);
+            if (!b)
+                return;
             b.style.maxHeight = current + 'px';
             void b.offsetHeight;
             b.style.maxHeight = '0px';
             const onEnd = (e: TransitionEvent) => {
-                if (e.propertyName !== 'max-height') return;
+                if (e.propertyName !== 'max-height')
+                    return;
                 b.style.maxHeight = '';
                 b.removeEventListener('transitionend', onEnd);
             };
             b.addEventListener('transitionend', onEnd);
         });
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     // ── Attr getters/setters ─────────────────────────────────────────────────
-
-    get multiple(): boolean  { return this.hasAttribute('multiple'); }
+    get multiple(): boolean { return this.hasAttribute('multiple'); }
     set multiple(v: boolean) { v ? this.setAttribute('multiple', '') : this.removeAttribute('multiple'); }
-
-    get animated(): boolean  { return this.getAttribute('animated') !== 'false'; }
+    get animated(): boolean { return this.getAttribute('animated') !== 'false'; }
     set animated(v: boolean) { this.setAttribute('animated', v ? 'true' : 'false'); }
-
-    get icon(): AccordionIconStyle  { return (this.getAttribute('icon') ?? 'chevron') as AccordionIconStyle; }
+    get icon(): AccordionIconStyle { return (this.getAttribute('icon') ?? 'chevron') as AccordionIconStyle; }
     set icon(v: AccordionIconStyle) { this.setAttribute('icon', v); }
-
-    get borderless(): boolean  { return this.hasAttribute('borderless'); }
+    get borderless(): boolean { return this.hasAttribute('borderless'); }
     set borderless(v: boolean) { v ? this.setAttribute('borderless', '') : this.removeAttribute('borderless'); }
-
-    get resizable(): boolean  { return this.hasAttribute('resizable'); }
+    get resizable(): boolean { return this.hasAttribute('resizable'); }
     set resizable(v: boolean) { v ? this.setAttribute('resizable', '') : this.removeAttribute('resizable'); }
-
     // ── Template helpers (set in build) ──────────────────────────────────────
-
-    private isMultiple    : () => boolean = () => false;
-    private isAnimated    : () => boolean = () => true;
-    private isResizable   : () => boolean = () => false;
-    private iconStyle     : () => AccordionIconStyle = () => 'chevron';
-    private minW          : () => number  = () => 180;
-    private maxW          : () => number  = () => 900;
-    private resizerHandles: () => string  = () => 'e';
-    private panels        : () => PanelView[] = () => [];
-    private iconHtml      : (isOpen: boolean) => string = () => '';
-    private onHeaderClick : (item: AccordionItem) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    display      : 'flex',
-                    flexDirection: 'column',
-                    width        : '100%',
-                    position     : 'relative',
-                    color        : 'var(--arianna-text, #1f2328)',
-                }),
-                new Rule('.ar-accordion__panel', {
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    overflow    : 'hidden',
-                    marginBottom: '4px',
-                    background  : 'var(--arianna-bg, #ffffff)',
-                }),
-                new Rule(':host([borderless]) .ar-accordion__panel', { border: 'none', borderRadius: '0' }),
-                new Rule('.ar-accordion__header', {
-                    alignItems   : 'center',
-                    background   : 'var(--arianna-bg-3, #f3f3f3)',
-                    border       : 'none',
-                    color        : 'var(--arianna-text, #1f2328)',
-                    cursor       : 'pointer',
-                    display      : 'flex',
-                    font         : 'inherit',
-                    fontSize     : '0.85rem',
-                    fontWeight   : '600',
-                    gap          : '8px',
-                    justifyContent: 'space-between',
-                    padding      : '12px 16px',
-                    textAlign    : 'left',
-                    transition   : `background 0.2s ${TRANSITION}`,
-                    width        : '100%',
-                }),
-                new Rule('.ar-accordion__header:hover:not(.ar-accordion__header--disabled)', {
-                    background: 'var(--arianna-bg-4, #ebebeb)',
-                }),
-                new Rule('.ar-accordion__header--disabled', {
-                    cursor: 'not-allowed', opacity: '0.5',
-                }),
-                new Rule('.ar-accordion__title', { flex: '1' }),
-
-                // Icon — smooth rotation / cross-fade
-                new Rule('.ar-accordion__icon', {
-                    color     : 'var(--arianna-muted, #8b949e)',
-                    display   : 'inline-block',
-                    fontSize  : '0.9em',
-                    lineHeight: '1',
-                    transition: `transform 0.28s ${TRANSITION}`,
-                }),
-                new Rule('.ar-accordion__icon--plus',  { fontSize: '1.1em', fontWeight: '400' }),
-
-                // Body — the heart of the animation
-                new Rule('.ar-accordion__body', {
-                    maxHeight : '0',
-                    overflow  : 'hidden',
-                    background: 'var(--arianna-bg, #ffffff)',
-                    // Animate max-height (set in JS) + opacity + small Y nudge
-                    transition: `max-height ${DURATION}ms ${TRANSITION},`
-                              + ` opacity ${DURATION}ms ${TRANSITION},`
-                              + ` transform ${DURATION}ms ${TRANSITION}`,
-                    opacity   : '0',
-                    transform : 'translateY(-2px)',
-                }),
-                new Rule('.ar-accordion__body--open', {
-                    opacity  : '1',
-                    transform: 'translateY(0)',
-                    // max-height set inline via JS during animation, then 'none'
-                }),
-                new Rule('.ar-accordion__content', {
-                    padding   : '14px 16px',
-                    lineHeight: '1.5',
-                }),
-
-                // Reduced motion accessibility
-                new Rule('@media (prefers-reduced-motion: reduce)', {
-                    '.ar-accordion__body, .ar-accordion__icon, .ar-accordion__header': {
-                        transition: 'none',
-                    },
-                } as never),
-            ]
-        );
+    private isMultiple: () => boolean = () => false;
+    private isAnimated: () => boolean = () => true;
+    private isResizable: () => boolean = () => false;
+    private iconStyle: () => AccordionIconStyle = () => 'chevron';
+    private minW: () => number = () => 180;
+    private maxW: () => number = () => 900;
+    private resizerHandles: () => string = () => 'e';
+    private panels: () => PanelView[] = () => [];
+    private iconHtml: (isOpen: boolean) => string = () => '';
+    private onHeaderClick: (item: AccordionItem) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                display: 'flex',
+                flexDirection: 'column',
+                width: '100%',
+                position: 'relative',
+                color: 'var(--arianna-text, #1f2328)',
+            }),
+            new Rule('.ar-accordion__panel', {
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                overflow: 'hidden',
+                marginBottom: '4px',
+                background: 'var(--arianna-bg, #ffffff)',
+            }),
+            new Rule(':host([borderless]) .ar-accordion__panel', { border: 'none', borderRadius: '0' }),
+            new Rule('.ar-accordion__header', {
+                alignItems: 'center',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                border: 'none',
+                color: 'var(--arianna-text, #1f2328)',
+                cursor: 'pointer',
+                display: 'flex',
+                font: 'inherit',
+                fontSize: '0.85rem',
+                fontWeight: '600',
+                gap: '8px',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                textAlign: 'left',
+                transition: `background 0.2s ${TRANSITION}`,
+                width: '100%',
+            }),
+            new Rule('.ar-accordion__header:hover:not(.ar-accordion__header--disabled)', {
+                background: 'var(--arianna-bg-4, #ebebeb)',
+            }),
+            new Rule('.ar-accordion__header--disabled', {
+                cursor: 'not-allowed', opacity: '0.5',
+            }),
+            new Rule('.ar-accordion__title', { flex: '1' }),
+            // Icon — smooth rotation / cross-fade
+            new Rule('.ar-accordion__icon', {
+                color: 'var(--arianna-muted, #8b949e)',
+                display: 'inline-block',
+                fontSize: '0.9em',
+                lineHeight: '1',
+                transition: `transform 0.28s ${TRANSITION}`,
+            }),
+            new Rule('.ar-accordion__icon--plus', { fontSize: '1.1em', fontWeight: '400' }),
+            // Body — the heart of the animation
+            new Rule('.ar-accordion__body', {
+                maxHeight: '0',
+                overflow: 'hidden',
+                background: 'var(--arianna-bg, #ffffff)',
+                // Animate max-height (set in JS) + opacity + small Y nudge
+                transition: `max-height ${DURATION}ms ${TRANSITION},`
+                    + ` opacity ${DURATION}ms ${TRANSITION},`
+                    + ` transform ${DURATION}ms ${TRANSITION}`,
+                opacity: '0',
+                transform: 'translateY(-2px)',
+            }),
+            new Rule('.ar-accordion__body--open', {
+                opacity: '1',
+                transform: 'translateY(0)',
+                // max-height set inline via JS during animation, then 'none'
+            }),
+            new Rule('.ar-accordion__content', {
+                padding: '14px 16px',
+                lineHeight: '1.5',
+            }),
+            // Reduced motion accessibility
+            new Rule('@media (prefers-reduced-motion: reduce)', {
+                '.ar-accordion__body, .ar-accordion__icon, .ar-accordion__header': {
+                    transition: 'none',
+                },
+            } as never),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Accordion', {
-        value: Accordion, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Accordion namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Accordion {
+    export namespace Types {
+        export type IconStyle = AccordionIconStyle;
+    }
+    export namespace Interfaces {
+        export interface Item extends AccordionItem {
+        }
+        export interface Options extends AccordionOptions {
+        }
+        export interface PanelViewContract extends PanelView {
+        }
+    }
 }
-
 export default Accordion;

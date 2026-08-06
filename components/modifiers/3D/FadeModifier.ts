@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/modifiers/3D/FadeModifier
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -9,32 +13,24 @@
  * @example HTML
  *   <arianna-fade for="m1" near="10" far="50"></arianna-fade>
  *
- * Attrs (declarative): for, near, far, enabled
+ * Attributes (declarative): for, near, far, enabled
  */
-
-import { Component } from '../../../core/Components.ts';
-import {
-    Modifier3D, Modifier3DElement,
-    _vLen, _vSub,
-    type MeshLike, type CameraLike,
-} from './Base.ts';
-
+import { Component } from '../../../core/index.ts';
+import { Modifier3D, Modifier3DElement, _vLen, _vSub, type MeshLike, type CameraLike, } from './Base.ts';
 export class FadeModifier extends Modifier3D {
-    #near  : number;
-    #far   : number;
+    #near: number;
+    #far: number;
     #onFade: ((mesh: MeshLike, opacity: number) => void) | null = null;
-
     constructor(mesh: MeshLike, near = 10, far = 50) {
         super(mesh);
         this.#near = near;
-        this.#far  = far;
+        this.#far = far;
     }
-
     apply(): this { return this; }
-
     update(camera: CameraLike): this {
-        if (!this.enabled) return this;
-        const d       = _vLen(_vSub(this.mesh.position, camera.position));
+        if (!this.enabled)
+            return this;
+        const d = _vLen(_vSub(this.mesh.position, camera.position));
         const opacity = 1 - Math.max(0, Math.min(1, (d - this.#near) / (this.#far - this.#near)));
         this.mesh.visible = opacity > 0.01;
         // Three.Material.opacity sits on material; we stash for material readers.
@@ -42,25 +38,27 @@ export class FadeModifier extends Modifier3D {
         this.#onFade?.(this.mesh, opacity);
         return this;
     }
-
     onFade(cb: (mesh: MeshLike, opacity: number) => void): this { this.#onFade = cb; return this; }
 }
-
-export class FadeModifierElement extends (Component('arianna-fade', HTMLElement, {}, {
-    attrs : ['for', 'near', 'far', 'enabled'],
-}) as typeof Modifier3DElement) {
+@Component('arianna-fade', {}, {
+    Attributes: ['for', 'near', 'far', 'enabled'],
+})
+export class FadeModifierElement extends Modifier3DElement {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const near = parseFloat(this.getAttribute('near') ?? '10') || 10;
-        const far  = parseFloat(this.getAttribute('far')  ?? '50') || 50;
+        const far = parseFloat(this.getAttribute('far') ?? '50') || 50;
         return new FadeModifier(mesh, near, far);
     }
     protected needsFrameUpdate(): boolean { return true; }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'FadeModifier', {
-        value: FadeModifier, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * FadeModifier namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace FadeModifier {
 }
-
+/* ──────────────────────────────────────────────────────────────────────────
+ * FadeModifierElement namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace FadeModifierElement {
+}
 export default FadeModifier;

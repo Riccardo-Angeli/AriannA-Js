@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/modifiers/3D/SubdivisionModifier
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -9,31 +13,23 @@
  * @example HTML
  *   <arianna-subdivision for="m1" iterations="2"></arianna-subdivision>
  *
- * Attrs (declarative): for, iterations, enabled
+ * Attributes (declarative): for, iterations, enabled
  */
-
-import { Component } from '../../../core/Components.ts';
-import {
-    Modifier3D, Modifier3DElement,
-    _cloneGeom, _recomputeNormals,
-    type MeshLike, type Geometry3Like, type Vec3Like,
-} from './Base.ts';
-
+import { Component } from '../../../core/index.ts';
+import { Modifier3D, Modifier3DElement, _cloneGeom, _recomputeNormals, type MeshLike, type Geometry3Like, type Vec3Like, } from './Base.ts';
 export class SubdivisionModifier extends Modifier3D {
     #iterations: number;
-
     constructor(mesh: MeshLike, iterations = 1) { super(mesh); this.#iterations = iterations; }
-
     setIterations(n: number): this { this.#iterations = n; return this; }
-
     apply(): this {
-        if (!this.enabled) return this;
+        if (!this.enabled)
+            return this;
         let g = _cloneGeom(this.mesh.geometry);
-        for (let i = 0; i < this.#iterations; i++) g = this.#subdivide(g);
+        for (let i = 0; i < this.#iterations; i++)
+            g = this.#subdivide(g);
         this.mesh.geometry = g;
         return this;
     }
-
     #subdivide(g: Geometry3Like): Geometry3Like {
         const out: Geometry3Like = {
             vertices: [...g.vertices.map(v => ({ ...v }))],
@@ -44,7 +40,8 @@ export class SubdivisionModifier extends Modifier3D {
         const midCache = new Map<string, number>();
         const midpoint = (ia: number, ib: number): number => {
             const key = `${Math.min(ia, ib)}_${Math.max(ia, ib)}`;
-            if (midCache.has(key)) return midCache.get(key)!;
+            if (midCache.has(key))
+                return midCache.get(key)!;
             const m: Vec3Like = {
                 x: (g.vertices[ia].x + g.vertices[ib].x) / 2,
                 y: (g.vertices[ia].y + g.vertices[ib].y) / 2,
@@ -64,20 +61,23 @@ export class SubdivisionModifier extends Modifier3D {
         return out;
     }
 }
-
-export class SubdivisionModifierElement extends (Component('arianna-subdivision', HTMLElement, {}, {
-    attrs : ['for', 'iterations', 'enabled'],
-}) as typeof Modifier3DElement) {
+@Component('arianna-subdivision', {}, {
+    Attributes: ['for', 'iterations', 'enabled'],
+})
+export class SubdivisionModifierElement extends Modifier3DElement {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const iterations = parseInt(this.getAttribute('iterations') ?? '1', 10) || 1;
         return new SubdivisionModifier(mesh, iterations);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'SubdivisionModifier', {
-        value: SubdivisionModifier, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * SubdivisionModifier namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace SubdivisionModifier {
 }
-
+/* ──────────────────────────────────────────────────────────────────────────
+ * SubdivisionModifierElement namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace SubdivisionModifierElement {
+}
 export default SubdivisionModifier;

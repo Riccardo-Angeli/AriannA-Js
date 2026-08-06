@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/finance/OrderBook
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -19,13 +23,8 @@
  * @example HTML
  *   <arianna-order-book depth="10"></arianna-order-book>
  *
- * Attrs: depth
+ * Attributes: depth
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -33,75 +32,75 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _fmt, _fmtK } from './helpers.ts';
-
-export type Level = [price: number, size: number];
-
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+export type Level = [
+    price: number,
+    size: number
+];
 export interface OrderBookOptions {
-    bids?  : Level[];
-    asks?  : Level[];
-    depth? : number;
+    bids?: Level[];
+    asks?: Level[];
+    depth?: number;
 }
-
 interface Row {
-    price : string;
-    size  : string;
+    price: string;
+    size: string;
     rowCls: string;
     priceCls: string;
 }
-
-export class OrderBook extends Component('arianna-order-book', HTMLElement, {}, {
-    attrs : ['depth'],
+@Component('arianna-order-book', {}, {
+    Attributes: ['depth'],
 })
-{
+export class OrderBook extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     bids$: Signal<Level[]> = signal<Level[]>([]);
     asks$: Signal<Level[]> = signal<Level[]>([]);
-
-    build(_opts: OrderBookOptions = {})
-    {
-        const depth = this.attributeSignal('depth');
-
+    onConnected(_opts: OrderBookOptions = {}) {
+        const depth = this.signal().attribute('depth');
         const depthN = () => parseInt(depth.Get() ?? '10', 10) || 10;
-
         this.askRows = (): Row[] => {
             const n = depthN();
             return this.asks$.Get().slice(0, n).reverse().map(([p, s]) => ({
                 price: _fmt(p),
-                size : _fmtK(s),
+                size: _fmtK(s),
                 rowCls: 'ar-ob__row',
                 priceCls: 'ar-ob__price ar-ob__price--ask',
             }));
         };
-
         this.bidRows = (): Row[] => {
             const n = depthN();
             return this.bids$.Get().slice(0, n).map(([p, s]) => ({
                 price: _fmt(p),
-                size : _fmtK(s),
+                size: _fmtK(s),
                 rowCls: 'ar-ob__row',
                 priceCls: 'ar-ob__price ar-ob__price--bid',
             }));
         };
-
         this.midText = () => {
             const bestAsk = this.asks$.Get()[0]?.[0];
             const bestBid = this.bids$.Get()[0]?.[0];
-            if (bestAsk === undefined || bestBid === undefined) return '—';
+            if (bestAsk === undefined || bestBid === undefined)
+                return '—';
             return _fmt((bestAsk + bestBid) / 2);
         };
         this.spreadText = () => {
             const bestAsk = this.asks$.Get()[0]?.[0];
             const bestBid = this.bids$.Get()[0]?.[0];
-            if (bestAsk === undefined || bestBid === undefined) return '—';
+            if (bestAsk === undefined || bestBid === undefined)
+                return '—';
             return _fmt(bestAsk - bestBid);
         };
-
-        this.template = html`
+        this.template = html `
             <table class="ar-ob__table">
                 <thead>
                     <tr>
@@ -129,91 +128,89 @@ export class OrderBook extends Component('arianna-order-book', HTMLElement, {}, 
                 </tbody>
             </table>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = OrderBook.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = OrderBook.DefaultSheet();
     }
-
     setData(bids: Level[], asks: Level[]): this {
         this.bids$.Set(bids ?? []);
         this.asks$.Set(asks ?? []);
         return this;
     }
-
     set bids(v: Level[]) { this.bids$.Set(v ?? []); }
-    get bids(): Level[]  { return this.bids$.Get(); }
-
+    get bids(): Level[] { return this.bids$.Get(); }
     set asks(v: Level[]) { this.asks$.Set(v ?? []); }
-    get asks(): Level[]  { return this.asks$.Get(); }
-
-    get depth(): number  { return parseInt(this.getAttribute('depth') ?? '10', 10); }
+    get asks(): Level[] { return this.asks$.Get(); }
+    get depth(): number { return parseInt(this.getAttribute('depth') ?? '10', 10); }
     set depth(v: number) { this.setAttribute('depth', String(v)); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    private askRows   : () => Row[] = () => [];
-    private bidRows   : () => Row[] = () => [];
-    private midText   : () => string = () => '—';
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    private askRows: () => Row[] = () => [];
+    private bidRows: () => Row[] = () => [];
+    private midText: () => string = () => '—';
     private spreadText: () => string = () => '—';
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    color       : 'var(--arianna-text, #1f2328)',
-                    display     : 'inline-block',
-                    fontFamily  : 'ui-monospace, monospace',
-                    fontSize    : '12px',
-                    minWidth    : '200px',
-                    overflow    : 'hidden',
-                    padding     : '8px',
-                }),
-                new Rule('.ar-ob__table', {
-                    borderCollapse: 'collapse',
-                    width: '100%',
-                }),
-                new Rule('.ar-ob__th', {
-                    color     : 'var(--arianna-muted, #787b86)',
-                    fontWeight: '500',
-                    padding   : '2px 8px',
-                    textAlign : 'left',
-                }),
-                new Rule('.ar-ob__th--right', { textAlign: 'right' }),
-                new Rule('.ar-ob__price', { padding: '2px 8px' }),
-                new Rule('.ar-ob__price--ask', { color: 'var(--arianna-bear, #ef5350)' }),
-                new Rule('.ar-ob__price--bid', { color: 'var(--arianna-bull, #26a69a)' }),
-                new Rule('.ar-ob__size', {
-                    color    : 'var(--arianna-text, #1f2328)',
-                    padding  : '2px 8px',
-                    textAlign: 'right',
-                }),
-                new Rule('.ar-ob__mid', {
-                    borderTop    : '1px solid var(--arianna-border, #e0e0e0)',
-                    borderBottom : '1px solid var(--arianna-border, #e0e0e0)',
-                    color        : 'var(--arianna-warning, #f4c842)',
-                    display      : 'flex',
-                    fontSize     : '11px',
-                    justifyContent: 'space-between',
-                    padding      : '4px 8px',
-                }),
-            ]
-        );
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                color: 'var(--arianna-text, #1f2328)',
+                display: 'inline-block',
+                fontFamily: 'ui-monospace, monospace',
+                fontSize: '12px',
+                minWidth: '200px',
+                overflow: 'hidden',
+                padding: '8px',
+            }),
+            new Rule('.ar-ob__table', {
+                borderCollapse: 'collapse',
+                width: '100%',
+            }),
+            new Rule('.ar-ob__th', {
+                color: 'var(--arianna-muted, #787b86)',
+                fontWeight: '500',
+                padding: '2px 8px',
+                textAlign: 'left',
+            }),
+            new Rule('.ar-ob__th--right', { textAlign: 'right' }),
+            new Rule('.ar-ob__price', { padding: '2px 8px' }),
+            new Rule('.ar-ob__price--ask', { color: 'var(--arianna-bear, #ef5350)' }),
+            new Rule('.ar-ob__price--bid', { color: 'var(--arianna-bull, #26a69a)' }),
+            new Rule('.ar-ob__size', {
+                color: 'var(--arianna-text, #1f2328)',
+                padding: '2px 8px',
+                textAlign: 'right',
+            }),
+            new Rule('.ar-ob__mid', {
+                borderTop: '1px solid var(--arianna-border, #e0e0e0)',
+                borderBottom: '1px solid var(--arianna-border, #e0e0e0)',
+                color: 'var(--arianna-warning, #f4c842)',
+                display: 'flex',
+                fontSize: '11px',
+                justifyContent: 'space-between',
+                padding: '4px 8px',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'OrderBook', {
-        value: OrderBook, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * OrderBook namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace OrderBook {
+    export namespace Types {
+        export type LevelType = Level;
+    }
+    export namespace Interfaces {
+        export interface Options extends OrderBookOptions {
+        }
+        export interface RowContract extends Row {
+        }
+    }
 }
-
 export default OrderBook;

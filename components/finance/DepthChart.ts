@@ -1,3 +1,10 @@
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/finance/DepthChart
  * @author    Riccardo Angeli
@@ -17,13 +24,8 @@
  * @example HTML
  *   <arianna-depth-chart width="600" height="280"></arianna-depth-chart>
  *
- * Attrs: width, height
+ * Attributes: width, height
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -31,45 +33,43 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
-export type Level = [price: number, size: number];
-
+export type Level = [
+    price: number,
+    size: number
+];
 export interface DepthChartOptions {
-    bids?   : Level[];
-    asks?   : Level[];
-    width?  : number;
-    height? : number;
+    bids?: Level[];
+    asks?: Level[];
+    width?: number;
+    height?: number;
 }
-
-export class DepthChart extends Component('arianna-depth-chart', HTMLElement, {}, {
-    attrs : ['width', 'height'],
+@Component('arianna-depth-chart', {}, {
+    Attributes: ['width', 'height'],
 })
-{
+export class DepthChart extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     bids$: Signal<Level[]> = signal<Level[]>([]);
     asks$: Signal<Level[]> = signal<Level[]>([]);
-
-    build(_opts: DepthChartOptions = {})
-    {
-        const wAttr = this.attributeSignal('width');
-        const hAttr = this.attributeSignal('height');
-
+    onConnected(_opts: DepthChartOptions = {}) {
+        const wAttr = this.signal().attribute('width');
+        const hAttr = this.signal().attribute('height');
         this.svgHtml = (): string => {
             const bids = this.bids$.Get();
             const asks = this.asks$.Get();
-            if (!bids.length || !asks.length) return '';
-
+            if (!bids.length || !asks.length)
+                return '';
             const w = parseInt(wAttr.Get() ?? '600', 10) || 600;
             const h = parseInt(hAttr.Get() ?? '300', 10) || 300;
-
             const pad = { l: 60, r: 20, t: 20, b: 30 };
             const W = w - pad.l - pad.r;
             const H = h - pad.t - pad.b;
-
             const cumulate = (levels: Level[]): Level[] => {
                 const out: Level[] = [];
                 let sum = 0;
@@ -81,79 +81,71 @@ export class DepthChart extends Component('arianna-depth-chart', HTMLElement, {}
             };
             const cumBids = cumulate(bids);
             const cumAsks = cumulate(asks);
-
             const allP = [...bids.map(b => b[0]), ...asks.map(a => a[0])];
             const allS = [...cumBids.map(b => b[1]), ...cumAsks.map(a => a[1])];
             const minP = Math.min(...allP);
             const maxP = Math.max(...allP);
             const maxS = Math.max(...allS) || 1;
-
             const xS = (p: number) => pad.l + ((p - minP) / (maxP - minP || 1)) * W;
             const yS = (s: number) => pad.t + (1 - s / maxS) * H;
-
             const bidPts = cumBids.map(([p, s]) => `${xS(p)},${yS(s)}`).join(' ');
             const askPts = cumAsks.map(([p, s]) => `${xS(p)},${yS(s)}`).join(' ');
-            const floor  = pad.t + H;
-
+            const floor = pad.t + H;
             const bullStroke = 'var(--arianna-bull, #26a69a)';
             const bearStroke = 'var(--arianna-bear, #ef5350)';
-            const bullFill   = 'rgba(38,166,154,0.20)';
-            const bearFill   = 'rgba(239,83,80,0.20)';
-
+            const bullFill = 'rgba(38,166,154,0.20)';
+            const bearFill = 'rgba(239,83,80,0.20)';
             return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
-                 + `<polyline points="${bidPts} ${xS(bids[0][0])},${floor}" fill="${bullFill}" stroke="${bullStroke}" stroke-width="2"/>`
-                 + `<polyline points="${askPts} ${xS(asks[asks.length - 1][0])},${floor}" fill="${bearFill}" stroke="${bearStroke}" stroke-width="2"/>`
-                 + `</svg>`;
+                + `<polyline points="${bidPts} ${xS(bids[0][0])},${floor}" fill="${bullFill}" stroke="${bullStroke}" stroke-width="2"/>`
+                + `<polyline points="${askPts} ${xS(asks[asks.length - 1][0])},${floor}" fill="${bearFill}" stroke="${bearStroke}" stroke-width="2"/>`
+                + `</svg>`;
         };
-
-        this.template = html`<div class="ar-depth" a-html="this.svgHtml()"></div>`;
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = DepthChart.DefaultSheet();
+        this.template = html `<div class="ar-depth" a-html="this.svgHtml()"></div>`;
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = DepthChart.DefaultSheet();
     }
-
     /** Convenience: set bids and asks together. */
     setData(bids: Level[], asks: Level[]): this {
         this.bids$.Set(bids ?? []);
         this.asks$.Set(asks ?? []);
         return this;
     }
-
     set bids(v: Level[]) { this.bids$.Set(v ?? []); }
-    get bids(): Level[]  { return this.bids$.Get(); }
-
+    get bids(): Level[] { return this.bids$.Get(); }
     set asks(v: Level[]) { this.asks$.Set(v ?? []); }
-    get asks(): Level[]  { return this.asks$.Get(); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    get asks(): Level[] { return this.asks$.Get(); }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     private svgHtml: () => string = () => '';
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    display     : 'inline-block',
-                    padding     : '4px',
-                }),
-                new Rule(':host svg', { display: 'block' }),
-            ]
-        );
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                display: 'inline-block',
+                padding: '4px',
+            }),
+            new Rule(':host svg', { display: 'block' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'DepthChart', {
-        value: DepthChart, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * DepthChart namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace DepthChart {
+    export namespace Types {
+        export type LevelType = Level;
+    }
+    export namespace Interfaces {
+        export interface Options extends DepthChartOptions {
+        }
+    }
 }
-
 export default DepthChart;

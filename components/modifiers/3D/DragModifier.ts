@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/modifiers/3D/DragModifier
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -20,70 +24,69 @@
  * Events:
  *   - arianna:drag   detail: { mesh, position }   (declarative form only)
  *
- * Attrs (declarative): for, plane, enabled
+ * Attributes (declarative): for, plane, enabled
  */
-
-import { Component } from '../../../core/Components.ts';
-import {
-    Modifier3D, Modifier3DElement,
-    type MeshLike, type CameraLike, type Vec3Like,
-} from './Base.ts';
-
+import { Component } from '../../../core/index.ts';
+import { Modifier3D, Modifier3DElement, type MeshLike, type CameraLike, type Vec3Like, } from './Base.ts';
 export type DragCallback3D = (mesh: MeshLike, pos: Vec3Like) => void;
-
 export class DragModifier extends Modifier3D {
-    #canvas   : HTMLCanvasElement;
-    #plane    : 'xy' | 'xz' | 'yz';
+    #canvas: HTMLCanvasElement;
+    #plane: 'xy' | 'xz' | 'yz';
     #callbacks: DragCallback3D[] = [];
-
     constructor(mesh: MeshLike, canvas: HTMLCanvasElement, _camera: CameraLike, plane: 'xy' | 'xz' | 'yz' = 'xz') {
         super(mesh);
         this.#canvas = canvas;
-        this.#plane  = plane;
+        this.#plane = plane;
         this.#wire();
     }
-
     apply(): this { return this; }
-
     onDrag(cb: DragCallback3D): this { this.#callbacks.push(cb); return this; }
-
     #wire(): void {
         let dragging = false, startMX = 0, startMY = 0;
         let startPos = { ...this.mesh.position };
-        const scale  = 0.01;
-
+        const scale = 0.01;
         const onDown = (e: MouseEvent) => {
-            if (!this.enabled) return;
+            if (!this.enabled)
+                return;
             dragging = true;
-            startMX  = e.clientX;
-            startMY  = e.clientY;
+            startMX = e.clientX;
+            startMY = e.clientY;
             startPos = { ...this.mesh.position };
         };
         const onMove = (e: MouseEvent) => {
-            if (!dragging || !this.enabled) return;
+            if (!dragging || !this.enabled)
+                return;
             const dx = (e.clientX - startMX) * scale;
             const dy = (e.clientY - startMY) * scale;
-            if      (this.#plane === 'xz') { this.mesh.position.x = startPos.x + dx; this.mesh.position.z = startPos.z + dy; }
-            else if (this.#plane === 'xy') { this.mesh.position.x = startPos.x + dx; this.mesh.position.y = startPos.y - dy; }
-            else                            { this.mesh.position.y = startPos.y - dy; this.mesh.position.z = startPos.z + dx; }
+            if (this.#plane === 'xz') {
+                this.mesh.position.x = startPos.x + dx;
+                this.mesh.position.z = startPos.z + dy;
+            }
+            else if (this.#plane === 'xy') {
+                this.mesh.position.x = startPos.x + dx;
+                this.mesh.position.y = startPos.y - dy;
+            }
+            else {
+                this.mesh.position.y = startPos.y - dy;
+                this.mesh.position.z = startPos.z + dx;
+            }
             this.#callbacks.forEach(cb => cb(this.mesh, { ...this.mesh.position }));
         };
         const onUp = () => { dragging = false; };
-
         this.#canvas.addEventListener('mousedown', onDown);
         window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup',   onUp);
+        window.addEventListener('mouseup', onUp);
         this.cleanups.push(() => {
             this.#canvas.removeEventListener('mousedown', onDown);
             window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup',   onUp);
+            window.removeEventListener('mouseup', onUp);
         });
     }
 }
-
-export class DragModifierElement extends (Component('arianna-drag', HTMLElement, {}, {
-    attrs : ['for', 'plane', 'enabled'],
-}) as typeof Modifier3DElement) {
+@Component('arianna-drag', {}, {
+    Attributes: ['for', 'plane', 'enabled'],
+})
+export class DragModifierElement extends Modifier3DElement {
     protected createModifier(mesh: MeshLike): Modifier3D | null {
         const vp = this.viewport;
         if (!vp || !vp.canvas) {
@@ -100,11 +103,17 @@ export class DragModifierElement extends (Component('arianna-drag', HTMLElement,
         return drag;
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'DragModifier', {
-        value: DragModifier, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * DragModifier namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace DragModifier {
+    export namespace Types {
+        export type DragCallback3DType = DragCallback3D;
+    }
 }
-
+/* ──────────────────────────────────────────────────────────────────────────
+ * DragModifierElement namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace DragModifierElement {
+}
 export default DragModifier;

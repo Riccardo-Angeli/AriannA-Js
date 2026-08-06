@@ -1,3 +1,9 @@
+import { Component, Components, Css, Templates } from '../../core/index.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/payments/AliPay
  * @author    Riccardo Angeli
@@ -27,60 +33,51 @@
  *   arianna:payment-redirect  detail: { method: 'alipay', url: string }
  *   arianna:payment-error     detail: { method: 'alipay', message: string }
  *
- * Attrs: mode, redirect-url, qr-url, amount, currency, target
+ * Attributes: mode, redirect-url, qr-url, amount, currency, target
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export type AliPayMode = 'redirect' | 'qr-code';
-
 export interface AliPayOptions {
-    mode?       : AliPayMode;
+    mode?: AliPayMode;
     redirectUrl?: string;
-    qrUrl?      : string;
-    amount      : number;
-    currency    : string;
-    target?     : '_blank' | '_self';
+    qrUrl?: string;
+    amount: number;
+    currency: string;
+    target?: '_blank' | '_self';
 }
-
 const ALIPAY_LOGO = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="4" fill="#00a0e9"/><text x="12" y="16" text-anchor="middle" fill="#fff" font-family="-apple-system, sans-serif" font-weight="700" font-size="11">支</text></svg>`;
-
-export class AliPay extends Component('arianna-alipay', HTMLElement, {}, {
-    attrs : ['mode', 'redirect-url', 'qr-url', 'amount', 'currency', 'target'],
+@Component('arianna-alipay', {}, {
+    Attributes: ['mode', 'redirect-url', 'qr-url', 'amount', 'currency', 'target'],
 })
-{
-    build(_opts: AliPayOptions = {} as AliPayOptions)
-    {
-        const modeAttr = this.attributeSignal('mode');
-        const amountAttr = this.attributeSignal('amount');
-        const currencyAttr = this.attributeSignal('currency');
-        const qrUrlAttr = this.attributeSignal('qr-url');
-
+export class AliPay extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    onConnected(_opts: AliPayOptions = {} as AliPayOptions) {
+        const modeAttr = this.signal().attribute('mode');
+        const amountAttr = this.signal().attribute('amount');
+        const currencyAttr = this.signal().attribute('currency');
+        const qrUrlAttr = this.signal().attribute('qr-url');
         this.isQrMode = () => modeAttr.Get() === 'qr-code';
-
         this.btnLabel = () => {
             const a = parseFloat(amountAttr.Get() ?? '0') || 0;
             const c = currencyAttr.Get() ?? 'CNY';
             return `Pay ${c} ${a.toFixed(2)} with Alipay`;
         };
-
         this.qrImgSrc = () => {
             const url = qrUrlAttr.Get() ?? '';
             // Use Google Chart API to render QR if URL doesn't point to an image
-            if (/\.(png|jpe?g|gif|svg)(\?|$)/i.test(url)) return url;
+            if (/\.(png|jpe?g|gif|svg)(\?|$)/i.test(url))
+                return url;
             return url
                 ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}`
                 : '';
         };
-
         this.onClick = () => { void this.pay(); };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-alipay" a-if="!this.isQrMode()">
                 <button type="button" class="ar-alipay__btn" @click="this.onClick">
                     <span class="ar-alipay__logo">${ALIPAY_LOGO}</span>
@@ -95,10 +92,10 @@ export class AliPay extends Component('arianna-alipay', HTMLElement, {}, {
                 <div class="ar-alipay__qr-amount">{{ this.btnLabel() }}</div>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = AliPay.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = AliPay.DefaultSheet();
     }
-
     async pay(): Promise<void> {
         const url = this.getAttribute('redirect-url');
         if (!url) {
@@ -111,82 +108,83 @@ export class AliPay extends Component('arianna-alipay', HTMLElement, {}, {
             bubbles: true, detail: { method: 'alipay', url },
         }));
         const target = (this.getAttribute('target') ?? '_self') as '_blank' | '_self';
-        if (target === '_self') window.location.href = url;
-        else window.open(url, '_blank', 'noopener');
+        if (target === '_self')
+            window.location.href = url;
+        else
+            window.open(url, '_blank', 'noopener');
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     private isQrMode: () => boolean = () => false;
     private btnLabel: () => string = () => 'Pay with Alipay';
     private qrImgSrc: () => string = () => '';
-    private onClick : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', { display: 'inline-block' }),
-                new Rule('.ar-alipay__btn', {
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    minWidth: '200px',
-                    minHeight: '44px',
-                    padding: '0 18px',
-                    background: '#00a0e9',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    font: '600 14px -apple-system, system-ui, sans-serif',
-                    transition: 'background 0.15s',
-                }),
-                new Rule('.ar-alipay__btn:hover', { background: '#0090d4' }),
-                new Rule('.ar-alipay__logo', {
-                    display: 'inline-flex',
-                    width: '22px', height: '22px',
-                }),
-                new Rule('.ar-alipay__logo svg', { width: '100%', height: '100%' }),
-                new Rule('.ar-alipay--qr', {
-                    display: 'inline-flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '14px',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 8px)',
-                }),
-                new Rule('.ar-alipay__qr', {
-                    width: '180px', height: '180px',
-                    display: 'block',
-                }),
-                new Rule('.ar-alipay__qr-hint', {
-                    fontSize: '11px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                }),
-                new Rule('.ar-alipay__qr-amount', {
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: 'var(--arianna-text, #1f2328)',
-                }),
-            ]
-        );
+    private onClick: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', { display: 'inline-block' }),
+            new Rule('.ar-alipay__btn', {
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                minWidth: '200px',
+                minHeight: '44px',
+                padding: '0 18px',
+                background: '#00a0e9',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                font: '600 14px -apple-system, system-ui, sans-serif',
+                transition: 'background 0.15s',
+            }),
+            new Rule('.ar-alipay__btn:hover', { background: '#0090d4' }),
+            new Rule('.ar-alipay__logo', {
+                display: 'inline-flex',
+                width: '22px', height: '22px',
+            }),
+            new Rule('.ar-alipay__logo svg', { width: '100%', height: '100%' }),
+            new Rule('.ar-alipay--qr', {
+                display: 'inline-flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '14px',
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 8px)',
+            }),
+            new Rule('.ar-alipay__qr', {
+                width: '180px', height: '180px',
+                display: 'block',
+            }),
+            new Rule('.ar-alipay__qr-hint', {
+                fontSize: '11px',
+                color: 'var(--arianna-muted, #6e6b62)',
+            }),
+            new Rule('.ar-alipay__qr-amount', {
+                fontSize: '13px',
+                fontWeight: '600',
+                color: 'var(--arianna-text, #1f2328)',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'AliPay', {
-        value: AliPay, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * AliPay namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace AliPay {
+    export namespace Types {
+        export type Mode = AliPayMode;
+    }
+    export namespace Interfaces {
+        export interface Options extends AliPayOptions {
+        }
+    }
 }
-
 export default AliPay;

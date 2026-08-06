@@ -23,247 +23,58 @@
  * phases and DOM mirroring belong to Core.Events through the `events` service.
  */
 
-import { Core }        from './Core.ts';
-import type { Events } from './Events.ts';
+import { Core } from './Core.ts';
+
+import type { Types as SchemaTypes }           from './schema/Types.ts';
+import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
 export namespace Reactivity
 {
-    export namespace Types
-    {
-        export type Key = PropertyKey;
-        export type Path = readonly Key[];
-        export type ChangeKind = 'set' | 'add' | 'delete' | 'clear' | 'mutate';
-        export type Schedule = 'sync' | 'microtask' | 'animation-frame' | 'idle';
-        export type Equality<T> = false | ((previous: T, next: T) => boolean);
-        export type Cleanup = () => void;
-        export type Stop = (() => void) &
-        {
-            readonly Active: boolean;
-            Pause(): void;
-            Resume(run?: boolean): void;
-            Run(): void;
-        };
-        export type WatchHandler<T> =
-        (
-            value: T,
-            previous: T | undefined,
-            OnCleanup: (cleanup: Cleanup) => void
-        ) => void;
-        export type ResourceState = 'idle' | 'pending' | 'ready' | 'refreshing' | 'error' | 'aborted';
-        export type ResourceFetcher<T, S = unknown> =
-        (
-            source: S | undefined,
-            context:
-            {
-                Previous: T | undefined;
-                Signal: AbortSignal;
-                Refetching: boolean;
-            }
-        ) => T | Promise<T>;
+    export type Key                            = SchemaTypes.Reactivity.Key;
+    export type Path                           = SchemaTypes.Reactivity.Path;
+    export type ChangeKind                     = SchemaTypes.Reactivity.ChangeKind;
+    export type Schedule                       = SchemaTypes.Reactivity.Schedule;
+    export type Equality<T>                    = SchemaTypes.Reactivity.Equality<T>;
+    export type Cleanup                        = SchemaTypes.Reactivity.Cleanup;
+    export type Stop                           = SchemaTypes.Reactivity.Stop;
+    export type WatchHandler<T>                = SchemaTypes.Reactivity.WatchHandler<T>;
+    export type ResourceState                  = SchemaTypes.Reactivity.ResourceState;
+    export type ResourceFetcher<T, S = unknown> = SchemaTypes.Reactivity.ResourceFetcher<T, S>;
+    export type ChangeEvent                    = SchemaInterfaces.Reactivity.ChangeEvent;
+    export type SignalOptions<T>               = SchemaInterfaces.Reactivity.SignalOptions<T>;
+    export type EffectOptions                  = SchemaInterfaces.Reactivity.EffectOptions;
+    export type WatchOptions<T>                = SchemaInterfaces.Reactivity.WatchOptions<T>;
+    export type ReactiveOptions                = SchemaInterfaces.Reactivity.ReactiveOptions;
+    export type ResourceOptions<T>             = SchemaInterfaces.Reactivity.ResourceOptions<T>;
+    export type SignalContract<T>              = SchemaInterfaces.Reactivity.Signal<T>;
+    export type ReadonlySignalContract<T>      = SchemaInterfaces.Reactivity.ReadonlySignal<T>;
+    export type MemoContract<T>                = SchemaInterfaces.Reactivity.Memo<T>;
+    export type ResourceContract<T, S = unknown> = SchemaInterfaces.Reactivity.Resource<T, S>;
+    export type SelectorContract<T, K = T>     = SchemaInterfaces.Reactivity.Selector<T, K>;
+    export type ReactionContract               = SchemaInterfaces.Reactivity.Reaction;
+    export type Snapshot                       = SchemaInterfaces.Reactivity.Snapshot;
+    export type Subscriber                     = SchemaInterfaces.Reactivity.Computation;
+    export type Dependency                     = SchemaTypes.Reactivity.Dependency;
+    export type Owner                          = SchemaInterfaces.Reactivity.Owner;
+    export type Computation                    = SchemaInterfaces.Reactivity.Computation;
+    export type ProxyMeta                      = SchemaInterfaces.Reactivity.ProxyMeta;
+    export type TransactionEntry               = SchemaInterfaces.Reactivity.TransactionEntry;
 
-        export type ChangeEvent = Interfaces.ChangeEvent;
-        export type SignalOptions<T> = Interfaces.SignalOptions<T>;
-        export type EffectOptions = Interfaces.EffectOptions;
-        export type WatchOptions<T> = Interfaces.WatchOptions<T>;
-        export type ReactiveOptions = Interfaces.ReactiveOptions;
-        export type ResourceOptions<T> = Interfaces.ResourceOptions<T>;
-        export type SignalContract<T> = Interfaces.Signal<T>;
-        export type ReadonlySignalContract<T> = Interfaces.ReadonlySignal<T>;
-        export type MemoContract<T> = Interfaces.Memo<T>;
-        export type ResourceContract<T, S = unknown> = Interfaces.Resource<T, S>;
-        export type SelectorContract<T, K = T> = Interfaces.Selector<T, K>;
-        export type ReactionContract = Interfaces.Reaction;
-        export type Snapshot = Interfaces.Snapshot;
-        export type Subscriber = Interfaces.Computation;
-        export type Dependency = Set<Subscriber>;
-        export type Owner = Interfaces.Owner;
-        export type Computation = Interfaces.Computation;
-        export type ProxyMeta = Interfaces.ProxyMeta;
-        export type TransactionEntry = Interfaces.TransactionEntry;
-    }
-
-    export namespace Interfaces
-    {
-        export interface ChangeEvent extends Omit<Events.EventDescriptor, 'Path'>
-        {
-            Type      : string;
-            Target    : object;
-            Root      : object;
-            Path      : Types.Path;
-            Key       : Types.Key;
-            Old       : unknown;
-            New       : unknown;
-            Kind      : Types.ChangeKind;
-            Version   : number;
-            Timestamp : number;
-        }
-
-        export interface SignalOptions<T>
-        {
-            Name?   : string;
-            Equals? : Types.Equality<T>;
-        }
-
-        export interface EffectOptions
-        {
-            Name?      : string;
-            Schedule?  : Types.Schedule;
-            Defer?     : boolean;
-            Priority?  : number;
-            OnError?   : (error: unknown) => void;
-            Signal?    : AbortSignal;
-        }
-
-        export interface WatchOptions<T> extends EffectOptions
-        {
-            Immediate? : boolean;
-            Deep?      : boolean;
-            Equals?    : Types.Equality<T>;
-        }
-
-        export interface ReactiveOptions
-        {
-            Name?     : string;
-            Shallow?  : boolean;
-            Readonly? : boolean;
-            Events?   : boolean;
-        }
-
-        export interface ResourceOptions<T>
-        {
-            Name?         : string;
-            Initial?      : T;
-            Immediate?    : boolean;
-            KeepPrevious? : boolean;
-            Schedule?     : Types.Schedule;
-            OnError?      : (error: unknown) => void;
-        }
-
-        export interface ReadonlySignal<T>
-        {
-            readonly Name  : string;
-            readonly Value : T;
-            Get(): T;
-            Peek(): T;
-            Subscribe(handler: (value: T, previous: T) => void, options?: EffectOptions): Types.Stop;
-        }
-
-        export interface Signal<T> extends ReadonlySignal<T>
-        {
-            Value: T;
-            Set(value: T | ((previous: T) => T)): T;
-            Update(updater: (previous: T) => T): T;
-            Touch(): void;
-            Readonly(): ReadonlySignal<T>;
-        }
-
-        export interface Memo<T> extends ReadonlySignal<T>
-        {
-            readonly Dirty : boolean;
-            Recompute(): T;
-        }
-
-        export interface Resource<T, S = unknown>
-        {
-            readonly Name       : string;
-            readonly Value      : T | undefined;
-            readonly Latest     : T | undefined;
-            readonly Error      : unknown;
-            readonly Loading    : boolean;
-            readonly State      : Types.ResourceState;
-            readonly Source     : S | undefined;
-            readonly Promise    : Promise<T> | null;
-            readonly Controller : AbortController | null;
-            Refetch(source?: S): Promise<T | undefined>;
-            Mutate(value: T | ((previous: T | undefined) => T)): T;
-            Abort(reason?: unknown): void;
-            Clear(): void;
-            Dispose(): void;
-        }
-
-        export interface Selector<T, K = T>
-        {
-            (key: K): boolean;
-            readonly Value: T;
-        }
-
-        export interface Reaction
-        {
-            Track(read: () => void): void;
-            Dispose(): void;
-            readonly Active: boolean;
-        }
-
-        export interface Snapshot
-        {
-            readonly Effects    : number;
-            readonly Signals    : number;
-            readonly Proxies    : number;
-            readonly Scheduled  : number;
-            readonly BatchDepth : number;
-            readonly Version    : number;
-        }
-
-        export interface Owner
-        {
-            Parent      : Owner | null;
-            Owned       : Set<Computation>;
-            Cleanups    : Types.Cleanup[];
-            Context     : Map<unknown, unknown> | null;
-            Disposed    : boolean;
-            Name        : string;
-        }
-
-        export interface Computation extends Owner
-        {
-            Id          : number;
-            Fn          : () => unknown;
-            Dependencies: Set<Types.Dependency>;
-            Active      : boolean;
-            Running     : boolean;
-            Pending     : boolean;
-            Paused      : boolean;
-            Schedule    : Types.Schedule;
-            Priority    : number;
-            OnError?    : (error: unknown) => void;
-            Run(): void;
-            Notify(): void;
-            Dispose(): void;
-        }
-
-        export interface ProxyMeta
-        {
-            Root      : object;
-            Path      : Types.Path;
-            Shallow   : boolean;
-            Readonly  : boolean;
-            Emit?     : (event: ChangeEvent) => void;
-        }
-
-        export interface TransactionEntry
-        {
-            Target : object;
-            Key    : Types.Key;
-            Had    : boolean;
-            Old    : unknown;
-        }
-    }
-
-    const Graph = new WeakMap<object, Map<Types.Key, Types.Dependency>>();
+    const Graph = new WeakMap<object, Map<Key, Dependency>>();
     const RawToProxy = new WeakMap<object, object>();
     const ProxyToRaw = new WeakMap<object, object>();
-    const ProxyMetadata = new WeakMap<object, Types.ProxyMeta>();
+    const ProxyMetadata = new WeakMap<object, ProxyMeta>();
     const MarkedRaw = new WeakSet<object>();
     const SignalNodes = new Set<object>();
-    const Computations = new Set<Types.Computation>();
+    const Computations = new Set<Computation>();
 
     const IterateKey = Symbol('AriannA.Reactivity.Iterate');
     const MapKeyIterateKey = Symbol('AriannA.Reactivity.MapKeys');
     const ProxyFlag = Symbol.for('arianna.reactive');
     const RawFlag = Symbol.for('arianna.raw');
 
-    let Active: Types.Computation | null = null;
-    let CurrentOwner: Types.Owner | null = null;
+    let Active: Computation | null = null;
+    let CurrentOwner: Owner | null = null;
     let Tracking = true;
     let BatchDepth = 0;
     let Version = 0;
@@ -271,12 +82,12 @@ export namespace Reactivity
     let TransactionDepth = 0;
     let RollingBack = false;
 
-    const Pending = new Set<Types.Computation>();
-    const Microtasks = new Set<Types.Computation>();
-    const Frames = new Set<Types.Computation>();
-    const Idles = new Set<Types.Computation>();
-    const TransactionLog: Types.TransactionEntry[] = [];
-    let TransactionSeen = new WeakMap<object, Set<Types.Key>>();
+    const Pending = new Set<Computation>();
+    const Microtasks = new Set<Computation>();
+    const Frames = new Set<Computation>();
+    const Idles = new Set<Computation>();
+    const TransactionLog: TransactionEntry[] = [];
+    let TransactionSeen = new WeakMap<object, Set<Key>>();
 
     let MicrotaskPending = false;
     let FramePending = false;
@@ -286,13 +97,13 @@ export namespace Reactivity
     //  SHARED HELPERS
     // ═════════════════════════════════════════════════════════════════════════
 
-    const Equal = <T>(equals: Types.Equality<T> | undefined, previous: T, next: T): boolean =>
+    const Equal = <T>(equals: Equality<T> | undefined, previous: T, next: T): boolean =>
         equals === false ? false : (equals ?? Object.is)(previous, next);
 
     const IsObject = (value: unknown): value is object =>
         value !== null && (typeof value === 'object' || typeof value === 'function');
 
-    const IsIntegerKey = (key: Types.Key): boolean =>
+    const IsIntegerKey = (key: Key): boolean =>
         typeof key === 'string' && key !== 'NaN' && key[0] !== '-' && String(parseInt(key, 10)) === key;
 
     const IsWrappable = (value: unknown): value is object =>
@@ -305,11 +116,11 @@ export namespace Reactivity
     };
 
     const GetEvents = () => Core.Services.Resolve<
-    {
-        Fire(target: EventTarget, event: { Type: string; Detail?: unknown; Cancelable?: boolean }): boolean;
-        On(target: EventTarget, types: string, handler: EventListener, options?: AddEventListenerOptions): unknown[];
-        Off(target: EventTarget, types: string, handler: EventListener): void;
-    }>('events');
+        {
+            Fire(target: EventTarget, event: { Type: string; Detail?: unknown; Cancelable?: boolean }): boolean;
+            On(target: EventTarget, types: string, handler: EventListener, options?: AddEventListenerOptions): unknown[];
+            Off(target: EventTarget, types: string, handler: EventListener): void;
+        }>('events');
 
     function Warn(code: string, error: unknown): void
     {
@@ -318,7 +129,7 @@ export namespace Reactivity
         else if(Core.AriannA.Configuration?.debug) console.warn(`[arianna:${code}]`, error);
     }
 
-    function CleanupOwner(owner: Types.Owner): void
+    function CleanupOwner(owner: Owner): void
     {
         for(const cleanup of owner.Cleanups.splice(0))
         {
@@ -327,7 +138,7 @@ export namespace Reactivity
         }
     }
 
-    function DisposeOwner(owner: Types.Owner): void
+    function DisposeOwner(owner: Owner): void
     {
         if(owner.Disposed) return;
         owner.Disposed = true;
@@ -336,13 +147,13 @@ export namespace Reactivity
         CleanupOwner(owner);
     }
 
-    function Detach(computation: Types.Computation): void
+    function Detach(computation: Computation): void
     {
         for(const dependency of computation.Dependencies) dependency.delete(computation);
         computation.Dependencies.clear();
     }
 
-    function Track(target: object, key: Types.Key): void
+    function Track(target: object, key: Key): void
     {
         if(!Tracking || !Active || !Active.Active || Active.Paused) return;
 
@@ -359,9 +170,9 @@ export namespace Reactivity
         }
     }
 
-    function Collect(target: object, keys: readonly Types.Key[]): Set<Types.Computation>
+    function Collect(target: object, keys: readonly Key[]): Set<Computation>
     {
-        const result = new Set<Types.Computation>();
+        const result = new Set<Computation>();
         const targetMap = Graph.get(target);
         if(!targetMap) return result;
 
@@ -375,7 +186,7 @@ export namespace Reactivity
         return result;
     }
 
-    function ScheduleComputation(computation: Types.Computation): void
+    function ScheduleComputation(computation: Computation): void
     {
         if(!computation.Active || computation.Paused || computation === Active) return;
         if(computation.Pending) return;
@@ -406,7 +217,7 @@ export namespace Reactivity
         RequestFlush(computation.Schedule);
     }
 
-    function Trigger(target: object, keys: readonly Types.Key[]): void
+    function Trigger(target: object, keys: readonly Key[]): void
     {
         Version++;
         const computations = Collect(target, keys);
@@ -414,7 +225,7 @@ export namespace Reactivity
         for(const computation of ordered) computation.Notify();
     }
 
-    function FlushQueue(queue: Set<Types.Computation>): void
+    function FlushQueue(queue: Set<Computation>): void
     {
         const work = [...queue].sort((a, b) => b.Priority - a.Priority || a.Id - b.Id);
         queue.clear();
@@ -425,7 +236,7 @@ export namespace Reactivity
         }
     }
 
-    function RequestFlush(schedule: Types.Schedule): void
+    function RequestFlush(schedule: Schedule): void
     {
         if(schedule === 'microtask' && !MicrotaskPending)
         {
@@ -452,9 +263,9 @@ export namespace Reactivity
         {
             IdlePending = true;
             const idle = (globalThis as unknown as
-            {
-                requestIdleCallback?: (callback: () => void) => number;
-            }).requestIdleCallback;
+                {
+                    requestIdleCallback?: (callback: () => void) => number;
+                }).requestIdleCallback;
             (idle ?? ((callback: () => void) => setTimeout(callback, 1) as unknown as number))(() =>
             {
                 IdlePending = false;
@@ -475,7 +286,7 @@ export namespace Reactivity
         }
     }
 
-    function CreateOwner(name: string, parent: Types.Owner | null = CurrentOwner): Types.Owner
+    function CreateOwner(name: string, parent: Owner | null = CurrentOwner): Owner
     {
         return {
             Parent: parent,
@@ -487,63 +298,63 @@ export namespace Reactivity
         };
     }
 
-    function CreateComputation(fn: () => unknown, options: Types.EffectOptions = {}): Types.Computation
+    function CreateComputation(fn: () => unknown, options: EffectOptions = {}): Computation
     {
         const owner = CreateOwner(options.Name ?? `Effect${Sequence + 1}`);
-        const computation: Types.Computation = Object.assign(owner,
-        {
-            Id: ++Sequence,
-            Fn: fn,
-            Dependencies: new Set<Types.Dependency>(),
-            Active: true,
-            Running: false,
-            Pending: false,
-            Paused: false,
-            Schedule: options.Schedule ?? 'sync',
-            Priority: options.Priority ?? 0,
-            OnError: options.OnError,
-            Run(): void
+        const computation: Computation = Object.assign(owner,
             {
-                if(!computation.Active || computation.Paused || computation.Running) return;
-                computation.Running = true;
-                computation.Pending = false;
-                CleanupOwner(computation);
-                Detach(computation);
-
-                const previousEffect = Active;
-                const previousOwner = CurrentOwner;
-                Active = computation;
-                CurrentOwner = computation;
-
-                try { computation.Fn(); }
-                catch(error)
+                Id: ++Sequence,
+                Fn: fn,
+                Dependencies: new Set<Dependency>(),
+                Active: true,
+                Running: false,
+                Pending: false,
+                Paused: false,
+                Schedule: options.Schedule ?? 'sync',
+                Priority: options.Priority ?? 0,
+                OnError: options.OnError,
+                Run(): void
                 {
-                    if(computation.OnError) computation.OnError(error);
-                    else Warn('reactivity-effect', error);
-                }
-                finally
+                    if(!computation.Active || computation.Paused || computation.Running) return;
+                    computation.Running = true;
+                    computation.Pending = false;
+                    CleanupOwner(computation);
+                    Detach(computation);
+
+                    const previousEffect = Active;
+                    const previousOwner = CurrentOwner;
+                    Active = computation;
+                    CurrentOwner = computation;
+
+                    try { computation.Fn(); }
+                    catch(error)
+                    {
+                        if(computation.OnError) computation.OnError(error);
+                        else Warn('reactivity-effect', error);
+                    }
+                    finally
+                    {
+                        Active = previousEffect;
+                        CurrentOwner = previousOwner;
+                        computation.Running = false;
+                    }
+                },
+                Notify(): void { ScheduleComputation(computation); },
+                Dispose(): void
                 {
-                    Active = previousEffect;
-                    CurrentOwner = previousOwner;
-                    computation.Running = false;
-                }
-            },
-            Notify(): void { ScheduleComputation(computation); },
-            Dispose(): void
-            {
-                if(!computation.Active) return;
-                computation.Active = false;
-                computation.Pending = false;
-                Pending.delete(computation);
-                Microtasks.delete(computation);
-                Frames.delete(computation);
-                Idles.delete(computation);
-                Detach(computation);
-                DisposeOwner(computation);
-                computation.Parent?.Owned.delete(computation);
-                Computations.delete(computation);
-            },
-        }) as Types.Computation;
+                    if(!computation.Active) return;
+                    computation.Active = false;
+                    computation.Pending = false;
+                    Pending.delete(computation);
+                    Microtasks.delete(computation);
+                    Frames.delete(computation);
+                    Idles.delete(computation);
+                    Detach(computation);
+                    DisposeOwner(computation);
+                    computation.Parent?.Owned.delete(computation);
+                    Computations.delete(computation);
+                },
+            }) as Computation;
 
         computation.Parent?.Owned.add(computation);
         Computations.add(computation);
@@ -557,9 +368,9 @@ export namespace Reactivity
         return computation;
     }
 
-    function MakeStop(computation: Types.Computation): Types.Stop
+    function MakeStop(computation: Computation): Stop
     {
-        const stop = (() => computation.Dispose()) as Types.Stop;
+        const stop = (() => computation.Dispose()) as Stop;
         Object.defineProperty(stop, 'Active', { get: () => computation.Active });
         stop.Pause = () => { computation.Paused = true; };
         stop.Resume = (run = false) =>
@@ -571,7 +382,7 @@ export namespace Reactivity
         return stop;
     }
 
-    function RecordTransaction(target: object, key: Types.Key, had: boolean, old: unknown): void
+    function RecordTransaction(target: object, key: Key, had: boolean, old: unknown): void
     {
         if(TransactionDepth === 0 || RollingBack) return;
         let seen = TransactionSeen.get(target);
@@ -585,22 +396,22 @@ export namespace Reactivity
     //  CHANGE EVENTS — EVENTS IS THE ONLY LISTENER/DISPATCH ENGINE
     // ═════════════════════════════════════════════════════════════════════════
 
-    function Emit(meta: Types.ProxyMeta, target: object, key: Types.Key, old: unknown, next: unknown, kind: Types.ChangeKind): void
+    function Emit(meta: ProxyMeta, target: object, key: Key, old: unknown, next: unknown, kind: ChangeKind): void
     {
         if(!meta.Emit) return;
-        const event: Types.ChangeEvent =
-        {
-            Type: '',
-            Target: target,
-            Root: meta.Root,
-            Path: [...meta.Path, key],
-            Key: key,
-            Old: old,
-            New: next,
-            Kind: kind,
-            Version,
-            Timestamp: Date.now(),
-        };
+        const event: ChangeEvent =
+            {
+                Type: '',
+                Target: target,
+                Root: meta.Root,
+                Path: [...meta.Path, key],
+                Key: key,
+                Old: old,
+                New: next,
+                Kind: kind,
+                Version,
+                Timestamp: Date.now(),
+            };
 
         const name = String(key);
         for(const type of [`${name}-change`, 'change'])
@@ -618,13 +429,13 @@ export namespace Reactivity
 
     const ArrayMutators = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin']);
 
-    function Wrap<T>(value: T, meta: Types.ProxyMeta): T
+    function Wrap<T>(value: T, meta: ProxyMeta): T
     {
         if(!IsWrappable(value)) return value;
         return ReactiveProxy(value as object, meta) as T;
     }
 
-    function CollectionMethod(target: Map<unknown, unknown> | Set<unknown>, key: Types.Key, meta: Types.ProxyMeta): unknown
+    function CollectionMethod(target: Map<unknown, unknown> | Set<unknown>, key: Key, meta: ProxyMeta): unknown
     {
         const isMap = target instanceof Map;
 
@@ -639,8 +450,8 @@ export namespace Reactivity
             return (mapKey: unknown) =>
             {
                 const rawKey = ToRaw(mapKey);
-                Track(target, rawKey as Types.Key);
-                return Wrap(target.get(rawKey), { ...meta, Path: [...meta.Path, rawKey as Types.Key] });
+                Track(target, rawKey as Key);
+                return Wrap(target.get(rawKey), { ...meta, Path: [...meta.Path, rawKey as Key] });
             };
         }
 
@@ -649,7 +460,7 @@ export namespace Reactivity
             return (value: unknown) =>
             {
                 const rawValue = ToRaw(value);
-                Track(target, rawValue as Types.Key);
+                Track(target, rawValue as Key);
                 return target.has(rawValue);
             };
         }
@@ -664,10 +475,10 @@ export namespace Reactivity
                 const had = target.has(rawKey);
                 const old = target.get(rawKey);
                 if(had && Object.is(old, rawValue)) return ProxyFor(target);
-                RecordTransaction(target, rawKey as Types.Key, had, old);
+                RecordTransaction(target, rawKey as Key, had, old);
                 target.set(rawKey, rawValue);
-                Trigger(target, [rawKey as Types.Key, IterateKey, MapKeyIterateKey]);
-                Emit(meta, target, rawKey as Types.Key, old, rawValue, had ? 'set' : 'add');
+                Trigger(target, [rawKey as Key, IterateKey, MapKeyIterateKey]);
+                Emit(meta, target, rawKey as Key, old, rawValue, had ? 'set' : 'add');
                 return ProxyFor(target);
             };
         }
@@ -680,8 +491,8 @@ export namespace Reactivity
                 const rawValue = ToRaw(value);
                 if(target.has(rawValue)) return ProxyFor(target);
                 target.add(rawValue);
-                Trigger(target, [rawValue as Types.Key, IterateKey]);
-                Emit(meta, target, rawValue as Types.Key, undefined, rawValue, 'add');
+                Trigger(target, [rawValue as Key, IterateKey]);
+                Emit(meta, target, rawValue as Key, undefined, rawValue, 'add');
                 return ProxyFor(target);
             };
         }
@@ -695,10 +506,10 @@ export namespace Reactivity
                 const had = target.has(rawValue);
                 const old = isMap ? target.get(rawValue) : rawValue;
                 if(!had) return false;
-                RecordTransaction(target, rawValue as Types.Key, true, old);
+                RecordTransaction(target, rawValue as Key, true, old);
                 const result = target.delete(rawValue);
-                Trigger(target, [rawValue as Types.Key, IterateKey, MapKeyIterateKey]);
-                Emit(meta, target, rawValue as Types.Key, old, undefined, 'delete');
+                Trigger(target, [rawValue as Key, IterateKey, MapKeyIterateKey]);
+                Emit(meta, target, rawValue as Key, old, undefined, 'delete');
                 return result;
             };
         }
@@ -731,7 +542,7 @@ export namespace Reactivity
         return member.bind(target);
     }
 
-    function ReactiveProxy(raw: object, meta: Types.ProxyMeta): object
+    function ReactiveProxy(raw: object, meta: ProxyMeta): object
     {
         if(IsProxy(raw)) return raw;
         const cached = RawToProxy.get(raw);
@@ -743,93 +554,93 @@ export namespace Reactivity
         }
 
         const proxy = new Proxy(raw,
-        {
-            get(target, key, receiver)
             {
-                if(key === ProxyFlag) return true;
-                if(key === RawFlag) return target;
-
-                if(target instanceof Map || target instanceof Set)
-                    return CollectionMethod(target, key, meta);
-
-                if(Array.isArray(target) && typeof key === 'string' && ArrayMutators.has(key))
+                get(target, key, receiver)
                 {
-                    const method = Reflect.get(target, key, receiver);
-                    return (...args: unknown[]) => RunBatch(() => Reflect.apply(method, receiver, args.map(ToRaw)));
-                }
+                    if(key === ProxyFlag) return true;
+                    if(key === RawFlag) return target;
 
-                const result = Reflect.get(target, key, receiver);
-                Track(target, key);
-                return meta.Shallow ? result : Wrap(result, { ...meta, Path: [...meta.Path, key] });
-            },
+                    if(target instanceof Map || target instanceof Set)
+                        return CollectionMethod(target, key, meta);
 
-            set(target, key, value, receiver)
-            {
-                if(meta.Readonly) throw new TypeError(`Readonly reactive property: ${String(key)}.`);
-                const old = Reflect.get(target, key, receiver);
-                const rawValue = ToRaw(value);
-                if(Object.is(old, rawValue)) return true;
+                    if(Array.isArray(target) && typeof key === 'string' && ArrayMutators.has(key))
+                    {
+                        const method = Reflect.get(target, key, receiver);
+                        return (...args: unknown[]) => RunBatch(() => Reflect.apply(method, receiver, args.map(ToRaw)));
+                    }
 
-                const had = Array.isArray(target)
-                    ? IsIntegerKey(key) && Number(key) < target.length
-                    : Object.prototype.hasOwnProperty.call(target, key);
+                    const result = Reflect.get(target, key, receiver);
+                    Track(target, key);
+                    return meta.Shallow ? result : Wrap(result, { ...meta, Path: [...meta.Path, key] });
+                },
 
-                RecordTransaction(target, key, had, old);
-                const oldLength = Array.isArray(target) ? target.length : 0;
-                const result = Reflect.set(target, key, rawValue, receiver);
-                if(!result) return false;
-
-                const keys: Types.Key[] = [key];
-                if(!had) keys.push(IterateKey);
-                if(Array.isArray(target) && IsIntegerKey(key) && target.length !== oldLength) keys.push('length');
-                Trigger(target, keys);
-                Emit(meta, target, key, old, rawValue, had ? 'set' : 'add');
-                return true;
-            },
-
-            deleteProperty(target, key)
-            {
-                if(meta.Readonly) throw new TypeError(`Readonly reactive property: ${String(key)}.`);
-                const had = Object.prototype.hasOwnProperty.call(target, key);
-                if(!had) return true;
-                const old = Reflect.get(target, key);
-                RecordTransaction(target, key, true, old);
-                const result = Reflect.deleteProperty(target, key);
-                if(result)
+                set(target, key, value, receiver)
                 {
-                    Trigger(target, [key, IterateKey]);
-                    Emit(meta, target, key, old, undefined, 'delete');
-                }
-                return result;
-            },
+                    if(meta.Readonly) throw new TypeError(`Readonly reactive property: ${String(key)}.`);
+                    const old = Reflect.get(target, key, receiver);
+                    const rawValue = ToRaw(value);
+                    if(Object.is(old, rawValue)) return true;
 
-            has(target, key)
-            {
-                Track(target, key);
-                return Reflect.has(target, key);
-            },
+                    const had = Array.isArray(target)
+                        ? IsIntegerKey(key) && Number(key) < target.length
+                        : Object.prototype.hasOwnProperty.call(target, key);
 
-            ownKeys(target)
-            {
-                Track(target, Array.isArray(target) ? 'length' : IterateKey);
-                return Reflect.ownKeys(target);
-            },
+                    RecordTransaction(target, key, had, old);
+                    const oldLength = Array.isArray(target) ? target.length : 0;
+                    const result = Reflect.set(target, key, rawValue, receiver);
+                    if(!result) return false;
 
-            defineProperty(target, key, descriptor)
-            {
-                if(meta.Readonly) throw new TypeError(`Readonly reactive property: ${String(key)}.`);
-                const had = Object.prototype.hasOwnProperty.call(target, key);
-                const old = Reflect.get(target, key);
-                RecordTransaction(target, key, had, old);
-                const result = Reflect.defineProperty(target, key, descriptor);
-                if(result)
+                    const keys: Key[] = [key];
+                    if(!had) keys.push(IterateKey);
+                    if(Array.isArray(target) && IsIntegerKey(key) && target.length !== oldLength) keys.push('length');
+                    Trigger(target, keys);
+                    Emit(meta, target, key, old, rawValue, had ? 'set' : 'add');
+                    return true;
+                },
+
+                deleteProperty(target, key)
                 {
-                    Trigger(target, [key, ...(had ? [] : [IterateKey])]);
-                    Emit(meta, target, key, old, descriptor.value, had ? 'set' : 'add');
-                }
-                return result;
-            },
-        });
+                    if(meta.Readonly) throw new TypeError(`Readonly reactive property: ${String(key)}.`);
+                    const had = Object.prototype.hasOwnProperty.call(target, key);
+                    if(!had) return true;
+                    const old = Reflect.get(target, key);
+                    RecordTransaction(target, key, true, old);
+                    const result = Reflect.deleteProperty(target, key);
+                    if(result)
+                    {
+                        Trigger(target, [key, IterateKey]);
+                        Emit(meta, target, key, old, undefined, 'delete');
+                    }
+                    return result;
+                },
+
+                has(target, key)
+                {
+                    Track(target, key);
+                    return Reflect.has(target, key);
+                },
+
+                ownKeys(target)
+                {
+                    Track(target, Array.isArray(target) ? 'length' : IterateKey);
+                    return Reflect.ownKeys(target);
+                },
+
+                defineProperty(target, key, descriptor)
+                {
+                    if(meta.Readonly) throw new TypeError(`Readonly reactive property: ${String(key)}.`);
+                    const had = Object.prototype.hasOwnProperty.call(target, key);
+                    const old = Reflect.get(target, key);
+                    RecordTransaction(target, key, had, old);
+                    const result = Reflect.defineProperty(target, key, descriptor);
+                    if(result)
+                    {
+                        Trigger(target, [key, ...(had ? [] : [IterateKey])]);
+                        Emit(meta, target, key, old, descriptor.value, had ? 'set' : 'add');
+                    }
+                    return result;
+                },
+            });
 
         RawToProxy.set(raw, proxy);
         ProxyToRaw.set(proxy, raw);
@@ -842,16 +653,16 @@ export namespace Reactivity
         return RawToProxy.get(raw) ?? raw;
     }
 
-    export function ReactiveObject<T extends object>(source: T, options: Types.ReactiveOptions = {}): T
+    export function ReactiveObject<T extends object>(source: T, options: ReactiveOptions = {}): T
     {
         if(!IsWrappable(source)) return source;
         return ReactiveProxy(source,
-        {
-            Root: source,
-            Path: [],
-            Shallow: options.Shallow ?? false,
-            Readonly: options.Readonly ?? false,
-        }) as T;
+            {
+                Root: source,
+                Path: [],
+                Shallow: options.Shallow ?? false,
+                Readonly: options.Readonly ?? false,
+            }) as T;
     }
 
     export function Shallow<T extends object>(source: T): T
@@ -896,66 +707,66 @@ export namespace Reactivity
     //  SIGNALS AND MEMOS
     // ═════════════════════════════════════════════════════════════════════════
 
-    export function CreateSignal<T>(initial: T, options: Types.SignalOptions<T> = {}): Types.SignalContract<T>
+    export function CreateSignal<T>(initial: T, options: SignalOptions<T> = {}): SignalContract<T>
     {
         const node = {};
         SignalNodes.add(node);
         let value = initial;
         const name = options.Name ?? `Signal${SignalNodes.size}`;
 
-        const signal: Types.SignalContract<T> =
-        {
-            Name: name,
-            get Value(): T { return signal.Get(); },
-            set Value(next: T) { signal.Set(next); },
-            Get(): T
+        const signal: SignalContract<T> =
             {
-                Track(node, 'value');
-                return value;
-            },
-            Peek(): T { return value; },
-            Set(next: T | ((previous: T) => T)): T
-            {
-                const resolved = typeof next === 'function'
-                    ? (next as (previous: T) => T)(value)
-                    : next;
-                if(Equal(options.Equals, value, resolved)) return value;
-                value = resolved;
-                Trigger(node, ['value']);
-                return value;
-            },
-            Update(updater: (previous: T) => T): T { return signal.Set(updater); },
-            Touch(): void { Trigger(node, ['value']); },
-            Readonly(): Types.ReadonlySignalContract<T>
-            {
-                return {
-                    Name: signal.Name,
-                    get Value(): T { return signal.Get(); },
-                    Get: signal.Get,
-                    Peek: signal.Peek,
-                    Subscribe: signal.Subscribe,
-                };
-            },
-            Subscribe(handler: (value: T, previous: T) => void, effectOptions: Types.EffectOptions = {}): Types.Stop
-            {
-                let previous = value;
-                return CreateEffectPrimitive(() =>
+                Name: name,
+                get Value(): T { return signal.Get(); },
+                set Value(next: T) { signal.Set(next); },
+                Get(): T
                 {
-                    const next = signal.Get();
-                    if(!Object.is(next, previous))
+                    Track(node, 'value');
+                    return value;
+                },
+                Peek(): T { return value; },
+                Set(next: T | ((previous: T) => T)): T
+                {
+                    const resolved = typeof next === 'function'
+                        ? (next as (previous: T) => T)(value)
+                        : next;
+                    if(Equal(options.Equals, value, resolved)) return value;
+                    value = resolved;
+                    Trigger(node, ['value']);
+                    return value;
+                },
+                Update(updater: (previous: T) => T): T { return signal.Set(updater); },
+                Touch(): void { Trigger(node, ['value']); },
+                Readonly(): ReadonlySignalContract<T>
+                {
+                    return {
+                        Name: signal.Name,
+                        get Value(): T { return signal.Get(); },
+                        Get: signal.Get,
+                        Peek: signal.Peek,
+                        Subscribe: signal.Subscribe,
+                    };
+                },
+                Subscribe(handler: (value: T, previous: T) => void, effectOptions: EffectOptions = {}): Stop
+                {
+                    let previous = value;
+                    return CreateEffectPrimitive(() =>
                     {
-                        const old = previous;
-                        previous = next;
-                        Untrack(() => handler(next, old));
-                    }
-                }, { ...effectOptions, Defer: true });
-            },
-        };
+                        const next = signal.Get();
+                        if(!Object.is(next, previous))
+                        {
+                            const old = previous;
+                            previous = next;
+                            Untrack(() => handler(next, old));
+                        }
+                    }, { ...effectOptions, Defer: true });
+                },
+            };
 
         return signal;
     }
 
-    export function CreateMemo<T>(derive: () => T, options: Types.SignalOptions<T> & Types.EffectOptions = {}): Types.MemoContract<T>
+    export function CreateMemo<T>(derive: () => T, options: SignalOptions<T> & EffectOptions = {}): MemoContract<T>
     {
         const node = {};
         SignalNodes.add(node);
@@ -986,43 +797,43 @@ export namespace Reactivity
             Trigger(node, ['value']);
         };
 
-        const memo: Types.MemoContract<T> =
-        {
-            Name: options.Name ?? `Memo${computation.Id}`,
-            get Value(): T { return memo.Get(); },
-            get Dirty(): boolean { return dirty; },
-            Get(): T
+        const memo: MemoContract<T> =
             {
-                Track(node, 'value');
-                if(dirty) computation.Run();
-                return value;
-            },
-            Peek(): T
-            {
-                if(dirty) Untrack(() => computation.Run());
-                return value;
-            },
-            Recompute(): T
-            {
-                dirty = true;
-                computation.Run();
-                return value;
-            },
-            Subscribe(handler: (value: T, previous: T) => void, effectOptions: Types.EffectOptions = {}): Types.Stop
-            {
-                let previous = memo.Peek();
-                return CreateEffectPrimitive(() =>
+                Name: options.Name ?? `Memo${computation.Id}`,
+                get Value(): T { return memo.Get(); },
+                get Dirty(): boolean { return dirty; },
+                Get(): T
                 {
-                    const next = memo.Get();
-                    if(!Object.is(previous, next))
+                    Track(node, 'value');
+                    if(dirty) computation.Run();
+                    return value;
+                },
+                Peek(): T
+                {
+                    if(dirty) Untrack(() => computation.Run());
+                    return value;
+                },
+                Recompute(): T
+                {
+                    dirty = true;
+                    computation.Run();
+                    return value;
+                },
+                Subscribe(handler: (value: T, previous: T) => void, effectOptions: EffectOptions = {}): Stop
+                {
+                    let previous = memo.Peek();
+                    return CreateEffectPrimitive(() =>
                     {
-                        const old = previous;
-                        previous = next;
-                        Untrack(() => handler(next, old));
-                    }
-                }, { ...effectOptions, Defer: true });
-            },
-        };
+                        const next = memo.Get();
+                        if(!Object.is(previous, next))
+                        {
+                            const old = previous;
+                            previous = next;
+                            Untrack(() => handler(next, old));
+                        }
+                    }, { ...effectOptions, Defer: true });
+                },
+            };
 
         return memo;
     }
@@ -1031,7 +842,7 @@ export namespace Reactivity
     //  EFFECTS, ROOTS, WATCHERS AND OWNERSHIP
     // ═════════════════════════════════════════════════════════════════════════
 
-    function CreateEffectPrimitive(fn: (OnCleanup: (cleanup: Types.Cleanup) => void) => void, options: Types.EffectOptions = {}): Types.Stop
+    function CreateEffectPrimitive(fn: (OnCleanup: (cleanup: Cleanup) => void) => void, options: EffectOptions = {}): Stop
     {
         const computation = CreateComputation(() => fn(OnCleanup), options);
         if(!options.Defer) computation.Run();
@@ -1039,14 +850,14 @@ export namespace Reactivity
         return MakeStop(computation);
     }
 
-    export function Computed(fn: () => void, options: Omit<Types.EffectOptions, 'Schedule'> = {}): Types.Stop
+    export function Computed(fn: () => void, options: Omit<EffectOptions, 'Schedule'> = {}): Stop
     {
         return CreateEffectPrimitive(() => fn(), { ...options, Schedule: 'sync' });
     }
 
-    function CreateReactionPrimitive(invalidate: () => void, options: Types.EffectOptions = {}): Types.ReactionContract
+    function CreateReactionPrimitive(invalidate: () => void, options: EffectOptions = {}): ReactionContract
     {
-        let tracker: Types.Computation | null = null;
+        let tracker: Computation | null = null;
         return {
             Track(read: () => void): void
             {
@@ -1065,7 +876,7 @@ export namespace Reactivity
         };
     }
 
-    function CreateWatchPrimitive<T>(source: () => T, handler: (value: T, previous: T | undefined, OnCleanup: (cleanup: Types.Cleanup) => void) => void, options: Types.WatchOptions<T> = {}): Types.Stop
+    function CreateWatchPrimitive<T>(source: () => T, handler: (value: T, previous: T | undefined, OnCleanup: (cleanup: Cleanup) => void) => void, options: WatchOptions<T> = {}): Stop
     {
         let initialized = false;
         let previous: T | undefined;
@@ -1084,12 +895,12 @@ export namespace Reactivity
         }, options);
     }
 
-    export function WatchEffect(fn: (OnCleanup: (cleanup: Types.Cleanup) => void) => void, options: Types.EffectOptions = {}): Types.Stop
+    export function WatchEffect(fn: (OnCleanup: (cleanup: Cleanup) => void) => void, options: EffectOptions = {}): Stop
     {
         return CreateEffectPrimitive(fn, options);
     }
 
-    function CreateRootPrimitive<T>(fn: (Dispose: Types.Cleanup) => T, name = 'Root'): T
+    function CreateRootPrimitive<T>(fn: (Dispose: Cleanup) => T, name = 'Root'): T
     {
         const owner = CreateOwner(name, CurrentOwner);
         const previous = CurrentOwner;
@@ -1098,7 +909,7 @@ export namespace Reactivity
         finally { CurrentOwner = previous; }
     }
 
-    function RunScopePrimitive<T>(fn: () => T, owner: Types.Owner | null = CurrentOwner): T
+    function RunScopePrimitive<T>(fn: () => T, owner: Owner | null = CurrentOwner): T
     {
         const previous = CurrentOwner;
         CurrentOwner = owner;
@@ -1108,7 +919,7 @@ export namespace Reactivity
 
     export function GetOwner(): unknown { return CurrentOwner; }
 
-    export function OnCleanup(cleanup: Types.Cleanup): void
+    export function OnCleanup(cleanup: Cleanup): void
     {
         if(!CurrentOwner) throw new Error('OnCleanup requires an active reactive owner.');
         CurrentOwner.Cleanups.push(cleanup);
@@ -1117,7 +928,7 @@ export namespace Reactivity
     export function OnError(handler: (error: unknown) => void): void
     {
         if(!CurrentOwner || !('OnError' in CurrentOwner)) throw new Error('OnError requires an active computation.');
-        (CurrentOwner as Types.Computation).OnError = handler;
+        (CurrentOwner as Computation).OnError = handler;
     }
 
     export function Provide<T>(key: unknown, value: T): T
@@ -1198,7 +1009,7 @@ export namespace Reactivity
             BatchDepth--;
             if(TransactionDepth === 0)
             {
-                TransactionSeen = new WeakMap<object, Set<Types.Key>>();
+                TransactionSeen = new WeakMap<object, Set<Key>>();
                 TransactionLog.length = 0;
             }
             if(BatchDepth === 0) FlushPending();
@@ -1230,15 +1041,15 @@ export namespace Reactivity
     //  DERIVED UTILITIES
     // ═════════════════════════════════════════════════════════════════════════
 
-    export function CreateSelector<T, K = T>(source: () => T, equals: (key: K, value: T) => boolean = Object.is as (key: K, value: T) => boolean): Types.SelectorContract<T, K>
+    export function CreateSelector<T, K = T>(source: () => T, equals: (key: K, value: T) => boolean = Object.is as (key: K, value: T) => boolean): SelectorContract<T, K>
     {
         const value = CreateMemo(source);
-        const selector = ((key: K) => equals(key, value.Get())) as unknown as Types.SelectorContract<T, K>;
+        const selector = ((key: K) => equals(key, value.Get())) as unknown as SelectorContract<T, K>;
         Object.defineProperty(selector, 'Value', { get: () => value.Get() });
         return selector;
     }
 
-    function CreateDeferredPrimitive<T>(source: () => T, timeout = 0): Types.ReadonlySignalContract<T>
+    function CreateDeferredPrimitive<T>(source: () => T, timeout = 0): ReadonlySignalContract<T>
     {
         const result = CreateSignal(source());
         let handle: ReturnType<typeof setTimeout> | undefined;
@@ -1252,7 +1063,7 @@ export namespace Reactivity
         return result.Readonly();
     }
 
-    export function From<T>(producer: ((set: (value: T) => void) => void | Types.Cleanup) | { subscribe(handler: (value: T) => void): void | Types.Cleanup | { unsubscribe(): void } }, initial?: T): Types.ReadonlySignalContract<T | undefined>
+    export function From<T>(producer: ((set: (value: T) => void) => void | Cleanup) | { subscribe(handler: (value: T) => void): void | Cleanup | { unsubscribe(): void } }, initial?: T): ReadonlySignalContract<T | undefined>
     {
         const result = CreateSignal<T | undefined>(initial);
         CreateRootPrimitive(() =>
@@ -1267,7 +1078,7 @@ export namespace Reactivity
         return result.Readonly();
     }
 
-    function CreateLinkedSignalPrimitive<T>(source: () => T, write: (value: T) => void, options: Types.SignalOptions<T> = {}): Types.SignalContract<T>
+    function CreateLinkedSignalPrimitive<T>(source: () => T, write: (value: T) => void, options: SignalOptions<T> = {}): SignalContract<T>
     {
         const read = CreateMemo(source, options);
         return {
@@ -1293,7 +1104,7 @@ export namespace Reactivity
     //  ASYNC RESOURCES
     // ═════════════════════════════════════════════════════════════════════════
 
-    function CreateResourcePrimitive<T, S = unknown>(fetcher: (source: S | undefined, context: { Previous: T | undefined; Signal: AbortSignal; Refetching: boolean }) => T | Promise<T>, source?: () => S, options: Types.ResourceOptions<T> = {}): Types.ResourceContract<T, S>
+    function CreateResourcePrimitive<T, S = unknown>(fetcher: (source: S | undefined, context: { Previous: T | undefined; Signal: AbortSignal; Refetching: boolean }) => T | Promise<T>, source?: () => S, options: ResourceOptions<T> = {}): ResourceContract<T, S>
     {
         const value = CreateSignal<T | undefined>(options.Initial, { Name: `${options.Name ?? 'Resource'}.Value` });
         const latest = CreateSignal<T | undefined>(options.Initial);
@@ -1306,106 +1117,106 @@ export namespace Reactivity
         let currentSource: S | undefined;
         let disposed = false;
 
-        const resource: Types.ResourceContract<T, S> =
-        {
-            Name: options.Name ?? 'Resource',
-            get Value() { return value.Get(); },
-            get Latest() { return latest.Get(); },
-            get Error() { return error.Get(); },
-            get Loading() { return loading.Get(); },
-            get State() { return state.Get(); },
-            get Source() { return currentSource; },
-            get Promise() { return promise; },
-            get Controller() { return controller; },
-            async Refetch(nextSource?: S): Promise<T | undefined>
+        const resource: ResourceContract<T, S> =
             {
-                if(disposed) return value.Peek();
-                const id = ++request;
-                controller?.abort('superseded');
-                controller = new AbortController();
-                currentSource = arguments.length ? nextSource : source?.();
-                const previous = latest.Peek();
-                const refetching = previous !== undefined;
-
-                RunBatch(() =>
+                Name: options.Name ?? 'Resource',
+                get Value() { return value.Get(); },
+                get Latest() { return latest.Get(); },
+                get Error() { return error.Get(); },
+                get Loading() { return loading.Get(); },
+                get State() { return state.Get(); },
+                get Source() { return currentSource; },
+                get Promise() { return promise; },
+                get Controller() { return controller; },
+                async Refetch(nextSource?: S): Promise<T | undefined>
                 {
-                    error.Set(undefined);
-                    loading.Set(true);
-                    state.Set(refetching ? 'refreshing' : 'pending');
-                    if(!options.KeepPrevious && !refetching) value.Set(undefined);
-                });
+                    if(disposed) return value.Peek();
+                    const id = ++request;
+                    controller?.abort('superseded');
+                    controller = new AbortController();
+                    currentSource = arguments.length ? nextSource : source?.();
+                    const previous = latest.Peek();
+                    const refetching = previous !== undefined;
 
-                promise = Promise.resolve(fetcher(currentSource,
-                {
-                    Previous: previous,
-                    Signal: controller.signal,
-                    Refetching: refetching,
-                }));
-
-                try
-                {
-                    const result = await promise;
-                    if(disposed || id !== request || controller.signal.aborted) return value.Peek();
                     RunBatch(() =>
                     {
-                        value.Set(result);
-                        latest.Set(result);
-                        loading.Set(false);
-                        state.Set('ready');
+                        error.Set(undefined);
+                        loading.Set(true);
+                        state.Set(refetching ? 'refreshing' : 'pending');
+                        if(!options.KeepPrevious && !refetching) value.Set(undefined);
                     });
-                    return result;
-                }
-                catch(reason)
-                {
-                    if(disposed || id !== request) return value.Peek();
-                    if(controller.signal.aborted)
+
+                    promise = Promise.resolve(fetcher(currentSource,
+                        {
+                            Previous: previous,
+                            Signal: controller.signal,
+                            Refetching: refetching,
+                        }));
+
+                    try
                     {
-                        loading.Set(false);
-                        state.Set('aborted');
+                        const result = await promise;
+                        if(disposed || id !== request || controller.signal.aborted) return value.Peek();
+                        RunBatch(() =>
+                        {
+                            value.Set(result);
+                            latest.Set(result);
+                            loading.Set(false);
+                            state.Set('ready');
+                        });
+                        return result;
+                    }
+                    catch(reason)
+                    {
+                        if(disposed || id !== request) return value.Peek();
+                        if(controller.signal.aborted)
+                        {
+                            loading.Set(false);
+                            state.Set('aborted');
+                            return value.Peek();
+                        }
+                        RunBatch(() =>
+                        {
+                            error.Set(reason);
+                            loading.Set(false);
+                            state.Set('error');
+                        });
+                        options.OnError?.(reason);
                         return value.Peek();
                     }
+                },
+                Mutate(next)
+                {
+                    const result = typeof next === 'function'
+                        ? (next as (previous: T | undefined) => T)(value.Peek())
+                        : next;
+                    RunBatch(() => { value.Set(result); latest.Set(result); state.Set('ready'); });
+                    return result;
+                },
+                Abort(reason?: unknown): void
+                {
+                    controller?.abort(reason);
+                    loading.Set(false);
+                    state.Set('aborted');
+                },
+                Clear(): void
+                {
+                    resource.Abort('clear');
                     RunBatch(() =>
                     {
-                        error.Set(reason);
-                        loading.Set(false);
-                        state.Set('error');
+                        value.Set(undefined);
+                        latest.Set(undefined);
+                        error.Set(undefined);
+                        state.Set('idle');
                     });
-                    options.OnError?.(reason);
-                    return value.Peek();
-                }
-            },
-            Mutate(next)
-            {
-                const result = typeof next === 'function'
-                    ? (next as (previous: T | undefined) => T)(value.Peek())
-                    : next;
-                RunBatch(() => { value.Set(result); latest.Set(result); state.Set('ready'); });
-                return result;
-            },
-            Abort(reason?: unknown): void
-            {
-                controller?.abort(reason);
-                loading.Set(false);
-                state.Set('aborted');
-            },
-            Clear(): void
-            {
-                resource.Abort('clear');
-                RunBatch(() =>
+                },
+                Dispose(): void
                 {
-                    value.Set(undefined);
-                    latest.Set(undefined);
-                    error.Set(undefined);
-                    state.Set('idle');
-                });
-            },
-            Dispose(): void
-            {
-                disposed = true;
-                resource.Abort('dispose');
-                stop?.();
-            },
-        };
+                    disposed = true;
+                    resource.Abort('dispose');
+                    stop?.();
+                },
+            };
 
         const stop = source
             ? CreateWatchPrimitive(source, next => { void resource.Refetch(next); }, { Immediate: options.Immediate ?? true, Schedule: options.Schedule })
@@ -1421,9 +1232,9 @@ export namespace Reactivity
 
     export class ReadonlySignal<T>
     {
-        protected readonly Source: Types.ReadonlySignalContract<T>;
+        protected readonly Source: ReadonlySignalContract<T>;
 
-        constructor(source: Types.ReadonlySignalContract<T>)
+        constructor(source: ReadonlySignalContract<T>)
         {
             this.Source = source;
         }
@@ -1433,7 +1244,7 @@ export namespace Reactivity
         Get(): T { return this.Source.Get(); }
         Peek(): T { return this.Source.Peek(); }
 
-        Subscribe(handler: (value: T, previous: T) => void, options: Types.EffectOptions = {}): Effect
+        Subscribe(handler: (value: T, previous: T) => void, options: EffectOptions = {}): Effect
         {
             return new Effect(() =>
             {
@@ -1448,17 +1259,17 @@ export namespace Reactivity
             }, { ...options, Defer: true });
         }
 
-        Map<U>(derive: (value: T) => U, options: Types.SignalOptions<U> & Types.EffectOptions = {}): Memo<U>
+        Map<U>(derive: (value: T) => U, options: SignalOptions<U> & EffectOptions = {}): Memo<U>
         {
             return new Memo(() => derive(this.Value), options);
         }
 
-        Effect(run: (value: T, OnCleanup: (cleanup: Types.Cleanup) => void) => void, options: Types.EffectOptions = {}): Effect
+        Effect(run: (value: T, OnCleanup: (cleanup: Cleanup) => void) => void, options: EffectOptions = {}): Effect
         {
             return new Effect(cleanup => run(this.Value, cleanup), options);
         }
 
-        Watch(handler: Types.WatchHandler<T>, options: Types.WatchOptions<T> = {}): Watch<T>
+        Watch(handler: WatchHandler<T>, options: WatchOptions<T> = {}): Watch<T>
         {
             return new Watch(() => this.Value, handler, options);
         }
@@ -1484,9 +1295,9 @@ export namespace Reactivity
 
     export class Signal<T> extends ReadonlySignal<T>
     {
-        protected declare readonly Source: Types.SignalContract<T>;
+        protected declare readonly Source: SignalContract<T>;
 
-        constructor(value: T, options: Types.SignalOptions<T> = {})
+        constructor(value: T, options: SignalOptions<T> = {})
         {
             super(CreateSignal(value, options));
         }
@@ -1615,9 +1426,9 @@ export namespace Reactivity
 
     export class Memo<T> extends ReadonlySignal<T>
     {
-        protected declare readonly Source: Types.MemoContract<T>;
+        protected declare readonly Source: MemoContract<T>;
 
-        constructor(derive: () => T, options: Types.SignalOptions<T> & Types.EffectOptions = {})
+        constructor(derive: () => T, options: SignalOptions<T> & EffectOptions = {})
         {
             super(CreateMemo(derive, options));
         }
@@ -1633,9 +1444,9 @@ export namespace Reactivity
 
     export class Effect
     {
-        readonly #stop: Types.Stop;
+        readonly #stop: Stop;
 
-        constructor(run: (OnCleanup: (cleanup: Types.Cleanup) => void) => void, options: Types.EffectOptions = {})
+        constructor(run: (OnCleanup: (cleanup: Cleanup) => void) => void, options: EffectOptions = {})
         {
             this.#stop = CreateEffectPrimitive(run, options);
         }
@@ -1650,9 +1461,9 @@ export namespace Reactivity
 
     export class Watch<T>
     {
-        readonly #stop: Types.Stop;
+        readonly #stop: Stop;
 
-        constructor(source: () => T, handler: Types.WatchHandler<T>, options: Types.WatchOptions<T> = {})
+        constructor(source: () => T, handler: WatchHandler<T>, options: WatchOptions<T> = {})
         {
             this.#stop = CreateWatchPrimitive(source, handler, options);
         }
@@ -1667,9 +1478,9 @@ export namespace Reactivity
 
     export class Reaction
     {
-        readonly #reaction: Types.ReactionContract;
+        readonly #reaction: ReactionContract;
 
-        constructor(invalidate: () => void, options: Types.EffectOptions = {})
+        constructor(invalidate: () => void, options: EffectOptions = {})
         {
             this.#reaction = CreateReactionPrimitive(invalidate, options);
         }
@@ -1681,9 +1492,9 @@ export namespace Reactivity
 
     export class Resource<T, S = unknown>
     {
-        readonly #resource: Types.ResourceContract<T, S>;
+        readonly #resource: ResourceContract<T, S>;
 
-        constructor(fetcher: Types.ResourceFetcher<T, S>, source?: () => S, options: Types.ResourceOptions<T> = {})
+        constructor(fetcher: ResourceFetcher<T, S>, source?: () => S, options: ResourceOptions<T> = {})
         {
             this.#resource = CreateResourcePrimitive(fetcher, source, options);
         }
@@ -1693,7 +1504,7 @@ export namespace Reactivity
         get Latest(): T | undefined { return this.#resource.Latest; }
         get Error(): unknown { return this.#resource.Error; }
         get Loading(): boolean { return this.#resource.Loading; }
-        get State(): Types.ResourceState { return this.#resource.State; }
+        get State(): ResourceState { return this.#resource.State; }
         get Source(): S | undefined { return this.#resource.Source; }
         get Promise(): Promise<T> | null { return this.#resource.Promise; }
         get Controller(): AbortController | null { return this.#resource.Controller; }
@@ -1702,7 +1513,7 @@ export namespace Reactivity
         Mutate(value: T | ((previous: T | undefined) => T)): this { this.#resource.Mutate(value); return this; }
         Abort(reason?: unknown): this { this.#resource.Abort(reason); return this; }
         Clear(): this { this.#resource.Clear(); return this; }
-        Effect(run: (resource: this, OnCleanup: (cleanup: Types.Cleanup) => void) => void, options: Types.EffectOptions = {}): Effect
+        Effect(run: (resource: this, OnCleanup: (cleanup: Cleanup) => void) => void, options: EffectOptions = {}): Effect
         { return new Effect(cleanup => run(this, cleanup), options); }
         Dispose(): void { this.#resource.Dispose(); }
     }
@@ -1751,15 +1562,15 @@ export namespace Reactivity
     export class Root<T = unknown>
     {
         readonly Value: T;
-        #dispose: Types.Cleanup = () => undefined;
+        #dispose: Cleanup = () => undefined;
 
-        constructor(run: (Dispose: Types.Cleanup) => T, name = 'Root')
+        constructor(run: (Dispose: Cleanup) => T, name = 'Root')
         {
             this.Value = CreateRootPrimitive(dispose => { this.#dispose = dispose; return run(dispose); }, name);
         }
 
         Dispose(): void { this.#dispose(); }
-        static Run<T>(run: (Dispose: Types.Cleanup) => T, name = 'Root'): T { return CreateRootPrimitive(run, name); }
+        static Run<T>(run: (Dispose: Cleanup) => T, name = 'Root'): T { return CreateRootPrimitive(run, name); }
     }
 
     export class Scope<T = unknown>
@@ -1767,15 +1578,15 @@ export namespace Reactivity
         readonly Value: T;
         constructor(run: () => T, owner: unknown = GetOwner())
         {
-            this.Value = RunScopePrimitive(run, owner as Types.Owner | null);
+            this.Value = RunScopePrimitive(run, owner as Owner | null);
         }
         static Run<T>(run: () => T, owner: unknown = GetOwner()): T
-        { return RunScopePrimitive(run, owner as Types.Owner | null); }
+        { return RunScopePrimitive(run, owner as Owner | null); }
     }
 
     export class Selector<T, K = T>
     {
-        readonly #selector: Types.SelectorContract<T, K>;
+        readonly #selector: SelectorContract<T, K>;
         constructor(source: () => T, equals: (key: K, value: T) => boolean = Object.is as (key: K, value: T) => boolean)
         { this.#selector = CreateSelector(source, equals); }
         get Value(): T { return this.#selector.Value; }
@@ -1790,8 +1601,8 @@ export namespace Reactivity
 
     export class LinkedSignal<T> extends ReadonlySignal<T>
     {
-        protected declare readonly Source: Types.SignalContract<T>;
-        constructor(source: () => T, write: (value: T) => void, options: Types.SignalOptions<T> = {})
+        protected declare readonly Source: SignalContract<T>;
+        constructor(source: () => T, write: (value: T) => void, options: SignalOptions<T> = {})
         { super(CreateLinkedSignalPrimitive(source, write, options)); }
         get Value(): T { return this.Source.Value; }
         set Value(value: T) { this.Source.Value = value; }
@@ -1805,19 +1616,19 @@ export namespace Reactivity
     //  DOM SINKS
     // ═════════════════════════════════════════════════════════════════════════
 
-    export function BindText(source: Types.ReadonlySignalContract<unknown> | (() => unknown), node: Text): Types.Stop
+    export function BindText(source: ReadonlySignalContract<unknown> | (() => unknown), node: Text): Stop
     {
         const read = typeof source === 'function' ? source : () => source.Get();
         return CreateEffectPrimitive(() => { node.nodeValue = String(read() ?? ''); });
     }
 
-    export function BindProperty<T extends object, K extends keyof T>(source: Types.ReadonlySignalContract<T[K]> | (() => T[K]), target: T, key: K): Types.Stop
+    export function BindProperty<T extends object, K extends keyof T>(source: ReadonlySignalContract<T[K]> | (() => T[K]), target: T, key: K): Stop
     {
         const read = typeof source === 'function' ? source : () => source.Get();
         return CreateEffectPrimitive(() => { target[key] = read(); });
     }
 
-    export function BindAttribute(source: Types.ReadonlySignalContract<unknown> | (() => unknown), element: Element, name: string): Types.Stop
+    export function BindAttribute(source: ReadonlySignalContract<unknown> | (() => unknown), element: Element, name: string): Stop
     {
         const read = typeof source === 'function' ? source : () => source.Get();
         return CreateEffectPrimitive(() =>
@@ -1838,7 +1649,7 @@ export namespace Reactivity
         readonly #value: T;
         readonly #name: string;
 
-        constructor(source: T, options: Types.ReactiveOptions = {})
+        constructor(source: T, options: ReactiveOptions = {})
         {
             super();
             if(!IsObject(source)) throw new TypeError('Reactive requires an object source.');
@@ -1846,13 +1657,13 @@ export namespace Reactivity
             this.#name = options.Name ?? source.constructor?.name ?? 'Reactive';
 
             this.#value = ReactiveProxy(source,
-            {
-                Root: source,
-                Path: [],
-                Shallow: options.Shallow ?? false,
-                Readonly: options.Readonly ?? false,
-                Emit: options.Events === false ? undefined : event => this.Fire(event),
-            }) as T;
+                {
+                    Root: source,
+                    Path: [],
+                    Shallow: options.Shallow ?? false,
+                    Readonly: options.Readonly ?? false,
+                    Emit: options.Events === false ? undefined : event => this.Fire(event),
+                }) as T;
         }
 
         get Name(): string { return this.#name; }
@@ -1860,7 +1671,7 @@ export namespace Reactivity
         get Raw(): T { return this.#raw; }
         get Version(): number { return Version; }
 
-        On(types: string, handler: (event: Types.ChangeEvent) => void, options?: AddEventListenerOptions): this
+        On(types: string, handler: (event: ChangeEvent) => void, options?: AddEventListenerOptions): this
         {
             const events = GetEvents();
             if(events) events.On(this, types, handler as unknown as EventListener, options);
@@ -1868,12 +1679,12 @@ export namespace Reactivity
             return this;
         }
 
-        Once(types: string, handler: (event: Types.ChangeEvent) => void, options: AddEventListenerOptions = {}): this
+        Once(types: string, handler: (event: ChangeEvent) => void, options: AddEventListenerOptions = {}): this
         {
             return this.On(types, handler, { ...options, once: true });
         }
 
-        Off(types: string, handler: (event: Types.ChangeEvent) => void): this
+        Off(types: string, handler: (event: ChangeEvent) => void): this
         {
             const events = GetEvents();
             if(events) events.Off(this, types, handler as unknown as EventListener);
@@ -1881,9 +1692,9 @@ export namespace Reactivity
             return this;
         }
 
-        Fire(event: Types.ChangeEvent | string, detail: Partial<Types.ChangeEvent> = {}): this
+        Fire(event: ChangeEvent | string, detail: Partial<ChangeEvent> = {}): this
         {
-            const descriptor: Types.ChangeEvent = typeof event === 'string'
+            const descriptor: ChangeEvent = typeof event === 'string'
                 ? {
                     Type: event,
                     Target: this.#raw,
@@ -1927,17 +1738,17 @@ export namespace Reactivity
             return this;
         }
 
-        Select<K>(selector: (value: T) => K, options: Types.SignalOptions<K> & Types.EffectOptions = {}): Memo<K>
+        Select<K>(selector: (value: T) => K, options: SignalOptions<K> & EffectOptions = {}): Memo<K>
         {
             return new Memo(() => selector(this.#value), options);
         }
 
-        Watch<K>(source: (value: T) => K, handler: Types.WatchHandler<K>, options: Types.WatchOptions<K> = {}): Watch<K>
+        Watch<K>(source: (value: T) => K, handler: WatchHandler<K>, options: WatchOptions<K> = {}): Watch<K>
         {
             return new Watch(() => source(this.#value), handler, options);
         }
 
-        Effect(fn: (value: T, OnCleanup: (cleanup: Types.Cleanup) => void) => void, options: Types.EffectOptions = {}): Effect
+        Effect(fn: (value: T, OnCleanup: (cleanup: Cleanup) => void) => void, options: EffectOptions = {}): Effect
         {
             return new Effect(cleanup => fn(this.#value, cleanup), options);
         }
@@ -1970,26 +1781,26 @@ export namespace Reactivity
     //  FUNCTIONAL FACTORIES — OPTIONAL COMPLEMENT TO THE NOMINAL API
     // ═════════════════════════════════════════════════════════════════════════
 
-    export function CreateReactive<T extends object>(source: T, options: Types.ReactiveOptions = {}): Reactive<T>
+    export function CreateReactive<T extends object>(source: T, options: ReactiveOptions = {}): Reactive<T>
     { return new Reactive(source, options); }
 
-    export function CreateEffect(run: (OnCleanup: (cleanup: Types.Cleanup) => void) => void, options: Types.EffectOptions = {}): Effect
+    export function CreateEffect(run: (OnCleanup: (cleanup: Cleanup) => void) => void, options: EffectOptions = {}): Effect
     { return new Effect(run, options); }
 
-    export function CreateWatch<T>(source: () => T, handler: Types.WatchHandler<T>, options: Types.WatchOptions<T> = {}): Watch<T>
+    export function CreateWatch<T>(source: () => T, handler: WatchHandler<T>, options: WatchOptions<T> = {}): Watch<T>
     { return new Watch(source, handler, options); }
 
-    export function CreateReaction(invalidate: () => void, options: Types.EffectOptions = {}): Reaction
+    export function CreateReaction(invalidate: () => void, options: EffectOptions = {}): Reaction
     { return new Reaction(invalidate, options); }
 
-    export function CreateResource<T, S = unknown>(fetcher: Types.ResourceFetcher<T, S>, source?: () => S, options: Types.ResourceOptions<T> = {}): Resource<T, S>
+    export function CreateResource<T, S = unknown>(fetcher: ResourceFetcher<T, S>, source?: () => S, options: ResourceOptions<T> = {}): Resource<T, S>
     { return new Resource(fetcher, source, options); }
 
     // ═════════════════════════════════════════════════════════════════════════
     //  DIAGNOSTICS AND SERVICE REGISTRATION
     // ═════════════════════════════════════════════════════════════════════════
 
-    export function Inspect(): Types.Snapshot
+    export function Inspect(): Snapshot
     {
         return {
             Effects: Computations.size,
@@ -2002,80 +1813,80 @@ export namespace Reactivity
     }
 
     export const API = Object.freeze(
-    {
-        /* Nominal constructors */
-        Reactive,
-        Signal,
-        ReadonlySignal,
-        Memo,
-        Effect,
-        Watch,
-        Reaction,
-        Resource,
-        Batch,
-        Transaction,
-        Root,
-        Scope,
-        Selector,
-        Deferred,
-        LinkedSignal,
-
-        /* Optional functional factories */
-        CreateReactive,
-        CreateSignal,
-        CreateMemo,
-        CreateEffect,
-        CreateWatch,
-        CreateReaction,
-        CreateResource,
-
-        Proxy: Object.freeze(
         {
-            Create: ReactiveObject,
-            Shallow,
-            Readonly,
-            MarkRaw,
-            IsProxy,
-            IsReactive,
-            IsReadonly,
-            ToRaw,
-        }),
+            /* Nominal constructors */
+            Reactive,
+            Signal,
+            ReadonlySignal,
+            Memo,
+            Effect,
+            Watch,
+            Reaction,
+            Resource,
+            Batch,
+            Transaction,
+            Root,
+            Scope,
+            Selector,
+            Deferred,
+            LinkedSignal,
 
-        Runtime: Object.freeze(
-        {
-            RunBatch,
-            RunTransaction,
-            Untrack,
-            Flush,
-            NextTick,
-            GetOwner,
-            OnCleanup,
-            OnError,
-            Computed,
-            WatchEffect,
-        }),
+            /* Optional functional factories */
+            CreateReactive,
+            CreateSignal,
+            CreateMemo,
+            CreateEffect,
+            CreateWatch,
+            CreateReaction,
+            CreateResource,
 
-        Ownership: Object.freeze(
-        {
-            Provide,
-            Inject,
-            Traverse,
-        }),
+            Proxy: Object.freeze(
+                {
+                    Create: ReactiveObject,
+                    Shallow,
+                    Readonly,
+                    MarkRaw,
+                    IsProxy,
+                    IsReactive,
+                    IsReadonly,
+                    ToRaw,
+                }),
 
-        Bind: Object.freeze(
-        {
-            Text: BindText,
-            Property: BindProperty,
-            Attribute: BindAttribute,
-        }),
+            Runtime: Object.freeze(
+                {
+                    RunBatch,
+                    RunTransaction,
+                    Untrack,
+                    Flush,
+                    NextTick,
+                    GetOwner,
+                    OnCleanup,
+                    OnError,
+                    Computed,
+                    WatchEffect,
+                }),
 
-        Interop: Object.freeze(
-        {
-            From,
-        }),
+            Ownership: Object.freeze(
+                {
+                    Provide,
+                    Inject,
+                    Traverse,
+                }),
 
-        Inspect,
-    });
+            Bind: Object.freeze(
+                {
+                    Text: BindText,
+                    Property: BindProperty,
+                    Attribute: BindAttribute,
+                }),
+
+            Interop: Object.freeze(
+                {
+                    From,
+                }),
+
+            Inspect,
+        });
 
     new Core.Services.Service('reactivity', API);
 

@@ -1,3 +1,9 @@
+import { Component, Css, Reactivity } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/charts/BarChart
  * @author    Riccardo Angeli
@@ -20,10 +26,6 @@
  *   arianna:chart-bar-hover { datum, index }
  *   arianna:chart-bar-click { datum, index }
  */
-
-import { Component } from '../../core/Components.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -31,121 +33,117 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface BarDatum {
-    label : string;
-    value : number;
+    label: string;
+    value: number;
     color?: string;
 }
-
 export interface BarChartOptions {
-    width?     : number;
-    height?    : number;
-    barColor?  : string;
+    width?: number;
+    height?: number;
+    barColor?: string;
     showValues?: boolean;
-    showGrid?  : boolean;
-    yMin?      : number;
-    yMax?      : number;
+    showGrid?: boolean;
+    yMin?: number;
+    yMax?: number;
 }
-
 const SVG_NS = 'http://www.w3.org/2000/svg';
-
-export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
-    attrs : ['width', 'height', 'bar-color', 'show-values', 'show-grid', 'y-min', 'y-max'],
+@Component('arianna-bar-chart', {}, {
+    Attributes: ['width', 'height', 'bar-color', 'show-values', 'show-grid', 'y-min', 'y-max'],
 })
-{
+export class BarChart extends HTMLElement {
     readonly data$: Signal<BarDatum[]> = signal<BarDatum[]>([]);
-
     #svg?: SVGSVGElement;
-
     constructor(opts: BarChartOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
-        const el = self.render();
-        if (opts.width      != null) el.setAttribute('width',       String(opts.width));
-        if (opts.height     != null) el.setAttribute('height',      String(opts.height));
-        if (opts.barColor)           el.setAttribute('bar-color',   opts.barColor);
-        if (opts.showValues != null) el.setAttribute('show-values', opts.showValues ? 'true' : 'false');
-        if (opts.showGrid   === false) el.setAttribute('show-grid', 'false');
-        if (opts.yMin       != null) el.setAttribute('y-min',       String(opts.yMin));
-        if (opts.yMax       != null) el.setAttribute('y-max',       String(opts.yMax));
-    }
-
-    build(): void {
+        super();
         const self = this as unknown as {
             render(): HTMLElement;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+        };
+        const el = self.render();
+        if (opts.width != null)
+            el.setAttribute('width', String(opts.width));
+        if (opts.height != null)
+            el.setAttribute('height', String(opts.height));
+        if (opts.barColor)
+            el.setAttribute('bar-color', opts.barColor);
+        if (opts.showValues != null)
+            el.setAttribute('show-values', opts.showValues ? 'true' : 'false');
+        if (opts.showGrid === false)
+            el.setAttribute('show-grid', 'false');
+        if (opts.yMin != null)
+            el.setAttribute('y-min', String(opts.yMin));
+        if (opts.yMax != null)
+            el.setAttribute('y-max', String(opts.yMax));
+    }
+    onConnected(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const root = self.render();
-        if (root.querySelector('svg')) return;
-
-        const w = parseInt(self.attributeSignal('width')?.Peek()  ?? '480', 10) || 480;
-        const h = parseInt(self.attributeSignal('height')?.Peek() ?? '280', 10) || 280;
+        if (root.querySelector('svg'))
+            return;
+        const w = parseInt(self.signal().attribute('width')?.Peek() ?? '480', 10) || 480;
+        const h = parseInt(self.signal().attribute('height')?.Peek() ?? '280', 10) || 280;
         const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
         svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-        svg.setAttribute('width',  String(w));
+        svg.setAttribute('width', String(w));
         svg.setAttribute('height', String(h));
         svg.setAttribute('class', 'bc-svg');
         this.#svg = svg;
         root.appendChild(svg);
-
         effect(() => { this.data$.Get(); this.#redraw(); });
-
         self.Sheet = BarChart.DefaultSheet();
     }
-
     set data(rows: BarDatum[]) { this.data$.Set(rows); }
-    get data(): BarDatum[]     { return this.data$.Get(); }
-
+    get data(): BarDatum[] { return this.data$.Get(); }
     #redraw(): void {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
         };
         const svg = this.#svg;
-        if (!svg) return;
-        while (svg.firstChild) svg.removeChild(svg.firstChild);
-
+        if (!svg)
+            return;
+        while (svg.firstChild)
+            svg.removeChild(svg.firstChild);
         const root = self.render();
-        const w = parseInt(svg.getAttribute('width')  ?? '480', 10);
+        const w = parseInt(svg.getAttribute('width') ?? '480', 10);
         const h = parseInt(svg.getAttribute('height') ?? '280', 10);
         const data = this.data$.Peek();
-        if (!data.length) return;
-
-        const showGrid   = self.attributeSignal('show-grid')?.Peek() !== 'false';
-        const showValues = self.attributeSignal('show-values')?.Peek() === 'true';
-        const barColor   = self.attributeSignal('bar-color')?.Peek() ?? '';
+        if (!data.length)
+            return;
+        const showGrid = self.signal().attribute('show-grid')?.Peek() !== 'false';
+        const showValues = self.signal().attribute('show-values')?.Peek() === 'true';
+        const barColor = self.signal().attribute('bar-color')?.Peek() ?? '';
         const cssBarColor = barColor || (getComputedStyle(root).getPropertyValue('--ar-primary').trim() || '#7eb8f7');
-
         const padL = 40, padR = 12, padT = 12, padB = 28;
         const plotW = w - padL - padR;
         const plotH = h - padT - padB;
-
-        const userMin = parseFloat(self.attributeSignal('y-min')?.Peek() ?? '');
-        const userMax = parseFloat(self.attributeSignal('y-max')?.Peek() ?? '');
+        const userMin = parseFloat(self.signal().attribute('y-min')?.Peek() ?? '');
+        const userMax = parseFloat(self.signal().attribute('y-max')?.Peek() ?? '');
         const dataMax = Math.max(...data.map(d => d.value));
         const dataMin = Math.min(...data.map(d => d.value));
         const yMax = isFinite(userMax) ? userMax : Math.max(0, dataMax) * 1.1;
         const yMin = isFinite(userMin) ? userMin : Math.min(0, dataMin);
         const range = (yMax - yMin) || 1;
-
         const yOf = (v: number) => padT + plotH - ((v - yMin) / range) * plotH;
         const barW = plotW / data.length * 0.72;
-        const gap  = plotW / data.length * 0.28;
-
+        const gap = plotW / data.length * 0.28;
         // Grid + Y axis ticks
         if (showGrid) {
             const ticks = 5;
@@ -168,27 +166,23 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
                 svg.appendChild(lbl);
             }
         }
-
         // Bars + X labels
         data.forEach((d, i) => {
             const x = padL + i * (barW + gap) + gap / 2;
             const yV = yOf(d.value);
             const y0 = yOf(0);
             const top = Math.min(yV, y0);
-            const ht  = Math.abs(yV - y0);
+            const ht = Math.abs(yV - y0);
             const rect = document.createElementNS(SVG_NS, 'rect');
             rect.setAttribute('x', String(x));
             rect.setAttribute('y', String(top));
-            rect.setAttribute('width',  String(barW));
+            rect.setAttribute('width', String(barW));
             rect.setAttribute('height', String(Math.max(1, ht)));
             rect.setAttribute('fill', d.color ?? cssBarColor);
             rect.setAttribute('class', 'bc-bar');
-            rect.addEventListener('mouseenter', () =>
-                self.fire('arianna:chart-bar-hover', { detail: { datum: d, index: i, source: this }, bubbles: true }));
-            rect.addEventListener('click', () =>
-                self.fire('arianna:chart-bar-click', { detail: { datum: d, index: i, source: this }, bubbles: true }));
+            rect.addEventListener('mouseenter', () => self.fire('arianna:chart-bar-hover', { detail: { datum: d, index: i, source: this }, bubbles: true }));
+            rect.addEventListener('click', () => self.fire('arianna:chart-bar-click', { detail: { datum: d, index: i, source: this }, bubbles: true }));
             svg.appendChild(rect);
-
             if (showValues) {
                 const val = document.createElementNS(SVG_NS, 'text');
                 val.setAttribute('x', String(x + barW / 2));
@@ -198,7 +192,6 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
                 val.textContent = d.value.toFixed(range > 10 ? 0 : 1);
                 svg.appendChild(val);
             }
-
             const lbl = document.createElementNS(SVG_NS, 'text');
             lbl.setAttribute('x', String(x + barW / 2));
             lbl.setAttribute('y', String(h - padB + 18));
@@ -207,7 +200,6 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
             lbl.textContent = d.label;
             svg.appendChild(lbl);
         });
-
         // Zero line if range crosses zero
         if (yMin < 0 && yMax > 0) {
             const y0 = yOf(0);
@@ -220,17 +212,16 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
             svg.appendChild(zero);
         }
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                background  : 'var(--ar-bg, #fff)',
-                border      : '1px solid var(--ar-border, #e0e0e0)',
+                background: 'var(--ar-bg, #fff)',
+                border: '1px solid var(--ar-border, #e0e0e0)',
                 borderRadius: 'var(--ar-radius, 5px)',
-                color       : 'var(--ar-text, #1a1a1a)',
-                display     : 'inline-block',
-                font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
-                padding     : '8px',
+                color: 'var(--ar-text, #1a1a1a)',
+                display: 'inline-block',
+                font: 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
+                padding: '8px',
             }),
             new Rule(':host .bc-svg', { display: 'block' }),
             new Rule(':host .bc-grid', { stroke: 'var(--ar-border, #e0e0e0)', strokeWidth: '1' }),
@@ -243,11 +234,15 @@ export class BarChart extends Component('arianna-bar-chart', HTMLElement, {}, {
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'BarChart', {
-        value: BarChart, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * BarChart namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace BarChart {
+    export namespace Interfaces {
+        export interface BarDatumContract extends BarDatum {
+        }
+        export interface Options extends BarChartOptions {
+        }
+    }
 }
-
 export default BarChart;

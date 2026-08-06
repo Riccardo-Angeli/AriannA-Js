@@ -20,12 +20,9 @@
  *   ];
  *   bar.append(document.body);
  */
-
-export { BarChart }  from './BarChart.ts';
+export { BarChart } from './BarChart.ts';
 export type { BarChartOptions, BarDatum } from './BarChart.ts';
-
 export { LineChart } from './LineChart.ts';
 export type { LineChartOptions, LineSeries, LinePoint } from './LineChart.ts';
-
-export { PieChart }  from './PieChart.ts';
+export { PieChart } from './PieChart.ts';
 export type { PieChartOptions, PieDatum } from './PieChart.ts';

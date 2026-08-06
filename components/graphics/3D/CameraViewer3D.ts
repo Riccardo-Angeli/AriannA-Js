@@ -1,3 +1,10 @@
+import { Component, Components, Css, Reactivity, Templates } from '../../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/graphics/3D/CameraViewer3D
  * @author    Riccardo Angeli
@@ -29,13 +36,8 @@
  *   arianna:focus  detail: { pane: PaneId }
  *   arianna:camera detail: { pane: PaneId, camera: Camera }
  *
- * Attrs: width, height, show-axes, show-labels, active-pane, maximized-pane
+ * Attributes: width, height, show-axes, show-labels, active-pane, maximized-pane
  */
-
-import { Component } from '../../../core/Components.ts';
-import { html }      from '../../../core/Template.ts';
-import { Reactivity } from '../../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -43,85 +45,84 @@ import { Reactivity } from '../../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export type PaneId = 'top' | 'front' | 'side' | 'perspective';
 export type ProjectionKind = 'orthographic' | 'perspective';
-
-export interface Vec3 { x: number; y: number; z: number; }
-
+export interface Vec3 {
+    x: number;
+    y: number;
+    z: number;
+}
 export interface Camera {
-    position : Vec3;
-    target   : Vec3;
-    zoom     : number;
-    kind     : ProjectionKind;
+    position: Vec3;
+    target: Vec3;
+    zoom: number;
+    kind: ProjectionKind;
 }
-
 export interface Pane {
-    id       : PaneId;
-    label    : string;
-    surface  : HTMLElement;
-    overlay  : HTMLElement;
-    camera   : Camera;
+    id: PaneId;
+    label: string;
+    surface: HTMLElement;
+    overlay: HTMLElement;
+    camera: Camera;
 }
-
 export interface CameraViewer3DOptions {
-    width?      : string;
-    height?     : string;
-    showAxes?   : boolean;
-    showLabels? : boolean;
+    width?: string;
+    height?: string;
+    showAxes?: boolean;
+    showLabels?: boolean;
 }
-
 const DEFAULT_CAMERAS: Record<PaneId, Camera> = {
-    top:         { position: { x: 0, y: 10, z: 0 },   target: { x: 0, y: 0, z: 0 }, zoom: 1, kind: 'orthographic' },
-    front:       { position: { x: 0, y: 0,  z: 10 },  target: { x: 0, y: 0, z: 0 }, zoom: 1, kind: 'orthographic' },
-    side:        { position: { x: 10, y: 0, z: 0 },   target: { x: 0, y: 0, z: 0 }, zoom: 1, kind: 'orthographic' },
-    perspective: { position: { x: 7,  y: 5, z: 7 },   target: { x: 0, y: 0, z: 0 }, zoom: 1, kind: 'perspective'  },
+    top: { position: { x: 0, y: 10, z: 0 }, target: { x: 0, y: 0, z: 0 }, zoom: 1, kind: 'orthographic' },
+    front: { position: { x: 0, y: 0, z: 10 }, target: { x: 0, y: 0, z: 0 }, zoom: 1, kind: 'orthographic' },
+    side: { position: { x: 10, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, zoom: 1, kind: 'orthographic' },
+    perspective: { position: { x: 7, y: 5, z: 7 }, target: { x: 0, y: 0, z: 0 }, zoom: 1, kind: 'perspective' },
 };
-
-const PANE_INFO: Array<{ id: PaneId; label: string }> = [
-    { id: 'top',         label: 'Top' },
-    { id: 'front',       label: 'Front' },
-    { id: 'side',        label: 'Side' },
+const PANE_INFO: Array<{
+    id: PaneId;
+    label: string;
+}> = [
+    { id: 'top', label: 'Top' },
+    { id: 'front', label: 'Front' },
+    { id: 'side', label: 'Side' },
     { id: 'perspective', label: 'Perspective' },
 ];
-
-export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLElement, {}, {
-    attrs : ['width', 'height', 'show-axes', 'show-labels', 'active-pane', 'maximized-pane'],
+@Component('arianna-camera-viewer-3d', {}, {
+    Attributes: ['width', 'height', 'show-axes', 'show-labels', 'active-pane', 'maximized-pane'],
 })
-{
-    cameras$: Signal<Record<PaneId, Camera>> = signal<Record<PaneId, Camera>>(
-        JSON.parse(JSON.stringify(DEFAULT_CAMERAS)),
-    );
-
-    build(_opts: CameraViewer3DOptions = {})
-    {
-        const wAttr = this.attributeSignal('width');
-        const hAttr = this.attributeSignal('height');
-        const activeAttr  = this.attributeSignal('active-pane');
-        const maxAttr     = this.attributeSignal('maximized-pane');
-
+export class CameraViewer3D extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    cameras$: Signal<Record<PaneId, Camera>> = signal<Record<PaneId, Camera>>(JSON.parse(JSON.stringify(DEFAULT_CAMERAS)));
+    onConnected(_opts: CameraViewer3DOptions = {}) {
+        const wAttr = this.signal().attribute('width');
+        const hAttr = this.signal().attribute('height');
+        const activeAttr = this.signal().attribute('active-pane');
+        const maxAttr = this.signal().attribute('maximized-pane');
         this.hostStyle = () => {
             const w = wAttr.Get() ?? '100%';
             const h = hAttr.Get() ?? '600px';
             return `width: ${w}; height: ${h}`;
         };
-
         this.gridCls = () => {
             const m = maxAttr.Get();
             return 'ar-cv3d__grid' + (m ? ' ar-cv3d__grid--maximized ar-cv3d__grid--max-' + m : '');
         };
-
-        this.showAxes   = () => this.getAttribute('show-axes')   !== 'false';
+        this.showAxes = () => this.getAttribute('show-axes') !== 'false';
         this.showLabels = () => this.getAttribute('show-labels') !== 'false';
-
-        this.panes = (): Array<{ id: PaneId; label: string; cls: string; camLabel: string }> => {
+        this.panes = (): Array<{
+            id: PaneId;
+            label: string;
+            cls: string;
+            camLabel: string;
+        }> => {
             const active = activeAttr.Get();
-            const max    = maxAttr.Get();
+            const max = maxAttr.Get();
             const cams = this.cameras$.Get();
             return PANE_INFO.map(p => ({
                 id: p.id,
@@ -132,7 +133,6 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
                 camLabel: this.#camLabel(cams[p.id]),
             }));
         };
-
         this.onPaneMouseDown = (e: Event) => {
             const me = e as MouseEvent;
             const pane = (me.currentTarget as HTMLElement).dataset.pane as PaneId;
@@ -158,7 +158,8 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
         this.onPanePointerMove = (e: Event) => {
             // Drag-orbit/pan (very basic — full orbit math left to consumer)
             const pe = e as PointerEvent;
-            if (!(pe.buttons & 1) || !pe.altKey) return;
+            if (!(pe.buttons & 1) || !pe.altKey)
+                return;
             const pane = (pe.currentTarget as HTMLElement).dataset.pane as PaneId;
             const cur = this.cameras$.Get();
             const c = cur[pane];
@@ -171,8 +172,7 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
             this.cameras$.Set({ ...cur, [pane]: newCam });
             this.#fireCamera(pane);
         };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-cv3d__host" :style="this.hostStyle()">
                 <div :class="this.gridCls()">
                     <div a-for="p in this.panes()"
@@ -201,12 +201,11 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
                 </div>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = CameraViewer3D.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = CameraViewer3D.DefaultSheet();
     }
-
     // ── Public API ───────────────────────────────────────────────────────────
-
     getPane(id: PaneId): Pane {
         const surface = this.querySelector<HTMLElement>(`[data-surface="${id}"]`)!;
         const overlay = surface?.nextElementSibling as HTMLElement;
@@ -216,7 +215,6 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
             camera: this.cameras$.Get()[id],
         };
     }
-
     setCamera(pane: PaneId, camera: Partial<Camera>): this {
         const cur = this.cameras$.Get();
         const next = { ...cur, [pane]: { ...cur[pane], ...camera } };
@@ -225,112 +223,119 @@ export class CameraViewer3D extends Component('arianna-camera-viewer-3d', HTMLEl
         return this;
     }
     getCamera(pane: PaneId): Camera { return { ...this.cameras$.Get()[pane] }; }
-
     setActivePane(pane: PaneId): this {
         this.setAttribute('active-pane', pane);
         this.dispatchEvent(new CustomEvent('arianna:focus', { bubbles: true, detail: { pane } }));
         return this;
     }
     getActivePane(): PaneId | null { return (this.getAttribute('active-pane') as PaneId) || null; }
-
     maximize(pane: PaneId): this { this.setAttribute('maximized-pane', pane); return this; }
     restore(): this { this.removeAttribute('maximized-pane'); return this; }
     toggleMaximize(pane: PaneId): this {
         return this.getAttribute('maximized-pane') === pane ? this.restore() : this.maximize(pane);
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     #fireCamera(pane: PaneId): void {
         this.dispatchEvent(new CustomEvent('arianna:camera', {
             bubbles: true,
             detail: { pane, camera: { ...this.cameras$.Get()[pane] } },
         }));
     }
-
     #camLabel(c: Camera): string {
         if (c.kind === 'perspective') {
             return `Persp · ${(c.zoom * 100).toFixed(0)}%`;
         }
         return `Ortho · ${(c.zoom * 100).toFixed(0)}%`;
     }
-
-    private hostStyle        : () => string = () => '';
-    private gridCls          : () => string = () => 'ar-cv3d__grid';
-    private showAxes         : () => boolean = () => true;
-    private showLabels       : () => boolean = () => true;
-    private panes            : () => Array<{ id: PaneId; label: string; cls: string; camLabel: string }> = () => [];
-    private onPaneMouseDown  : (e: Event) => void = () => {};
-    private onPaneDblClick   : (e: Event) => void = () => {};
-    private onPaneWheel      : (e: Event) => void = () => {};
-    private onPanePointerMove: (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', { display: 'block' }),
-                new Rule('.ar-cv3d__host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    overflow    : 'hidden',
-                }),
-                new Rule('.ar-cv3d__grid', {
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gridTemplateRows: '1fr 1fr',
-                    width: '100%', height: '100%',
-                    gap: '1px',
-                    background: 'var(--arianna-border, #d8d8d8)',
-                }),
-                new Rule('.ar-cv3d__grid--maximized', { gridTemplateColumns: '1fr', gridTemplateRows: '1fr' }),
-                new Rule('.ar-cv3d__pane', {
-                    position: 'relative',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                    overflow: 'hidden',
-                    touchAction: 'none',
-                }),
-                new Rule('.ar-cv3d__pane--active', {
-                    boxShadow: 'inset 0 0 0 2px var(--arianna-primary, #1f6feb)',
-                }),
-                new Rule('.ar-cv3d__grid--maximized .ar-cv3d__pane', { display: 'none' }),
-                new Rule('.ar-cv3d__pane--maximized', { display: 'block !important' }),
-                new Rule('.ar-cv3d__surface', { position: 'absolute', inset: '0' }),
-                new Rule('.ar-cv3d__overlay', {
-                    position: 'absolute',
-                    inset: '0',
-                    pointerEvents: 'none',
-                }),
-                new Rule('.ar-cv3d__label', {
-                    position: 'absolute', top: '6px', left: '8px',
-                    fontSize: '10px', fontWeight: '600',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                }),
-                new Rule('.ar-cv3d__camlabel', {
-                    position: 'absolute', top: '6px', right: '8px',
-                    fontSize: '10px',
-                    fontFamily: 'ui-monospace, monospace',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                }),
-                new Rule('.ar-cv3d__axes', { position: 'absolute', bottom: '6px', left: '6px' }),
-            ]
-        );
+    private hostStyle: () => string = () => '';
+    private gridCls: () => string = () => 'ar-cv3d__grid';
+    private showAxes: () => boolean = () => true;
+    private showLabels: () => boolean = () => true;
+    private panes: () => Array<{
+        id: PaneId;
+        label: string;
+        cls: string;
+        camLabel: string;
+    }> = () => [];
+    private onPaneMouseDown: (e: Event) => void = () => { };
+    private onPaneDblClick: (e: Event) => void = () => { };
+    private onPaneWheel: (e: Event) => void = () => { };
+    private onPanePointerMove: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', { display: 'block' }),
+            new Rule('.ar-cv3d__host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                overflow: 'hidden',
+            }),
+            new Rule('.ar-cv3d__grid', {
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gridTemplateRows: '1fr 1fr',
+                width: '100%', height: '100%',
+                gap: '1px',
+                background: 'var(--arianna-border, #d8d8d8)',
+            }),
+            new Rule('.ar-cv3d__grid--maximized', { gridTemplateColumns: '1fr', gridTemplateRows: '1fr' }),
+            new Rule('.ar-cv3d__pane', {
+                position: 'relative',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                overflow: 'hidden',
+                touchAction: 'none',
+            }),
+            new Rule('.ar-cv3d__pane--active', {
+                boxShadow: 'inset 0 0 0 2px var(--arianna-primary, #1f6feb)',
+            }),
+            new Rule('.ar-cv3d__grid--maximized .ar-cv3d__pane', { display: 'none' }),
+            new Rule('.ar-cv3d__pane--maximized', { display: 'block !important' }),
+            new Rule('.ar-cv3d__surface', { position: 'absolute', inset: '0' }),
+            new Rule('.ar-cv3d__overlay', {
+                position: 'absolute',
+                inset: '0',
+                pointerEvents: 'none',
+            }),
+            new Rule('.ar-cv3d__label', {
+                position: 'absolute', top: '6px', left: '8px',
+                fontSize: '10px', fontWeight: '600',
+                color: 'var(--arianna-muted, #6e6b62)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+            }),
+            new Rule('.ar-cv3d__camlabel', {
+                position: 'absolute', top: '6px', right: '8px',
+                fontSize: '10px',
+                fontFamily: 'ui-monospace, monospace',
+                color: 'var(--arianna-muted, #6e6b62)',
+            }),
+            new Rule('.ar-cv3d__axes', { position: 'absolute', bottom: '6px', left: '6px' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'CameraViewer3D', {
-        value: CameraViewer3D, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * CameraViewer3D namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace CameraViewer3D {
+    export namespace Types {
+        export type PaneIdType = PaneId;
+        export type ProjectionKindType = ProjectionKind;
+    }
+    export namespace Interfaces {
+        export interface Vec3Contract extends Vec3 {
+        }
+        export interface CameraContract extends Camera {
+        }
+        export interface PaneContract extends Pane {
+        }
+        export interface Options extends CameraViewer3DOptions {
+        }
+    }
 }
-
 export default CameraViewer3D;

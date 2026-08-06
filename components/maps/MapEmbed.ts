@@ -1,3 +1,9 @@
+import { Component, Components, Css, Templates } from '../../core/index.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/maps/MapEmbed
  * @author    Riccardo Angeli
@@ -41,74 +47,61 @@
  *   <arianna-osm-map address="Eiffel Tower, Paris" zoom="15"></arianna-osm-map>
  *   <arianna-apple-map center-lat="40.7128" center-lng="-74.0060"></arianna-apple-map>
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
-export interface LatLng { lat: number; lng: number; }
-
-export type MapProvider =
-    | 'google' | 'osm' | 'apple' | 'bing' | 'azure' | 'maplibre';
-
+export interface LatLng {
+    lat: number;
+    lng: number;
+}
+export type MapProvider = 'google' | 'osm' | 'apple' | 'bing' | 'azure' | 'maplibre';
 export interface MapEmbedOptions {
-    center?     : LatLng;
-    zoom?       : number;
-    marker?     : boolean;
-    label?      : string;
-    address?    : string;
+    center?: LatLng;
+    zoom?: number;
+    marker?: boolean;
+    label?: string;
+    address?: string;
     aspectRatio?: string;
 }
-
-const DEFAULT_CENTER: LatLng = { lat: 51.4779, lng: -0.0015 };  // Greenwich
-
+const DEFAULT_CENTER: LatLng = { lat: 51.4779, lng: -0.0015 }; // Greenwich
 /**
  * Helper used by subclasses. Builds the abstract MapEmbed Component definition
  * with the unified attribute set. Concrete subclasses pass their own tag.
  */
-export function _mapEmbedBase(tag: string) {
-    return Component(tag, HTMLElement, {}, {
-        attrs : [
-            'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
-            'aspect-ratio', 'api-key', 'mapkit-token',
-        ],
-    });
-}
-
 /**
  * MapEmbed — base class. Subclasses MUST override `getProvider()` and
- * `embedUrl()`; may override `openUrl()` and `build()` for fallback states.
+ * `embedUrl()`; may override `openUrl()` and `onConnected()` for fallback states.
  */
-export abstract class MapEmbed extends _mapEmbedBase('arianna-map-embed')
-{
-    build(_opts: MapEmbedOptions = {})
-    {
-        const centerLat   = this.attributeSignal('center-lat');
-        const centerLng   = this.attributeSignal('center-lng');
-        const zoom        = this.attributeSignal('zoom');
-        const aspectRatio = this.attributeSignal('aspect-ratio');
-
+@Component('arianna-map-embed', {}, {
+    Attributes: [
+        'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
+        'aspect-ratio', 'api-key', 'mapkit-token',
+    ],
+})
+export abstract class MapEmbed extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    onConnected(_opts: MapEmbedOptions = {}) {
+        const centerLat = this.signal().attribute('center-lat');
+        const centerLng = this.signal().attribute('center-lng');
+        const zoom = this.signal().attribute('zoom');
+        const aspectRatio = this.signal().attribute('aspect-ratio');
         this.centerLatNum = () => parseFloat(centerLat.Get() ?? String(DEFAULT_CENTER.lat));
         this.centerLngNum = () => parseFloat(centerLng.Get() ?? String(DEFAULT_CENTER.lng));
-        this.zoomNum      = () => parseInt(zoom.Get() ?? '13', 10) || 13;
-        this.hasMarker    = () => this.getAttribute('marker') !== 'false';
-
+        this.zoomNum = () => parseInt(zoom.Get() ?? '13', 10) || 13;
+        this.hasMarker = () => this.getAttribute('marker') !== 'false';
         this.stageStyle = () => {
             const ar = aspectRatio.Get() ?? '16/9';
             return `aspect-ratio: ${ar}`;
         };
-
         this.providerBadge = () => this.getProvider().toUpperCase();
-
-        // Build URLs reactively — getEmbedUrl/getOpenUrl read attrs lazily,
+        // Build URLs reactively — getEmbedUrl/getOpenUrl read attributes lazily,
         // so any attribute change triggers a re-render.
         this.iframeSrc = () => this.getEmbedUrl();
-        this.openHref  = () => this.getOpenUrl();
-
-        this.template = html`
+        this.openHref = () => this.getOpenUrl();
+        this.template = html `
             <div class="ar-map__stage" :style="this.stageStyle()">
                 <iframe class="ar-map__iframe"
                         :src="this.iframeSrc()"
@@ -125,25 +118,20 @@ export abstract class MapEmbed extends _mapEmbedBase('arianna-map-embed')
                    rel="noopener">Open ↗</a>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = MapEmbed.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = MapEmbed.DefaultSheet();
     }
-
     // ── Subclass contract ────────────────────────────────────────────────────
-
     /** Provider identifier — must be unique per concrete subclass. */
     abstract getProvider(): MapProvider;
-
     /** Builds the iframe `src` URL from the current attributes. */
     protected abstract getEmbedUrl(): string;
-
     /** Public link in new tab. Default: Google Maps coords URL. */
     protected getOpenUrl(): string {
         return `https://www.google.com/maps/@${this.centerLatNum()},${this.centerLngNum()},${this.zoomNum()}z`;
     }
-
     // ── Programmatic API (shared) ────────────────────────────────────────────
-
     setLocation(center: LatLng): this {
         this.setAttribute('center-lat', String(center.lat));
         this.setAttribute('center-lng', String(center.lng));
@@ -159,150 +147,147 @@ export abstract class MapEmbed extends _mapEmbedBase('arianna-map-embed')
     }
     reload(): this {
         const iframe = this.querySelector<HTMLIFrameElement>('iframe.ar-map__iframe');
-        if (iframe) iframe.src = this.getEmbedUrl();
+        if (iframe)
+            iframe.src = this.getEmbedUrl();
         return this;
     }
     getCenter(): LatLng { return { lat: this.centerLatNum(), lng: this.centerLngNum() }; }
-    getZoom(): number   { return this.zoomNum(); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    getZoom(): number { return this.zoomNum(); }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     // ── Attr getters/setters (typed) ────────────────────────────────────────
-
-    get centerLat(): number  { return this.centerLatNum(); }
+    get centerLat(): number { return this.centerLatNum(); }
     set centerLat(v: number) { this.setAttribute('center-lat', String(v)); }
-
-    get centerLng(): number  { return this.centerLngNum(); }
+    get centerLng(): number { return this.centerLngNum(); }
     set centerLng(v: number) { this.setAttribute('center-lng', String(v)); }
-
-    get zoom(): number       { return this.zoomNum(); }
-    set zoom(v: number)      { this.setAttribute('zoom', String(v)); }
-
-    get marker(): boolean    { return this.hasMarker(); }
-    set marker(v: boolean)   { this.setAttribute('marker', v ? 'true' : 'false'); }
-
-    get address(): string    { return this.getAttribute('address') ?? ''; }
-    set address(v: string)   { v ? this.setAttribute('address', v) : this.removeAttribute('address'); }
-
-    get label(): string      { return this.getAttribute('label') ?? ''; }
-    set label(v: string)     { v ? this.setAttribute('label', v) : this.removeAttribute('label'); }
-
-    get apiKey(): string     { return this.getAttribute('api-key') ?? ''; }
-    set apiKey(v: string)    { v ? this.setAttribute('api-key', v) : this.removeAttribute('api-key'); }
-
+    get zoom(): number { return this.zoomNum(); }
+    set zoom(v: number) { this.setAttribute('zoom', String(v)); }
+    get marker(): boolean { return this.hasMarker(); }
+    set marker(v: boolean) { this.setAttribute('marker', v ? 'true' : 'false'); }
+    get address(): string { return this.getAttribute('address') ?? ''; }
+    set address(v: string) { v ? this.setAttribute('address', v) : this.removeAttribute('address'); }
+    get label(): string { return this.getAttribute('label') ?? ''; }
+    set label(v: string) { v ? this.setAttribute('label', v) : this.removeAttribute('label'); }
+    get apiKey(): string { return this.getAttribute('api-key') ?? ''; }
+    set apiKey(v: string) { v ? this.setAttribute('api-key', v) : this.removeAttribute('api-key'); }
     // ── Template helpers (set in build) ─────────────────────────────────────
-
-    protected centerLatNum  : () => number = () => DEFAULT_CENTER.lat;
-    protected centerLngNum  : () => number = () => DEFAULT_CENTER.lng;
-    protected zoomNum       : () => number = () => 13;
-    protected hasMarker     : () => boolean = () => true;
-    protected stageStyle    : () => string = () => '';
-    protected providerBadge : () => string = () => '';
-    protected iframeSrc     : () => string = () => 'about:blank';
-    protected openHref      : () => string = () => '#';
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg-3, #f3f3f3)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 8px)',
-                    color       : 'var(--arianna-text, #1f2328)',
-                    display     : 'flex',
-                    flexDirection: 'column',
-                    fontFamily  : '-apple-system, system-ui, sans-serif',
-                    fontSize    : '12px',
-                    overflow    : 'hidden',
-                    position    : 'relative',
-                }),
-                new Rule('.ar-map__stage', {
-                    background: 'var(--arianna-bg-4, #ebebeb)',
-                    minHeight : '200px',
-                    position  : 'relative',
-                }),
-                new Rule('.ar-map__iframe', {
-                    border: '0',
-                    display: 'block',
-                    height: '100%',
-                    left  : '0',
-                    position: 'absolute',
-                    top   : '0',
-                    width : '100%',
-                }),
-                new Rule('.ar-map__chrome', {
-                    alignItems    : 'center',
-                    background    : 'var(--arianna-bg, #ffffff)',
-                    borderTop     : '1px solid var(--arianna-border, #d8d8d8)',
-                    display       : 'flex',
-                    justifyContent: 'space-between',
-                    padding       : '6px 10px',
-                }),
-                new Rule('.ar-map__badge', {
-                    border       : '1px solid var(--arianna-primary, #1f6feb)',
-                    borderRadius : '10px',
-                    color        : 'var(--arianna-primary, #1f6feb)',
-                    font         : '10px ui-monospace, monospace',
-                    letterSpacing: '0.08em',
-                    padding      : '2px 8px',
-                    textTransform: 'uppercase',
-                }),
-                new Rule('.ar-map__open', {
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: '3px',
-                    color       : 'var(--arianna-text, #1f2328)',
-                    font        : '11px sans-serif',
-                    padding     : '3px 8px',
-                    textDecoration: 'none',
-                    transition  : 'background 0.14s ease',
-                }),
-                new Rule('.ar-map__open:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
-
-                // Fallback card (used by AppleMap when MapKit token absent + by BingMap)
-                new Rule('.ar-map__fallback', {
-                    alignItems    : 'center',
-                    color         : 'var(--arianna-muted, #6e6b62)',
-                    display       : 'flex',
-                    flexDirection : 'column',
-                    gap           : '10px',
-                    height        : '100%',
-                    justifyContent: 'center',
-                    padding       : '24px',
-                    position      : 'absolute',
-                    inset         : '0',
-                    textAlign     : 'center',
-                }),
-                new Rule('.ar-map__fallback svg', { opacity: '0.4' }),
-                new Rule('.ar-map__fallback a', {
-                    color        : 'var(--arianna-primary, #1f6feb)',
-                    fontWeight   : '600',
-                    textDecoration: 'none',
-                }),
-                new Rule('.ar-map__fallback a:hover', { textDecoration: 'underline' }),
-
-                // Deprecation banner (used by BingMap)
-                new Rule('.ar-map__deprecation', {
-                    background : 'var(--arianna-warning-bg, #fff8e1)',
-                    borderBottom: '1px solid var(--arianna-warning, #f5a623)',
-                    color      : 'var(--arianna-warning-text, #7a4a00)',
-                    fontSize   : '11px',
-                    padding    : '6px 10px',
-                    textAlign  : 'center',
-                }),
-
-                new Rule('@media (max-width: 600px)', {
-                    '.ar-map__stage':  { minHeight: '160px' },
-                    '.ar-map__chrome': { padding: '4px 8px' },
-                    '.ar-map__badge':  { fontSize: '9px', padding: '1px 6px' },
-                } as never),
-            ]
-        );
+    protected centerLatNum: () => number = () => DEFAULT_CENTER.lat;
+    protected centerLngNum: () => number = () => DEFAULT_CENTER.lng;
+    protected zoomNum: () => number = () => 13;
+    protected hasMarker: () => boolean = () => true;
+    protected stageStyle: () => string = () => '';
+    protected providerBadge: () => string = () => '';
+    protected iframeSrc: () => string = () => 'about:blank';
+    protected openHref: () => string = () => '#';
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 8px)',
+                color: 'var(--arianna-text, #1f2328)',
+                display: 'flex',
+                flexDirection: 'column',
+                fontFamily: '-apple-system, system-ui, sans-serif',
+                fontSize: '12px',
+                overflow: 'hidden',
+                position: 'relative',
+            }),
+            new Rule('.ar-map__stage', {
+                background: 'var(--arianna-bg-4, #ebebeb)',
+                minHeight: '200px',
+                position: 'relative',
+            }),
+            new Rule('.ar-map__iframe', {
+                border: '0',
+                display: 'block',
+                height: '100%',
+                left: '0',
+                position: 'absolute',
+                top: '0',
+                width: '100%',
+            }),
+            new Rule('.ar-map__chrome', {
+                alignItems: 'center',
+                background: 'var(--arianna-bg, #ffffff)',
+                borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '6px 10px',
+            }),
+            new Rule('.ar-map__badge', {
+                border: '1px solid var(--arianna-primary, #1f6feb)',
+                borderRadius: '10px',
+                color: 'var(--arianna-primary, #1f6feb)',
+                font: '10px ui-monospace, monospace',
+                letterSpacing: '0.08em',
+                padding: '2px 8px',
+                textTransform: 'uppercase',
+            }),
+            new Rule('.ar-map__open', {
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: '3px',
+                color: 'var(--arianna-text, #1f2328)',
+                font: '11px sans-serif',
+                padding: '3px 8px',
+                textDecoration: 'none',
+                transition: 'background 0.14s ease',
+            }),
+            new Rule('.ar-map__open:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+            // Fallback card (used by AppleMap when MapKit token absent + by BingMap)
+            new Rule('.ar-map__fallback', {
+                alignItems: 'center',
+                color: 'var(--arianna-muted, #6e6b62)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                height: '100%',
+                justifyContent: 'center',
+                padding: '24px',
+                position: 'absolute',
+                inset: '0',
+                textAlign: 'center',
+            }),
+            new Rule('.ar-map__fallback svg', { opacity: '0.4' }),
+            new Rule('.ar-map__fallback a', {
+                color: 'var(--arianna-primary, #1f6feb)',
+                fontWeight: '600',
+                textDecoration: 'none',
+            }),
+            new Rule('.ar-map__fallback a:hover', { textDecoration: 'underline' }),
+            // Deprecation banner (used by BingMap)
+            new Rule('.ar-map__deprecation', {
+                background: 'var(--arianna-warning-bg, #fff8e1)',
+                borderBottom: '1px solid var(--arianna-warning, #f5a623)',
+                color: 'var(--arianna-warning-text, #7a4a00)',
+                fontSize: '11px',
+                padding: '6px 10px',
+                textAlign: 'center',
+            }),
+            new Rule('@media (max-width: 600px)', {
+                '.ar-map__stage': { minHeight: '160px' },
+                '.ar-map__chrome': { padding: '4px 8px' },
+                '.ar-map__badge': { fontSize: '9px', padding: '1px 6px' },
+            } as never),
+        ]);
+    }
+}
+/* ──────────────────────────────────────────────────────────────────────────
+ * MapEmbed namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace MapEmbed {
+    export namespace Types {
+        export type MapProviderType = MapProvider;
+    }
+    export namespace Interfaces {
+        export interface LatLngContract extends LatLng {
+        }
+        export interface Options extends MapEmbedOptions {
+        }
     }
 }

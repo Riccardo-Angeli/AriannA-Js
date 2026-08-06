@@ -12,9 +12,5 @@
  * source of truth and this file is the thin import-bridge that keeps the
  * historical path working.
  */
-
 export { Table, default } from '../layout/Table.ts';
-export type {
-    Row, SortDir, SortState, SelectMode,
-    TableColumn, TableOptions,
-} from '../layout/Table.ts';
+export type { Row, SortDir, SortState, SelectMode, TableColumn, TableOptions, } from '../layout/Table.ts';

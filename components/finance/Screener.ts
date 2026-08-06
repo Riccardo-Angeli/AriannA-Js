@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/finance/Screener
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -20,13 +24,8 @@
  * @example HTML
  *   <arianna-screener></arianna-screener>
  *
- * Attrs:  (none — programmatic columns/rows only)
+ * Attributes:  (none — programmatic columns/rows only)
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -34,53 +33,53 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
+import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _fmt, _fmtK, _esc } from './helpers.ts';
-
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
 export interface ScreenerRow {
-    symbol     : string;
-    price      : number;
-    change     : number;
-    volume     : number;
-    marketCap? : number;
+    symbol: string;
+    price: number;
+    change: number;
+    volume: number;
+    marketCap?: number;
     [key: string]: unknown;
 }
-
 export interface ScreenerOptions {
-    rows?    : ScreenerRow[];
-    columns? : (keyof ScreenerRow)[];
+    rows?: ScreenerRow[];
+    columns?: (keyof ScreenerRow)[];
 }
-
-interface HeaderCell { label: string; }
-interface BodyCell   { html: string; cls: string; }
-interface BodyRow    { cells: BodyCell[]; }
-
-export class Screener extends Component('arianna-screener', HTMLElement, {}, {
-    attrs : [],
+interface HeaderCell {
+    label: string;
+}
+interface BodyCell {
+    html: string;
+    cls: string;
+}
+interface BodyRow {
+    cells: BodyCell[];
+}
+@Component('arianna-screener', {}, {
+    Attributes: [],
 })
-{
-    rows$    : Signal<ScreenerRow[]>           = signal<ScreenerRow[]>([]);
-    columns$ : Signal<(keyof ScreenerRow)[]>   = signal<(keyof ScreenerRow)[]>(
-        ['symbol', 'price', 'change', 'volume'],
-    );
-
-    build(_opts: ScreenerOptions = {})
-    {
-        this.headerCells = (): HeaderCell[] =>
-            this.columns$.Get().map(c => ({ label: String(c).toUpperCase() }));
-
+export class Screener extends HTMLElement {
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    rows$: Signal<ScreenerRow[]> = signal<ScreenerRow[]>([]);
+    columns$: Signal<(keyof ScreenerRow)[]> = signal<(keyof ScreenerRow)[]>(['symbol', 'price', 'change', 'volume']);
+    onConnected(_opts: ScreenerOptions = {}) {
+        this.headerCells = (): HeaderCell[] => this.columns$.Get().map(c => ({ label: String(c).toUpperCase() }));
         this.bodyRows = (): BodyRow[] => {
             const cols = this.columns$.Get();
             return this.rows$.Get().map(row => ({
                 cells: cols.map(c => this.#formatCell(c, row[c])),
             }));
         };
-
-        this.template = html`
+        this.template = html `
             <table class="ar-screener__table">
                 <thead>
                     <tr>
@@ -94,38 +93,34 @@ export class Screener extends Component('arianna-screener', HTMLElement, {}, {
                 </tbody>
             </table>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Screener.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Screener.DefaultSheet();
     }
-
     set rows(v: ScreenerRow[]) { this.rows$.Set(v ?? []); }
-    get rows(): ScreenerRow[]  { return this.rows$.Get(); }
-
+    get rows(): ScreenerRow[] { return this.rows$.Get(); }
     set columns(v: (keyof ScreenerRow)[]) { this.columns$.Set(v ?? []); }
-    get columns(): (keyof ScreenerRow)[]  { return this.columns$.Get(); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    #formatCell(col: keyof ScreenerRow, raw: unknown): BodyCell
-    {
+    get columns(): (keyof ScreenerRow)[] { return this.columns$.Get(); }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    #formatCell(col: keyof ScreenerRow, raw: unknown): BodyCell {
         if (col === 'change') {
             const n = Number(raw) || 0;
             const sign = n >= 0 ? '+' : '';
             return {
                 html: `${sign}${_fmt(n)}%`,
-                cls : 'ar-screener__td ar-screener__td--' + (n >= 0 ? 'up' : 'down'),
+                cls: 'ar-screener__td ar-screener__td--' + (n >= 0 ? 'up' : 'down'),
             };
         }
         if (col === 'symbol') {
             return {
                 html: _esc(String(raw ?? '')),
-                cls : 'ar-screener__td ar-screener__td--symbol',
+                cls: 'ar-screener__td ar-screener__td--symbol',
             };
         }
         if (typeof raw === 'number') {
@@ -133,62 +128,67 @@ export class Screener extends Component('arianna-screener', HTMLElement, {}, {
         }
         return { html: _esc(String(raw ?? '')), cls: 'ar-screener__td' };
     }
-
     private headerCells: () => HeaderCell[] = () => [];
-    private bodyRows   : () => BodyRow[] = () => [];
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    color       : 'var(--arianna-text, #1f2328)',
-                    display     : 'block',
-                    fontFamily  : 'inherit',
-                    fontSize    : '13px',
-                    overflow    : 'auto',
-                }),
-                new Rule('.ar-screener__table', {
-                    borderCollapse: 'collapse',
-                    width: '100%',
-                }),
-                new Rule('.ar-screener__th', {
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    color       : 'var(--arianna-muted, #787b86)',
-                    fontWeight  : '500',
-                    padding     : '8px 12px',
-                    textAlign   : 'left',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    fontSize    : '11px',
-                }),
-                new Rule('.ar-screener__row', {
-                    borderBottom: '1px solid var(--arianna-bg-3, #f1f1f1)',
-                    transition  : 'background 0.14s ease',
-                }),
-                new Rule('.ar-screener__row:hover', {
-                    background: 'var(--arianna-bg-3, #f8f9fa)',
-                }),
-                new Rule('.ar-screener__td', { padding: '6px 12px' }),
-                new Rule('.ar-screener__td--symbol', {
-                    color     : 'var(--arianna-text, #1f2328)',
-                    fontWeight: '600',
-                }),
-                new Rule('.ar-screener__td--num', { textAlign: 'right' }),
-                new Rule('.ar-screener__td--up',   { color: 'var(--arianna-bull, #26a69a)' }),
-                new Rule('.ar-screener__td--down', { color: 'var(--arianna-bear, #ef5350)' }),
-            ]
-        );
+    private bodyRows: () => BodyRow[] = () => [];
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                color: 'var(--arianna-text, #1f2328)',
+                display: 'block',
+                fontFamily: 'inherit',
+                fontSize: '13px',
+                overflow: 'auto',
+            }),
+            new Rule('.ar-screener__table', {
+                borderCollapse: 'collapse',
+                width: '100%',
+            }),
+            new Rule('.ar-screener__th', {
+                borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                color: 'var(--arianna-muted, #787b86)',
+                fontWeight: '500',
+                padding: '8px 12px',
+                textAlign: 'left',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                fontSize: '11px',
+            }),
+            new Rule('.ar-screener__row', {
+                borderBottom: '1px solid var(--arianna-bg-3, #f1f1f1)',
+                transition: 'background 0.14s ease',
+            }),
+            new Rule('.ar-screener__row:hover', {
+                background: 'var(--arianna-bg-3, #f8f9fa)',
+            }),
+            new Rule('.ar-screener__td', { padding: '6px 12px' }),
+            new Rule('.ar-screener__td--symbol', {
+                color: 'var(--arianna-text, #1f2328)',
+                fontWeight: '600',
+            }),
+            new Rule('.ar-screener__td--num', { textAlign: 'right' }),
+            new Rule('.ar-screener__td--up', { color: 'var(--arianna-bull, #26a69a)' }),
+            new Rule('.ar-screener__td--down', { color: 'var(--arianna-bear, #ef5350)' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Screener', {
-        value: Screener, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Screener namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Screener {
+    export namespace Interfaces {
+        export interface Row extends ScreenerRow {
+        }
+        export interface Options extends ScreenerOptions {
+        }
+        export interface HeaderCellContract extends HeaderCell {
+        }
+        export interface BodyCellContract extends BodyCell {
+        }
+        export interface BodyRowContract extends BodyRow {
+        }
+    }
 }
-
 export default Screener;

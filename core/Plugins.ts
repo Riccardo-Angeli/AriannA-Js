@@ -1,139 +1,376 @@
 /**
- * @module    Plugin
- * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026
- *
- * Plugin — one self-contained class for AriannA's plugin system.
- *
- * Mirrors the Property pattern: a single class you can `new`, with its types
- * nested under the class name (Plugin.Definition, Plugin.CoreApi) via namespace
- * merging — type-only, so no extra runtime code — and the installed-plugin
- * registry held as a `private static` member.
- *
- * Lives outside Core (the frozen, zero-import kernel cannot own a mutable
- * registry nor import anything); this is the one module allowed to import Core
- * and pass it to each plugin's install().
- *
- * @example
- *   // instance form
- *   new Plugin('router', (core, opts) => {
- *       core.Events.On(window, 'popstate', opts!.handler as EventListener);
- *   }).use({ handler: myHandler });
- *
- *   // object form
- *   Plugin.use({ name: 'i18n', install(core) { ... } });
- *
- *   Plugin.list();   // ['router', 'i18n']
+ * @module      core/Plugins
+ * @description AriannA plugin registry, lifecycle manager and the canonical AriannA API passed to plugins.
+ * @author      Riccardo Angeli
+ * @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ * @license     MIT / Commercial (dual license)
  */
-import { Core } from './Core.ts';
 
-/**
- * Type members of Plugin, grouped under the class name via declaration merging.
- * Types only — emits no runtime code.
- */
+import { Services } from './Service.ts';
+
+import type { Types as SchemaTypes }           from './schema/Types.ts';
+import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
+
 export namespace Plugins
 {
-    export class Plugin
-    {
-        /** Unique name — guards against double-installation. */
-        public readonly name    : string;
-        /** Called once, with the Core singleton and the options passed to use(). */
-        public readonly install : (core: Plugins.CoreApi, options?: Record<string, unknown>) => void;
+    export type Name            = SchemaTypes.Plugins.Name;
+    export type State           = SchemaTypes.Plugins.State;
+    export type Options         = SchemaTypes.Plugins.Options;
+    export type Cleanup         = SchemaTypes.Plugins.Cleanup;
+    export type Installer       = SchemaTypes.Plugins.Installer;
+    export type Definition      = SchemaInterfaces.Plugins.Definition;
+    export type RecordContract  = SchemaInterfaces.Plugins.Record;
+    export type APIContract     = SchemaInterfaces.Plugins.AriannAAPI;
+    export type ServiceContract = SchemaInterfaces.Plugins.Service;
 
-        constructor(name: string, install: Plugin['install'])
+    /** @class       AriannAAPI
+     *  @public
+     *  @memberof    Plugins
+     *  @description Stable capability facade supplied to every plugin installer. Plugins depend on this API rather
+     *               than importing Core modules directly.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export class AriannAAPI implements APIContract
+    {
+        readonly Name = 'AriannA API' as const;
+        readonly Version: string;
+
+        constructor(version = '2.0.0')
         {
-            this.name    = name;
-            this.install = install;
+            this.Version = version;
         }
 
-        /**
-         * Install THIS plugin into Core. Idempotent, chainable.
-         * @example new Plugin('router', fn).use({ routes });
-         */
-        use(options: Record<string, unknown> = {}): this
+        get Services(): readonly string[]
         {
-            Plugin.use(this, options);
+            return Object.freeze(Services.Providers());
+        }
+
+        HasService(name: string): boolean
+        {
+            return Services.Resolve(name) !== undefined;
+        }
+
+        Resolve<T extends object = object>(name: string): T | undefined
+        {
+            return Services.Resolve(name) as T | undefined;
+        }
+
+        Call<R = unknown>(name: string, method: string, ...args: unknown[]): R | undefined
+        {
+            return Services.Call<R>(name, method, ...args);
+        }
+    }
+
+    /** @class       Plugin
+     *  @public
+     *  @memberof    Plugins
+     *  @description Declarative plugin definition with fluent registration and installation methods.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export class Plugin implements Definition
+    {
+        readonly Name: Name;
+        readonly Version?: string;
+        readonly Description?: string;
+        readonly Dependencies?: readonly Name[];
+        readonly Install: Installer;
+
+        constructor(definition: Definition);
+        constructor(name: Name, install: Installer);
+        constructor(definitionOrName: Definition | Name, install?: Installer)
+        {
+            const definition: Definition =
+                typeof definitionOrName === 'string'
+                    ? {
+                        Name    : definitionOrName,
+                        Install : install ?? (() => undefined)
+                    }
+                    : definitionOrName;
+
+            Plugin.Validate(definition);
+
+            this.Name         = definition.Name;
+            this.Version      = definition.Version;
+            this.Description  = definition.Description;
+            this.Dependencies = definition.Dependencies
+                ? Object.freeze([...definition.Dependencies])
+                : undefined;
+            this.Install      = definition.Install;
+        }
+
+        register(): this
+        {
+            Registry.Register(this);
             return this;
         }
 
-        // ── Static registry ───────────────────────────────────────────────────────
-
-        /** Installed-plugin names (mutable — the reason Plugin lives outside Core). */
-        private static _installed = new Set<string>();
-
-        /**
-         * Install a plugin — a Plugin instance or a plain { name, install } object.
-         * Idempotent: a second call with the same name is ignored with a warning.
-         * @example Plugin.use(new Plugin('i18n', fn));
-         */
-        static use(plugin: Plugin | Plugins.Definition, options: Record<string, unknown> = {}): void
+        async use(options: Options = {}): Promise<this>
         {
-            if (!plugin || typeof plugin.install !== 'function' || typeof plugin.name !== 'string') {
-                console.warn('Plugin.use: expected a Plugin or { name, install } object.');
-                return;
+            Registry.Register(this);
+            await Registry.Install(this.Name, options);
+            return this;
+        }
+
+        async uninstall(): Promise<this>
+        {
+            await Registry.Uninstall(this.Name);
+            return this;
+        }
+
+        static Create(definition: Definition): Plugin
+        {
+            return new Plugin(definition);
+        }
+
+        static Register(definition: Definition): Plugin
+        {
+            return Registry.Register(definition);
+        }
+
+        static Use(definition: Definition, options: Options = {}): Promise<Plugin>
+        {
+            return Registry.Use(definition, options);
+        }
+
+        static Validate(definition: Definition): void
+        {
+            if(!definition || typeof definition !== 'object')
+            {
+                throw new TypeError('[arianna] Plugin definition must be an object.');
             }
-            if (Plugin._installed.has(plugin.name)) {
-                console.warn(`Plugin.use: '${plugin.name}' is already installed.`);
-                return;
+
+            if(!definition.Name || typeof definition.Name !== 'string')
+            {
+                throw new TypeError('[arianna] Plugin Name must be a non-empty string.');
             }
-            plugin.install(Core, options);
-            Plugin._installed.add(plugin.name);
-        }
 
-        /** True if a plugin with this name is installed. */
-        static has(name: string): boolean
-        {
-            return Plugin._installed.has(name);
+            if(typeof definition.Install !== 'function')
+            {
+                throw new TypeError(`[arianna] Plugin '${definition.Name}' requires an Install function.`);
+            }
         }
-
-        /** Names of all currently installed plugins. */
-        static list(): string[]
-        {
-            return Array.from(Plugin._installed);
-        }
-
-        /** Pin the constructor name (bundler renames the colliding local to `_Plugin`)
-         *  and expose the class on `window`. Runs once at class-eval. */
-        static #Build(): void
-        {
-            try { Object.defineProperty(this, 'name', { value: 'Plugin', configurable: true }); } catch { /* frozen */ }
-            if (typeof window !== 'undefined' && !Object.prototype.hasOwnProperty.call(window, 'Plugin'))
-                Object.defineProperty(window, 'Plugin', { enumerable: true, configurable: false, writable: false, value: this });
-        }
-
-        static { this.#Build(); }
     }
 
-    /** The Core public API surface handed to every plugin's install(). */
-    export type CoreApi = typeof Core;
-
-    /** Plain-object plugin shape accepted by Plugin.use(). */
-    export interface Definition
-    {
-        name    : string;
-        install : (core: CoreApi, options?: Record<string, unknown>) => void;
-    }
-
-    /** @name        pluginService
-     *  @private
-     *  @description Registers the 'plugin' service: install / query plugins through the kernel registry.
+    /** @class       Registry
+     *  @public
+     *  @memberof    Plugins
+     *  @description Owns registration, dependency resolution, installation, disabling and cleanup for all plugins.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license)
-     */
-    export const pluginsService = new Core.Services.Service
-    (
-        'plugin',
+     *  @license     MIT / Commercial (dual license) */
+    export class Registry
+    {
+        static readonly API = new AriannAAPI();
+        static readonly #records = new Map<Name, RecordContract>();
+
+        static Register(definition: Definition): Plugin
         {
-            /** Install a plugin (instance or { name, install } object). */
-            use(plugin: Plugins.Plugin | Plugins.Definition, options: Record<string, unknown> = {}): void
-            { Plugins.Plugin.use(plugin, options); },
-            /** True if a plugin with this name is installed. */
-            has(name: string): boolean { return Plugins.Plugin.has(name); },
-            /** Names of all installed plugins. */
-            list(): string[] { return Plugins.Plugin.list(); },
+            const plugin =
+                definition instanceof Plugin
+                    ? definition
+                    : new Plugin(definition);
+
+            const existing = Registry.#records.get(plugin.Name);
+
+            if(existing)
+            {
+                if(existing.Definition === plugin)
+                {
+                    return plugin;
+                }
+
+                throw new Error(`[arianna] Plugin '${plugin.Name}' is already registered.`);
+            }
+
+            Registry.#records.set
+            (
+                plugin.Name,
+                {
+                    Definition : plugin,
+                    State      : 'registered',
+                    Options    : Object.freeze({}),
+                    Cleanup    : null,
+                    Error      : null,
+                    InstalledAt: null
+                }
+            );
+
+            return plugin;
+        }
+
+        static async Install(name: Name, options: Options = {}, stack: readonly Name[] = []): Promise<Plugin>
+        {
+            const record = Registry.#records.get(name);
+
+            if(!record)
+            {
+                throw new Error(`[arianna] Plugin '${name}' is not registered.`);
+            }
+
+            if(record.State === 'installed')
+            {
+                return record.Definition as Plugin;
+            }
+
+            if(stack.includes(name))
+            {
+                throw new Error(`[arianna] Circular plugin dependency: ${[...stack, name].join(' -> ')}.`);
+            }
+
+            record.State = 'installing';
+            record.Options = Object.freeze({ ...options });
+            record.Error = null;
+
+            try
+            {
+                for(const dependency of record.Definition.Dependencies ?? [])
+                {
+                    await Registry.Install(dependency, {}, [...stack, name]);
+                }
+
+                const cleanup =
+                    await record.Definition.Install(Registry.API, record.Options);
+
+                record.Cleanup = typeof cleanup === 'function' ? cleanup : null;
+                record.State = 'installed';
+                record.InstalledAt = Date.now();
+
+                return record.Definition as Plugin;
+            }
+            catch(error)
+            {
+                record.State = 'failed';
+                record.Error = error;
+                throw error;
+            }
+        }
+
+        static async Use(definition: Definition, options: Options = {}): Promise<Plugin>
+        {
+            const plugin = Registry.Register(definition);
+            return Registry.Install(plugin.Name, options);
+        }
+
+        static async Uninstall(name: Name): Promise<boolean>
+        {
+            const record = Registry.#records.get(name);
+
+            if(!record)
+            {
+                return false;
+            }
+
+            if(record.Cleanup)
+            {
+                await record.Cleanup();
+            }
+
+            record.Cleanup = null;
+            record.State = 'uninstalled';
+            record.InstalledAt = null;
+
+            return true;
+        }
+
+        static async Disable(name: Name): Promise<boolean>
+        {
+            const changed = await Registry.Uninstall(name);
+            const record = Registry.#records.get(name);
+
+            if(record)
+            {
+                record.State = 'disabled';
+            }
+
+            return changed;
+        }
+
+        static async Enable(name: Name): Promise<boolean>
+        {
+            const record = Registry.#records.get(name);
+
+            if(!record)
+            {
+                return false;
+            }
+
+            await Registry.Install(name, record.Options);
+            return true;
+        }
+
+        static Has(name: Name): boolean
+        {
+            return Registry.#records.has(name);
+        }
+
+        static Get(name: Name): RecordContract | undefined
+        {
+            return Registry.#records.get(name);
+        }
+
+        static List(): readonly RecordContract[]
+        {
+            return Object.freeze([...Registry.#records.values()]);
+        }
+    }
+
+    const Service = new Services.Service<ServiceContract>
+    (
+        'plugins',
+        {
+            get API(): AriannAAPI
+            {
+                return Registry.API;
+            },
+
+            Register(definition: Definition): Plugin
+            {
+                return Registry.Register(definition);
+            },
+
+            Install(name: string, options?: Options): Promise<Plugin>
+            {
+                return Registry.Install(name, options);
+            },
+
+            Use(definition: Definition, options?: Options): Promise<Plugin>
+            {
+                return Registry.Use(definition, options);
+            },
+
+            Uninstall(name: string): Promise<boolean>
+            {
+                return Registry.Uninstall(name);
+            },
+
+            Enable(name: string): Promise<boolean>
+            {
+                return Registry.Enable(name);
+            },
+
+            Disable(name: string): Promise<boolean>
+            {
+                return Registry.Disable(name);
+            },
+
+            Has(name: string): boolean
+            {
+                return Registry.Has(name);
+            },
+
+            Get(name: string): RecordContract | undefined
+            {
+                return Registry.Get(name);
+            },
+
+            List(): readonly RecordContract[]
+            {
+                return Registry.List();
+            }
         }
     );
 }
 
-export default Plugins;
+export default Plugins.Plugin;

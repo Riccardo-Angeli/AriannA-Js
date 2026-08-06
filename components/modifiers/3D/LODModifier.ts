@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/modifiers/3D/LODModifier
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -22,41 +26,37 @@
  *     { distance: 40, geometry: lowPoly  },
  *   ]);
  *
- * Attrs (declarative): for, enabled
+ * Attributes (declarative): for, enabled
  */
-
-import { Component } from '../../../core/Components.ts';
-import {
-    Modifier3D, Modifier3DElement,
-    _vLen, _vSub,
-    type MeshLike, type CameraLike, type Geometry3Like,
-} from './Base.ts';
-
-export interface LODLevel { distance: number; geometry: Geometry3Like; }
-
+import { Component } from '../../../core/index.ts';
+import { Modifier3D, Modifier3DElement, _vLen, _vSub, type MeshLike, type CameraLike, type Geometry3Like, } from './Base.ts';
+export interface LODLevel {
+    distance: number;
+    geometry: Geometry3Like;
+}
 export class LODModifier extends Modifier3D {
-    #levels : LODLevel[];
+    #levels: LODLevel[];
     #current = -1;
-
     constructor(mesh: MeshLike, levels: LODLevel[]) {
         super(mesh);
         this.#levels = [...levels].sort((a, b) => a.distance - b.distance);
     }
-
     setLevels(levels: LODLevel[]): this {
         this.#levels = [...levels].sort((a, b) => a.distance - b.distance);
         this.#current = -1;
         return this;
     }
-
     apply(): this { return this; }
-
     update(camera: CameraLike): this {
-        if (!this.enabled || this.#levels.length === 0) return this;
-        const d    = _vLen(_vSub(this.mesh.position, camera.position));
-        let   best = this.#levels.length - 1;
+        if (!this.enabled || this.#levels.length === 0)
+            return this;
+        const d = _vLen(_vSub(this.mesh.position, camera.position));
+        let best = this.#levels.length - 1;
         for (let i = 0; i < this.#levels.length; i++) {
-            if (d <= this.#levels[i].distance) { best = i; break; }
+            if (d <= this.#levels[i].distance) {
+                best = i;
+                break;
+            }
         }
         if (best !== this.#current) {
             this.#current = best;
@@ -65,16 +65,16 @@ export class LODModifier extends Modifier3D {
         return this;
     }
 }
-
 /**
  * Declarative form. **Second-pass TODO**: parse child `<arianna-lod-level>`
  * elements to read geometry references. For now the element registers itself
  * with an empty levels array; consumers must call `getModifier().setLevels()`
  * after the viewport's asset registry is available.
  */
-export class LODModifierElement extends (Component('arianna-lod', HTMLElement, {}, {
-    attrs : ['for', 'enabled'],
-}) as typeof Modifier3DElement) {
+@Component('arianna-lod', {}, {
+    Attributes: ['for', 'enabled'],
+})
+export class LODModifierElement extends Modifier3DElement {
     protected createModifier(mesh: MeshLike): Modifier3D {
         // TODO second-pass: read <arianna-lod-level> children and resolve their
         // `geometry` attribute against the viewport's asset registry.
@@ -82,11 +82,18 @@ export class LODModifierElement extends (Component('arianna-lod', HTMLElement, {
     }
     protected needsFrameUpdate(): boolean { return true; }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'LODModifier', {
-        value: LODModifier, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * LODModifier namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace LODModifier {
+    export namespace Interfaces {
+        export interface LODLevelContract extends LODLevel {
+        }
+    }
 }
-
+/* ──────────────────────────────────────────────────────────────────────────
+ * LODModifierElement namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace LODModifierElement {
+}
 export default LODModifier;

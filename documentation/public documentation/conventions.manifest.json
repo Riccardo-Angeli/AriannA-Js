@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "status": "normative",
+  "indent": 4,
+  "core_contracts": {
+    "types": "core/schema/Types.ts",
+    "interfaces": "core/schema/Interfaces.ts"
+  },
+  "component_core_imports": "named imports from core/index.ts",
+  "global_HTMLElement_augmentation": "forbidden",
+  "service_wrapper": "Services.Service"
+}

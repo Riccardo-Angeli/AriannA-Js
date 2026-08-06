@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/modifiers/2D/Skewer
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -15,53 +19,49 @@
  * Events:
  *   - arianna:skew   detail: { skewX, skewY, target }
  *
- * Attrs:
+ * Attributes:
  *   axis          'x' | 'y' | 'both' (default 'both')
  *   max-angle     degree clamp (default 45)
  *   handle-color  default var(--arianna-primary)
  *   disabled
  */
-
-import { Component } from '../../../core/Components.ts';
+import { Component } from '../../../core/index.ts';
 import { Modifier2D } from './Base.ts';
-
 export interface SkewerOptions {
-    axis?        : 'x' | 'y' | 'both';
-    maxAngle?    : number;
-    handleColor? : string;
+    axis?: 'x' | 'y' | 'both';
+    maxAngle?: number;
+    handleColor?: string;
 }
-
-export class Skewer extends (Component('arianna-skewer', HTMLElement, {}, {
-    attrs : ['axis', 'max-angle', 'handle-color', 'disabled'],
-}) as typeof Modifier2D)
-{
-    #skew: [number, number] = [0, 0];
-
-    protected applyTo(target: HTMLElement): void
-    {
-        if (getComputedStyle(target).position === 'static') target.style.position = 'relative';
-
+@Component('arianna-skewer', {}, {
+    Attributes: ['axis', 'max-angle', 'handle-color', 'disabled'],
+})
+export class Skewer extends Modifier2D {
+    #skew: [
+        number,
+        number
+    ] = [0, 0];
+    protected applyTo(target: HTMLElement): void {
+        if (getComputedStyle(target).position === 'static')
+            target.style.position = 'relative';
         const axis = (this.getAttribute('axis') ?? 'both') as 'x' | 'y' | 'both';
-        const max  = parseFloat(this.getAttribute('max-angle') ?? '45') || 45;
-        const hc   = this.getAttribute('handle-color') ?? 'var(--arianna-primary, #1f6feb)';
-
+        const max = parseFloat(this.getAttribute('max-angle') ?? '45') || 45;
+        const hc = this.getAttribute('handle-color') ?? 'var(--arianna-primary, #1f6feb)';
         const dot = document.createElement('div');
         dot.className = 'ar-skewer-handle';
         dot.style.cssText =
             `position:absolute;bottom:-10px;right:-10px;width:10px;height:10px;` +
-            `background:${hc};border-radius:50%;cursor:crosshair;z-index:9999;` +
-            `touch-action:none;`;
+                `background:${hc};border-radius:50%;cursor:crosshair;z-index:9999;` +
+                `touch-action:none;`;
         target.appendChild(dot);
-
         const onDown = (e: PointerEvent) => {
-            if (!this.isEnabled) return;
-            if (e.button !== 0) return;
+            if (!this.isEnabled)
+                return;
+            if (e.button !== 0)
+                return;
             e.preventDefault();
             e.stopPropagation();
-
             const startX = e.clientX, startY = e.clientY;
             const [sx0, sy0] = this.#skew;
-
             const onMove = (ev: PointerEvent) => {
                 const dx = (ev.clientX - startX) / 4;
                 const dy = (ev.clientY - startY) / 4;
@@ -74,23 +74,24 @@ export class Skewer extends (Component('arianna-skewer', HTMLElement, {}, {
                 }));
             };
             const onUp = () => {
-                dot.removeEventListener('pointermove',   onMove);
-                dot.removeEventListener('pointerup',     onUp);
+                dot.removeEventListener('pointermove', onMove);
+                dot.removeEventListener('pointerup', onUp);
                 dot.removeEventListener('pointercancel', onUp);
             };
-            try { dot.setPointerCapture(e.pointerId); } catch { /* ignore */ }
-            dot.addEventListener('pointermove',   onMove);
-            dot.addEventListener('pointerup',     onUp);
+            try {
+                dot.setPointerCapture(e.pointerId);
+            }
+            catch { /* ignore */ }
+            dot.addEventListener('pointermove', onMove);
+            dot.addEventListener('pointerup', onUp);
             dot.addEventListener('pointercancel', onUp);
         };
-
         dot.addEventListener('pointerdown', onDown);
         this.cleanups.push(() => {
             dot.removeEventListener('pointerdown', onDown);
             dot.remove();
         });
     }
-
     /** Reset skew to (0, 0). */
     reset(): this {
         this.#skew = [0, 0];
@@ -102,15 +103,19 @@ export class Skewer extends (Component('arianna-skewer', HTMLElement, {}, {
         }
         return this;
     }
-
     /** Current skew (degrees). */
-    getSkew(): [number, number] { return [...this.#skew]; }
+    getSkew(): [
+        number,
+        number
+    ] { return [...this.#skew]; }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Skewer', {
-        value: Skewer, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Skewer namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Skewer {
+    export namespace Interfaces {
+        export interface Options extends SkewerOptions {
+        }
+    }
 }
-
 export default Skewer;

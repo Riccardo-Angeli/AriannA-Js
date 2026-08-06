@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/finance/PortfolioDonut
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -20,13 +24,8 @@
  * @example HTML
  *   <arianna-portfolio-donut size="320"></arianna-portfolio-donut>
  *
- * Attrs: size
+ * Attributes: size
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -34,24 +33,23 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _fmt, _esc } from './helpers.ts';
-
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
 export interface DonutSegment {
-    label : string;
-    value : number;
+    label: string;
+    value: number;
     color?: string;
 }
-
 export interface PortfolioDonutOptions {
-    segments? : DonutSegment[];
-    size?     : number;
+    segments?: DonutSegment[];
+    size?: number;
 }
-
 const PALETTE = [
     'var(--arianna-primary, #1f6feb)',
     'var(--arianna-bull,    #26a69a)',
@@ -62,34 +60,32 @@ const PALETTE = [
     '#ce93d8',
     '#80cbc4',
 ];
-
-export class PortfolioDonut extends Component('arianna-portfolio-donut', HTMLElement, {}, {
-    attrs : ['size'],
+@Component('arianna-portfolio-donut', {}, {
+    Attributes: ['size'],
 })
-{
+export class PortfolioDonut extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     segments$: Signal<DonutSegment[]> = signal<DonutSegment[]>([]);
-
-    build(_opts: PortfolioDonutOptions = {})
-    {
-        const sizeAttr = this.attributeSignal('size');
-
+    onConnected(_opts: PortfolioDonutOptions = {}) {
+        const sizeAttr = this.signal().attribute('size');
         this.svgHtml = (): string => {
             const segments = this.segments$.Get();
-            if (!segments.length) return '';
-
+            if (!segments.length)
+                return '';
             const s = parseInt(sizeAttr.Get() ?? '300', 10) || 300;
             const total = segments.reduce((a, x) => a + x.value, 0);
-            if (total <= 0) return '';
-
+            if (total <= 0)
+                return '';
             const cx = s / 2;
             const cy = s / 2;
             const R = cx * 0.7;
             const r = cx * 0.42;
-
             let angle = -Math.PI / 2;
             let arcs = '';
             let labels = '';
-
             segments.forEach((seg, i) => {
                 const slice = (seg.value / total) * 2 * Math.PI;
                 const x1 = cx + R * Math.cos(angle);
@@ -102,64 +98,56 @@ export class PortfolioDonut extends Component('arianna-portfolio-donut', HTMLEle
                 const iy2 = cy + r * Math.sin(angle + slice);
                 const large = slice > Math.PI ? 1 : 0;
                 const color = seg.color ?? PALETTE[i % PALETTE.length];
-
                 arcs += `<path d="M${ix1},${iy1} L${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2} L${ix2},${iy2} A${r},${r} 0 ${large},0 ${ix1},${iy1}" fill="${color}"/>`;
-
                 const midA = angle + slice / 2;
                 const lx = cx + R * 1.15 * Math.cos(midA);
                 const ly = cy + R * 1.15 * Math.sin(midA);
                 const pct = _fmt((seg.value / total) * 100);
-
                 labels += `<text x="${lx}" y="${ly - 4}" fill="var(--arianna-text, #1f2328)" font-size="11" font-weight="600" text-anchor="middle">${pct}%</text>`;
                 labels += `<text x="${lx}" y="${ly + 10}" fill="var(--arianna-muted, #787b86)" font-size="10" text-anchor="middle">${_esc(seg.label)}</text>`;
-
                 angle += slice;
             });
-
             return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">${arcs}${labels}</svg>`;
         };
-
-        this.template = html`<div class="ar-donut" a-html="this.svgHtml()"></div>`;
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = PortfolioDonut.DefaultSheet();
+        this.template = html `<div class="ar-donut" a-html="this.svgHtml()"></div>`;
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = PortfolioDonut.DefaultSheet();
     }
-
     set segments(v: DonutSegment[]) { this.segments$.Set(v ?? []); }
-    get segments(): DonutSegment[]  { return this.segments$.Get(); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    get size(): number  { return parseInt(this.getAttribute('size') ?? '300', 10); }
+    get segments(): DonutSegment[] { return this.segments$.Get(); }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    get size(): number { return parseInt(this.getAttribute('size') ?? '300', 10); }
     set size(v: number) { this.setAttribute('size', String(v)); }
-
     private svgHtml: () => string = () => '';
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    display     : 'inline-block',
-                    padding     : '8px',
-                }),
-                new Rule(':host svg', { display: 'block' }),
-            ]
-        );
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                display: 'inline-block',
+                padding: '8px',
+            }),
+            new Rule(':host svg', { display: 'block' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'PortfolioDonut', {
-        value: PortfolioDonut, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * PortfolioDonut namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace PortfolioDonut {
+    export namespace Interfaces {
+        export interface DonutSegmentContract extends DonutSegment {
+        }
+        export interface Options extends PortfolioDonutOptions {
+        }
+    }
 }
-
 export default PortfolioDonut;

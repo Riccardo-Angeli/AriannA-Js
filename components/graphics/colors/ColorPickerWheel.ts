@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/graphics/colors/ColorPickerWheel
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -11,13 +15,8 @@
  *   <arianna-color-picker-wheel value="#ff00aa" size="200"></arianna-color-picker-wheel>
  *
  * Events: arianna:change  detail: { hex, hue, hslString }
- * Attrs:  value, size
+ * Attributes:  value, size
  */
-
-import { Component } from '../../../core/Components.ts';
-import { html }      from '../../../core/Template.ts';
-import { Reactivity } from '../../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -25,38 +24,44 @@ import { Reactivity } from '../../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-import { parseHexRgba, rgbToHsl, hslToRgb, rgbToHex } from './ColorPicker.ts';
-
+import { Component, Components, Css, Reactivity, Templates } from '../../../core/index.ts';
+import { parseHexRgba, rgbToHsl, hslToRgb, rgbToHex } from './GraphicsColorPicker.ts';
+import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
 export interface ColorPickerWheelOptions {
-    value? : string;
-    size?  : number;
+    value?: string;
+    size?: number;
 }
-
-export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HTMLElement, {}, {
-    attrs : ['value', 'size'],
+@Component('arianna-color-picker-wheel', {}, {
+    Attributes: ['value', 'size'],
 })
-{
+export class ColorPickerWheel extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     hue$: Signal<number> = signal<number>(0);
-
-    build(_opts: ColorPickerWheelOptions = {})
-    {
-        const sizeAttr = this.attributeSignal('size');
-
+    onConnected(_opts: ColorPickerWheelOptions = {}) {
+        const sizeAttr = this.signal().attribute('size');
         this.dim = () => parseInt(sizeAttr.Get() ?? '200', 10) || 200;
         this.viewBox = () => `0 0 ${this.dim()} ${this.dim()}`;
-        this.dimStr  = () => String(this.dim());
-
-        this.wedges = (): Array<{ d: string; fill: string }> => {
+        this.dimStr = () => String(this.dim());
+        this.wedges = (): Array<{
+            d: string;
+            fill: string;
+        }> => {
             const d = this.dim();
             const cx = d / 2, cy = d / 2;
             const rOuter = d / 2 - 4;
             const rInner = rOuter - 20;
-            const out: Array<{ d: string; fill: string }> = [];
+            const out: Array<{
+                d: string;
+                fill: string;
+            }> = [];
             for (let h = 0; h < 360; h += 2) {
                 const a0 = (h - 1) * Math.PI / 180;
                 const a1 = (h + 1) * Math.PI / 180;
@@ -87,22 +92,22 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
             const r = (rInner + rOuter) / 2;
             return String(cy + r * Math.sin(this.hue$.Get() * Math.PI / 180));
         };
-
         this.onPointer = (e: Event) => {
             const me = e as PointerEvent;
             if (me.type === 'pointerdown') {
                 (me.currentTarget as SVGElement).setPointerCapture?.(me.pointerId);
-            } else if (!(me.buttons & 1)) return;
+            }
+            else if (!(me.buttons & 1))
+                return;
             const rect = (me.currentTarget as SVGElement).getBoundingClientRect();
             const d = this.dim();
             const x = me.clientX - rect.left - d / 2;
-            const y = me.clientY - rect.top  - d / 2;
+            const y = me.clientY - rect.top - d / 2;
             const hue = ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
             this.hue$.Set(hue);
             this.#emit();
         };
-
-        this.template = html`
+        this.template = html `
             <svg :viewBox="this.viewBox()"
                  :width="this.dimStr()"
                  :height="this.dimStr()"
@@ -114,29 +119,28 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
                         r="6" fill="none" stroke="#fff" stroke-width="2"></circle>
             </svg>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ColorPickerWheel.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = ColorPickerWheel.DefaultSheet();
     }
-
     // ── Public API ───────────────────────────────────────────────────────────
-
     setValue(v: string): this {
         const p = parseHexRgba(v);
         if (p) {
             this.hue$.Set(rgbToHsl(p.r, p.g, p.b).h);
-        } else {
+        }
+        else {
             // Try hsl(...) form
             const m = /hsl\(\s*(\d+(?:\.\d+)?)/.exec(v);
-            if (m) this.hue$.Set(parseFloat(m[1]!));
+            if (m)
+                this.hue$.Set(parseFloat(m[1]!));
         }
         return this;
     }
-
     getValue(): string {
         const rgb = hslToRgb(this.hue$.Get(), 100, 50);
         return rgbToHex(rgb.r, rgb.g, rgb.b);
     }
-
     #emit(): void {
         const h = this.hue$.Get();
         const rgb = hslToRgb(h, 100, 50);
@@ -146,52 +150,52 @@ export class ColorPickerWheel extends Component('arianna-color-picker-wheel', HT
             detail: { hex, hue: h, hslString: `hsl(${h.toFixed(0)}, 100%, 50%)` },
         }));
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
+    onCreated() { }
+    onBeforeMount() { }
     onMount() {
         const v = this.getAttribute('value');
-        if (v) this.setValue(v);
+        if (v)
+            this.setValue(v);
     }
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    private dim       : () => number = () => 200;
-    private viewBox   : () => string = () => '0 0 200 200';
-    private dimStr    : () => string = () => '200';
-    private wedges    : () => Array<{ d: string; fill: string }> = () => [];
-    private dotCx     : () => string = () => '0';
-    private dotCy     : () => string = () => '0';
-    private onPointer : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 10px)',
-                    display     : 'inline-block',
-                    padding     : '10px',
-                    boxShadow   : '0 4px 12px rgba(0,0,0,0.06)',
-                }),
-                new Rule(':host svg', {
-                    display: 'block',
-                    cursor : 'crosshair',
-                    touchAction: 'none',
-                }),
-            ]
-        );
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    private dim: () => number = () => 200;
+    private viewBox: () => string = () => '0 0 200 200';
+    private dimStr: () => string = () => '200';
+    private wedges: () => Array<{
+        d: string;
+        fill: string;
+    }> = () => [];
+    private dotCx: () => string = () => '0';
+    private dotCy: () => string = () => '0';
+    private onPointer: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 10px)',
+                display: 'inline-block',
+                padding: '10px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+            }),
+            new Rule(':host svg', {
+                display: 'block',
+                cursor: 'crosshair',
+                touchAction: 'none',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'ColorPickerWheel', {
-        value: ColorPickerWheel, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * ColorPickerWheel namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace ColorPickerWheel {
+    export namespace Interfaces {
+        export interface Options extends ColorPickerWheelOptions {
+        }
+    }
 }
-
 export default ColorPickerWheel;

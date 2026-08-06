@@ -1,3 +1,9 @@
+import { Component, Css, Reactivity } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/charts/PieChart
  * @author    Riccardo Angeli
@@ -20,10 +26,6 @@
  *   arianna:chart-slice-hover { datum, index, percent }
  *   arianna:chart-slice-click { datum, index, percent }
  */
-
-import { Component } from '../../core/Components.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -31,38 +33,33 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface PieDatum {
-    label : string;
-    value : number;
+    label: string;
+    value: number;
     color?: string;
 }
-
 export interface PieChartOptions {
-    size?       : number;     // SVG square size
-    donut?      : number;     // 0..1 — inner radius ratio (0 = pie, 0.5 = donut)
-    showLegend? : boolean;    // default true
-    showLabels? : boolean;    // labels on slices
-    startAngle? : number;     // radians, default -90deg
+    size?: number; // SVG square size
+    donut?: number; // 0..1 — inner radius ratio (0 = pie, 0.5 = donut)
+    showLegend?: boolean; // default true
+    showLabels?: boolean; // labels on slices
+    startAngle?: number; // radians, default -90deg
 }
-
 const SVG_NS = 'http://www.w3.org/2000/svg';
-
-function polar(cx: number, cy: number, r: number, angle: number): [number, number] {
+function polar(cx: number, cy: number, r: number, angle: number): [
+    number,
+    number
+] {
     return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
 }
-
 function arcPath(cx: number, cy: number, rOuter: number, rInner: number, a0: number, a1: number): string {
     const [x0, y0] = polar(cx, cy, rOuter, a0);
     const [x1, y1] = polar(cx, cy, rOuter, a1);
@@ -80,106 +77,101 @@ function arcPath(cx: number, cy: number, rOuter: number, rInner: number, a0: num
         'Z',
     ].join(' ');
 }
-
-export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
-    attrs : ['size', 'donut', 'show-legend', 'show-labels', 'start-angle'],
+@Component('arianna-pie-chart', {}, {
+    Attributes: ['size', 'donut', 'show-legend', 'show-labels', 'start-angle'],
 })
-{
+export class PieChart extends HTMLElement {
     readonly data$: Signal<PieDatum[]> = signal<PieDatum[]>([]);
-
-    #svg?    : SVGSVGElement;
-    #legend? : HTMLDivElement;
-
+    #svg?: SVGSVGElement;
+    #legend?: HTMLDivElement;
     constructor(opts: PieChartOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
-        const el = self.render();
-        if (opts.size       != null) el.setAttribute('size',        String(opts.size));
-        if (opts.donut      != null) el.setAttribute('donut',       String(opts.donut));
-        if (opts.showLegend === false) el.setAttribute('show-legend', 'false');
-        if (opts.showLabels === true)  el.setAttribute('show-labels', '');
-        if (opts.startAngle != null) el.setAttribute('start-angle', String(opts.startAngle));
-    }
-
-    build(): void {
+        super();
         const self = this as unknown as {
             render(): HTMLElement;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+        };
+        const el = self.render();
+        if (opts.size != null)
+            el.setAttribute('size', String(opts.size));
+        if (opts.donut != null)
+            el.setAttribute('donut', String(opts.donut));
+        if (opts.showLegend === false)
+            el.setAttribute('show-legend', 'false');
+        if (opts.showLabels === true)
+            el.setAttribute('show-labels', '');
+        if (opts.startAngle != null)
+            el.setAttribute('start-angle', String(opts.startAngle));
+    }
+    onConnected(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const root = self.render();
-        if (root.querySelector('.pc-wrap')) return;
-
-        const size = parseInt(self.attributeSignal('size')?.Peek() ?? '280', 10) || 280;
+        if (root.querySelector('.pc-wrap'))
+            return;
+        const size = parseInt(self.signal().attribute('size')?.Peek() ?? '280', 10) || 280;
         const wrap = document.createElement('div');
         wrap.className = 'pc-wrap';
-
         const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
         svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
-        svg.setAttribute('width',  String(size));
+        svg.setAttribute('width', String(size));
         svg.setAttribute('height', String(size));
         svg.setAttribute('class', 'pc-svg');
         this.#svg = svg;
         wrap.appendChild(svg);
-
         const legend = document.createElement('div');
         legend.className = 'pc-legend';
         this.#legend = legend;
         wrap.appendChild(legend);
-
         root.appendChild(wrap);
-
         effect(() => { this.data$.Get(); this.#redraw(); });
-
         self.Sheet = PieChart.DefaultSheet();
     }
-
     set data(rows: PieDatum[]) { this.data$.Set(rows); }
-    get data(): PieDatum[]     { return this.data$.Get(); }
-
+    get data(): PieDatum[] { return this.data$.Get(); }
     #redraw(): void {
         const self = this as unknown as {
             fire(t: string, init?: CustomEventInit): void;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
         };
         const svg = this.#svg;
         const legend = this.#legend;
-        if (!svg || !legend) return;
-        while (svg.firstChild) svg.removeChild(svg.firstChild);
+        if (!svg || !legend)
+            return;
+        while (svg.firstChild)
+            svg.removeChild(svg.firstChild);
         legend.innerHTML = '';
-
         const data = this.data$.Peek();
-        if (!data.length) return;
-
+        if (!data.length)
+            return;
         const size = parseInt(svg.getAttribute('width') ?? '280', 10);
         const cx = size / 2, cy = size / 2;
         const rOuter = size / 2 - 6;
-        const donut  = parseFloat(self.attributeSignal('donut')?.Peek() ?? '0') || 0;
+        const donut = parseFloat(self.signal().attribute('donut')?.Peek() ?? '0') || 0;
         const rInner = rOuter * Math.max(0, Math.min(0.9, donut));
-        let angle    = parseFloat(self.attributeSignal('start-angle')?.Peek() ?? String(-Math.PI / 2)) || -Math.PI / 2;
-        const total  = data.reduce((s, d) => s + d.value, 0) || 1;
-        const showLabels = self.attributeSignal('show-labels')?.Peek() != null;
-        const showLegend = self.attributeSignal('show-legend')?.Peek() !== 'false';
-
+        let angle = parseFloat(self.signal().attribute('start-angle')?.Peek() ?? String(-Math.PI / 2)) || -Math.PI / 2;
+        const total = data.reduce((s, d) => s + d.value, 0) || 1;
+        const showLabels = self.signal().attribute('show-labels')?.Peek() != null;
+        const showLegend = self.signal().attribute('show-legend')?.Peek() !== 'false';
         legend.style.display = showLegend ? '' : 'none';
-
         data.forEach((d, i) => {
             const slice = (d.value / total) * Math.PI * 2;
             const a0 = angle;
             const a1 = angle + slice;
             angle = a1;
-
             const path = document.createElementNS(SVG_NS, 'path');
             path.setAttribute('d', arcPath(cx, cy, rOuter, rInner, a0, a1));
             path.setAttribute('fill', d.color ?? this.#defaultColor(i));
             path.setAttribute('class', 'pc-slice');
             const pct = (d.value / total) * 100;
-            path.addEventListener('mouseenter', () =>
-                self.fire('arianna:chart-slice-hover', { detail: { datum: d, index: i, percent: pct, source: this }, bubbles: true }));
-            path.addEventListener('click', () =>
-                self.fire('arianna:chart-slice-click', { detail: { datum: d, index: i, percent: pct, source: this }, bubbles: true }));
+            path.addEventListener('mouseenter', () => self.fire('arianna:chart-slice-hover', { detail: { datum: d, index: i, percent: pct, source: this }, bubbles: true }));
+            path.addEventListener('click', () => self.fire('arianna:chart-slice-click', { detail: { datum: d, index: i, percent: pct, source: this }, bubbles: true }));
             svg.appendChild(path);
-
             if (showLabels) {
                 const mid = (a0 + a1) / 2;
                 const r = rInner > 0 ? (rInner + rOuter) / 2 : rOuter * 0.65;
@@ -192,7 +184,6 @@ export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
                 lbl.textContent = pct.toFixed(0) + '%';
                 svg.appendChild(lbl);
             }
-
             // Legend item
             const li = document.createElement('div');
             li.className = 'pc-legend-item';
@@ -202,72 +193,77 @@ export class PieChart extends Component('arianna-pie-chart', HTMLElement, {}, {
             const lbl = document.createElement('span');
             lbl.className = 'pc-legend-lbl';
             lbl.textContent = `${d.label} · ${pct.toFixed(1)}%`;
-            li.appendChild(sw); li.appendChild(lbl);
+            li.appendChild(sw);
+            li.appendChild(lbl);
             legend.appendChild(li);
         });
     }
-
     #defaultColor(i: number): string {
         const palette = ['#7eb8f7', '#f47e7e', '#7ef7a8', '#f7c97e', '#b87ef7', '#7ef7e3', '#f77ec4', '#a8f77e'];
         return palette[i % palette.length] ?? '#7eb8f7';
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                background  : 'var(--ar-bg, #fff)',
-                border      : '1px solid var(--ar-border, #e0e0e0)',
+                background: 'var(--ar-bg, #fff)',
+                border: '1px solid var(--ar-border, #e0e0e0)',
                 borderRadius: 'var(--ar-radius, 5px)',
-                color       : 'var(--ar-text, #1a1a1a)',
-                display     : 'inline-block',
-                font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
-                padding     : '12px',
+                color: 'var(--ar-text, #1a1a1a)',
+                display: 'inline-block',
+                font: 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
+                padding: '12px',
             }),
             new Rule(':host .pc-wrap', {
                 alignItems: 'center',
-                display   : 'flex',
-                gap       : '16px',
+                display: 'flex',
+                gap: '16px',
             }),
             new Rule(':host .pc-svg', { display: 'block' }),
             new Rule(':host .pc-slice', {
-                cursor    : 'pointer',
-                stroke    : 'var(--ar-bg, #fff)',
+                cursor: 'pointer',
+                stroke: 'var(--ar-bg, #fff)',
                 strokeWidth: '2',
                 transition: 'opacity 0.15s',
             }),
             new Rule(':host .pc-slice:hover', { opacity: '0.85' }),
             new Rule(':host .pc-label', {
-                fill       : '#fff',
-                fontSize   : '11px',
-                fontWeight : '700',
+                fill: '#fff',
+                fontSize: '11px',
+                fontWeight: '700',
                 pointerEvents: 'none',
-                textShadow : '0 1px 2px rgba(0,0,0,0.5)',
+                textShadow: '0 1px 2px rgba(0,0,0,0.5)',
             }),
             new Rule(':host .pc-legend', {
-                display      : 'flex',
+                display: 'flex',
                 flexDirection: 'column',
-                gap          : '4px',
+                gap: '4px',
             }),
             new Rule(':host .pc-legend-item', {
                 alignItems: 'center',
-                display   : 'flex',
-                fontSize  : '0.78rem',
-                gap       : '6px',
+                display: 'flex',
+                fontSize: '0.78rem',
+                gap: '6px',
             }),
             new Rule(':host .pc-legend-sw', {
                 borderRadius: '2px',
-                display     : 'inline-block',
-                height      : '12px',
-                width       : '12px',
+                display: 'inline-block',
+                height: '12px',
+                width: '12px',
             }),
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'PieChart', {
-        value: PieChart, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * PieChart namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace PieChart {
+    export namespace Interfaces {
+        export interface PieDatumContract extends PieDatum {
+        }
+        export interface Options extends PieChartOptions {
+        }
+    }
+    export const Polar = polar;
+    export const ArcPath = arcPath;
 }
-
 export default PieChart;

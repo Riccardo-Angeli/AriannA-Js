@@ -1,421 +1,620 @@
 /**
- * @module    SSR
+ * @module    core/SSR
  * @author    Riccardo Angeli
- * @version   1.0.0
- * @copyright Riccardo Angeli 2026
+ * @version   2.0.0
+ * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * Copyright (c) 2012-2026 Riccardo Angeli
- * MIT License — see AriannA.ts for full text.
- *
- * Server-side rendering for AriannA.
- * Works in Node.js, Deno, Bun, and Rust (via Axum + Workers bridge).
- *
- * ── FEATURES ──────────────────────────────────────────────────────────────────
- *
- *   renderToString   — synchronous Virtual tree → HTML string
- *   renderToStream   — streaming HTML via async generator (chunked for Axum)
- *   hydrate          — attach live AriannA state to server-rendered HTML
- *   Island           — mark selective subtrees for client hydration only
- *   escapeHtml       — XSS-safe attribute/text escaping (exported utility)
- *
- * ── INTEGRATION ───────────────────────────────────────────────────────────────
- *
- *   Node.js (Express/Fastify):
- *     import { renderToString } from './SSR.ts';
- *     app.get('/', (req, res) => res.send(renderToString(appNode)));
- *
- *   Bun / Deno:
- *     import { renderToStream } from './SSR.ts';
- *     return new Response(readableFromAsyncGen(renderToStream(appNode)));
- *
- *   Rust / Axum (via Workers bridge):
- *     Workers pool runs SSR.ts in parallel; Axum streams the chunks.
- *     See Workers.ts → WorkerPool for the bridge pattern.
- *
- *   Browser (hydration):
- *     import { hydrate } from './SSR.ts';
- *     hydrate(appNode, document.getElementById('app'), appState);
- *
- * ── ISLAND ARCHITECTURE ───────────────────────────────────────────────────────
- *
- *   Islands = only some parts of the page are interactive.
- *   Static parts are rendered server-side and never hydrated.
- *   Interactive parts (islands) are hydrated client-side.
- *
- *   Usage:
- *     const page = Virtual('div', {},
- *       Island.static(headerNode),           // SSR only, no client JS
- *       Island.interactive(counterNode, id), // hydrated on client
- *     );
- *
- * ── PERFORMANCE NOTES ─────────────────────────────────────────────────────────
- *
- *   renderToString:  ~2-5ms for 1000-node trees (no DOM API calls — pure string concat)
- *   renderToStream:  first byte < 1ms — chunks emitted as nodes are processed
- *   hydrate:         O(n) walk, uses data-arianna-wip-id for node matching
+ * @description Isomorphic SSR, streaming, islands and hydration for AriannA. SSR consumes Virtual-compatible
+ *              nodes, State, Context, Workers and Router through structural contracts.
  */
 
-// ── Imports ────────────────────────────────────────────────────────────────────
+import { Contexts } from './Context.ts';
+import { Routers }  from './Router.ts';
+import { Services } from './Service.ts';
+import { States }   from './State.ts';
 
-import Virtual from './Virtual.ts';
+import type { Types as SchemaTypes }           from './schema/Types.ts';
+import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-/** HTML5 void elements — self-closing, no children. */
 export namespace SSR
 {
-    const VOID_ELEMENTS = new Set([
-        'area','base','br','col','embed','hr','img','input',
-        'link','meta','param','source','track','wbr',
-    ]);
+    export type IslandMode       = SchemaTypes.SSR.IslandMode;
+    export type RenderOptions    = SchemaInterfaces.SSR.RenderOptions;
+    export type HydrateOptions   = SchemaInterfaces.SSR.HydrateOptions;
+    export type NodeContract     = SchemaInterfaces.SSR.Node;
+    export type WorkerBridge     = SchemaInterfaces.SSR.WorkerBridge;
+    export type Application      = SchemaInterfaces.SSR.Application;
+    export type RenderResult     = SchemaInterfaces.SSR.RenderResult;
+    export type ServiceContract  = SchemaInterfaces.SSR.Service;
 
-    /** Attributes that should NOT be escaped (they contain HTML). */
-    const RAW_ATTRS = new Set(['innerHTML', 'dangerouslySetInnerHTML']);
-
-    /** Boolean attributes — rendered as `attr` not `attr="true"`. */
-    const BOOLEAN_ATTRS = new Set([
-        'allowfullscreen','async','autofocus','autoplay','checked','controls',
-        'default','defer','disabled','formnovalidate','hidden','ismap','loop',
-        'multiple','muted','nomodule','novalidate','open','readonly','required',
-        'reversed','selected','typemustmatch',
-    ]);
-
-    // ── Escape utility ─────────────────────────────────────────────────────────────
-
-    /**
-     * XSS-safe HTML escaping for attribute values and text content.
-     *
-     * @example
-     *   escapeHtml('<script>alert(1)</script>')
-     *   // → '&lt;script&gt;alert(1)&lt;/script&gt;'
-     */
-    export function escapeHtml(str: string): string
+    /** @class       Island
+     *  @public
+     *  @description Declarative selective-hydration island.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export class Island
     {
-        return str
-            .replace(/&/g,  '&amp;')
-            .replace(/</g,  '&lt;')
-            .replace(/>/g,  '&gt;')
-            .replace(/"/g,  '&quot;')
-            .replace(/'/g,  '&#39;');
-    }
+        readonly Mode: IslandMode;
+        readonly Id: string;
+        readonly Node: NodeContract;
 
-    // ── Internal Virtual accessor ─────────────────────────────────────────────────
-    //
-    // Reads a Virtual node's PUBLIC surface only — Tag / Attributes / Children /
-    // Text / Id — never private fields. This is what keeps SSR decoupled from
-    // Virtual's internal representation (no `#attrs` / `__children` duck-typing).
-
-    interface VNodeAccessor
-    {
-        tag      : string;
-        attrs    : Record<string, string>;
-        children : VNodeAccessor[];
-        text     : string;
-        id       : string;
-    }
-
-    function accessNode(node: Virtual): VNodeAccessor
-    {
-        // Attributes come back typed as string | number | boolean | null; SSR emits
-        // strings, so normalise: drop null/false/undefined, empty-string a `true`.
-        const attrs: Record<string, string> = {};
-        for (const [k, v] of Object.entries(node.Attributes))
+        constructor
+        (
+            mode : IslandMode,
+            id   : string,
+            node : NodeContract
+        )
         {
-            if (v === null || v === false || v === undefined) continue;
-            if (v === true) { attrs[k] = ''; continue; }
-            attrs[k] = String(v);
+            this.Mode = mode;
+            this.Id   = id;
+            this.Node = node;
         }
 
-        return {
-            tag     : node.Tag || 'div',
-            attrs,
-            text    : node.Text ?? '',
-            children: node.Children.map(accessNode),
-            id      : node.Id ?? '',
-        };
-    }
-
-    // ── renderAttrs ────────────────────────────────────────────────────────────────
-
-    function renderAttrs(attrs: Record<string, string>, ssrId?: string): string
-    {
-        let s = '';
-        for (const [k, v] of Object.entries(attrs))
+        static Static
+        (
+            id   : string,
+            node : NodeContract
+        ): Island
         {
-            if (RAW_ATTRS.has(k)) continue;
-            if (k === 'textContent' || k === 'innerHTML') continue;
-            if (BOOLEAN_ATTRS.has(k.toLowerCase()))
-            {
-                if (v !== '' && v !== 'false') s += ` ${k}`;
-                continue;
-            }
-            s += ` ${escapeHtml(k)}="${escapeHtml(v)}"`;
+            return new Island('static', id, node);
         }
-        if (ssrId) s += ` data-arianna-id="${escapeHtml(ssrId)}"`;
-        return s;
-    }
 
-    // ── renderToString ─────────────────────────────────────────────────────────────
-
-    /**
-     * Render a Virtual tree to an HTML string (synchronous).
-     * Safe to call in Node.js, Deno, Bun, or a Web Worker.
-     * No DOM APIs are used — pure string concatenation.
-     *
-     * @param node    - Root Virtual to render
-     * @param options - SSR options
-     *
-     * @example
-     *   const html = renderToString(appNode);
-     *   res.send(`<!DOCTYPE html><html><body>${html}</body></html>`);
-     *
-     * @example
-     *   // With hydration markers (adds data-arianna-wip-id to each element)
-     *   const html = renderToString(appNode, { hydration: true });
-     */
-    export function renderToString(
-        node   : Virtual,
-        options: { hydration?: boolean; indent?: number } = {},
-    ): string
-    {
-        const { hydration = false, indent = 0 } = options;
-        return _renderNode(accessNode(node), hydration, indent, 0);
-    }
-
-    function _renderNode(node: VNodeAccessor, hydration: boolean, indent: number, depth: number): string
-    {
-        const pad  = indent > 0 ? '\n' + ' '.repeat(indent * depth) : '';
-        const cPad = indent > 0 ? '\n' + ' '.repeat(indent * (depth + 1)) : '';
-
-        const ssrId = hydration ? node.id : undefined;
-        const attrs = renderAttrs(node.attrs, ssrId);
-
-        // textContent / innerHTML special-case
-        const textContent = node.attrs['textContent'] ?? node.text;
-        const innerHTML   = node.attrs['innerHTML'];
-
-        if (VOID_ELEMENTS.has(node.tag))
-            return `${pad}<${node.tag}${attrs}>`;
-
-        const open  = `${pad}<${node.tag}${attrs}>`;
-        const close = `${indent > 0 ? '\n' + ' '.repeat(indent * depth) : ''}</${node.tag}>`;
-
-        if (innerHTML !== undefined)
-            return `${open}${innerHTML}${close}`;
-
-        if (textContent)
-            return `${open}${escapeHtml(textContent)}${close}`;
-
-        if (node.children.length === 0)
-            return `${open}${close}`;
-
-        const inner = node.children
-            .map(c => _renderNode(c, hydration, indent, depth + 1))
-            .join('');
-
-        return `${open}${inner}${indent > 0 ? cPad.slice(0, -indent) : ''}${close}`;
-    }
-
-    // ── renderToStream ─────────────────────────────────────────────────────────────
-
-    /**
-     * Stream HTML as an async generator — emit chunks as nodes are processed.
-     * First byte latency < 1ms. Ideal for Axum streaming responses via Workers.
-     *
-     * @example
-     *   // Node.js / Bun
-     *   for await (const chunk of renderToStream(appNode)) {
-     *     res.write(chunk);
-     *   }
-     *   res.end();
-     *
-     * @example
-     *   // Axum bridge — Worker receives chunks and sends them to Rust
-     *   for await (const chunk of renderToStream(appNode)) {
-     *     self.postMessage({ type: 'chunk', payload: chunk });
-     *   }
-     *   self.postMessage({ type: 'end' });
-     */
-    export async function* renderToStream(
-        node   : Virtual,
-        options: { hydration?: boolean; chunkSize?: number } = {},
-    ): AsyncGenerator<string>
-    {
-        const { hydration = false, chunkSize = 512 } = options;
-        let   buffer = '';
-
-        for (const chunk of _walkNode(accessNode(node), hydration))
+        static Interactive
+        (
+            id   : string,
+            node : NodeContract
+        ): Island
         {
-            buffer += chunk;
-            if (buffer.length >= chunkSize)
-            {
-                yield buffer;
-                buffer = '';
-            }
+            return new Island('interactive', id, node);
         }
-        if (buffer) yield buffer;
-    }
 
-    function* _walkNode(node: VNodeAccessor, hydration: boolean): Generator<string>
-    {
-        const ssrId     = hydration ? node.id : undefined;
-        const attrs     = renderAttrs(node.attrs, ssrId);
-        const textContent = node.attrs['textContent'] ?? node.text;
-        const innerHTML   = node.attrs['innerHTML'];
-
-        if (VOID_ELEMENTS.has(node.tag)) { yield `<${node.tag}${attrs}>`; return; }
-
-        yield `<${node.tag}${attrs}>`;
-
-        if (innerHTML !== undefined)  { yield innerHTML; }
-        else if (textContent)         { yield escapeHtml(textContent); }
-        else for (const c of node.children) yield* _walkNode(c, hydration);
-
-        yield `</${node.tag}>`;
-    }
-
-    // ── hydrate ────────────────────────────────────────────────────────────────────
-
-    /**
-     * Attach AriannA reactivity to server-rendered HTML.
-     * Matches Virtual nodes to existing DOM elements via data-arianna-wip-id.
-     * Wires event listeners and State subscriptions without re-rendering.
-     *
-     * @param vnode    - The Virtual tree that was server-rendered
-     * @param root     - The container DOM element (e.g. document.getElementById('app'))
-     * @param state?   - Optional AriannA State to wire up
-     *
-     * @example
-     *   // Server sent HTML with data-arianna-wip-id markers
-     *   hydrate(appNode, document.getElementById('app'), appState);
-     */
-    export function hydrate(
-        vnode  : Virtual,
-        root   : Element,
-        state? : { on(type: string, cb: () => void): void },
-    ): void
-    {
-        _hydrateNode(accessNode(vnode), root);
-        if (state)
+        static Lazy
+        (
+            id   : string,
+            node : NodeContract
+        ): Island
         {
-            state.on('State-Changed', () => _hydrateNode(accessNode(vnode), root));
+            return new Island('lazy', id, node);
         }
     }
 
-    function _hydrateNode(node: VNodeAccessor, container: Element): void
+    /** @class       Renderer
+     *  @public
+     *  @description Stateful fluent SSR renderer. One renderer can bind State, Context, Router and Workers before
+     *               producing strings, streams, hydration payloads.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export class Renderer
     {
-        if (!node.id) return;
-        const el = container.querySelector(`[data-arianna-id="${node.id}"]`) ?? container;
-        if (!el) return;
+        static readonly #Void  = new Set
+        (
+            [
+                'area',
+                'base',
+                'br',
+                'col',
+                'embed',
+                'hr',
+                'img',
+                'input',
+                'link',
+                'meta',
+                'param',
+                'source',
+                'track',
+                'wbr'
+            ]
+        );
 
-        // Attach the Virtual's __dom pointer to the existing element
-        // so future .set() / .on() calls operate on the server-rendered DOM
-        // (We can't set private #dom directly — instead we expose a _hydrateAttach helper
-        //  that Virtual can call. For now we mark the element.)
-        el.setAttribute('data-arianna-wip-hydrated', 'true');
+        static readonly #Boolean= new Set
+        (
+            [
+                'allowfullscreen', 'async', 'autofocus', 'autoplay', 'checked',
+                'controls', 'default', 'defer', 'disabled', 'formnovalidate',
+                'hidden', 'ismap', 'loop', 'multiple', 'muted', 'nomodule',
+                'novalidate', 'open', 'readonly', 'required', 'reversed', 'selected'
+            ]
+        );
 
-        for (const child of node.children)
-            _hydrateNode(child, el);
-    }
+        readonly #options: Required<RenderOptions>;
+        #state: States.State<unknown> | null = null;
+        #context: Contexts.Context<unknown> | null = null;
+        #router: Routers.Router | null = null;
+        #worker: WorkerBridge | null = null;
 
-    // ── Island architecture ────────────────────────────────────────────────────────
-
-    /**
-     * Island helpers — mark subtrees as static (SSR only) or interactive (hydrated).
-     *
-     * @example
-     *   const page = Virtual('div', {},
-     *     Island.static(header),                    // rendered server-side only
-     *     Island.interactive(counter, 'counter-1'), // hydrated client-side
-     *   );
-     */
-    export const Island = {
-
-        /**
-         * Mark a Virtual as static — rendered server-side, never hydrated.
-         * Adds data-arianna-wip-island="static" to the node's root element.
-         */
-        static(node: Virtual): Virtual
+        constructor(options?: RenderOptions)
         {
-            node.set('data-arianna-wip-island', 'static');
-            return node;
-        },
+            this.#options =
+                {
+                    Hydration : options?.Hydration ?? true,
+                    Indent    : options?.Indent ?? 0,
+                    Doctype   : options?.Doctype ?? false,
+                    State     : options?.State ?? true,
+                    Context   : options?.Context ?? true
+                };
+        }
 
-        /**
-         * Mark a Virtual as an interactive island.
-         * On the client, hydrate() will re-attach AriannA reactivity to this subtree.
-         *
-         * @param node - The interactive subtree
-         * @param id   - Stable identifier for client-side matching
-         */
-        interactive(node: Virtual, id: string): Virtual
+        static Create(options?: RenderOptions): Renderer
         {
-            node.set('data-arianna-wip-island', 'interactive');
-            node.set('data-arianna-wip-island-id', id);
-            return node;
-        },
+            return new Renderer(options);
+        }
 
-        /**
-         * Hydrate all interactive islands in a container.
-         * Call this once on page load, after server HTML is in the DOM.
-         *
-         * @example
-         *   Island.hydrateAll(document.body, islandMap);
-         *   // islandMap: Record<id, Virtual>
-         */
-        hydrateAll(
-            container : Element,
-            islandMap : Record<string, Virtual>,
+        /** @name        RenderToString
+         *  @public
+         *  @static
+         *  @param       {NodeContract | Island} node Node or selective-hydration island.
+         *  @param       {RenderOptions} [options] Renderer options.
+         *  @returns     {string} Rendered HTML.
+         *  @description Render a node directly to HTML through a short-lived Renderer. Use an instance when State,
+         *               Context, Router, or Workers have already been attached to a configured renderer.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        static RenderToString
+        (
+            node     : NodeContract | Island,
+            options? : RenderOptions
+        ): string
+        {
+            return Renderer
+                .Create(options)
+                .Render(node)
+                .Html;
+        }
+
+        /** @name        HydrateRoot
+         *  @public
+         *  @static
+         *  @param       {NodeContract} node Hydration definition.
+         *  @param       {ParentNode} root Existing rendered root.
+         *  @param       {HydrateOptions} [options] Hydration options.
+         *  @returns     {void}
+         *  @description Hydrate an existing rendered tree through a short-lived Renderer. The distinct name avoids
+         *               colliding with the stateful instance `Hydrate()` method.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        static HydrateRoot
+        (
+            node     : NodeContract,
+            root     : ParentNode,
+            options? : HydrateOptions
         ): void
         {
-            const islands = container.querySelectorAll('[data-arianna-wip-island="interactive"]');
-            for (const el of Array.from(islands))
-            {
-                const id   = el.getAttribute('data-arianna-wip-island-id');
-                const node = id ? islandMap[id] : null;
-                if (node) hydrate(node, el as Element);
-            }
-        },
-    };
-
-    // ── Plugin definition ──────────────────────────────────────────────────────────
-
-    /**
-     * AriannA SSR plugin.
-     * Install with: Core.use(SSR)
-     *
-     * After install, AriannASSR is available globally on window/globalThis.
-     */
-    export const name    = 'AriannASSR';
-    export const version = '1.0.0';
-
-    /** Plugin install hook — exposes the SSR api on window/globalThis. */
-    export function install(_core: unknown): void
-    {
-        const api = { renderToString, renderToStream, hydrate, escapeHtml, Island };
-        // Works in both browser (window) and server (globalThis)
-        const g = typeof window !== 'undefined' ? window
-                : typeof globalThis !== 'undefined' ? globalThis
-                : null;
-        if (g)
-        {
-            Object.defineProperty(g, 'AriannASSR', {
-                value       : api,
-                writable    : false,
-                enumerable  : false,
-                configurable: false,
-            });
+            Renderer
+                .Create()
+                .Hydrate(node, root, options);
         }
+
+        State<T>(state: States.State<T>): this
+        {
+            this.#state = state as States.State<unknown>;
+
+            return this;
+        }
+
+        Context<T>(context: Contexts.Context<T>): this
+        {
+            this.#context = context as Contexts.Context<unknown>;
+
+            return this;
+        }
+
+        Router(router: Routers.Router): this
+        {
+            this.#router = router;
+
+            return this;
+        }
+
+        Worker(worker: WorkerBridge): this
+        {
+            this.#worker = worker;
+
+            return this;
+        }
+
+        async Resolve(url: string): Promise<this>
+        {
+            if(this.#router)
+            {
+                await this.#router.Resolve(url);
+            }
+
+            return this;
+        }
+
+        Render(node: NodeContract | Island): RenderResult
+        {
+            const html =
+                this.#RenderNode(node, 0);
+
+            const payload =
+                this.#Payload();
+
+            return {
+                Html    : `${this.#options.Doctype ? '<!DOCTYPE html>' : ''}${html}${payload}`,
+                State   : this.#state?.Serialize('json') ?? null,
+                Context : this.#context?.Value ?? null
+            };
+        }
+
+        async RenderAsync(node: NodeContract | Island): Promise<RenderResult>
+        {
+            if(this.#worker)
+            {
+                return this.#worker
+                    .Task<RenderResult>('SSR.Render')
+                    .With
+                    (
+                        {
+                            Node    : Renderer.#Plain(node),
+                            Options : this.#options,
+                            State   : this.#state?.Serialize('json') ?? null,
+                            Context : this.#context?.Value ?? null
+                        }
+                    )
+                    .Run();
+            }
+
+            return this.Render(node);
+        }
+
+        async *Stream(node: NodeContract | Island): AsyncGenerator<string>
+        {
+            if(this.#options.Doctype)
+            {
+                yield '<!DOCTYPE html>';
+            }
+
+            yield* this.#StreamNode(node, 0);
+
+            const payload =
+                this.#Payload();
+
+            if(payload)
+            {
+                yield payload;
+            }
+        }
+
+        Hydrate
+        (
+            node    : NodeContract,
+            root    : ParentNode,
+            options : HydrateOptions = {}
+        ): void
+        {
+            const selector =
+                options.Selector ?? '[data-arianna-id]';
+
+            const elements =
+                Array.from(root.querySelectorAll<HTMLElement>(selector));
+
+            const index =
+                new Map
+                (
+                    elements.map
+                    (
+                        element =>
+                            [element.dataset.ariannaId ?? '', element]
+                    )
+                );
+
+            Renderer.#Walk
+            (
+                node,
+                item =>
+                {
+                    const id =
+                        item.Id ?? '';
+
+                    if(!id)
+                    {
+                        return;
+                    }
+
+                    const element =
+                        index.get(id);
+
+                    if(element)
+                    {
+                        element.dataset.ariannaHydrated = 'true';
+                    }
+                }
+            );
+
+            if(options.State && this.#state)
+            {
+                this.#state.Deserialize(options.State, 'json');
+            }
+        }
+
+        static EscapeHtml(value: string): string
+        {
+            return value
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        #RenderNode
+        (
+            source : NodeContract | Island,
+            depth  : number
+        ): string
+        {
+            if(source instanceof Island)
+            {
+                const content =
+                    this.#RenderNode(source.Node, depth);
+
+                return `<arianna-island data-island="${Renderer.EscapeHtml(source.Id)}" data-mode="${source.Mode}">${content}</arianna-island>`;
+            }
+
+            const node =
+                Renderer.#Node(source);
+
+            const pad =
+                this.#options.Indent > 0
+                    ? '\n' + ' '.repeat(this.#options.Indent * depth)
+                    : '';
+
+            const attributes =
+                this.#Attributes(node.Attributes, node.Id);
+
+            if(Renderer.#Void.has(node.Tag))
+            {
+                return `${pad}<${node.Tag}${attributes}>`;
+            }
+
+            const open =
+                `${pad}<${node.Tag}${attributes}>`;
+
+            const close =
+                `${this.#options.Indent > 0 ? '\n' + ' '.repeat(this.#options.Indent * depth) : ''}</${node.Tag}>`;
+
+            if(node.Html !== undefined)
+            {
+                return `${open}${node.Html}${close}`;
+            }
+
+            if(node.Text)
+            {
+                return `${open}${Renderer.EscapeHtml(node.Text)}${close}`;
+            }
+
+            const children =
+                node.Children
+                    .map(child => this.#RenderNode(child, depth + 1))
+                    .join('');
+
+            return `${open}${children}${close}`;
+        }
+
+        async *#StreamNode
+        (
+            source : NodeContract | Island,
+            depth  : number
+        ): AsyncGenerator<string>
+        {
+            if(source instanceof Island)
+            {
+                yield `<arianna-island data-island="${Renderer.EscapeHtml(source.Id)}" data-mode="${source.Mode}">`;
+                yield* this.#StreamNode(source.Node, depth + 1);
+                yield '</arianna-island>';
+
+                return;
+            }
+
+            const node =
+                Renderer.#Node(source);
+
+            const pad =
+                this.#options.Indent > 0
+                    ? '\n' + ' '.repeat(this.#options.Indent * depth)
+                    : '';
+
+            yield `${pad}<${node.Tag}${this.#Attributes(node.Attributes, node.Id)}>`;
+
+            if(Renderer.#Void.has(node.Tag))
+            {
+                return;
+            }
+
+            if(node.Html !== undefined)
+            {
+                yield node.Html;
+            }
+            else if(node.Text)
+            {
+                yield Renderer.EscapeHtml(node.Text);
+            }
+            else
+            {
+                for(const child of node.Children)
+                {
+                    yield* this.#StreamNode(child, depth + 1);
+                }
+            }
+
+            yield `</${node.Tag}>`;
+        }
+
+        #Attributes
+        (
+            attributes : Record<string, unknown>,
+            id?        : string
+        ): string
+        {
+            const output: string[] = [];
+
+            for(const [key, value] of Object.entries(attributes))
+            {
+                if(value === null || value === undefined || value === false)
+                {
+                    continue;
+                }
+
+                if(Renderer.#Boolean.has(key.toLowerCase()) && value === true)
+                {
+                    output.push(key);
+
+                    continue;
+                }
+
+                output.push
+                (
+                    `${Renderer.EscapeHtml(key)}="${Renderer.EscapeHtml(String(value))}"`
+                );
+            }
+
+            if(this.#options.Hydration && id)
+            {
+                output.push(`data-arianna-id="${Renderer.EscapeHtml(id)}"`);
+            }
+
+            return output.length > 0
+                ? ` ${output.join(' ')}`
+                : '';
+        }
+
+        #Payload(): string
+        {
+            const payload: Record<string, unknown> = {};
+
+            if(this.#options.State && this.#state)
+            {
+                payload.State = JSON.parse(this.#state.Serialize('json'));
+            }
+
+            if(this.#options.Context && this.#context)
+            {
+                payload.Context = this.#context.Value;
+            }
+
+            if(Object.keys(payload).length === 0)
+            {
+                return '';
+            }
+
+            const json =
+                JSON.stringify(payload)
+                    .replace(/</g, '\\u003c');
+
+            return `<script type="application/json" id="arianna-ssr">${json}</script>`;
+        }
+
+        static #Node(source: NodeContract): Required<Omit<NodeContract, 'Id' | 'Html'>> & Pick<NodeContract, 'Id' | 'Html'>
+        {
+            return {
+                Tag        : source.Tag ?? 'div',
+                Attributes : source.Attributes ?? {},
+                Children   : source.Children ?? [],
+                Text       : source.Text ?? '',
+                Id         : source.Id,
+                Html       : source.Html
+            };
+        }
+
+        static #Plain(source: NodeContract | Island): unknown
+        {
+            if(source instanceof Island)
+            {
+                return {
+                    Island : source.Id,
+                    Mode   : source.Mode,
+                    Node   : Renderer.#Plain(source.Node)
+                };
+            }
+
+            return {
+                Tag        : source.Tag,
+                Attributes : source.Attributes,
+                Children   : (source.Children ?? []).map(Renderer.#Plain),
+                Text       : source.Text,
+                Html       : source.Html,
+                Id         : source.Id
+            };
+        }
+
+        static #Walk
+        (
+            node  : NodeContract,
+            visit : (node: NodeContract) => void
+        ): void
+        {
+            visit(node);
+
+            for(const child of node.Children ?? [])
+            {
+                Renderer.#Walk(child, visit);
+            }
+        }
+
     }
 
-}
+    /** @name        Service
+     *  @private
+     *  @constant
+     *  @type        {Services.Service<ServiceContract>}
+     *  @description Registers the canonical SSR service. Rendering, streaming, hydration, and escaping remain
+     *               implemented by `Renderer`; the service exposes only the contract declared in Schema.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    const Service = new Services.Service<ServiceContract>
+    (
+        'ssr',
+        {
+            Create
+            (
+                options?: RenderOptions
+            ): Renderer
+            {
+                return Renderer.Create(options);
+            },
 
-// ── Top-level re-exports: named public API preserved (renderToString, hydrate, …). ──
-export const escapeHtml     = SSR.escapeHtml;
-export const renderToString = SSR.renderToString;
-export const renderToStream = SSR.renderToStream;
-export const hydrate        = SSR.hydrate;
-export const Island         = SSR.Island;
+            RenderToString
+            (
+                node     : NodeContract | Island,
+                options? : RenderOptions
+            ): string
+            {
+                return Renderer.RenderToString
+                (
+                    node,
+                    options
+                );
+            },
+
+            Hydrate
+            (
+                node     : NodeContract,
+                root     : ParentNode,
+                options? : HydrateOptions
+            ): void
+            {
+                Renderer.HydrateRoot
+                (
+                    node,
+                    root,
+                    options
+                );
+            },
+
+            EscapeHtml
+            (
+                value: string
+            ): string
+            { return Renderer.EscapeHtml(value); }
+        }
+    );
+}
 
 export default SSR;

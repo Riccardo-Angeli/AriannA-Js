@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/finance/LineChart
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -19,13 +23,8 @@
  * @example HTML
  *   <arianna-line-chart width="600" height="300"></arianna-line-chart>
  *
- * Attrs: width, height
+ * Attributes: width, height
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -33,25 +32,24 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _svg, _fmt, _esc } from './helpers.ts';
-
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
 export interface LineChartSeries {
-    name  : string;
-    data  : number[];
+    name: string;
+    data: number[];
     color?: string;
 }
-
 export interface LineChartOptions {
-    series? : LineChartSeries[];
-    width?  : number;
-    height? : number;
+    series?: LineChartSeries[];
+    width?: number;
+    height?: number;
 }
-
 const PALETTE = [
     'var(--arianna-primary, #1f6feb)',
     'var(--arianna-bull,    #26a69a)',
@@ -60,36 +58,34 @@ const PALETTE = [
     '#7b9ef9',
     '#ce93d8',
 ];
-
-export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, {
-    attrs : ['width', 'height'],
+@Component('arianna-finance-line-chart', {}, {
+    Attributes: ['width', 'height'],
 })
-{
+export class FinanceLineChart extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     series$: Signal<LineChartSeries[]> = signal<LineChartSeries[]>([]);
-
-    build(_opts: LineChartOptions = {})
-    {
-        const wAttr = this.attributeSignal('width');
-        const hAttr = this.attributeSignal('height');
-
+    onConnected(_opts: LineChartOptions = {}) {
+        const wAttr = this.signal().attribute('width');
+        const hAttr = this.signal().attribute('height');
         this.svgHtml = (): string => {
             const series = this.series$.Get();
-            if (!series.length) return '';
-
+            if (!series.length)
+                return '';
             const w = parseInt(wAttr.Get() ?? '600', 10) || 600;
             const h = parseInt(hAttr.Get() ?? '300', 10) || 300;
-
             const pad = { l: 55, r: 20, t: 20, b: 36 };
             const W = w - pad.l - pad.r;
             const H = h - pad.t - pad.b;
             const all = series.flatMap(s => s.data);
-            const mn  = Math.min(...all);
-            const mx  = Math.max(...all);
+            const mn = Math.min(...all);
+            const mx = Math.max(...all);
             const rng = mx - mn || 1;
             const maxLen = Math.max(...series.map(s => s.data.length), 2);
             const xS = (i: number) => pad.l + (i / (maxLen - 1)) * W;
             const yS = (v: number) => pad.t + ((mx - v) / rng) * H;
-
             let grid = '';
             for (let i = 0; i <= 4; i++) {
                 const v = mn + (i / 4) * rng;
@@ -106,15 +102,14 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
                     'text-anchor': 'end',
                 }, _fmt(v));
             }
-
             let lines = '', legend = '';
             series.forEach((s, si) => {
                 const color = s.color ?? PALETTE[si % PALETTE.length];
-                const last  = s.data.length - 1 || 1;
+                const last = s.data.length - 1 || 1;
                 const pts = s.data.map((v, i) => `${pad.l + (i / last) * W},${yS(v)}`).join(' ');
                 lines += _svg('polyline', {
                     points: pts,
-                    fill  : 'none',
+                    fill: 'none',
                     stroke: color,
                     'stroke-width': 2,
                     'stroke-linejoin': 'round',
@@ -129,50 +124,47 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
                     'font-size': 12,
                 }, _esc(s.name));
             });
-
             return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
-                 + grid + lines + legend
-                 + `</svg>`;
+                + grid + lines + legend
+                + `</svg>`;
         };
-
-        this.template = html`<div class="ar-linechart" a-html="this.svgHtml()"></div>`;
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = LineChart.DefaultSheet();
+        this.template = html `<div class="ar-linechart" a-html="this.svgHtml()"></div>`;
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = FinanceLineChart.DefaultSheet();
     }
-
     set series(v: LineChartSeries[]) { this.series$.Set(v ?? []); }
-    get series(): LineChartSeries[]  { return this.series$.Get(); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    get series(): LineChartSeries[] { return this.series$.Get(); }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     private svgHtml: () => string = () => '';
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    display     : 'inline-block',
-                    padding     : '4px',
-                }),
-                new Rule(':host svg', { display: 'block' }),
-            ]
-        );
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                display: 'inline-block',
+                padding: '4px',
+            }),
+            new Rule(':host svg', { display: 'block' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'FinanceLineChart', {
-        value: LineChart, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * FinanceLineChart namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace FinanceLineChart {
+    export namespace Interfaces {
+        export interface LineChartSeriesContract extends LineChartSeries {
+        }
+        export interface LineChartOptionsContract extends LineChartOptions {
+        }
+    }
 }
-
-export default LineChart;
+export default FinanceLineChart;

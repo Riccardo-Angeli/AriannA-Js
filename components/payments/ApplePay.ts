@@ -1,3 +1,10 @@
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/payments/ApplePay
  * @author    Riccardo Angeli
@@ -31,15 +38,10 @@
  *   arianna:payment-error    detail: { method: 'applePay', message: string }
  *   arianna:payment-cancel   detail: { method: 'applePay' }
  *
- * Attrs: merchant-id, country-code, currency, amount, label,
+ * Attributes: merchant-id, country-code, currency, amount, label,
  *        supported-networks (CSV), merchant-capabilities (CSV),
  *        force-show, button-style, button-type
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -47,78 +49,64 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
-export type ApplePayNetwork =
-    | 'visa' | 'masterCard' | 'amex' | 'discover' | 'maestro'
-    | 'jcb'  | 'cartesBancaires' | 'unionPay' | 'mada' | 'electron';
-
-export type ApplePayMerchantCapability =
-    'supports3DS' | 'supportsCredit' | 'supportsDebit' | 'supportsEMV';
-
+export type ApplePayNetwork = 'visa' | 'masterCard' | 'amex' | 'discover' | 'maestro' | 'jcb' | 'cartesBancaires' | 'unionPay' | 'mada' | 'electron';
+export type ApplePayMerchantCapability = 'supports3DS' | 'supportsCredit' | 'supportsDebit' | 'supportsEMV';
 export type ApplePayButtonStyle = 'black' | 'white' | 'white-outline';
-export type ApplePayButtonType  =
-    'plain' | 'buy' | 'donate' | 'check-out' | 'subscribe' | 'reload';
-
+export type ApplePayButtonType = 'plain' | 'buy' | 'donate' | 'check-out' | 'subscribe' | 'reload';
 export interface ApplePayOptions {
-    merchantId           : string;
-    countryCode          : string;
-    currency             : string;
-    amount               : number;
-    label?               : string;
-    supportedNetworks?   : ApplePayNetwork[];
+    merchantId: string;
+    countryCode: string;
+    currency: string;
+    amount: number;
+    label?: string;
+    supportedNetworks?: ApplePayNetwork[];
     merchantCapabilities?: ApplePayMerchantCapability[];
-    forceShow?           : boolean;
-    buttonStyle?         : ApplePayButtonStyle;
-    buttonType?          : ApplePayButtonType;
+    forceShow?: boolean;
+    buttonStyle?: ApplePayButtonStyle;
+    buttonType?: ApplePayButtonType;
 }
-
 const APPLE_LOGO_SVG = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M16.365 12.5c.02-2.21 1.81-3.27 1.89-3.32-1.03-1.5-2.63-1.71-3.2-1.73-1.36-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.18-1.54 2.66-.39 6.6 1.11 8.76.74 1.06 1.61 2.25 2.74 2.21 1.1-.04 1.52-.71 2.85-.71 1.34 0 1.71.71 2.88.69 1.19-.02 1.94-1.07 2.67-2.14.84-1.23 1.18-2.42 1.2-2.48-.03-.01-2.3-.88-2.32-3.5z"/><path fill="currentColor" d="M14.32 6.32c.61-.74 1.02-1.76.91-2.78-.88.04-1.94.59-2.57 1.33-.56.65-1.06 1.7-.93 2.7.98.08 1.98-.5 2.59-1.25z"/></svg>`;
-
-export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
-    attrs : [
+@Component('arianna-apple-pay', {}, {
+    Attributes: [
         'merchant-id', 'country-code', 'currency', 'amount', 'label',
         'supported-networks', 'merchant-capabilities',
         'force-show', 'button-style', 'button-type',
     ],
 })
-{
+export class ApplePay extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     available$: Signal<boolean> = signal<boolean>(false);
-    busy$     : Signal<boolean> = signal<boolean>(false);
-
-    build(_opts: ApplePayOptions = {} as ApplePayOptions)
-    {
-        const styleAttr = this.attributeSignal('button-style');
-        const typeAttr  = this.attributeSignal('button-type');
-
+    busy$: Signal<boolean> = signal<boolean>(false);
+    onConnected(_opts: ApplePayOptions = {} as ApplePayOptions) {
+        const styleAttr = this.signal().attribute('button-style');
+        const typeAttr = this.signal().attribute('button-type');
         this.btnCls = () => {
             const style = styleAttr.Get() ?? 'black';
-            const kind  = typeAttr.Get()  ?? 'plain';
+            const kind = typeAttr.Get() ?? 'plain';
             return `ar-applepay__btn ar-applepay__btn--${style} ar-applepay__btn--${kind}`
                 + (this.busy$.Get() ? ' ar-applepay__btn--busy' : '');
         };
-
         this.btnLabel = () => {
             const kind = typeAttr.Get() ?? 'plain';
             switch (kind) {
-                case 'buy':       return 'Buy with';
-                case 'donate':    return 'Donate with';
+                case 'buy': return 'Buy with';
+                case 'donate': return 'Donate with';
                 case 'check-out': return 'Check out with';
                 case 'subscribe': return 'Subscribe with';
-                case 'reload':    return 'Reload with';
-                default:          return 'Pay with';
+                case 'reload': return 'Reload with';
+                default: return 'Pay with';
             }
         };
-
         this.visible = () => this.available$.Get() || this.hasAttribute('force-show');
-
         this.onClick = () => { void this.pay(); };
-
-        this.template = html`
+        this.template = html `
             <button type="button"
                     :class="this.btnCls()"
                     a-if="this.visible()"
@@ -130,36 +118,38 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
                 Apple Pay isn't available on this device.
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ApplePay.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = ApplePay.DefaultSheet();
     }
-
     /** Programmatically open the Apple Pay sheet. */
     async pay(): Promise<void> {
-        if (this.busy$.Get()) return;
+        if (this.busy$.Get())
+            return;
         this.busy$.Set(true);
         try {
-            const merchantId  = this.getAttribute('merchant-id') ?? '';
+            const merchantId = this.getAttribute('merchant-id') ?? '';
             const countryCode = this.getAttribute('country-code') ?? 'US';
-            const currency    = this.getAttribute('currency')     ?? 'USD';
-            const amount      = parseFloat(this.getAttribute('amount') ?? '0') || 0;
-            const label       = this.getAttribute('label') ?? 'Total';
-            const networks    = (this.getAttribute('supported-networks') ?? 'visa,masterCard,amex').split(',').map(s => s.trim()).filter(Boolean);
-            const caps        = (this.getAttribute('merchant-capabilities') ?? 'supports3DS').split(',').map(s => s.trim()).filter(Boolean);
-
-            const PR = (window as unknown as { PaymentRequest?: typeof PaymentRequest }).PaymentRequest;
-            if (typeof PR !== 'function') throw new Error('PaymentRequest API not available');
-
+            const currency = this.getAttribute('currency') ?? 'USD';
+            const amount = parseFloat(this.getAttribute('amount') ?? '0') || 0;
+            const label = this.getAttribute('label') ?? 'Total';
+            const networks = (this.getAttribute('supported-networks') ?? 'visa,masterCard,amex').split(',').map(s => s.trim()).filter(Boolean);
+            const caps = (this.getAttribute('merchant-capabilities') ?? 'supports3DS').split(',').map(s => s.trim()).filter(Boolean);
+            const PR = (window as unknown as {
+                PaymentRequest?: typeof PaymentRequest;
+            }).PaymentRequest;
+            if (typeof PR !== 'function')
+                throw new Error('PaymentRequest API not available');
             const methodData: PaymentMethodData[] = [{
-                supportedMethods: 'https://apple.com/apple-pay',
-                data: {
-                    version: 3,
-                    merchantIdentifier   : merchantId,
-                    merchantCapabilities : caps,
-                    supportedNetworks    : networks,
-                    countryCode,
-                },
-            }];
+                    supportedMethods: 'https://apple.com/apple-pay',
+                    data: {
+                        version: 3,
+                        merchantIdentifier: merchantId,
+                        merchantCapabilities: caps,
+                        supportedNetworks: networks,
+                        countryCode,
+                    },
+                }];
             const details: PaymentDetailsInit = {
                 total: { label, amount: { currency, value: amount.toFixed(2) } },
             };
@@ -169,98 +159,111 @@ export class ApplePay extends Component('arianna-apple-pay', HTMLElement, {}, {
             this.dispatchEvent(new CustomEvent('arianna:payment-success', {
                 bubbles: true, detail: { method: 'applePay', token: resp.details },
             }));
-        } catch (err) {
+        }
+        catch (err) {
             if (err instanceof DOMException && err.name === 'AbortError') {
                 this.dispatchEvent(new CustomEvent('arianna:payment-cancel', {
                     bubbles: true, detail: { method: 'applePay' },
                 }));
-            } else {
+            }
+            else {
                 this.dispatchEvent(new CustomEvent('arianna:payment-error', {
                     bubbles: true,
                     detail: { method: 'applePay', message: err instanceof Error ? err.message : String(err) },
                 }));
             }
-        } finally {
+        }
+        finally {
             this.busy$.Set(false);
         }
     }
-
     /** True if PaymentRequest or ApplePaySession is available on this device. */
     static async isAvailable(): Promise<boolean> {
-        if (typeof window === 'undefined') return false;
-        const w = window as unknown as { ApplePaySession?: { canMakePayments(): boolean } };
-        if (w.ApplePaySession?.canMakePayments) return w.ApplePaySession.canMakePayments();
-        if (typeof (window as unknown as { PaymentRequest?: unknown }).PaymentRequest !== 'undefined') return true;
+        if (typeof window === 'undefined')
+            return false;
+        const w = window as unknown as {
+            ApplePaySession?: {
+                canMakePayments(): boolean;
+            };
+        };
+        if (w.ApplePaySession?.canMakePayments)
+            return w.ApplePaySession.canMakePayments();
+        if (typeof (window as unknown as {
+            PaymentRequest?: unknown;
+        }).PaymentRequest !== 'undefined')
+            return true;
         return false;
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    async onMount()   {
+    onCreated() { }
+    onBeforeMount() { }
+    async onMount() {
         this.available$.Set(await ApplePay.isAvailable());
     }
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    private btnCls  : () => string  = () => 'ar-applepay__btn ar-applepay__btn--black ar-applepay__btn--plain';
-    private btnLabel: () => string  = () => 'Pay with';
-    private visible : () => boolean = () => false;
-    private onClick : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', { display: 'inline-block' }),
-                new Rule('.ar-applepay__btn', {
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    minWidth: '160px',
-                    minHeight: '44px',
-                    padding: '0 18px',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    font: '600 14px -apple-system, "SF Pro Display", system-ui, sans-serif',
-                    letterSpacing: '0.2px',
-                    transition: 'opacity 0.15s',
-                }),
-                new Rule('.ar-applepay__btn:hover', { opacity: '0.9' }),
-                new Rule('.ar-applepay__btn--busy', { opacity: '0.6', cursor: 'wait' }),
-                new Rule('.ar-applepay__btn--black', {
-                    background: '#000', color: '#fff',
-                }),
-                new Rule('.ar-applepay__btn--white', {
-                    background: '#fff', color: '#000',
-                    border: '1px solid #d8d8d8',
-                }),
-                new Rule('.ar-applepay__btn--white-outline', {
-                    background: '#fff', color: '#000',
-                    border: '1.5px solid #000',
-                }),
-                new Rule('.ar-applepay__logo', {
-                    display: 'inline-flex',
-                    width: '18px', height: '18px',
-                }),
-                new Rule('.ar-applepay__logo svg', { width: '100%', height: '100%' }),
-                new Rule('.ar-applepay__fallback', {
-                    fontSize: '12px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    padding: '8px',
-                }),
-            ]
-        );
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    private btnCls: () => string = () => 'ar-applepay__btn ar-applepay__btn--black ar-applepay__btn--plain';
+    private btnLabel: () => string = () => 'Pay with';
+    private visible: () => boolean = () => false;
+    private onClick: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', { display: 'inline-block' }),
+            new Rule('.ar-applepay__btn', {
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                minWidth: '160px',
+                minHeight: '44px',
+                padding: '0 18px',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                font: '600 14px -apple-system, "SF Pro Display", system-ui, sans-serif',
+                letterSpacing: '0.2px',
+                transition: 'opacity 0.15s',
+            }),
+            new Rule('.ar-applepay__btn:hover', { opacity: '0.9' }),
+            new Rule('.ar-applepay__btn--busy', { opacity: '0.6', cursor: 'wait' }),
+            new Rule('.ar-applepay__btn--black', {
+                background: '#000', color: '#fff',
+            }),
+            new Rule('.ar-applepay__btn--white', {
+                background: '#fff', color: '#000',
+                border: '1px solid #d8d8d8',
+            }),
+            new Rule('.ar-applepay__btn--white-outline', {
+                background: '#fff', color: '#000',
+                border: '1.5px solid #000',
+            }),
+            new Rule('.ar-applepay__logo', {
+                display: 'inline-flex',
+                width: '18px', height: '18px',
+            }),
+            new Rule('.ar-applepay__logo svg', { width: '100%', height: '100%' }),
+            new Rule('.ar-applepay__fallback', {
+                fontSize: '12px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                padding: '8px',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'ApplePay', {
-        value: ApplePay, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * ApplePay namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace ApplePay {
+    export namespace Types {
+        export type Network = ApplePayNetwork;
+        export type MerchantCapability = ApplePayMerchantCapability;
+        export type ButtonStyle = ApplePayButtonStyle;
+        export type ButtonType = ApplePayButtonType;
+    }
+    export namespace Interfaces {
+        export interface Options extends ApplePayOptions {
+        }
+    }
 }
-
 export default ApplePay;

@@ -57,22 +57,15 @@
  *     arianna-mirror, arianna-snap, arianna-wave, arianna-billboard,
  *     arianna-fade, arianna-lod, arianna-drag, arianna-array
  */
-
 // ── 2D modifiers ──────────────────────────────────────────────────────────────
-
 export * from './2D/index.ts';
 export { default as Modifiers2D } from './2D/index.ts';
-
 // ── 3D modifiers ──────────────────────────────────────────────────────────────
-
 export * from './3D/index.ts';
 export { default as Modifiers3D } from './3D/index.ts';
-
 // ── Convenience combined bundle ───────────────────────────────────────────────
-
 import Modifiers2DBundle from './2D/index.ts';
 import Modifiers3DBundle from './3D/index.ts';
-
 export const Modifiers = {
     ...Modifiers2DBundle,
     ...Modifiers3DBundle,

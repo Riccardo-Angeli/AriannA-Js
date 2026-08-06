@@ -23,18 +23,9 @@
  * are slated for the standalone `arianna-viewport-3d` enterprise package,
  * roadmapped in `3D_ENTERPRISE_ROADMAP.md`.
  */
-
 export { CameraViewer3D } from './CameraViewer3D.ts';
-export type {
-    PaneId, ProjectionKind, Vec3, Camera, Pane, CameraViewer3DOptions,
-} from './CameraViewer3D.ts';
-
+export type { PaneId, ProjectionKind, Vec3, Camera, Pane, CameraViewer3DOptions, } from './CameraViewer3D.ts';
 export { MaterialsPalette } from './MaterialsPalette.ts';
-export type {
-    MaterialKind, MaterialDef, MaterialsPaletteOptions,
-} from './MaterialsPalette.ts';
-
+export type { MaterialKind, MaterialDef, MaterialsPaletteOptions, } from './MaterialsPalette.ts';
 export { Modifiers3DPalette } from './Modifiers3DPalette.ts';
-export type {
-    ModifierKind, ModifierEntry, Modifiers3DPaletteOptions,
-} from './Modifiers3DPalette.ts';
+export type { ModifierKind, ModifierEntry, Modifiers3DPaletteOptions, } from './Modifiers3DPalette.ts';

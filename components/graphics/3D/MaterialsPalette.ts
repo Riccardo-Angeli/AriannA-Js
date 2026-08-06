@@ -1,3 +1,10 @@
+import { Component, Components, Css, Reactivity, Templates } from '../../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/graphics/3D/MaterialsPalette
  * @author    Riccardo Angeli
@@ -23,13 +30,8 @@
  *   <arianna-materials-palette kind="standard"></arianna-materials-palette>
  *
  * Events: arianna:material-change  detail: MaterialDef
- * Attrs:  kind
+ * Attributes:  kind
  */
-
-import { Component } from '../../../core/Components.ts';
-import { html }      from '../../../core/Template.ts';
-import { Reactivity } from '../../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -37,66 +39,64 @@ import { Reactivity } from '../../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
-export type MaterialKind =
-    | 'basic' | 'lambert' | 'phong' | 'standard' | 'physical'
-    | 'toon' | 'normal' | 'wireframe';
-
+export type MaterialKind = 'basic' | 'lambert' | 'phong' | 'standard' | 'physical' | 'toon' | 'normal' | 'wireframe';
 export interface MaterialDef {
-    kind         : MaterialKind;
-    color?       : string;
-    emissive?    : string;
-    opacity?     : number;
-    metalness?   : number;
-    roughness?   : number;
-    clearcoat?   : number;
+    kind: MaterialKind;
+    color?: string;
+    emissive?: string;
+    opacity?: number;
+    metalness?: number;
+    roughness?: number;
+    clearcoat?: number;
     transmission?: number;
-    ior?         : number;
-    shininess?   : number;
-    side?        : 'front' | 'back' | 'double';
-    flatShading? : boolean;
-    wireframe?   : boolean;
+    ior?: number;
+    shininess?: number;
+    side?: 'front' | 'back' | 'double';
+    flatShading?: boolean;
+    wireframe?: boolean;
 }
-
-export interface MaterialsPaletteOptions { kind?: MaterialKind; }
-
-const KIND_INFO: Array<{ kind: MaterialKind; label: string; icon: string }> = [
-    { kind: 'basic',     label: 'Basic',     icon: '◻' },
-    { kind: 'lambert',   label: 'Lambert',   icon: '◐' },
-    { kind: 'phong',     label: 'Phong',     icon: '◓' },
-    { kind: 'standard',  label: 'Standard',  icon: '◆' },
-    { kind: 'physical',  label: 'Physical',  icon: '◈' },
-    { kind: 'toon',      label: 'Toon',      icon: '◖' },
-    { kind: 'normal',    label: 'Normal',    icon: '⬢' },
+export interface MaterialsPaletteOptions {
+    kind?: MaterialKind;
+}
+const KIND_INFO: Array<{
+    kind: MaterialKind;
+    label: string;
+    icon: string;
+}> = [
+    { kind: 'basic', label: 'Basic', icon: '◻' },
+    { kind: 'lambert', label: 'Lambert', icon: '◐' },
+    { kind: 'phong', label: 'Phong', icon: '◓' },
+    { kind: 'standard', label: 'Standard', icon: '◆' },
+    { kind: 'physical', label: 'Physical', icon: '◈' },
+    { kind: 'toon', label: 'Toon', icon: '◖' },
+    { kind: 'normal', label: 'Normal', icon: '⬢' },
     { kind: 'wireframe', label: 'Wireframe', icon: '⊞' },
 ];
-
 const DEFAULTS: Record<MaterialKind, MaterialDef> = {
-    basic:     { kind: 'basic',     color: '#cccccc', opacity: 1 },
-    lambert:   { kind: 'lambert',   color: '#cccccc', emissive: '#000000', opacity: 1 },
-    phong:     { kind: 'phong',     color: '#cccccc', emissive: '#000000', shininess: 30, opacity: 1 },
-    standard:  { kind: 'standard',  color: '#cccccc', emissive: '#000000', metalness: 0, roughness: 0.5, opacity: 1 },
-    physical:  { kind: 'physical',  color: '#cccccc', emissive: '#000000', metalness: 0, roughness: 0.5, clearcoat: 0, transmission: 0, ior: 1.5, opacity: 1 },
-    toon:      { kind: 'toon',      color: '#cccccc', emissive: '#000000', opacity: 1 },
-    normal:    { kind: 'normal' },
+    basic: { kind: 'basic', color: '#cccccc', opacity: 1 },
+    lambert: { kind: 'lambert', color: '#cccccc', emissive: '#000000', opacity: 1 },
+    phong: { kind: 'phong', color: '#cccccc', emissive: '#000000', shininess: 30, opacity: 1 },
+    standard: { kind: 'standard', color: '#cccccc', emissive: '#000000', metalness: 0, roughness: 0.5, opacity: 1 },
+    physical: { kind: 'physical', color: '#cccccc', emissive: '#000000', metalness: 0, roughness: 0.5, clearcoat: 0, transmission: 0, ior: 1.5, opacity: 1 },
+    toon: { kind: 'toon', color: '#cccccc', emissive: '#000000', opacity: 1 },
+    normal: { kind: 'normal' },
     wireframe: { kind: 'wireframe', color: '#cccccc', wireframe: true, opacity: 1 },
 };
-
-export class MaterialsPalette extends Component('arianna-materials-palette', HTMLElement, {}, {
-    attrs : ['kind'],
+@Component('arianna-materials-palette', {}, {
+    Attributes: ['kind'],
 })
-{
+export class MaterialsPalette extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     material$: Signal<MaterialDef> = signal<MaterialDef>(DEFAULTS.standard);
-
-    build(_opts: MaterialsPaletteOptions = {})
-    {
-        const kindAttr = this.attributeSignal('kind');
-
+    onConnected(_opts: MaterialsPaletteOptions = {}) {
+        const kindAttr = this.signal().attribute('kind');
         this.kinds = () => {
             const cur = kindAttr.Get() ?? 'standard';
             return KIND_INFO.map(k => ({
@@ -106,43 +106,41 @@ export class MaterialsPalette extends Component('arianna-materials-palette', HTM
                 cls: 'ar-mat__kind' + (cur === k.kind ? ' ar-mat__kind--active' : ''),
             }));
         };
-
         this.curKind = (): MaterialKind => (kindAttr.Get() as MaterialKind) ?? 'standard';
-        this.hasColor      = () => !['normal'].includes(this.curKind());
-        this.hasEmissive   = () => ['lambert', 'phong', 'standard', 'physical', 'toon'].includes(this.curKind());
-        this.hasMetalness  = () => ['standard', 'physical'].includes(this.curKind());
-        this.hasRoughness  = () => ['standard', 'physical'].includes(this.curKind());
-        this.hasClearcoat  = () => this.curKind() === 'physical';
+        this.hasColor = () => !['normal'].includes(this.curKind());
+        this.hasEmissive = () => ['lambert', 'phong', 'standard', 'physical', 'toon'].includes(this.curKind());
+        this.hasMetalness = () => ['standard', 'physical'].includes(this.curKind());
+        this.hasRoughness = () => ['standard', 'physical'].includes(this.curKind());
+        this.hasClearcoat = () => this.curKind() === 'physical';
         this.hasTransmission = () => this.curKind() === 'physical';
-        this.hasShininess  = () => this.curKind() === 'phong';
-        this.hasIor        = () => this.curKind() === 'physical';
-
-        this.colorVal     = () => this.material$.Get().color     ?? '#cccccc';
-        this.emissiveVal  = () => this.material$.Get().emissive  ?? '#000000';
-        this.opacityVal   = () => String(this.material$.Get().opacity   ?? 1);
+        this.hasShininess = () => this.curKind() === 'phong';
+        this.hasIor = () => this.curKind() === 'physical';
+        this.colorVal = () => this.material$.Get().color ?? '#cccccc';
+        this.emissiveVal = () => this.material$.Get().emissive ?? '#000000';
+        this.opacityVal = () => String(this.material$.Get().opacity ?? 1);
         this.metalnessVal = () => String(this.material$.Get().metalness ?? 0);
         this.roughnessVal = () => String(this.material$.Get().roughness ?? 0.5);
         this.clearcoatVal = () => String(this.material$.Get().clearcoat ?? 0);
         this.transmissionVal = () => String(this.material$.Get().transmission ?? 0);
         this.shininessVal = () => String(this.material$.Get().shininess ?? 30);
-        this.iorVal       = () => String(this.material$.Get().ior ?? 1.5);
-
+        this.iorVal = () => String(this.material$.Get().ior ?? 1.5);
         this.onKindClick = (e: Event) => {
             const btn = e.currentTarget as HTMLButtonElement;
             const kind = btn.dataset.kind as MaterialKind;
-            if (kind) this.setKind(kind);
+            if (kind)
+                this.setKind(kind);
         };
         this.onParam = (e: Event) => {
             const inp = e.target as HTMLInputElement;
             const param = inp.dataset.param;
-            if (!param) return;
+            if (!param)
+                return;
             const v: string | number = inp.type === 'number' || inp.type === 'range'
                 ? parseFloat(inp.value)
                 : inp.value;
             this.setParam(param as keyof MaterialDef, v);
         };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-mat__kinds">
                 <button type="button" a-for="k in this.kinds()"
                         :class="k.cls"
@@ -199,19 +197,20 @@ export class MaterialsPalette extends Component('arianna-materials-palette', HTM
                 </label>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = MaterialsPalette.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = MaterialsPalette.DefaultSheet();
     }
-
     // ── Public API ───────────────────────────────────────────────────────────
-
     setKind(kind: MaterialKind): this {
         this.setAttribute('kind', kind);
         // Reset material to defaults for the new kind, preserving common shared fields
         const cur = this.material$.Get();
         const next: MaterialDef = { ...DEFAULTS[kind] };
-        if (cur.color) next.color = cur.color;
-        if (cur.opacity !== undefined) next.opacity = cur.opacity;
+        if (cur.color)
+            next.color = cur.color;
+        if (cur.opacity !== undefined)
+            next.opacity = cur.opacity;
         this.material$.Set(next);
         this.#fire();
         return this;
@@ -224,135 +223,141 @@ export class MaterialsPalette extends Component('arianna-materials-palette', HTM
     }
     getMaterial(): MaterialDef { return { ...this.material$.Get() }; }
     setMaterial(m: MaterialDef): this {
-        if (m.kind) this.setAttribute('kind', m.kind);
+        if (m.kind)
+            this.setAttribute('kind', m.kind);
         this.material$.Set({ ...m });
         this.#fire();
         return this;
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     #fire(): void {
         this.dispatchEvent(new CustomEvent('arianna:material-change', {
             bubbles: true, detail: this.getMaterial(),
         }));
     }
-
-    private kinds          : () => Array<{ kind: MaterialKind; label: string; icon: string; cls: string }> = () => [];
-    private curKind        : () => MaterialKind = () => 'standard';
-    private hasColor       : () => boolean = () => true;
-    private hasEmissive    : () => boolean = () => false;
-    private hasMetalness   : () => boolean = () => false;
-    private hasRoughness   : () => boolean = () => false;
-    private hasClearcoat   : () => boolean = () => false;
+    private kinds: () => Array<{
+        kind: MaterialKind;
+        label: string;
+        icon: string;
+        cls: string;
+    }> = () => [];
+    private curKind: () => MaterialKind = () => 'standard';
+    private hasColor: () => boolean = () => true;
+    private hasEmissive: () => boolean = () => false;
+    private hasMetalness: () => boolean = () => false;
+    private hasRoughness: () => boolean = () => false;
+    private hasClearcoat: () => boolean = () => false;
     private hasTransmission: () => boolean = () => false;
-    private hasShininess   : () => boolean = () => false;
-    private hasIor         : () => boolean = () => false;
-    private colorVal       : () => string = () => '#cccccc';
-    private emissiveVal    : () => string = () => '#000000';
-    private opacityVal     : () => string = () => '1';
-    private metalnessVal   : () => string = () => '0';
-    private roughnessVal   : () => string = () => '0.5';
-    private clearcoatVal   : () => string = () => '0';
+    private hasShininess: () => boolean = () => false;
+    private hasIor: () => boolean = () => false;
+    private colorVal: () => string = () => '#cccccc';
+    private emissiveVal: () => string = () => '#000000';
+    private opacityVal: () => string = () => '1';
+    private metalnessVal: () => string = () => '0';
+    private roughnessVal: () => string = () => '0.5';
+    private clearcoatVal: () => string = () => '0';
     private transmissionVal: () => string = () => '0';
-    private shininessVal   : () => string = () => '30';
-    private iorVal         : () => string = () => '1.5';
-    private onKindClick    : (e: Event) => void = () => {};
-    private onParam        : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    color       : 'var(--arianna-text, #1f2328)',
-                    display     : 'flex',
-                    fontFamily  : '-apple-system, system-ui, sans-serif',
-                    fontSize    : '12px',
-                    width       : '320px',
-                    minHeight   : '300px',
-                    overflow    : 'hidden',
-                }),
-                new Rule('.ar-mat__kinds', {
-                    display: 'flex', flexDirection: 'column',
-                    gap: '2px', padding: '4px',
-                    width: '90px',
-                    borderRight: '1px solid var(--arianna-border, #d8d8d8)',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                }),
-                new Rule('.ar-mat__kind', {
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '5px 7px',
-                    background: 'transparent',
-                    border: '1px solid transparent',
-                    borderRadius: '3px',
-                    color: 'var(--arianna-text, #1f2328)',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                }),
-                new Rule('.ar-mat__kind:hover', { background: 'var(--arianna-bg, #fff)' }),
-                new Rule('.ar-mat__kind--active', {
-                    background: 'var(--arianna-bg, #fff)',
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
-                    color: 'var(--arianna-primary, #1f6feb)',
-                }),
-                new Rule('.ar-mat__kind-icon', { fontSize: '13px' }),
-                new Rule('.ar-mat__kind-lbl',  { fontSize: '11px' }),
-                new Rule('.ar-mat__params', {
-                    flex: '1', padding: '8px',
-                    display: 'flex', flexDirection: 'column', gap: '6px',
-                    overflowY: 'auto',
-                }),
-                new Rule('.ar-mat__field', {
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                }),
-                new Rule('.ar-mat__field span:first-child', {
-                    width: '76px',
-                    fontSize: '10px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    textTransform: 'uppercase',
-                }),
-                new Rule('.ar-mat__field input[type="range"]', { flex: '1' }),
-                new Rule('.ar-mat__field input[type="text"], .ar-mat__field input[type="number"]', {
-                    flex: '1', minWidth: '0',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    padding: '3px 6px',
-                    font: '11px ui-monospace, monospace',
-                    borderRadius: '2px',
-                }),
-                new Rule('.ar-mat__field input[type="color"]', {
-                    width: '28px', height: '22px',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    padding: '0', background: 'transparent',
-                    cursor: 'pointer',
-                }),
-                new Rule('.ar-mat__num', {
-                    width: '30px',
-                    fontSize: '10px', fontFamily: 'ui-monospace, monospace',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    textAlign: 'right',
-                }),
-            ]
-        );
+    private shininessVal: () => string = () => '30';
+    private iorVal: () => string = () => '1.5';
+    private onKindClick: (e: Event) => void = () => { };
+    private onParam: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                color: 'var(--arianna-text, #1f2328)',
+                display: 'flex',
+                fontFamily: '-apple-system, system-ui, sans-serif',
+                fontSize: '12px',
+                width: '320px',
+                minHeight: '300px',
+                overflow: 'hidden',
+            }),
+            new Rule('.ar-mat__kinds', {
+                display: 'flex', flexDirection: 'column',
+                gap: '2px', padding: '4px',
+                width: '90px',
+                borderRight: '1px solid var(--arianna-border, #d8d8d8)',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+            }),
+            new Rule('.ar-mat__kind', {
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '5px 7px',
+                background: 'transparent',
+                border: '1px solid transparent',
+                borderRadius: '3px',
+                color: 'var(--arianna-text, #1f2328)',
+                fontSize: '11px',
+                cursor: 'pointer',
+                textAlign: 'left',
+            }),
+            new Rule('.ar-mat__kind:hover', { background: 'var(--arianna-bg, #fff)' }),
+            new Rule('.ar-mat__kind--active', {
+                background: 'var(--arianna-bg, #fff)',
+                borderColor: 'var(--arianna-primary, #1f6feb)',
+                color: 'var(--arianna-primary, #1f6feb)',
+            }),
+            new Rule('.ar-mat__kind-icon', { fontSize: '13px' }),
+            new Rule('.ar-mat__kind-lbl', { fontSize: '11px' }),
+            new Rule('.ar-mat__params', {
+                flex: '1', padding: '8px',
+                display: 'flex', flexDirection: 'column', gap: '6px',
+                overflowY: 'auto',
+            }),
+            new Rule('.ar-mat__field', {
+                display: 'flex', alignItems: 'center', gap: '6px',
+            }),
+            new Rule('.ar-mat__field span:first-child', {
+                width: '76px',
+                fontSize: '10px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                textTransform: 'uppercase',
+            }),
+            new Rule('.ar-mat__field input[type="range"]', { flex: '1' }),
+            new Rule('.ar-mat__field input[type="text"], .ar-mat__field input[type="number"]', {
+                flex: '1', minWidth: '0',
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                color: 'var(--arianna-text, #1f2328)',
+                padding: '3px 6px',
+                font: '11px ui-monospace, monospace',
+                borderRadius: '2px',
+            }),
+            new Rule('.ar-mat__field input[type="color"]', {
+                width: '28px', height: '22px',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                padding: '0', background: 'transparent',
+                cursor: 'pointer',
+            }),
+            new Rule('.ar-mat__num', {
+                width: '30px',
+                fontSize: '10px', fontFamily: 'ui-monospace, monospace',
+                color: 'var(--arianna-muted, #6e6b62)',
+                textAlign: 'right',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'MaterialsPalette', {
-        value: MaterialsPalette, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * MaterialsPalette namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace MaterialsPalette {
+    export namespace Types {
+        export type MaterialKindType = MaterialKind;
+    }
+    export namespace Interfaces {
+        export interface MaterialDefContract extends MaterialDef {
+        }
+        export interface Options extends MaterialsPaletteOptions {
+        }
+    }
 }
-
 export default MaterialsPalette;

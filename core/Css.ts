@@ -14,6 +14,9 @@
 import { Core }      from './Core.ts';
 import { parseLess } from '../additionals/Less.ts';
 
+import type { Types as SchemaTypes } from './schema/Types.ts';
+import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
+
 /** @namespace   Css
  *  @public
  *  @memberof    Core
@@ -28,342 +31,12 @@ import { parseLess } from '../additionals/Less.ts';
  *  @license     MIT / Commercial (dual license) */
 export namespace Css
 {
-    /** @namespace   Types
-     *  @public
-     *  @memberof    Core.Css
-     *  @description Type-only argument contracts for the Css constructors — the unions of every shape Rule and
-     *               Stylesheet accept. Erases at compile time (zero runtime footprint).
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export namespace Types
-    {
-        /** @typedef     RuleArguments
-         *  @public
-         *  @memberof    Core.Css.Types
-         *  @description The input forms a Rule accepts: an existing Rule (adopted), a native CSSRule (split
-         *               into selector + declarations), or a raw CSS / selector string.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type RuleArguments       = Rule | CSSRule | string;
-
-        /** @typedef     StylesheetArguments
-         *  @public
-         *  @memberof    Core.Css.Types
-         *  @description The input forms a Stylesheet accepts, discriminated at runtime by the `parse` instance:
-         *               another Stylesheet (rules cloned), a live CSSStyleSheet / CSSRuleList (each rule
-         *               wrapped), an HTMLLinkElement (its sheet adopted), an array of CSSRule or Rule, a single
-         *               Rule (adopted as the sole rule), a StylesheetObjectInterface, or a raw CSS / URL string.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type StylesheetArguments =
-            | Stylesheet
-            | CSSStyleSheet
-            | CSSRuleList
-            | HTMLLinkElement
-            | CSSRule[]
-            | Rule[]
-            | Rule
-            | Interfaces.StylesheetObjectInterface
-            | string;
-    }
-
-    /** @namespace   Interfaces
-     *  @public
-     *  @memberof    Core.Css
-     *  @description Type-only object-literal contracts for the Css layer — the structured selector, the rule
-     *               definition (with its legacy Golem aliases), and the stylesheet object map. Erases at
-     *               compile time (zero runtime footprint).
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export namespace Interfaces
-    {
-        /** @name        SelectorInterface
-         *  @public
-         *  @interface
-         *  @memberof    Core.Css.Interfaces
-         *  @description Structured object selector, the object form of an @-rule prelude (the Golem Css model).
-         *               `Type` is the @-rule keyword (`@media`, `@supports`, `@import`, …); the remaining keys
-         *               are rule-specific — `Name` / `Value` for `@charset` & friends, `Media` / `Url` for
-         *               `@import`, `Prefix` / `Domain` / `Regex` for `@namespace` & `@document`, and the
-         *               `And` / `Or` / `Not` condition trees for `@media` / `@supports`. The index signature
-         *               keeps it open for rule-specific extras.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface SelectorInterface
-        {
-            /** @member      Type
-             *  @public
-             *  @type        {string}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description The @-rule keyword that names the rule — `@media`, `@supports`, `@import`, `@charset`,
-             *               `@namespace`, `@page`, `@document`, `@keyframes`, `@font-face`, … The one required key;
-             *               every other field is rule-specific and read according to it.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Type    : string;
-
-            /** @member      Name
-             *  @public
-             *  @type        {string}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description The identifier of a named @-rule — the `@keyframes <Name>`, `@counter-style <Name>`, or
-             *               the prefix bound by `@namespace <Name> url(…)`.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Name?   : string;
-
-            /** @member      Value
-             *  @public
-             *  @type        {string}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description The literal value of a value-carrying @-rule — the encoding of `@charset "<Value>"` or
-             *               the string payload of a simple prelude.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Value?  : string;
-
-            /** @member      Media
-             *  @public
-             *  @type        {string}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description The media query text attached to the prelude — the trailing `screen and (…)` of an
-             *               `@import` or the query list of an `@media` given in flat string form.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Media?  : string;
-
-            /** @member      Url
-             *  @public
-             *  @type        {string}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description The target URL of a URL-carrying @-rule — the `url(…)` of an `@import` or an
-             *               `@namespace`.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Url?    : string;
-
-            /** @member      Prefix
-             *  @public
-             *  @type        {string}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description The namespace prefix declared by `@namespace <Prefix> url(…)`, bound to the following
-             *               URL for prefixed type selectors.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Prefix? : string;
-
-            /** @member      Domain
-             *  @public
-             *  @type        {string}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description A domain matcher of `@document` — the argument of its `domain(…)` / `url(…)` predicate
-             *               that scopes the contained rules to a site.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Domain? : string;
-
-            /** @member      Regex
-             *  @public
-             *  @type        {string}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description A regexp matcher of `@document` — the argument of its `regexp("…")` predicate that
-             *               scopes the contained rules by URL pattern.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Regex?  : string;
-
-            /** @member      Right
-             *  @public
-             *  @type        {boolean}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description Page-box side flag for `@page` — selects the `:right` margin context when the margin
-             *               boxes are built.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Right?  : boolean;
-
-            /** @member      Left
-             *  @public
-             *  @type        {boolean}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description Page-box side flag for `@page` — selects the `:left` margin context when the margin
-             *               boxes are built.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Left?   : boolean;
-
-            /** @member      And
-             *  @public
-             *  @type        {Record<string, unknown>}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description Conjunction node of a condition tree — the `and (…)` branch of an `@media` / `@supports`
-             *               prelude, holding the further feature tests all of which must hold.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            And?    : Record<string, unknown>;
-
-            /** @member      Or
-             *  @public
-             *  @type        {Record<string, unknown>}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description Disjunction node of a condition tree — the `or (…)` branch of an `@media` / `@supports`
-             *               prelude, holding the alternative feature tests any of which may hold.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Or?     : Record<string, unknown>;
-
-            /** @member      Not
-             *  @public
-             *  @type        {Record<string, unknown>}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description Negation node of a condition tree — the `not (…)` branch of an `@media` / `@supports`
-             *               prelude, holding the single feature test that must not hold.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Not?    : Record<string, unknown>;
-
-            /** @member      [key: string]
-             *  @public
-             *  @type        {unknown}
-             *  @memberof    Core.Css.Interfaces.SelectorInterface
-             *  @description Index signature keeping the selector open for rule-specific keys beyond the named ones,
-             *               so a novel @-rule prelude can carry its own fields without a type change.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            [key: string]: unknown;
-        }
-
-        /** @name        RuleInterface
-         *  @public
-         *  @interface
-         *  @memberof    Core.Css.Interfaces
-         *  @description Object-literal rule definition accepted by the Rule constructor. `Selector` is a
-         *               selector string or a structured SelectorInterface; the body arrives under any one of
-         *               the legacy Golem aliases — `Contents` / `Content` / `Body` / `Rule` — as a CSS string
-         *               or a property object; `Rules` holds a nested selector→definition map for grouping
-         *               rules. Property keys may be PascalCase (`Width`) or camelCase (`width`); the statics
-         *               normalise them.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface RuleInterface
-        {
-            /** @member      Selector
-             *  @public
-             *  @type        {string | Interfaces.SelectorInterface}
-             *  @memberof    Core.Css.Interfaces.RuleInterface
-             *  @description The rule's selector — a plain selector string (`.card`, `#id > a`) or a structured
-             *               SelectorInterface for the @-rules, whose `Type` names the keyword and whose remaining
-             *               keys carry the prelude. The one required field; every other key holds the body.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Selector  : string | Interfaces.SelectorInterface;
-
-            /** @member      Contents
-             *  @public
-             *  @type        {string | Record<string, unknown>}
-             *  @memberof    Core.Css.Interfaces.RuleInterface
-             *  @description The rule body, primary form — a raw CSS declaration string or a property object. The
-             *               first of the four interchangeable Golem body aliases (`Contents` / `Content` / `Body` /
-             *               `Rule`); the statics read whichever one is present.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Contents? : string | Record<string, unknown>;
-
-            /** @member      Content
-             *  @public
-             *  @type        {string | Record<string, unknown>}
-             *  @memberof    Core.Css.Interfaces.RuleInterface
-             *  @description The rule body — a Golem alias of `Contents`, accepted for authoring convenience. Same
-             *               shape (CSS string or property object) and same treatment; supply only one body key.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Content?  : string | Record<string, unknown>;
-
-            /** @member      Body
-             *  @public
-             *  @type        {string | Record<string, unknown>}
-             *  @memberof    Core.Css.Interfaces.RuleInterface
-             *  @description The rule body — a Golem alias of `Contents`, accepted for authoring convenience. Same
-             *               shape (CSS string or property object) and same treatment; supply only one body key.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Body?     : string | Record<string, unknown>;
-
-            /** @member      Rule
-             *  @public
-             *  @type        {string | Record<string, unknown>}
-             *  @memberof    Core.Css.Interfaces.RuleInterface
-             *  @description The rule body — a Golem alias of `Contents`, accepted for authoring convenience. Same
-             *               shape (CSS string or property object) and same treatment; supply only one body key.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Rule?     : string | Record<string, unknown>;
-
-            /** @member      Rules
-             *  @public
-             *  @type        {Record<string, RuleInterface | Record<string, string>>}
-             *  @memberof    Core.Css.Interfaces.RuleInterface
-             *  @description Nested child rules for a grouping @-rule (`@media`, `@supports`, `@document`) — a
-             *               selector→definition map whose each value is a full RuleInterface or a bare property
-             *               object, built into child Rules under this rule.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Rules?    : Record<string, RuleInterface | Record<string, string>> | RuleInterface[];
-        }
-
-        /** @name        StylesheetObjectInterface
-         *  @public
-         *  @interface
-         *  @memberof    Core.Css.Interfaces
-         *  @description Object-map form of a whole stylesheet: each key is a selector, each value its rule —
-         *               either a full RuleInterface or a bare property object (format E). Consumed by the
-         *               Stylesheet constructor / `parse` to build one Rule per entry.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface StylesheetObjectInterface
-        {
-            /** @member      [selector]
-             *  @public
-             *  @type        {RuleInterface | Record<string, string>}
-             *  @memberof    Core.Css.Interfaces.StylesheetObjectInterface
-             *  @description One entry per rule: the key is the selector, the value is either a full
-             *               RuleInterface or a bare property object (format E). An index signature and
-             *               nothing else — this interface describes a MAP of rules, not a rule; the
-             *               Stylesheet constructor and `parse` walk it with Object.entries and build one
-             *               Rule per entry, taking the selector from the key.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            [selector: string] : RuleInterface | Record<string, string>;
-        }
-    }
+    type ServiceContract           = SchemaInterfaces.Css.Service;
+    type RuleInterface             = SchemaInterfaces.Css.RuleInterface;
+    type SelectorInterface         = SchemaInterfaces.Css.SelectorInterface;
+    type StylesheetObjectInterface = SchemaInterfaces.Css.SelectorInterface;
+    type StylesheetArguments       = SchemaTypes.Css.StylesheetArguments | Rule[];
+    type RuleArguments             = SchemaTypes.Css.RuleArguments | Rule;
 
     /** @name        Rule
      *  @public
@@ -585,7 +258,7 @@ export namespace Css
         /** @name        constructor
          *  @public
          *  @memberof    Core.Css.Rule
-         *  @param       {string | Interfaces.RuleInterface | CSSRule} Selector A selector string, a
+         *  @param       {string | RuleInterface | CSSRule} Selector A selector string, a
          *               RuleInterface object, or a native CSSRule.
          *  @param       {string | Record<string, string>} [Content] With a string selector: the body, as a CSS
          *               string or a property object.
@@ -600,25 +273,25 @@ export namespace Css
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         constructor(selector: string, contents?: string | Record<string, string>);
-        constructor(definition: Interfaces.RuleInterface);
+        constructor(definition: RuleInterface);
         constructor(cssRule: CSSRule);
         constructor
         (
-            Selector : string | Interfaces.RuleInterface | CSSRule,
+            Selector : string | RuleInterface | CSSRule,
             Content? : string | Record<string, string>,
         )
         {
             this.#id = Core.UUID();
 
-            const def: Interfaces.RuleInterface =
+            const def: RuleInterface =
                 Selector instanceof CSSRule ?
                     {
                         Selector: Selector.cssText.split('{')[0]?.trim() ?? '',
                         Contents: /\{([\s\S]*)\}/.exec(Selector.cssText)?.[1] ?? ''
                     }
                     : typeof Selector === 'string' ?
-                      { Selector: Selector, Contents: Content ?? {} }
-                        : Selector as Interfaces.RuleInterface;
+                        { Selector: Selector, Contents: Content ?? {} }
+                        : Selector as RuleInterface;
             this.#selector = Rule.GetSelector(def);
 
 
@@ -645,7 +318,7 @@ export namespace Css
                     {
                         if (Rule.#CheckSyntax(child as unknown as Record<string, unknown>))
                         {
-                            this.#children.push(new Rule(child as Interfaces.RuleInterface));
+                            this.#children.push(new Rule(child as RuleInterface));
                         }
                         else
                         {
@@ -759,7 +432,7 @@ export namespace Css
          *  @readonly
          *  @memberof    Core.Css.Rule
          *  @type        {string}
-         *  @description The rule serialised to CSS text. Builds a Interfaces.RuleInterface via `#definition`
+         *  @description The rule serialised to CSS text. Builds a RuleInterface via `#definition`
          *               — nested children included, as a `Rules` map — and delegates to the composable
          *               Rule.GetText static, so the instance owns the state and the static owns the
          *               serialisation. The result is memoised for a LEAF rule and handed back until a mutator
@@ -816,7 +489,7 @@ export namespace Css
         /** @name        #definition
          *  @private
          *  @memberof    Core.Css.Rule
-         *  @returns     {Interfaces.RuleInterface} This Rule as a plain definition object.
+         *  @returns     {RuleInterface} This Rule as a plain definition object.
          *  @description Project this Rule's state into the definition shape the Rule.GetText static consumes:
          *               the selector, the body (the raw `#contents` of an @keyframes / @page when there is
          *               one, the declarations otherwise), and — for a grouping @-rule — a `Rules` map built by
@@ -825,9 +498,9 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #definition(): Interfaces.RuleInterface
+        #definition(): RuleInterface
         {
-            const definition : Interfaces.RuleInterface =
+            const definition : RuleInterface =
                 {
                     Selector : this.#selector,
                     Contents : this.#contents ?? this.#properties,
@@ -835,7 +508,7 @@ export namespace Css
 
             if (this.#children.length > 0)
             {
-                const rules : Interfaces.RuleInterface[] = [];
+                const rules : RuleInterface[] = [];
 
                 for (const child of this.#children)
                 {
@@ -1403,8 +1076,8 @@ export namespace Css
          *  @static
          *  @memberof    Core.Css.Rule
          *  @param       {Record<string, unknown>} o A candidate object.
-         *  @returns     {boolean} True if it carries a Interfaces.RuleInterface key (Selector or a body name).
-         *  @description Distinguish a Interfaces.RuleInterface from a bare property bag / selector-map for GetText's
+         *  @returns     {boolean} True if it carries a RuleInterface key (Selector or a body name).
+         *  @description Distinguish a RuleInterface from a bare property bag / selector-map for GetText's
          *               format detection. A definition has Selector, Contents, Content, Body, Rule or Rules.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
@@ -1474,7 +1147,7 @@ export namespace Css
          *  @public
          *  @static
          *  @memberof    Core.Css.Rule
-         *  @param       {Interfaces.RuleInterface} def A rule definition (string selector or Selector object).
+         *  @param       {RuleInterface} def A rule definition (string selector or Selector object).
          *  @returns     {string} The serialised selector / @-rule prelude.
          *  @description Serialise a definition's selector across all 11 @-rules. The And/Or/Not walker is a
          *               local closure that produces valid CSS: features join with ` and `, Or emits a comma,
@@ -1484,13 +1157,13 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static GetSelector(def: Interfaces.RuleInterface): string
+        static GetSelector(def: RuleInterface): string
         {
             const sel = def.Selector;
             if (!sel)                    return '';
             if (typeof sel === 'string') return sel;
 
-            const s    = sel as Interfaces.SelectorInterface;
+            const s    = sel as SelectorInterface;
             const type = s.Type.toLowerCase().trim();
 
             const cond = (obj: Record<string, unknown>): string =>
@@ -1561,14 +1234,14 @@ export namespace Css
          *  @public
          *  @static
          *  @memberof    Core.Css.Rule
-         *  @param       {Interfaces.RuleInterface} def A rule definition.
+         *  @param       {RuleInterface} def A rule definition.
          *  @returns     {string} The @-rule keyword (e.g. '@media'), or '' for a plain style rule.
          *  @description Extract the @-rule type. From a string selector, the leading `@word`; from a Selector
          *               object, its `Type`. Mirrors the legacy Css.GetType; GetText branches on it.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static GetType(def: Interfaces.RuleInterface): string
+        static GetType(def: RuleInterface): string
         {
             const sel = def.Selector;
             if (!sel) return '';
@@ -1577,14 +1250,14 @@ export namespace Css
                 const m = /^(@[\w-]+)/.exec(sel.trim());
                 return m?.[1] ?? '';
             }
-            return (sel as Interfaces.SelectorInterface).Type ?? '';
+            return (sel as SelectorInterface).Type ?? '';
         }
 
         /** @name        GetContents
          *  @public
          *  @static
          *  @memberof    Core.Css.Rule
-         *  @param       {Interfaces.RuleInterface} def A rule definition.
+         *  @param       {RuleInterface} def A rule definition.
          *  @returns     {Record<string, unknown>} The body object (properties, or frames/margin-boxes for @-rules).
          *  @description Resolve a definition's body from the four interchangeable names (Contents ?? Content ??
          *               Body ?? Rule). A string body is parsed inline into a camelCased property map; an object
@@ -1592,7 +1265,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static GetContents(def: Interfaces.RuleInterface): Record<string, unknown>
+        static GetContents(def: RuleInterface): Record<string, unknown>
         {
             const body = def.Contents ?? def.Content ?? def.Body ?? def.Rule ?? {};
 
@@ -1619,7 +1292,7 @@ export namespace Css
          *  @public
          *  @static
          *  @memberof    Core.Css.Rule
-         *  @param       {Interfaces.RuleInterface | Record<string, unknown>} def A rule definition, a flat
+         *  @param       {RuleInterface | Record<string, unknown>} def A rule definition, a flat
          *               property bag, or a selector→properties map.
          *  @param       {string} [selector] When given, `def` is treated as a bare property bag wrapped at
          *               this selector — `GetText(props, '.btn')`.
@@ -1643,7 +1316,7 @@ export namespace Css
          *  @license     MIT / Commercial (dual license) */
         static GetText
         (
-            def       : Interfaces.RuleInterface | Record<string, unknown>,
+            def       : RuleInterface | Record<string, unknown>,
             selector? : string,
         ): string
         {
@@ -1654,7 +1327,7 @@ export namespace Css
                     {
                         Selector : selector,
                         Content  : def,
-                    } as Interfaces.RuleInterface,
+                    } as RuleInterface,
                 );
             }
 
@@ -1681,7 +1354,7 @@ export namespace Css
                         {
                             Selector : ':host',
                             Content  : def,
-                        } as Interfaces.RuleInterface,
+                        } as RuleInterface,
                     );
                 }
 
@@ -1694,7 +1367,7 @@ export namespace Css
                         {
                             Selector : key,
                             Content  : properties,
-                        } as Interfaces.RuleInterface,
+                        } as RuleInterface,
                     );
 
                     mapped.push(text);
@@ -1703,7 +1376,7 @@ export namespace Css
                 return mapped.join('\n');
             }
 
-            const d            = def as Interfaces.RuleInterface;
+            const d            = def as RuleInterface;
             const type         = Rule.GetType(d).toLowerCase();
             const selectorText = Rule.GetSelector(d);
             const contents     = Rule.GetContents(d);
@@ -1738,7 +1411,7 @@ export namespace Css
 
                 if (typeof source === 'object' && source)
                 {
-                    name = (source as Interfaces.SelectorInterface).Name ?? '';
+                    name = (source as SelectorInterface).Name ?? '';
                 }
 
                 if (!name)
@@ -2004,7 +1677,7 @@ export namespace Css
          *  @public
          *  @static
          *  @memberof    Core.Css.Rule
-         *  @param       {Interfaces.RuleInterface} definition A full rule definition (object form).
+         *  @param       {RuleInterface} definition A full rule definition (object form).
          *  @param       {'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null} [target] Injection target.
          *  @param       {number} [index] Insertion index within a sheet target.
          *  @returns     {Rule} The created, injected Rule.
@@ -2013,12 +1686,12 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static css(definition: Interfaces.RuleInterface,                          target?: 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null, index?: number): Rule;
+        static css(definition: RuleInterface,                          target?: 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null, index?: number): Rule;
         /** @name        css
          *  @public
          *  @static
          *  @memberof    Core.Css.Rule
-         *  @param       {string | Interfaces.RuleInterface} arg0 The selector (positional form) or the full rule
+         *  @param       {string | RuleInterface} arg0 The selector (positional form) or the full rule
          *               definition (object form) — discriminated at runtime by `typeof arg0 === 'string'`.
          *  @param       {Record<string, string> | string | 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null} [arg1] The body when positional; otherwise the target.
          *  @param       {'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null | number} [arg2] The target when positional; otherwise the index.
@@ -2034,7 +1707,7 @@ export namespace Css
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         static css(
-            arg0  : string | Interfaces.RuleInterface,
+            arg0  : string | RuleInterface,
             arg1? : Record<string, string> | string | 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null,
             arg2? : 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null | number,
             arg3? : number,
@@ -2081,7 +1754,7 @@ export namespace Css
          *  @public
          *  @static
          *  @memberof    Core.Css.Rule
-         *  @param       {Interfaces.RuleInterface} definition A full rule definition (object form).
+         *  @param       {RuleInterface} definition A full rule definition (object form).
          *  @param       {'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null} [target] Injection target.
          *  @param       {number} [index] Insertion index within a sheet target.
          *  @returns     {Rule} The created, injected Rule.
@@ -2089,12 +1762,12 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static Append(definition: Interfaces.RuleInterface,                          target?: 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null, index?: number): Rule;
+        static Append(definition: RuleInterface,                          target?: 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null, index?: number): Rule;
         /** @name        Append
          *  @public
          *  @static
          *  @memberof    Core.Css.Rule
-         *  @param       {string | Interfaces.RuleInterface} arg0 The selector (positional form) or the full rule
+         *  @param       {string | RuleInterface} arg0 The selector (positional form) or the full rule
          *               definition (object form) — discriminated at runtime by `typeof arg0 === 'string'`.
          *  @param       {Record<string, string> | string | 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null} [arg1] The body when positional; otherwise the target.
          *  @param       {'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null | number} [arg2] The target when positional; otherwise the index.
@@ -2109,7 +1782,7 @@ export namespace Css
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         static Append(
-            arg0  : string | Interfaces.RuleInterface,
+            arg0  : string | RuleInterface,
             arg1? : Record<string, string> | string | 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null,
             arg2? : 'style' | 'file' | object | Element | ShadowRoot | CSSStyleSheet | HTMLLinkElement | null | number,
             arg3? : number,
@@ -2317,7 +1990,7 @@ export namespace Css
         /** @name        constructor
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {...Types.StylesheetArguments} args Zero, one, or many source values. Zero → an empty
+         *  @param       {...StylesheetArguments} args Zero, one, or many source values. Zero → an empty
          *               sheet; one → that value in any accepted form; many → the Rule arguments among them,
          *               collected into a Rule array.
          *  @description Build a Stylesheet from any of its input forms, then mount it live. The variadic args
@@ -2336,11 +2009,11 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        constructor(...args: Types.StylesheetArguments[])
+        constructor(...args: StylesheetArguments[])
         {
             this.#head = document.head ?? document.documentElement;
 
-            const input: Types.StylesheetArguments | undefined =
+            const input: StylesheetArguments | undefined =
                 args.length === 0    ? undefined :
                     args.length === 1    ? args[0] :
                         /* multiple args */    args.filter(a => a instanceof Rule) as Rule[];
@@ -2417,7 +2090,7 @@ export namespace Css
                         this.parse((input as unknown as { Text: string }).Text);
                     } else
                     {
-                        this.parse(input as Interfaces.StylesheetObjectInterface);
+                        this.parse(input as StylesheetObjectInterface);
                     }
                 }
             }
@@ -2703,7 +2376,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static ToString(source: Types.StylesheetArguments | Rule[]): string
+        static ToString(source: StylesheetArguments | Rule[]): string
         {
             if (typeof source === 'string') return source;
             if (Array.isArray(source))
@@ -2731,19 +2404,19 @@ export namespace Css
          *  @public
          *  @static
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {Interfaces.StylesheetObjectInterface} obj A stylesheet object map to build from.
+         *  @param       {StylesheetObjectInterface} obj A stylesheet object map to build from.
          *  @returns     {Stylesheet} A fresh Stylesheet built from the object map.
          *  @description Build a new Stylesheet from an object map (selector→rule). Delegates to `new
          *               Stylesheet(obj)`, whose `parse` builds one Rule per entry.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static Parse(obj: Interfaces.StylesheetObjectInterface): Stylesheet;
+        static Parse(obj: StylesheetObjectInterface): Stylesheet;
         /** @name        Parse
          *  @public
          *  @static
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {string | Interfaces.StylesheetObjectInterface} argument A CSS string or a stylesheet
+         *  @param       {string | StylesheetObjectInterface} argument A CSS string or a stylesheet
          *               object map.
          *  @returns     {Stylesheet} A fresh Stylesheet built from the input.
          *  @description The factory that mirrors `ToArray` but returns a Stylesheet instead of a `Rule[]`: builds
@@ -2754,7 +2427,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static Parse(argument: string | Interfaces.StylesheetObjectInterface): Stylesheet
+        static Parse(argument: string | StylesheetObjectInterface): Stylesheet
         {
             return new Stylesheet(argument);
         }
@@ -3047,12 +2720,12 @@ export namespace Css
             types: string,
             handler: EventListener,
             options?: AddEventListenerOptions &
-            {
-                phase?: 'capture' |
+                {
+                    phase?: 'capture' |
                         'bubble'  |
                         'broker';
-                brokers?: string[]
-            }
+                    brokers?: string[]
+                }
         ): this
         {
             Core.Services.Events?.On(document, types, handler, options);
@@ -3117,7 +2790,7 @@ export namespace Css
         /** @name        parse
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {Css.Types.StylesheetArguments} input CSS text, a URL string, a native CSSStyleSheet /
+         *  @param       {StylesheetArguments} input CSS text, a URL string, a native CSSStyleSheet /
          *               CSSRuleList, a Rule[] , or a Stylesheet / stylesheet object.
          *  @returns     {this} For chaining — the AriannA fluent convention.
          *  @description Populate THIS sheet's rules from any accepted input, then flush to the live CSSOM and
@@ -3130,7 +2803,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        parse(input: Css.Types.StylesheetArguments): this
+        parse(input: StylesheetArguments): this
         {
             this.#rules = [];
 
@@ -3160,7 +2833,7 @@ export namespace Css
             }
             else if (typeof input === 'object' && input !== null)
             {
-                const obj     = input as Interfaces.StylesheetObjectInterface;
+                const obj     = input as StylesheetObjectInterface;
                 const entries = Object.entries(obj);
 
                 if (entries.length > 0 && entries.every(([, v]) => typeof v !== 'object' || v === null))
@@ -3171,7 +2844,7 @@ export namespace Css
                 {
                     for (const [sel, def] of entries)
                     {
-                        const d = def as Interfaces.RuleInterface;
+                        const d = def as RuleInterface;
 
                         if (d && (d.Selector || d.Contents || d.Content || d.Rule || d.Body))
                         {
@@ -3193,7 +2866,7 @@ export namespace Css
         /** @name        getIndex
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {Types.RuleArguments} rule A selector string, a Rule, or a native CSSRule to locate.
+         *  @param       {RuleArguments} rule A selector string, a Rule, or a native CSSRule to locate.
          *  @returns     {number} The index of the matching Rule in the sheet, or -1 when none matches.
          *  @description Find a Rule's position in the sheet by selector. Extracts the selector from any input
          *               form (string / Rule / CSSRule) and matches it against `#rules` whitespace-insensitively,
@@ -3201,7 +2874,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        getIndex(rule: Types.RuleArguments): number
+        getIndex(rule: RuleArguments): number
         {
             const selector = typeof rule === 'string'
                 ? rule.trim()
@@ -3216,14 +2889,14 @@ export namespace Css
         /** @name        contains
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {...Types.RuleArguments} rules One or more selectors / Rules / CSSRules to test for.
+         *  @param       {...RuleArguments} rules One or more selectors / Rules / CSSRules to test for.
          *  @returns     {boolean} True when every given rule is present in the sheet.
          *  @description Test whether the sheet contains all of the given rules — true when each one resolves to a
          *               non-negative index via `getIndex`.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        contains(...rules: Types.RuleArguments[]): boolean
+        contains(...rules: RuleArguments[]): boolean
         {
             return rules.every(r => this.getIndex(r) >= 0);
         }
@@ -3231,7 +2904,7 @@ export namespace Css
         /** @name        get
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {...Types.RuleArguments} rules One or more selectors / Rules / CSSRules to fetch. Also
+         *  @param       {...RuleArguments} rules One or more selectors / Rules / CSSRules to fetch. Also
          *               accepts @-rule selectors, e.g. `sheet.get('@keyframes spin')`.
          *  @returns     {Rule | Rule[] | undefined} A single Rule for one argument (or undefined), an array of
          *               the found Rules for several.
@@ -3241,7 +2914,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        get(...rules: Types.RuleArguments[]): Rule | Rule[] | undefined
+        get(...rules: RuleArguments[]): Rule | Rule[] | undefined
         {
             if (rules.length === 1)
             {
@@ -3259,13 +2932,13 @@ export namespace Css
         /** @name        Get
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {...Types.RuleArguments} rules One or more selectors / Rules / CSSRules to fetch.
+         *  @param       {...RuleArguments} rules One or more selectors / Rules / CSSRules to fetch.
          *  @returns     {Rule | Rule[] | undefined} Whatever `get` returns for the same arguments.
          *  @description Golem alias for `get` — mirrors `sheet.Get('@keyframes Settete')`. Forwards verbatim.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        Get(...rules: Types.RuleArguments[]): Rule | Rule[] | undefined
+        Get(...rules: RuleArguments[]): Rule | Rule[] | undefined
         {
             return this.get(...rules);
         }
@@ -3273,7 +2946,7 @@ export namespace Css
         /** @name        set
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {Types.RuleArguments} rule The selector / Rule / CSSRule identifying the rule to update.
+         *  @param       {RuleArguments} rule The selector / Rule / CSSRule identifying the rule to update.
          *  @param       {Record<string, string> | string} value New declarations — a CSS string (replaces the
          *               body) or a property object (merged in).
          *  @returns     {this} The Stylesheet, for chaining.
@@ -3283,7 +2956,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        set(rule: Types.RuleArguments, value: Record<string, string> | string): this
+        set(rule: RuleArguments, value: Record<string, string> | string): this
         {
             const i = this.getIndex(rule);
             if (i < 0) return this;
@@ -3303,7 +2976,7 @@ export namespace Css
         /** @name        insert
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {Types.RuleArguments | Types.RuleArguments[]} rules One rule or an array of rules to
+         *  @param       {RuleArguments | RuleArguments[]} rules One rule or an array of rules to
          *               insert, in any accepted form.
          *  @param       {number} index The position to splice them in at.
          *  @returns     {this} The Stylesheet, for chaining.
@@ -3313,7 +2986,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        insert(rules: Types.RuleArguments | Types.RuleArguments[], index: number): this
+        insert(rules: RuleArguments | RuleArguments[], index: number): this
         {
             const arr = Array.isArray(rules) ? rules : [rules];
             const newRules = arr.map(r =>
@@ -3331,7 +3004,7 @@ export namespace Css
         /** @name        Insert
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {Types.RuleArguments | Types.RuleArguments[]} rules One rule or an array of rules to
+         *  @param       {RuleArguments | RuleArguments[]} rules One rule or an array of rules to
          *               insert.
          *  @param       {number} index The position to splice them in at.
          *  @returns     {this} The Stylesheet, for chaining.
@@ -3339,7 +3012,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        Insert(rules: Types.RuleArguments | Types.RuleArguments[], index: number): this
+        Insert(rules: RuleArguments | RuleArguments[], index: number): this
         {
             return this.insert(rules, index);
         }
@@ -3347,7 +3020,7 @@ export namespace Css
         /** @name        unshift
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {...(Types.RuleArguments | Types.RuleArguments[])} rules One or more rules (or rule
+         *  @param       {...(RuleArguments | RuleArguments[])} rules One or more rules (or rule
          *               arrays) to prepend.
          *  @returns     {this} The Stylesheet, for chaining.
          *  @description Prepend one or more rules to the front of the sheet — flattens the arguments and inserts
@@ -3355,14 +3028,14 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        add(...args: (Types.RuleArguments | Types.RuleArguments[] | number)[]): this
+        add(...args: (RuleArguments | RuleArguments[] | number)[]): this
         {
             const last   = args[args.length - 1];
             const hasIdx = typeof last === 'number';
             const idx    = hasIdx ? (last as number) : undefined;
-            const src    = (hasIdx ? args.slice(0, -1) : args) as (Types.RuleArguments | Types.RuleArguments[])[];
+            const src    = (hasIdx ? args.slice(0, -1) : args) as (RuleArguments | RuleArguments[])[];
 
-            const flat = src.flat() as Types.RuleArguments[];
+            const flat = src.flat() as RuleArguments[];
             const newRules = flat.map(r =>
                 r instanceof Rule ? r :
                     typeof r === 'string' ? (Rule.Parse(r)[0] ?? null) :
@@ -3382,7 +3055,7 @@ export namespace Css
         /** @name        unshift
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {...(Types.RuleArguments | Types.RuleArguments[])} rules One or more rules (or rule
+         *  @param       {...(RuleArguments | RuleArguments[])} rules One or more rules (or rule
          *               arrays) to prepend.
          *  @returns     {this} The Stylesheet, for chaining.
          *  @description Prepend one or more rules to the front of the sheet — flattens the arguments and inserts
@@ -3390,7 +3063,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        Add(...args: (Types.RuleArguments | Types.RuleArguments[] | number)[]): this
+        Add(...args: (RuleArguments | RuleArguments[] | number)[]): this
         {
             return this.add(...args);
         }
@@ -3398,7 +3071,7 @@ export namespace Css
         /** @name        unshift
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {...(Types.RuleArguments | Types.RuleArguments[])} rules One or more rules (or rule
+         *  @param       {...(RuleArguments | RuleArguments[])} rules One or more rules (or rule
          *               arrays) to prepend.
          *  @returns     {this} The Stylesheet, for chaining.
          *  @description Prepend one or more rules to the front of the sheet — flattens the arguments and inserts
@@ -3406,15 +3079,15 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        unshift(...rules: (Types.RuleArguments | Types.RuleArguments[])[]): this
+        unshift(...rules: (RuleArguments | RuleArguments[])[]): this
         {
-            return this.insert(rules.flat() as Types.RuleArguments[], 0);
+            return this.insert(rules.flat() as RuleArguments[], 0);
         }
 
         /** @name        remove
          *  @public
          *  @memberof    Core.Css.Stylesheet
-         *  @param       {...(Types.RuleArguments | number)} rules Rules to remove, each given as a selector /
+         *  @param       {...(RuleArguments | number)} rules Rules to remove, each given as a selector /
          *               Rule / CSSRule or as a direct numeric index.
          *  @returns     {this} The Stylesheet, for chaining.
          *  @description Remove one or more rules from the sheet. Each argument is resolved to an index (a number
@@ -3423,7 +3096,7 @@ export namespace Css
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        remove(...rules: (Types.RuleArguments | number)[]): this
+        remove(...rules: (RuleArguments | number)[]): this
         {
             for (const r of rules)
             {
@@ -3500,7 +3173,7 @@ export namespace Css
         toString(): string { return this.Text; }
     }
 
-    export function Compile
+    export function  Compile
     (
         input: unknown,
         selector: string = ':root'
@@ -3658,7 +3331,7 @@ export namespace Css
             {
                 return new Rule
                 (
-                    source as unknown as Interfaces.RuleInterface
+                    source as unknown as RuleInterface
                 ).Text;
             }
             catch
@@ -3676,7 +3349,7 @@ export namespace Css
                     {
                         ...source,
                         Selector: source.selector
-                    } as unknown as Interfaces.RuleInterface
+                    } as unknown as RuleInterface
                 ).Text;
             }
             catch
@@ -3737,7 +3410,7 @@ export namespace Css
         {
             return new Stylesheet
             (
-                source as Interfaces.StylesheetObjectInterface
+                source as StylesheetObjectInterface
             ).Text;
         }
         catch
@@ -3760,7 +3433,7 @@ export namespace Css
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    const Service = new Core.Services.Service
+    const Service = new Core.Services.Service<ServiceContract>
     (
         'css',
         {
@@ -3908,14 +3581,14 @@ export namespace Css
                     /** @name        ToString
                      *  @public
                      *  @memberof    Core.Css.Service.Stylesheet
-                     *  @param       {Css.Types.StylesheetArguments | Rule[]} source Any stylesheet source, or a Rule list.
+                     *  @param       {StylesheetArguments | Rule[]} source Any stylesheet source, or a Rule list.
                      *  @returns     {string} The whole sheet as CSS text.
                      *  @description Serialise any stylesheet source to CSS text. Delegates to
                      *               Stylesheet.ToString.
                      *  @author      Riccardo Angeli
                      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                      *  @license     MIT / Commercial (dual license) */
-                    ToString(source: Css.Types.StylesheetArguments | Rule[]): string
+                    ToString(source: StylesheetArguments | Rule[]): string
                     {
                         return Stylesheet.ToString(source);
                     },
@@ -4037,11 +3710,7 @@ export namespace Css
                 return { Rule: 'Rule', Stylesheet: 'Stylesheet' } as const;
             },
 
-            Compile
-            (
-                input: unknown,
-                selector?: string
-            ): string | false
+            Compile(input: unknown, selector?: string): string | false
             {
                 return Css.Compile
                 (
@@ -4051,35 +3720,6 @@ export namespace Css
             },
         }
     );
-
-    /** @name        window.Css
-     *  @global
-     *  @memberof    Core.Css
-     *  @description Expose the Css namespace as a window global for consumers outside the module system —
-     *               notably the playground, which runs user code with `new Function` (sync), where ES imports
-     *               are unavailable and `Css.Rule` / `new Css.Stylesheet(...)` must resolve as a global.
-     *               Separate from the module `export` (which serves `import` consumers). Guarded so it never
-     *               clobbers an existing global; non-enumerable to stay out of `for…in` over window.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    if (typeof window !== 'undefined')
-    {
-        if (!('Css' in window))
-        {
-            Object.defineProperty
-            (
-                window,
-                'Css',
-                {
-                    enumerable: false,
-                    configurable: false,
-                    writable: false,
-                    value: Css,
-                }
-            );
-        }
-    }
 }
 
-export default { Css };
+export default Css;

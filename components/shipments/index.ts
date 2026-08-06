@@ -36,23 +36,15 @@
  * operate in pure "link" mode — only the public tracking URL is exposed via
  * the "Track on <carrier> →" button.
  */
-
 export { Tracker } from './Tracker.ts';
-export type {
-    TrackingEventKind, TrackingEvent, CarrierConfig, TrackerOptions,
-} from './Tracker.ts';
-
-export { DHLTracker }   from './DHLTracker.ts';
+export type { TrackingEventKind, TrackingEvent, CarrierConfig, TrackerOptions, } from './Tracker.ts';
+export { DHLTracker } from './DHLTracker.ts';
 export type { DHLTrackerOptions } from './DHLTracker.ts';
-
-export { UPSTracker }   from './UPSTracker.ts';
+export { UPSTracker } from './UPSTracker.ts';
 export type { UPSTrackerOptions } from './UPSTracker.ts';
-
 export { FedExTracker } from './FedExTracker.ts';
 export type { FedExTrackerOptions } from './FedExTracker.ts';
-
-export { BRTTracker }   from './BRTTracker.ts';
+export { BRTTracker } from './BRTTracker.ts';
 export type { BRTTrackerOptions } from './BRTTracker.ts';
-
 export { TrackingMulti } from './TrackingMulti.ts';
 export type { CarrierId, TrackingMultiOptions } from './TrackingMulti.ts';

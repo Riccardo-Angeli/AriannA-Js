@@ -1,3 +1,9 @@
+import { Component, Components, Css, Templates } from '../../core/index.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/payments/Nexi
  * @author    Riccardo Angeli
@@ -17,50 +23,44 @@
  *   arianna:payment-redirect  detail: { method: 'nexi', url: string }
  *   arianna:payment-error     detail: { method: 'nexi', message: string }
  *
- * Attrs: redirect-url, amount, currency, target
+ * Attributes: redirect-url, amount, currency, target
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface NexiOptions {
-    redirectUrl : string;
-    amount      : number;
-    currency    : string;
-    target?     : '_blank' | '_self';
+    redirectUrl: string;
+    amount: number;
+    currency: string;
+    target?: '_blank' | '_self';
 }
-
-export class Nexi extends Component('arianna-nexi', HTMLElement, {}, {
-    attrs : ['redirect-url', 'amount', 'currency', 'target'],
+@Component('arianna-nexi', {}, {
+    Attributes: ['redirect-url', 'amount', 'currency', 'target'],
 })
-{
-    build(_opts: NexiOptions = {} as NexiOptions)
-    {
-        const amountAttr = this.attributeSignal('amount');
-        const currencyAttr = this.attributeSignal('currency');
-
+export class Nexi extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    onConnected(_opts: NexiOptions = {} as NexiOptions) {
+        const amountAttr = this.signal().attribute('amount');
+        const currencyAttr = this.signal().attribute('currency');
         this.btnLabel = () => {
             const a = parseFloat(amountAttr.Get() ?? '0') || 0;
             const c = currencyAttr.Get() ?? 'EUR';
             return `Pay ${c} ${a.toFixed(2)} with Nexi`;
         };
-
         this.onClick = () => { void this.pay(); };
-
-        this.template = html`
+        this.template = html `
             <button type="button" class="ar-nexi__btn" @click="this.onClick">
                 <span class="ar-nexi__logo">nexi</span>
                 <span>{{ this.btnLabel() }}</span>
             </button>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Nexi.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Nexi.DefaultSheet();
     }
-
     async pay(): Promise<void> {
         const url = this.getAttribute('redirect-url');
         if (!url) {
@@ -73,61 +73,59 @@ export class Nexi extends Component('arianna-nexi', HTMLElement, {}, {
             bubbles: true, detail: { method: 'nexi', url },
         }));
         const target = (this.getAttribute('target') ?? '_self') as '_blank' | '_self';
-        if (target === '_self') window.location.href = url;
-        else window.open(url, '_blank', 'noopener');
+        if (target === '_self')
+            window.location.href = url;
+        else
+            window.open(url, '_blank', 'noopener');
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     private btnLabel: () => string = () => 'Pay with Nexi';
-    private onClick : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', { display: 'inline-block' }),
-                new Rule('.ar-nexi__btn', {
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    minWidth: '200px',
-                    minHeight: '44px',
-                    padding: '0 18px',
-                    background: '#0e2c5e',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    font: '600 14px -apple-system, system-ui, sans-serif',
-                    transition: 'background 0.15s',
-                }),
-                new Rule('.ar-nexi__btn:hover', { background: '#0a2148' }),
-                new Rule('.ar-nexi__logo', {
-                    background: '#fff',
-                    color: '#0e2c5e',
-                    padding: '2px 8px',
-                    borderRadius: '3px',
-                    fontWeight: '900',
-                    fontStyle: 'italic',
-                    fontSize: '13px',
-                }),
-            ]
-        );
+    private onClick: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', { display: 'inline-block' }),
+            new Rule('.ar-nexi__btn', {
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                minWidth: '200px',
+                minHeight: '44px',
+                padding: '0 18px',
+                background: '#0e2c5e',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                font: '600 14px -apple-system, system-ui, sans-serif',
+                transition: 'background 0.15s',
+            }),
+            new Rule('.ar-nexi__btn:hover', { background: '#0a2148' }),
+            new Rule('.ar-nexi__logo', {
+                background: '#fff',
+                color: '#0e2c5e',
+                padding: '2px 8px',
+                borderRadius: '3px',
+                fontWeight: '900',
+                fontStyle: 'italic',
+                fontSize: '13px',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Nexi', {
-        value: Nexi, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Nexi namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Nexi {
+    export namespace Interfaces {
+        export interface Options extends NexiOptions {
+        }
+    }
 }
-
 export default Nexi;

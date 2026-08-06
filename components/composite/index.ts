@@ -14,17 +14,9 @@
  *
  *   import { NodeEditor, Chat, CodeEditor } from 'arianna/components/composite';
  */
-
 export { NodeEditor } from './NodeEditor.ts';
-export type {
-    NodeEditorOptions, NodeSchema, NodeInstance, WireInstance,
-    PortSpec, ParamSpec, RunState, WireStatus, TypeCheckFn,
-} from './NodeEditor.ts';
-
+export type { NodeEditorOptions, NodeSchema, NodeInstance, WireInstance, PortSpec, ParamSpec, RunState, WireStatus, TypeCheckFn, } from './NodeEditor.ts';
 export { Chat } from './Chat.ts';
-export type {
-    ChatOptions, ChatConversation, ChatMessage, ChatUser, MessageStatus,
-} from './Chat.ts';
-
+export type { ChatOptions, ChatConversation, ChatMessage, ChatUser, MessageStatus, } from './Chat.ts';
 export { CodeEditor } from './CodeEditor.ts';
 export type { CodeEditorOptions, CodeEditorLanguage } from './CodeEditor.ts';

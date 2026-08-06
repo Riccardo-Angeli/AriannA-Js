@@ -1,3 +1,9 @@
+import { Component, Css, Reactivity } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/audio/PianoRoll
  * @author    Riccardo Angeli
@@ -31,10 +37,6 @@
  *   arianna:pianoroll-play
  *   arianna:pianoroll-stop
  */
-
-import { Component } from '../../core/Components.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -42,34 +44,28 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface PianoNote {
-    pitch    : number;   // MIDI 0..127 (60 = C4)
-    start    : number;   // beats
-    length   : number;   // beats
-    velocity : number;   // 0..1
+    pitch: number; // MIDI 0..127 (60 = C4)
+    start: number; // beats
+    length: number; // beats
+    velocity: number; // 0..1
 }
-
 export interface PianoRollOptions {
-    beats?     : number;     // total beat count
-    pitchMin?  : number;     // lowest pitch shown (inclusive)
-    pitchMax?  : number;     // highest pitch shown (inclusive)
-    cellWidth? : number;     // px per beat
-    cellHeight?: number;     // px per row (pitch)
-    snap?      : number;     // beat snap (e.g. 0.25 = 16th)
+    beats?: number; // total beat count
+    pitchMin?: number; // lowest pitch shown (inclusive)
+    pitchMax?: number; // highest pitch shown (inclusive)
+    cellWidth?: number; // px per beat
+    cellHeight?: number; // px per row (pitch)
+    snap?: number; // beat snap (e.g. 0.25 = 16th)
 }
-
 const PITCH_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 function pitchLabel(p: number): string {
     const oct = Math.floor(p / 12) - 1;
@@ -79,91 +75,97 @@ function pitchLabel(p: number): string {
 function isBlackKey(p: number): boolean {
     return [1, 3, 6, 8, 10].includes(p % 12);
 }
-
-export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, {
-    attrs : ['beats', 'pitch-min', 'pitch-max', 'cell-width', 'cell-height', 'snap'],
+@Component('arianna-piano-roll', {}, {
+    Attributes: ['beats', 'pitch-min', 'pitch-max', 'cell-width', 'cell-height', 'snap'],
 })
-{
+export class PianoRoll extends HTMLElement {
     readonly notes$: Signal<PianoNote[]> = signal<PianoNote[]>([]);
-    readonly playing$: Signal<boolean>  = signal(false);
-    readonly playhead$: Signal<number>  = signal(0);
-
-    #grid?    : HTMLDivElement;
-    #cellW    = 28;
-    #cellH    = 14;
-    #beats    = 16;
+    readonly playing$: Signal<boolean> = signal(false);
+    readonly playhead$: Signal<number> = signal(0);
+    #grid?: HTMLDivElement;
+    #cellW = 28;
+    #cellH = 14;
+    #beats = 16;
     #pitchMin = 36;
     #pitchMax = 84;
-    #snap     = 0.25;
-
+    #snap = 0.25;
     constructor(opts: PianoRollOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
+        super();
+        const self = this as unknown as {
+            render(): HTMLElement;
+        };
         const el = self.render();
-        if (opts.beats      != null) el.setAttribute('beats',       String(opts.beats));
-        if (opts.pitchMin   != null) el.setAttribute('pitch-min',   String(opts.pitchMin));
-        if (opts.pitchMax   != null) el.setAttribute('pitch-max',   String(opts.pitchMax));
-        if (opts.cellWidth  != null) el.setAttribute('cell-width',  String(opts.cellWidth));
-        if (opts.cellHeight != null) el.setAttribute('cell-height', String(opts.cellHeight));
-        if (opts.snap       != null) el.setAttribute('snap',        String(opts.snap));
+        if (opts.beats != null)
+            el.setAttribute('beats', String(opts.beats));
+        if (opts.pitchMin != null)
+            el.setAttribute('pitch-min', String(opts.pitchMin));
+        if (opts.pitchMax != null)
+            el.setAttribute('pitch-max', String(opts.pitchMax));
+        if (opts.cellWidth != null)
+            el.setAttribute('cell-width', String(opts.cellWidth));
+        if (opts.cellHeight != null)
+            el.setAttribute('cell-height', String(opts.cellHeight));
+        if (opts.snap != null)
+            el.setAttribute('snap', String(opts.snap));
     }
-
-    build(): void {
+    onConnected(): void {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const root = self.render();
-        if (root.querySelector('.pr-wrap')) return;
-
-        this.#beats    = parseInt(self.attributeSignal('beats')?.Peek()      ?? '16', 10) || 16;
-        this.#pitchMin = parseInt(self.attributeSignal('pitch-min')?.Peek()  ?? '36', 10) || 36;
-        this.#pitchMax = parseInt(self.attributeSignal('pitch-max')?.Peek()  ?? '84', 10) || 84;
-        this.#cellW    = parseInt(self.attributeSignal('cell-width')?.Peek() ?? '28', 10) || 28;
-        this.#cellH    = parseInt(self.attributeSignal('cell-height')?.Peek()?? '14', 10) || 14;
-        this.#snap     = parseFloat(self.attributeSignal('snap')?.Peek()     ?? '0.25') || 0.25;
-
+        if (root.querySelector('.pr-wrap'))
+            return;
+        this.#beats = parseInt(self.signal().attribute('beats')?.Peek() ?? '16', 10) || 16;
+        this.#pitchMin = parseInt(self.signal().attribute('pitch-min')?.Peek() ?? '36', 10) || 36;
+        this.#pitchMax = parseInt(self.signal().attribute('pitch-max')?.Peek() ?? '84', 10) || 84;
+        this.#cellW = parseInt(self.signal().attribute('cell-width')?.Peek() ?? '28', 10) || 28;
+        this.#cellH = parseInt(self.signal().attribute('cell-height')?.Peek() ?? '14', 10) || 14;
+        this.#snap = parseFloat(self.signal().attribute('snap')?.Peek() ?? '0.25') || 0.25;
         const wrap = document.createElement('div');
         wrap.className = 'pr-wrap';
-
         // Toolbar
         const tb = document.createElement('div');
         tb.className = 'pr-toolbar';
-        const btnPlay  = document.createElement('button');
-        btnPlay.type = 'button'; btnPlay.className = 'pr-btn'; btnPlay.textContent = '▶';
-        const btnStop  = document.createElement('button');
-        btnStop.type = 'button'; btnStop.className = 'pr-btn'; btnStop.textContent = '■';
+        const btnPlay = document.createElement('button');
+        btnPlay.type = 'button';
+        btnPlay.className = 'pr-btn';
+        btnPlay.textContent = '▶';
+        const btnStop = document.createElement('button');
+        btnStop.type = 'button';
+        btnStop.className = 'pr-btn';
+        btnStop.textContent = '■';
         const btnClear = document.createElement('button');
-        btnClear.type = 'button'; btnClear.className = 'pr-btn'; btnClear.textContent = 'Clear';
+        btnClear.type = 'button';
+        btnClear.className = 'pr-btn';
+        btnClear.textContent = 'Clear';
         tb.append(btnPlay, btnStop, btnClear);
-
         // Body: keyboard | grid
         const body = document.createElement('div');
         body.className = 'pr-body';
-
         const keyboard = document.createElement('div');
         keyboard.className = 'pr-keyboard';
         for (let p = this.#pitchMax; p >= this.#pitchMin; p--) {
             const k = document.createElement('div');
             k.className = 'pr-key ' + (isBlackKey(p) ? 'pr-key-black' : 'pr-key-white');
             k.style.height = this.#cellH + 'px';
-            if (p % 12 === 0) k.textContent = pitchLabel(p);
+            if (p % 12 === 0)
+                k.textContent = pitchLabel(p);
             keyboard.appendChild(k);
         }
-
         const grid = document.createElement('div');
         grid.className = 'pr-grid';
-        grid.style.width  = (this.#beats * this.#cellW) + 'px';
+        grid.style.width = (this.#beats * this.#cellW) + 'px';
         grid.style.height = ((this.#pitchMax - this.#pitchMin + 1) * this.#cellH) + 'px';
         this.#grid = grid;
         this.#paintGrid(grid);
-
         body.append(keyboard, grid);
         wrap.append(tb, body);
         root.appendChild(wrap);
-
         // Notes layer
         effect(() => {
             // Strip existing note elements, redraw from signal
@@ -182,31 +184,29 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
             }
             phEl.style.left = (ph * this.#cellW) + 'px';
         });
-
         // Click-empty to add a note
         grid.addEventListener('pointerdown', (e: PointerEvent) => {
             const t = e.target as HTMLElement;
-            if (t.classList.contains('pr-note') || t.classList.contains('pr-note-grip')) return;
+            if (t.classList.contains('pr-note') || t.classList.contains('pr-note-grip'))
+                return;
             const r = grid.getBoundingClientRect();
             const x = e.clientX - r.left;
             const y = e.clientY - r.top;
             const start = this.#snapBeat(x / this.#cellW);
             const pitch = this.#pitchMax - Math.floor(y / this.#cellH);
-            if (pitch < this.#pitchMin || pitch > this.#pitchMax) return;
+            if (pitch < this.#pitchMin || pitch > this.#pitchMax)
+                return;
             const note: PianoNote = { pitch, start, length: 1, velocity: 0.8 };
             this.notes$.Set([...this.notes$.Peek(), note]);
             self.fire('arianna:pianoroll-note-add', { detail: { note, source: this }, bubbles: true });
         });
-
-        btnPlay .addEventListener('click', () => this.play());
-        btnStop .addEventListener('click', () => this.stop());
+        btnPlay.addEventListener('click', () => this.play());
+        btnStop.addEventListener('click', () => this.stop());
         btnClear.addEventListener('click', () => {
             this.notes$.Set([]);
         });
-
         self.Sheet = PianoRoll.DefaultSheet();
     }
-
     #paintGrid(grid: HTMLElement): void {
         const cols = this.#beats;
         const rows = this.#pitchMax - this.#pitchMin + 1;
@@ -216,51 +216,54 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
             `linear-gradient(to bottom, var(--ar-border, #2a2a2a) 1px, transparent 1px)`,
         ].join(', ');
         grid.style.backgroundSize = `${this.#cellW}px 100%, 100% ${this.#cellH}px`;
-
         // Black-key row tint via overlay divs (one per black row)
         for (let p = this.#pitchMax; p >= this.#pitchMin; p--) {
-            if (!isBlackKey(p)) continue;
+            if (!isBlackKey(p))
+                continue;
             const row = document.createElement('div');
             row.className = 'pr-row-tint';
-            row.style.top    = ((this.#pitchMax - p) * this.#cellH) + 'px';
+            row.style.top = ((this.#pitchMax - p) * this.#cellH) + 'px';
             row.style.height = this.#cellH + 'px';
-            row.style.width  = (cols * this.#cellW) + 'px';
+            row.style.width = (cols * this.#cellW) + 'px';
             grid.appendChild(row);
         }
     }
-
     #renderNote(n: PianoNote): HTMLDivElement {
         const div = document.createElement('div');
         div.className = 'pr-note';
-        div.style.left   = (n.start * this.#cellW) + 'px';
-        div.style.top    = ((this.#pitchMax - n.pitch) * this.#cellH) + 'px';
-        div.style.width  = (n.length * this.#cellW) + 'px';
+        div.style.left = (n.start * this.#cellW) + 'px';
+        div.style.top = ((this.#pitchMax - n.pitch) * this.#cellH) + 'px';
+        div.style.width = (n.length * this.#cellW) + 'px';
         div.style.height = this.#cellH + 'px';
         div.style.opacity = String(0.5 + n.velocity * 0.5);
         // Resize grip
         const grip = document.createElement('div');
         grip.className = 'pr-note-grip';
         div.appendChild(grip);
-
         let dragKind: 'move' | 'resize' | null = null;
         let startX = 0, startY = 0, origStart = 0, origPitch = 0, origLen = 0;
-
         div.addEventListener('pointerdown', (e: PointerEvent) => {
             e.stopPropagation();
             if (e.detail >= 2) {
                 // Double-click → delete
-                const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+                const self = this as unknown as {
+                    fire(t: string, init?: CustomEventInit): void;
+                };
                 this.notes$.Set(this.notes$.Peek().filter(x => x !== n));
                 self.fire('arianna:pianoroll-note-remove', { detail: { note: n, source: this }, bubbles: true });
                 return;
             }
             dragKind = (e.target as HTMLElement).classList.contains('pr-note-grip') ? 'resize' : 'move';
-            startX = e.clientX; startY = e.clientY;
-            origStart = n.start; origPitch = n.pitch; origLen = n.length;
+            startX = e.clientX;
+            startY = e.clientY;
+            origStart = n.start;
+            origPitch = n.pitch;
+            origLen = n.length;
             div.setPointerCapture(e.pointerId);
         });
         div.addEventListener('pointermove', (e: PointerEvent) => {
-            if (!dragKind) return;
+            if (!dragKind)
+                return;
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
             if (dragKind === 'move') {
@@ -268,7 +271,8 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
                 const newPitch = origPitch - Math.round(dy / this.#cellH);
                 const updated = { ...n, start: Math.max(0, newStart), pitch: Math.max(this.#pitchMin, Math.min(this.#pitchMax, newPitch)) };
                 this.#updateNote(n, updated);
-            } else {
+            }
+            else {
                 const newLen = Math.max(this.#snap, this.#snapBeat(origLen + dx / this.#cellW));
                 const updated = { ...n, length: newLen };
                 this.#updateNote(n, updated);
@@ -278,15 +282,16 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
             div.releasePointerCapture(e.pointerId);
             dragKind = null;
         });
-
         return div;
     }
-
     #updateNote(oldNote: PianoNote, newNote: PianoNote): void {
-        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+        };
         const list = this.notes$.Peek();
         const idx = list.indexOf(oldNote);
-        if (idx < 0) return;
+        if (idx < 0)
+            return;
         const next = list.slice();
         next[idx] = newNote;
         this.notes$.Set(next);
@@ -294,140 +299,142 @@ export class PianoRoll extends Component('arianna-piano-roll', HTMLElement, {}, 
         Object.assign(oldNote, newNote);
         self.fire('arianna:pianoroll-note-edit', { detail: { note: newNote, oldNote, source: this }, bubbles: true });
     }
-
     #snapBeat(b: number): number {
-        if (this.#snap <= 0) return b;
+        if (this.#snap <= 0)
+            return b;
         return Math.round(b / this.#snap) * this.#snap;
     }
-
     // ── Public API ────────────────────────────────────────────────────────
-
     addNote(n: PianoNote): this {
         this.notes$.Set([...this.notes$.Peek(), n]);
         return this;
     }
-
     setNotes(notes: PianoNote[]): this {
         this.notes$.Set(notes);
         return this;
     }
-
     getNotes(): PianoNote[] { return this.notes$.Get(); }
-
     play(): void {
-        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+        };
         this.playing$.Set(true);
         self.fire('arianna:pianoroll-play', { detail: { source: this }, bubbles: true });
     }
-
     stop(): void {
-        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+        };
         this.playing$.Set(false);
         this.playhead$.Set(0);
         self.fire('arianna:pianoroll-stop', { detail: { source: this }, bubbles: true });
     }
-
     /** Drive the playhead from an external clock (e.g. AudioContext). */
     setPlayhead(beat: number): this {
         this.playhead$.Set(beat);
         return this;
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                background  : 'var(--ar-bg, #0d0d0d)',
-                border      : '1px solid var(--ar-border, #2a2a2a)',
+                background: 'var(--ar-bg, #0d0d0d)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
-                color       : 'var(--ar-text, #e0e0e0)',
-                display     : 'inline-block',
-                font        : 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
-                padding     : '8px',
-                userSelect  : 'none',
+                color: 'var(--ar-text, #e0e0e0)',
+                display: 'inline-block',
+                font: 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
+                padding: '8px',
+                userSelect: 'none',
             }),
             new Rule(':host .pr-wrap', {
-                display      : 'flex',
+                display: 'flex',
                 flexDirection: 'column',
-                gap          : '6px',
+                gap: '6px',
             }),
             new Rule(':host .pr-toolbar', { display: 'flex', gap: '4px' }),
             new Rule(':host .pr-btn', {
-                background  : 'var(--ar-bg3, #1e1e1e)',
-                border      : '1px solid var(--ar-border, #2a2a2a)',
+                background: 'var(--ar-bg3, #1e1e1e)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
-                color       : 'var(--ar-text, #e0e0e0)',
-                cursor      : 'pointer',
-                font        : 'inherit',
-                fontSize    : '0.78rem',
-                minWidth    : '32px',
-                padding     : '4px 10px',
+                color: 'var(--ar-text, #e0e0e0)',
+                cursor: 'pointer',
+                font: 'inherit',
+                fontSize: '0.78rem',
+                minWidth: '32px',
+                padding: '4px 10px',
             }),
             new Rule(':host .pr-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
             new Rule(':host .pr-body', {
-                display    : 'flex',
-                maxHeight  : '320px',
-                overflow   : 'auto',
+                display: 'flex',
+                maxHeight: '320px',
+                overflow: 'auto',
             }),
             new Rule(':host .pr-keyboard', {
-                background : 'var(--ar-bg2, #161616)',
+                background: 'var(--ar-bg2, #161616)',
                 borderRight: '1px solid var(--ar-border, #2a2a2a)',
-                display    : 'flex',
+                display: 'flex',
                 flexDirection: 'column',
-                position   : 'sticky',
-                left       : '0',
-                zIndex     : '2',
+                position: 'sticky',
+                left: '0',
+                zIndex: '2',
             }),
             new Rule(':host .pr-key', {
-                alignItems : 'center',
+                alignItems: 'center',
                 borderBottom: '1px solid var(--ar-border, #2a2a2a)',
-                color      : 'var(--ar-muted, #888)',
-                display    : 'flex',
-                fontSize   : '0.62rem',
+                color: 'var(--ar-muted, #888)',
+                display: 'flex',
+                fontSize: '0.62rem',
                 paddingLeft: '6px',
-                width      : '48px',
+                width: '48px',
             }),
             new Rule(':host .pr-key-white', { background: 'var(--ar-bg3, #1e1e1e)' }),
             new Rule(':host .pr-key-black', { background: 'var(--ar-bg, #0d0d0d)' }),
             new Rule(':host .pr-grid', {
                 position: 'relative',
-                cursor  : 'crosshair',
+                cursor: 'crosshair',
             }),
             new Rule(':host .pr-row-tint', {
-                background    : 'rgba(255,255,255,0.02)',
-                pointerEvents : 'none',
-                position      : 'absolute',
+                background: 'rgba(255,255,255,0.02)',
+                pointerEvents: 'none',
+                position: 'absolute',
             }),
             new Rule(':host .pr-note', {
-                background  : 'var(--ar-primary, #7eb8f7)',
-                border      : '1px solid rgba(0,0,0,0.4)',
+                background: 'var(--ar-primary, #7eb8f7)',
+                border: '1px solid rgba(0,0,0,0.4)',
                 borderRadius: '2px',
-                cursor      : 'move',
-                position    : 'absolute',
+                cursor: 'move',
+                position: 'absolute',
             }),
             new Rule(':host .pr-note-grip', {
-                cursor   : 'ew-resize',
-                height   : '100%',
-                position : 'absolute',
-                right    : '0',
-                top      : '0',
-                width    : '4px',
+                cursor: 'ew-resize',
+                height: '100%',
+                position: 'absolute',
+                right: '0',
+                top: '0',
+                width: '4px',
             }),
             new Rule(':host .pr-playhead', {
-                background    : 'var(--ar-danger, #f44336)',
-                bottom        : '0',
-                pointerEvents : 'none',
-                position      : 'absolute',
-                top           : '0',
-                width         : '2px',
+                background: 'var(--ar-danger, #f44336)',
+                bottom: '0',
+                pointerEvents: 'none',
+                position: 'absolute',
+                top: '0',
+                width: '2px',
             }),
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'PianoRoll', {
-        value: PianoRoll, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * PianoRoll namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace PianoRoll {
+    export namespace Interfaces {
+        export interface PianoNoteContract extends PianoNote {
+        }
+        export interface Options extends PianoRollOptions {
+        }
+    }
+    export const PitchLabel = pitchLabel;
+    export const IsBlackKey = isBlackKey;
 }
-
 export default PianoRoll;

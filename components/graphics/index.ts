@@ -17,7 +17,6 @@
  * visual composer), and any third-party AriannA app that needs design-time
  * graphics controls. Renderer choice is left to the consumer.
  */
-
 export * from './colors/index.ts';
 export * from './2D/index.ts';
 export * from './3D/index.ts';

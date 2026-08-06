@@ -1,3 +1,10 @@
+import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/display/List
  * @author    Riccardo Angeli
@@ -31,13 +38,8 @@
  * Slots:
  *   default — list items when not using programmatic `.items`
  *
- * Attrs:  selectable, multiselect, dense, divided
+ * Attributes:  selectable, multiselect, dense, divided
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -45,69 +47,67 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface ListItem {
-    id        : string;
-    label     : string;
-    subtitle? : string;
-    icon?     : string;
-    badge?    : string | number;
-    meta?     : string;
-    disabled? : boolean;
+    id: string;
+    label: string;
+    subtitle?: string;
+    icon?: string;
+    badge?: string | number;
+    meta?: string;
+    disabled?: boolean;
 }
-
 export interface ListOptions {
-    selectable?  : boolean;
-    multiselect? : boolean;
-    dense?       : boolean;
-    divided?     : boolean;
+    selectable?: boolean;
+    multiselect?: boolean;
+    dense?: boolean;
+    divided?: boolean;
 }
-
-export class List extends Component('arianna-list', HTMLElement, {}, {
-    attrs : ['selectable', 'multiselect', 'dense', 'divided'],
+@Component('arianna-list', {}, {
+    Attributes: ['selectable', 'multiselect', 'dense', 'divided'],
 })
-{
+export class List extends HTMLElement {
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     /** Reactive items list. */
     items$: Signal<ListItem[]> = signal<ListItem[]>([]);
-
     /** Selected ids set, reactive. */
     selected$: Signal<Set<string>> = signal<Set<string>>(new Set());
-
-    build(_opts: ListOptions = {})
-    {
+    onConnected(_opts: ListOptions = {}) {
         this.setAttribute('role', this.hasAttribute('selectable') ? 'listbox' : 'list');
-
         this.hasItems = () => this.items$.Get().length > 0;
         this.allItems = () => this.items$.Get();
         this.isSelectable = () => this.hasAttribute('selectable');
-
         this.itemClass = (item: ListItem) => {
             let c = 'ar-list__item';
-            if (this.selected$.Get().has(item.id)) c += ' ar-list__item--selected';
-            if (item.disabled)                      c += ' ar-list__item--disabled';
+            if (this.selected$.Get().has(item.id))
+                c += ' ar-list__item--selected';
+            if (item.disabled)
+                c += ' ar-list__item--disabled';
             return c;
         };
         this.itemRole = () => this.isSelectable() ? 'option' : 'listitem';
         this.itemClick = (item: ListItem) => {
-            if (item.disabled || !this.isSelectable()) return;
+            if (item.disabled || !this.isSelectable())
+                return;
             const cur = new Set(this.selected$.Get());
             const multi = this.hasAttribute('multiselect');
-            if (!multi) cur.clear();
-            if (cur.has(item.id)) cur.delete(item.id);
-            else                   cur.add(item.id);
+            if (!multi)
+                cur.clear();
+            if (cur.has(item.id))
+                cur.delete(item.id);
+            else
+                cur.add(item.id);
             this.selected$.Set(cur);
             this.dispatchEvent(new CustomEvent('arianna:select', {
                 bubbles: true,
-                detail : { item, selected: [...cur] },
+                detail: { item, selected: [...cur] },
             }));
         };
-
-        this.template = html`
+        this.template = html `
             <ul class="ar-list__container" a-if="this.hasItems()">
                 <li a-for="item in this.allItems()"
                     :class="this.itemClass(item)"
@@ -126,106 +126,99 @@ export class List extends Component('arianna-list', HTMLElement, {}, {
                 <slot></slot>
             </ul>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = List.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = List.DefaultSheet();
     }
-
     /** Replace the items list. */
     set items(v: ListItem[]) { this.items$.Set(v ?? []); }
-    get items(): ListItem[]  { return this.items$.Get(); }
-
+    get items(): ListItem[] { return this.items$.Get(); }
     /** Currently-selected item ids. */
     get selected(): Set<string> { return this.selected$.Get(); }
     clearSelection(): void { this.selected$.Set(new Set()); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    get selectable(): boolean  { return this.hasAttribute('selectable'); }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    get selectable(): boolean { return this.hasAttribute('selectable'); }
     set selectable(v: boolean) { v ? this.setAttribute('selectable', '') : this.removeAttribute('selectable'); }
-
-    get multiselect(): boolean  { return this.hasAttribute('multiselect'); }
+    get multiselect(): boolean { return this.hasAttribute('multiselect'); }
     set multiselect(v: boolean) { v ? this.setAttribute('multiselect', '') : this.removeAttribute('multiselect'); }
-
-    get dense(): boolean  { return this.hasAttribute('dense'); }
+    get dense(): boolean { return this.hasAttribute('dense'); }
     set dense(v: boolean) { v ? this.setAttribute('dense', '') : this.removeAttribute('dense'); }
-
-    get divided(): boolean  { return this.hasAttribute('divided'); }
+    get divided(): boolean { return this.hasAttribute('divided'); }
     set divided(v: boolean) { v ? this.setAttribute('divided', '') : this.removeAttribute('divided'); }
-
-    private hasItems    : () => boolean = () => false;
-    private allItems    : () => ListItem[] = () => [];
+    private hasItems: () => boolean = () => false;
+    private allItems: () => ListItem[] = () => [];
     private isSelectable: () => boolean = () => false;
-    private itemClass   : (i: ListItem) => string = () => 'ar-list__item';
-    private itemRole    : () => string = () => 'listitem';
-    private itemClick   : (i: ListItem) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', { display: 'block' }),
-                new Rule('.ar-list__container', {
-                    listStyle: 'none',
-                    margin   : '0',
-                    padding  : '0',
-                }),
-                new Rule(':host([divided]) .ar-list__item:not(:last-child)', {
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                }),
-                new Rule('.ar-list__item', {
-                    alignItems: 'center',
-                    display   : 'flex',
-                    gap       : '10px',
-                    padding   : '10px 12px',
-                    transition: 'background 0.18s ease',
-                }),
-                new Rule(':host([dense]) .ar-list__item', { padding: '6px 12px' }),
-                new Rule('.ar-list__item:hover:not(.ar-list__item--disabled)', {
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                }),
-                new Rule('.ar-list__item--selected', { background: 'rgba(31,111,235,0.1)' }),
-                new Rule('.ar-list__item--disabled', { opacity: '0.45' }),
-                new Rule('.ar-list__icon', { flexShrink: '0', fontSize: '1rem' }),
-                new Rule('.ar-list__body', { flex: '1', minWidth: '0' }),
-                new Rule('.ar-list__label', {
-                    fontSize    : '0.83rem',
-                    overflow    : 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace  : 'nowrap',
-                }),
-                new Rule('.ar-list__subtitle', {
-                    color    : 'var(--arianna-muted, #8b949e)',
-                    fontSize : '0.74rem',
-                    marginTop: '1px',
-                }),
-                new Rule('.ar-list__badge', {
-                    background  : 'var(--arianna-primary, #1f6feb)',
-                    borderRadius: '10px',
-                    color       : '#fff',
-                    fontSize    : '0.66rem',
-                    fontWeight  : '600',
-                    padding     : '1px 6px',
-                }),
-                new Rule('.ar-list__meta', {
-                    color     : 'var(--arianna-muted, #8b949e)',
-                    fontSize  : '0.74rem',
-                    whiteSpace: 'nowrap',
-                }),
-            ]
-        );
+    private itemClass: (i: ListItem) => string = () => 'ar-list__item';
+    private itemRole: () => string = () => 'listitem';
+    private itemClick: (i: ListItem) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', { display: 'block' }),
+            new Rule('.ar-list__container', {
+                listStyle: 'none',
+                margin: '0',
+                padding: '0',
+            }),
+            new Rule(':host([divided]) .ar-list__item:not(:last-child)', {
+                borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+            }),
+            new Rule('.ar-list__item', {
+                alignItems: 'center',
+                display: 'flex',
+                gap: '10px',
+                padding: '10px 12px',
+                transition: 'background 0.18s ease',
+            }),
+            new Rule(':host([dense]) .ar-list__item', { padding: '6px 12px' }),
+            new Rule('.ar-list__item:hover:not(.ar-list__item--disabled)', {
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+            }),
+            new Rule('.ar-list__item--selected', { background: 'rgba(31,111,235,0.1)' }),
+            new Rule('.ar-list__item--disabled', { opacity: '0.45' }),
+            new Rule('.ar-list__icon', { flexShrink: '0', fontSize: '1rem' }),
+            new Rule('.ar-list__body', { flex: '1', minWidth: '0' }),
+            new Rule('.ar-list__label', {
+                fontSize: '0.83rem',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+            }),
+            new Rule('.ar-list__subtitle', {
+                color: 'var(--arianna-muted, #8b949e)',
+                fontSize: '0.74rem',
+                marginTop: '1px',
+            }),
+            new Rule('.ar-list__badge', {
+                background: 'var(--arianna-primary, #1f6feb)',
+                borderRadius: '10px',
+                color: '#fff',
+                fontSize: '0.66rem',
+                fontWeight: '600',
+                padding: '1px 6px',
+            }),
+            new Rule('.ar-list__meta', {
+                color: 'var(--arianna-muted, #8b949e)',
+                fontSize: '0.74rem',
+                whiteSpace: 'nowrap',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'List', {
-        value: List, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * List namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace List {
+    export namespace Interfaces {
+        export interface Item extends ListItem {
+        }
+        export interface Options extends ListOptions {
+        }
+    }
 }
-
 export default List;

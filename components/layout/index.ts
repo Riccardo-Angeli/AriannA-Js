@@ -20,32 +20,23 @@
  * Make sure the modifiers/2D barrel is imported alongside this one when
  * mounting those components.
  */
-
-export { Card }      from './Card.ts';
-export { Drawer }    from './Drawer.ts';
-export { Modal }     from './Modal.ts';
-export { Panel }     from './Panel.ts';
-export { Splitter }  from './Splitter.ts';
+export { Card } from './Card.ts';
+export { Drawer } from './Drawer.ts';
+export { Modal } from './Modal.ts';
+export { Panel } from './Panel.ts';
+export { Splitter } from './Splitter.ts';
 export { Tabs, Tab } from './Tabs.ts';
 export { Accordion } from './Accordion.ts';
-export { Dock }      from './Dock.ts';
+export { Dock } from './Dock.ts';
 export { WindowComponent } from './Window.ts';
-export { Table }     from './Table.ts';
-
-export type { CardOptions }                 from './Card.ts';
-export type { DrawerOptions }               from './Drawer.ts';
-export type { ModalOptions }                from './Modal.ts';
-export type { PanelOptions }                from './Panel.ts';
-export type { SplitterOptions }             from './Splitter.ts';
-export type { TabsOptions, TabOptions }     from './Tabs.ts';
-export type {
-    AccordionItem, AccordionOptions, AccordionIconStyle,
-} from './Accordion.ts';
+export { Table } from './Table.ts';
+export type { CardOptions } from './Card.ts';
+export type { DrawerOptions } from './Drawer.ts';
+export type { ModalOptions } from './Modal.ts';
+export type { PanelOptions } from './Panel.ts';
+export type { SplitterOptions } from './Splitter.ts';
+export type { TabsOptions, TabOptions } from './Tabs.ts';
+export type { AccordionItem, AccordionOptions, AccordionIconStyle, } from './Accordion.ts';
 export type { DockItem, DockOptions, DockStyle } from './Dock.ts';
-export type {
-    WindowOptions, WindowStyle, WindowMenuItem,
-} from './Window.ts';
-export type {
-    Row, SortDir, SortState, SelectMode,
-    TableColumn, TableOptions,
-} from './Table.ts';
+export type { WindowOptions, WindowStyle, WindowMenuItem, } from './Window.ts';
+export type { Row, SortDir, SortState, SelectMode, TableColumn, TableOptions, } from './Table.ts';

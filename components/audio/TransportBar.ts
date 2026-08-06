@@ -1,3 +1,9 @@
+import { Component, Css, Reactivity } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/audio/TransportBar
  * @author    Riccardo Angeli
@@ -21,10 +27,6 @@
  *
  *   <arianna-transport-bar duration="217" current="42"></arianna-transport-bar>
  */
-
-import { Component } from '../../core/Components.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -32,95 +34,99 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface TransportBarOptions {
-    duration?  : number;     // seconds
-    current?   : number;     // seconds
-    playing?   : boolean;
-    volume?    : number;     // 0..1
-    showVolume?: boolean;    // default true
-    showStop?  : boolean;    // default true
-    showSkip?  : boolean;    // default false (rew/ffwd buttons)
+    duration?: number; // seconds
+    current?: number; // seconds
+    playing?: boolean;
+    volume?: number; // 0..1
+    showVolume?: boolean; // default true
+    showStop?: boolean; // default true
+    showSkip?: boolean; // default false (rew/ffwd buttons)
 }
-
 function fmtTime(s: number): string {
-    if (!isFinite(s) || s < 0) s = 0;
+    if (!isFinite(s) || s < 0)
+        s = 0;
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
     return `${m}:${sec.toString().padStart(2, '0')}`;
 }
-
-export class TransportBar extends Component('arianna-transport-bar', HTMLElement, {}, {
-    attrs : ['duration', 'current', 'playing', 'volume', 'show-volume', 'show-stop', 'show-skip'],
+@Component('arianna-transport-bar', {}, {
+    Attributes: ['duration', 'current', 'playing', 'volume', 'show-volume', 'show-stop', 'show-skip'],
 })
-{
-    readonly playing$ : Signal<boolean> = signal(false);
-    readonly current$ : Signal<number>  = signal(0);
-    readonly duration$: Signal<number>  = signal(0);
-    readonly volume$  : Signal<number>  = signal(1);
-
+export class TransportBar extends HTMLElement {
+    readonly playing$: Signal<boolean> = signal(false);
+    readonly current$: Signal<number> = signal(0);
+    readonly duration$: Signal<number> = signal(0);
+    readonly volume$: Signal<number> = signal(1);
     constructor(opts: TransportBarOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
+        super();
+        const self = this as unknown as {
+            render(): HTMLElement;
+        };
         const el = self.render();
-        if (opts.duration   != null) el.setAttribute('duration',    String(opts.duration));
-        if (opts.current    != null) el.setAttribute('current',     String(opts.current));
-        if (opts.playing)            el.setAttribute('playing',     '');
-        if (opts.volume     != null) el.setAttribute('volume',      String(opts.volume));
-        if (opts.showVolume === false) el.setAttribute('show-volume', 'false');
-        if (opts.showStop   === false) el.setAttribute('show-stop',   'false');
-        if (opts.showSkip)             el.setAttribute('show-skip',   '');
-        if (opts.duration != null) this.duration$.Set(opts.duration);
-        if (opts.current  != null) this.current$.Set(opts.current);
-        if (opts.playing)          this.playing$.Set(true);
-        if (opts.volume   != null) this.volume$.Set(opts.volume);
+        if (opts.duration != null)
+            el.setAttribute('duration', String(opts.duration));
+        if (opts.current != null)
+            el.setAttribute('current', String(opts.current));
+        if (opts.playing)
+            el.setAttribute('playing', '');
+        if (opts.volume != null)
+            el.setAttribute('volume', String(opts.volume));
+        if (opts.showVolume === false)
+            el.setAttribute('show-volume', 'false');
+        if (opts.showStop === false)
+            el.setAttribute('show-stop', 'false');
+        if (opts.showSkip)
+            el.setAttribute('show-skip', '');
+        if (opts.duration != null)
+            this.duration$.Set(opts.duration);
+        if (opts.current != null)
+            this.current$.Set(opts.current);
+        if (opts.playing)
+            this.playing$.Set(true);
+        if (opts.volume != null)
+            this.volume$.Set(opts.volume);
     }
-
-    build(): void {
+    onConnected(): void {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const root = self.render();
-        if (root.children.length) return;   // already built (markup-driven)
-
+        if (root.children.length)
+            return; // already built (markup-driven)
         // Build buttons
         const btnSkipBack = document.createElement('button');
         btnSkipBack.className = 'tb-btn tb-skip-back';
         btnSkipBack.type = 'button';
         btnSkipBack.setAttribute('aria-label', 'rewind 10s');
         btnSkipBack.textContent = '◀◀';
-
         const btnPlay = document.createElement('button');
         btnPlay.className = 'tb-btn tb-play';
         btnPlay.type = 'button';
         btnPlay.setAttribute('aria-label', 'play / pause');
-
         const btnStop = document.createElement('button');
         btnStop.className = 'tb-btn tb-stop';
         btnStop.type = 'button';
         btnStop.setAttribute('aria-label', 'stop');
         btnStop.textContent = '■';
-
         const btnSkipFwd = document.createElement('button');
         btnSkipFwd.className = 'tb-btn tb-skip-fwd';
         btnSkipFwd.type = 'button';
         btnSkipFwd.setAttribute('aria-label', 'forward 10s');
         btnSkipFwd.textContent = '▶▶';
-
         // Seek slider
         const seek = document.createElement('input') as HTMLInputElement;
         seek.type = 'range';
@@ -129,11 +135,9 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
         seek.max = '1000';
         seek.step = '1';
         seek.value = '0';
-
         // Time display
         const time = document.createElement('span');
         time.className = 'tb-time';
-
         // Volume slider
         const vol = document.createElement('input') as HTMLInputElement;
         vol.type = 'range';
@@ -142,14 +146,13 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
         vol.max = '1000';
         vol.step = '1';
         vol.value = '1000';
-
         // Visibility controls
-        const sShowVol  = self.attributeSignal('show-volume');
-        const sShowStop = self.attributeSignal('show-stop');
-        const sShowSkip = self.attributeSignal('show-skip');
+        const sShowVol = self.signal().attribute('show-volume');
+        const sShowStop = self.signal().attribute('show-stop');
+        const sShowSkip = self.signal().attribute('show-skip');
         effect(() => {
             btnSkipBack.style.display = (sShowSkip?.Get() != null) ? '' : 'none';
-            btnSkipFwd .style.display = (sShowSkip?.Get() != null) ? '' : 'none';
+            btnSkipFwd.style.display = (sShowSkip?.Get() != null) ? '' : 'none';
         });
         effect(() => {
             btnStop.style.display = (sShowStop?.Get() === 'false') ? 'none' : '';
@@ -157,7 +160,6 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
         effect(() => {
             vol.style.display = (sShowVol?.Get() === 'false') ? 'none' : '';
         });
-
         // Reactive bindings
         effect(() => {
             btnPlay.textContent = this.playing$.Get() ? '❚❚' : '▶';
@@ -173,13 +175,11 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
         effect(() => {
             vol.value = String(Math.round(this.volume$.Get() * 1000));
         });
-
         // Event wiring
         btnPlay.addEventListener('click', () => {
             const next = !this.playing$.Get();
             this.playing$.Set(next);
-            self.fire(next ? 'arianna:transport-play' : 'arianna:transport-pause',
-                { detail: { source: this }, bubbles: true });
+            self.fire(next ? 'arianna:transport-play' : 'arianna:transport-pause', { detail: { source: this }, bubbles: true });
         });
         btnStop.addEventListener('click', () => {
             this.playing$.Set(false);
@@ -207,7 +207,6 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
             this.volume$.Set(v);
             self.fire('arianna:transport-volume', { detail: { value: v, source: this }, bubbles: true });
         });
-
         root.appendChild(btnSkipBack);
         root.appendChild(btnPlay);
         root.appendChild(btnStop);
@@ -215,59 +214,59 @@ export class TransportBar extends Component('arianna-transport-bar', HTMLElement
         root.appendChild(seek);
         root.appendChild(time);
         root.appendChild(vol);
-
         self.Sheet = TransportBar.DefaultSheet();
     }
-
     /** Push external state in from the audio source. */
     setCurrentTime(s: number): this { this.current$.Set(s); return this; }
-    setDuration(s: number): this    { this.duration$.Set(s); return this; }
-    setPlaying(p: boolean): this    { this.playing$.Set(p); return this; }
-    setVolume(v: number): this      { this.volume$.Set(Math.max(0, Math.min(1, v))); return this; }
-
+    setDuration(s: number): this { this.duration$.Set(s); return this; }
+    setPlaying(p: boolean): this { this.playing$.Set(p); return this; }
+    setVolume(v: number): this { this.volume$.Set(Math.max(0, Math.min(1, v))); return this; }
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                alignItems   : 'center',
-                background   : 'var(--ar-bg2, #161616)',
-                border       : '1px solid var(--ar-border, #2a2a2a)',
-                borderRadius : 'var(--ar-radius, 5px)',
-                color        : 'var(--ar-text, #e0e0e0)',
-                display      : 'inline-flex',
-                font         : 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
-                gap          : '6px',
-                padding      : '6px 10px',
+                alignItems: 'center',
+                background: 'var(--ar-bg2, #161616)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
+                borderRadius: 'var(--ar-radius, 5px)',
+                color: 'var(--ar-text, #e0e0e0)',
+                display: 'inline-flex',
+                font: 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
+                gap: '6px',
+                padding: '6px 10px',
             }),
             new Rule(':host .tb-btn', {
-                background  : 'var(--ar-bg3, #1e1e1e)',
-                border      : '1px solid var(--ar-border, #2a2a2a)',
+                background: 'var(--ar-bg3, #1e1e1e)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
-                color       : 'inherit',
-                cursor      : 'pointer',
-                font        : 'inherit',
-                minWidth    : '32px',
-                padding     : '4px 8px',
-                transition  : 'background var(--ar-transition, 0.14s)',
+                color: 'inherit',
+                cursor: 'pointer',
+                font: 'inherit',
+                minWidth: '32px',
+                padding: '4px 8px',
+                transition: 'background var(--ar-transition, 0.14s)',
             }),
             new Rule(':host .tb-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
             new Rule(':host .tb-play', { minWidth: '40px' }),
             new Rule(':host .tb-seek', { flex: '1 1 160px', minWidth: '120px', accentColor: 'var(--ar-primary, #7eb8f7)' }),
             new Rule(':host .tb-volume', { width: '90px', accentColor: 'var(--ar-primary, #7eb8f7)' }),
             new Rule(':host .tb-time', {
-                color     : 'var(--ar-muted, #888)',
-                fontSize  : '0.78rem',
+                color: 'var(--ar-muted, #888)',
+                fontSize: '0.78rem',
                 fontVariantNumeric: 'tabular-nums',
-                minWidth  : '90px',
-                textAlign : 'center',
+                minWidth: '90px',
+                textAlign: 'center',
             }),
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'TransportBar', {
-        value: TransportBar, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * TransportBar namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace TransportBar {
+    export namespace Interfaces {
+        export interface Options extends TransportBarOptions {
+        }
+    }
+    export const FmtTime = fmtTime;
 }
-
 export default TransportBar;

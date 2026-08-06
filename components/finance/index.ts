@@ -35,7 +35,7 @@
  *     --arianna-warning     warning             (default #f5a623)
  *     --arianna-danger      danger              (default #cf222e)
  *
- *   Override per-widget by setting attrs (e.g. `bull="#0a0"`) or by
+ *   Override per-widget by setting attributes (e.g. `bull="#0a0"`) or by
  *   replacing the component's `.Sheet`.
  *
  * # Light/dark theme
@@ -49,23 +49,20 @@
  *   internal use by the widgets. Stable API; exported for downstream
  *   apps that want consistent number formatting.
  */
-
 // ── Re-exports ──────────────────────────────────────────────────────────────
-
 export { CandlestickChart } from './CandlestickChart.ts';
-export { LineChart }        from './LineChart.ts';
-export { DepthChart }       from './DepthChart.ts';
-export { HeatmapChart }     from './HeatmapChart.ts';
-export { PortfolioDonut }   from './PortfolioDonut.ts';
-export { PnLChart }         from './PnLChart.ts';
-export { RiskGauge }        from './RiskGauge.ts';
-export { OrderBook }        from './OrderBook.ts';
-export { Screener }         from './Screener.ts';
-export { Sparkline }        from './Sparkline.ts';
-export { AlertBadge }       from './AlertBadge.ts';
-
+export { FinanceLineChart } from './FinanceLineChart.ts';
+export { DepthChart } from './DepthChart.ts';
+export { HeatmapChart } from './HeatmapChart.ts';
+export { PortfolioDonut } from './PortfolioDonut.ts';
+export { PnLChart } from './PnLChart.ts';
+export { RiskGauge } from './RiskGauge.ts';
+export { OrderBook } from './OrderBook.ts';
+export { Screener } from './Screener.ts';
+export { Sparkline } from './Sparkline.ts';
+export { AlertBadge } from './AlertBadge.ts';
 export type { CandleBar, CandlestickChartOptions } from './CandlestickChart.ts';
-export type { LineChartSeries, LineChartOptions } from './LineChart.ts';
+export type { LineChartSeries, LineChartOptions } from './FinanceLineChart.ts';
 export type { Level as DepthLevel, DepthChartOptions } from './DepthChart.ts';
 export type { HeatmapChartOptions } from './HeatmapChart.ts';
 export type { DonutSegment, PortfolioDonutOptions } from './PortfolioDonut.ts';
@@ -75,29 +72,23 @@ export type { Level as OrderBookLevel, OrderBookOptions } from './OrderBook.ts';
 export type { ScreenerRow, ScreenerOptions } from './Screener.ts';
 export type { SparklineOptions } from './Sparkline.ts';
 export type { AlertLevel, AlertBadgeOptions } from './AlertBadge.ts';
-
 // ── Helpers (re-exported for downstream consistency) ────────────────────────
-
 export { _svg, _fmt, _fmtK, _esc } from './helpers.ts';
-
 // ── Convenience bundle ─────────────────────────────────────────────────────
-
 import { CandlestickChart } from './CandlestickChart.ts';
-import { LineChart }        from './LineChart.ts';
-import { DepthChart }       from './DepthChart.ts';
-import { HeatmapChart }     from './HeatmapChart.ts';
-import { PortfolioDonut }   from './PortfolioDonut.ts';
-import { PnLChart }         from './PnLChart.ts';
-import { RiskGauge }        from './RiskGauge.ts';
-import { OrderBook }        from './OrderBook.ts';
-import { Screener }         from './Screener.ts';
-import { Sparkline }        from './Sparkline.ts';
-import { AlertBadge }       from './AlertBadge.ts';
-
+import { FinanceLineChart } from './FinanceLineChart.ts';
+import { DepthChart } from './DepthChart.ts';
+import { HeatmapChart } from './HeatmapChart.ts';
+import { PortfolioDonut } from './PortfolioDonut.ts';
+import { PnLChart } from './PnLChart.ts';
+import { RiskGauge } from './RiskGauge.ts';
+import { OrderBook } from './OrderBook.ts';
+import { Screener } from './Screener.ts';
+import { Sparkline } from './Sparkline.ts';
+import { AlertBadge } from './AlertBadge.ts';
 export const FinanceComponents = {
-    CandlestickChart, LineChart, DepthChart, HeatmapChart,
+    CandlestickChart, FinanceLineChart, DepthChart, HeatmapChart,
     PortfolioDonut, PnLChart, RiskGauge,
     OrderBook, Screener, Sparkline, AlertBadge,
 };
-
 export default FinanceComponents;

@@ -1,3 +1,9 @@
+import { Component, Css, Reactivity } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/animations/OnionStage
  * @author    Riccardo Angeli
@@ -23,10 +29,6 @@
  * The widget is render-engine agnostic — it accepts ANY DOM-renderable
  * snapshot via setSnapshotProvider().
  */
-
-import { Component } from '../../core/Components.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -34,107 +36,108 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export type SnapshotProvider = (frame: number) => HTMLElement | SVGElement | null;
-
 export interface OnionStageOptions {
-    before? : number;       // ghost frames before the playhead
-    after?  : number;       // ghost frames after
-    step?   : number;       // distance (in frames) between ghosts (default 1)
-    width?  : number;
-    height? : number;
+    before?: number; // ghost frames before the playhead
+    after?: number; // ghost frames after
+    step?: number; // distance (in frames) between ghosts (default 1)
+    width?: number;
+    height?: number;
 }
-
-export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}, {
-    attrs : ['before', 'after', 'step', 'width', 'height'],
+@Component('arianna-onion-stage', {}, {
+    Attributes: ['before', 'after', 'step', 'width', 'height'],
 })
-{
+export class OnionStage extends HTMLElement {
     readonly frame$: Signal<number> = signal(0);
-
     #provider?: SnapshotProvider;
-    #host?    : HTMLDivElement;
-
+    #host?: HTMLDivElement;
     constructor(opts: OnionStageOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
-        const el = self.render();
-        if (opts.before  != null) el.setAttribute('before',  String(opts.before));
-        if (opts.after   != null) el.setAttribute('after',   String(opts.after));
-        if (opts.step    != null) el.setAttribute('step',    String(opts.step));
-        if (opts.width   != null) el.setAttribute('width',   String(opts.width));
-        if (opts.height  != null) el.setAttribute('height',  String(opts.height));
-    }
-
-    build(): void {
+        super();
         const self = this as unknown as {
             render(): HTMLElement;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+        };
+        const el = self.render();
+        if (opts.before != null)
+            el.setAttribute('before', String(opts.before));
+        if (opts.after != null)
+            el.setAttribute('after', String(opts.after));
+        if (opts.step != null)
+            el.setAttribute('step', String(opts.step));
+        if (opts.width != null)
+            el.setAttribute('width', String(opts.width));
+        if (opts.height != null)
+            el.setAttribute('height', String(opts.height));
+    }
+    onConnected(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const root = self.render();
-        if (root.querySelector('.os-host')) return;
-
-        const sW = self.attributeSignal('width');
-        const sH = self.attributeSignal('height');
+        if (root.querySelector('.os-host'))
+            return;
+        const sW = self.signal().attribute('width');
+        const sH = self.signal().attribute('height');
         const w = parseInt(sW?.Peek() ?? '420', 10) || 420;
         const h = parseInt(sH?.Peek() ?? '300', 10) || 300;
-        root.style.width  = w + 'px';
+        root.style.width = w + 'px';
         root.style.height = h + 'px';
-
         const host = document.createElement('div');
         host.className = 'os-host';
         this.#host = host;
         root.appendChild(host);
-
         // Re-render whenever frame or provider change
         effect(() => { this.frame$.Get(); this.#repaint(); });
-
         self.Sheet = OnionStage.DefaultSheet();
     }
-
     /** Provider must return a fresh DOM/SVG snapshot for the given frame. */
     setSnapshotProvider(fn: SnapshotProvider): this {
         this.#provider = fn;
         this.#repaint();
         return this;
     }
-
     /** Update the live playhead frame. */
     setFrame(f: number): this {
         this.frame$.Set(f);
         return this;
     }
-
     /** Public: total ghost count (before + after). */
     get ghostCount(): number {
-        const self = this as unknown as { attributeSignal(name: string): Signal<string | null> | undefined };
-        const b = parseInt(self.attributeSignal('before')?.Peek() ?? '2', 10) || 0;
-        const a = parseInt(self.attributeSignal('after')?.Peek()  ?? '2', 10) || 0;
+        const self = this as unknown as {
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
+        };
+        const b = parseInt(self.signal().attribute('before')?.Peek() ?? '2', 10) || 0;
+        const a = parseInt(self.signal().attribute('after')?.Peek() ?? '2', 10) || 0;
         return b + a;
     }
-
     #repaint(): void {
-        const self = this as unknown as { attributeSignal(name: string): Signal<string | null> | undefined };
+        const self = this as unknown as {
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
+        };
         const host = this.#host;
-        if (!host || !this.#provider) return;
-        while (host.firstChild) host.removeChild(host.firstChild);
-
-        const before = parseInt(self.attributeSignal('before')?.Peek() ?? '2', 10) || 0;
-        const after  = parseInt(self.attributeSignal('after')?.Peek()  ?? '2', 10) || 0;
-        const step   = parseInt(self.attributeSignal('step')?.Peek()   ?? '1', 10) || 1;
-        const live   = this.frame$.Peek();
-
+        if (!host || !this.#provider)
+            return;
+        while (host.firstChild)
+            host.removeChild(host.firstChild);
+        const before = parseInt(self.signal().attribute('before')?.Peek() ?? '2', 10) || 0;
+        const after = parseInt(self.signal().attribute('after')?.Peek() ?? '2', 10) || 0;
+        const step = parseInt(self.signal().attribute('step')?.Peek() ?? '1', 10) || 1;
+        const live = this.frame$.Peek();
         // Past ghosts (deepest first so live ends up on top)
         for (let i = before; i >= 1; i--) {
             const f = live - i * step;
@@ -162,7 +165,6 @@ export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}
             host.appendChild(w);
         }
     }
-
     #wrapGhost(snap: HTMLElement | SVGElement, distRatio: number, kind: 'past' | 'future'): HTMLDivElement {
         // distRatio: 1 = furthest (most faded), 0 = closest to live
         const opacity = 0.45 * (1 - distRatio * 0.7);
@@ -172,38 +174,42 @@ export class OnionStage extends Component('arianna-onion-stage', HTMLElement, {}
         wrap.appendChild(snap);
         return wrap;
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                background  : 'var(--ar-bg2, #161616)',
-                border      : '1px solid var(--ar-border, #2a2a2a)',
+                background: 'var(--ar-bg2, #161616)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
-                display     : 'inline-block',
-                overflow    : 'hidden',
-                position    : 'relative',
+                display: 'inline-block',
+                overflow: 'hidden',
+                position: 'relative',
             }),
             new Rule(':host .os-host', {
-                height  : '100%',
+                height: '100%',
                 position: 'relative',
-                width   : '100%',
+                width: '100%',
             }),
             new Rule(':host .os-host > *', {
-                inset      : '0',
+                inset: '0',
                 pointerEvents: 'none',
-                position   : 'absolute',
+                position: 'absolute',
             }),
-            new Rule(':host .os-ghost-past',   { filter: 'grayscale(0.35) sepia(0.1) hue-rotate(190deg)', mixBlendMode: 'screen' }),
+            new Rule(':host .os-ghost-past', { filter: 'grayscale(0.35) sepia(0.1) hue-rotate(190deg)', mixBlendMode: 'screen' }),
             new Rule(':host .os-ghost-future', { filter: 'grayscale(0.35) sepia(0.4) hue-rotate(330deg)', mixBlendMode: 'screen' }),
             new Rule(':host .os-live', { pointerEvents: 'auto', opacity: '1' }),
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'OnionStage', {
-        value: OnionStage, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * OnionStage namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace OnionStage {
+    export namespace Types {
+        export type SnapshotProviderType = SnapshotProvider;
+    }
+    export namespace Interfaces {
+        export interface Options extends OnionStageOptions {
+        }
+    }
 }
-
 export default OnionStage;

@@ -8,85 +8,512 @@
  *
  * A real class `Component` (hard-`#`-private state) made callable through a single Proxy
  * (`Component.Callable`). The Proxy's `apply` trap dispatches `Component(...)` by argument
- * shape to three private-static handlers; `new Component(...)` bypasses the trap and hits the
+ * shape to two private-static handlers; `new Component(...)` bypasses the trap and hits the
  * native constructor (the Layer-2 instance owning Real + Virtual). One public callable surface,
  * everything else `#`-private.
  *
- * # The four forms
+ * # The three forms
  *
  *   Component(el) | Component(this) | Component('#sel')          → #Static      (install / wrap)
- *   class X extends Component('tag', Base, css?, def?) { … }     → #Constructor (factory; Base required)
  *   @Component({ … }) | @Component('tag', css, def?)             → #Decorator  (decorator)
  *   const c = new Component(elOrTag, opts?)                      → constructor  (Layer-2 instance)
  *
  * Dispatch is unambiguous by shape:
  *   · Element                                  → #Static
  *   · length 1 && string                       → #Static      (CSS selector)
- *   · string && args[1] is a function          → #Constructor (Base is mandatory — a bare
- *                                                 `Component('tag')` is never a factory, which
- *                                                 keeps the multi-namespace / IR model intact)
+ *   · string && args[1] is a function          → error (removed factory form)
  *   · else                                     → #Decorator
  */
 
-import { Core } from './Core.ts';
-import { Css } from './Css.ts';
-import Virtual from './Virtual.ts';
-
-import type { Real } from './Real.ts';
+import { Css }        from './Css.ts';
+import { Namespaces } from './Namespaces.ts';
 import { Reactivity } from './Reactive.ts';
-import type { Template } from './Template.ts';
-import {Namespaces} from "./Namespaces.ts";
+import Real           from './Real.ts';
+import { Services }   from './Service.ts';
+import Virtual        from './Virtual.ts';
+
+import type { Types as SchemaTypes }           from './schema/Types.ts';
+import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
+import {Shadow} from "./index.ts";
 
 export namespace Components
 {
-    import TypeOptions = Core.Types.TypeOptions;
-    export const { Rule, Stylesheet } = Css;
+    export type Callable       = SchemaInterfaces.Components.ComponentInterface;
+    export type Constructor    = SchemaTypes.Constructor;
+    export type TypeDescriptor = SchemaInterfaces.Namespaces.Type;
+    export type Template       = SchemaInterfaces.Template.Binding;
 
-    /** @interface   ComponentInstance
-     *  @description Runtime facilities present on every AriannA component produced by the factory form
-     *               (attached during upgrade) but absent from the bare `Base` structural type. Merged into
-     *               the factory return type so `class X extends Component('x', HTMLElement, …)` sees
-     *               `attrSignal` / `template` / `build`.
-     *  @memberof    Components
-     */
-    export interface ComponentInstance
+    /** @name        Binding
+     *  @public
+     *  @class
+     *  @template    T
+     *  @description Fluent component binding builder. Navigation remains on the builder; terminal methods return
+     *               canonical Reactivity signals.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export class Binding<T = unknown>
     {
-        /** Reactive view over an observed attribute; `.get()` yields the current string value (or null). */
-        attributeSignal(name: string): Reactivity.Signal<string | null>;
-        /** Declarative markup for the element; assign an `html`…`` Template. */
-        template: Template;
-        /** Optional lifecycle hook run after upgrade (Core invokes `build()` when present). */
-        build?(): void;
-    }
+        #initial : T | undefined;
+        #source  : Element | undefined;
+        #target  : Element | undefined;
+        #owner   : Element | undefined;
+        #path    : string[] = [];
 
-    /** @interface   ComponentInterface
-     *  @description The callable + constructable surface of `Component` exposed through `Callable`. Call
-     *               signatures mirror the four dispatch forms; the construct signature is the Layer-2 instance.
-     *  @memberof    Components
-     */
-    export interface ComponentInterface
-    {
-        (el: Element): unknown;                                                                                 // #Static (el / this)
-        (selector: string): unknown;                                                                           // #Static (selector, length 1)
-        (tag: string, base: new (...a: unknown[]) => Element, css?: unknown, def?: unknown): new (...a: unknown[]) => HTMLElement & ComponentInstance;  // #Constructor
-        (spec: object): (target: unknown) => unknown;                                                          // #Decorator (object)
-        (tag: string, css: unknown, def?: unknown): (target: unknown) => unknown;                              // #Decorator (positional, length ≥ 2)
-        new (arg: Element | string, opts?: Record<string, unknown>): Component;
-    }
+        constructor(initial?: T, owner?: Element)
+        {
+            this.#initial = initial;
+            this.#owner   = owner;
+            this.#source  = owner;
+            this.#target  = owner;
+        }
 
-    /** CSS input accepted by the component factory / decorator (sugar form). */
-    type CssArguments = Css.Stylesheet | Css.Rule | Css.Rule[] | string | Record<string, unknown>;
-    type RealService  = { create(arg: unknown): Real };
-    /** Argument tuples of the factory form `Component(tag, Base, …)`. Type-only — no runtime cost.
-     *  css/def are distinguished by ARITY (read with if/else in #Constructor), never by key-sniffing.
-     *  Not exported: private to this module. */
-    type Arguments =
-        | [tag: string, base: new (...a: unknown[]) => Element]
-        | [tag: string, base: new (...a: unknown[]) => Element, css: CssArguments]
-        | [tag: string, base: new (...a: unknown[]) => Element, css: CssArguments, def: Record<string, unknown>];
+        from(source?: unknown): this
+        {
+            this.#source =
+                Component.ResolveTarget(source) ??
+                this.#source;
+
+            return this;
+        }
+
+        to(target?: unknown): this
+        {
+            this.#target =
+                Component.ResolveTarget(target) ??
+                this.#target;
+
+            return this;
+        }
+
+        host(host?: unknown): this
+        {
+            return this.from(host);
+        }
+
+        owner(owner?: unknown): this
+        {
+            this.#owner =
+                Component.ResolveTarget(owner) ??
+                this.#owner;
+
+            return this;
+        }
+
+        sub(key: string): this
+        {
+            this.#path.push(key);
+
+            return this;
+        }
+
+        up(): this
+        {
+            this.#path.pop();
+
+            return this;
+        }
+
+        attribute(name: string): Reactivity.Signal<string | null>
+        {
+            return Component.AttributeSignal
+            (
+                this.#host(),
+                name,
+                this.#initial
+            );
+        }
+
+        value<V = unknown>(): Reactivity.Signal<V>
+        {
+            let current: unknown =
+                this.#initial;
+
+            for(const key of this.#path)
+            {
+                current =
+                    current == null
+                        ? undefined
+                        : (current as Record<string, unknown>)[key];
+            }
+
+            return new Reactivity.Signal<V>(current as V);
+        }
+
+        property(_name: string): never
+        {
+            return this.#pending('property');
+        }
+
+        style(_name: string): never
+        {
+            return this.#pending('style');
+        }
+
+        text(): never
+        {
+            return this.#pending('text');
+        }
+
+        dataset(_name: string): never
+        {
+            return this.#pending('dataset');
+        }
+
+        class(_name: string): never
+        {
+            return this.#pending('class');
+        }
+
+        event(_name: string): never
+        {
+            return this.#pending('event');
+        }
+
+        #pending(name: string): never
+        {
+            throw new Error
+            (
+                `[arianna] signal().${name}() is not implemented yet. ` +
+                'Available terminals: attribute(), value().'
+            );
+        }
+
+        #host(): Element
+        {
+            const host =
+                this.#source ??
+                this.#owner ??
+                Component.CurrentHost();
+
+            if(!host)
+            {
+                throw new TypeError
+                (
+                    '[arianna] signal().attribute(): no host is available. ' +
+                    'Use .from(element) or call it from a component instance.'
+                );
+            }
+
+            return host;
+        }
+    }
 
     export class Component
     {
+        static readonly #realFacets  = new WeakMap<Element, Real>();
+        static readonly #templates= new WeakMap<Element, unknown>();
+        static readonly #attributeSignals =
+            new WeakMap<Element, Map<string, Reactivity.Signal<string | null>>>();
+        static readonly #hostStack: Element[] = [];
+        static readonly #typeOptionKeys = new Map<string, string>
+        (
+            [
+                ['css',        'Css'],
+                ['attributes', 'Attributes'],
+                ['shadow',     'Shadow'],
+                ['bus',        'Bus'],
+                ['render',     'Render'],
+                ['template',   'Template'],
+                ['slot',       'Slot'],
+                ['component',  'Component']
+            ]
+        );
+
+        /** @name        EnterHost
+         *  @public
+         *  @static
+         *  @param       {Element} host Component host entering synchronous construction.
+         *  @returns     {void}
+         *  @description Push a host onto the synchronous construction stack.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        static EnterHost(host: Element): void
+        {
+            Component.#hostStack.push(host);
+        }
+
+        /** @name        LeaveHost
+         *  @public
+         *  @static
+         *  @returns     {void}
+         *  @description Remove the most recently entered component host.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        static LeaveHost(): void
+        {
+            Component.#hostStack.pop();
+        }
+
+        static CurrentHost(): Element | undefined
+        {
+            return Component.#hostStack[Component.#hostStack.length - 1];
+        }
+
+        static ResolveTarget(target: unknown): Element | undefined
+        {
+            if(target instanceof Element)
+            {
+                return target;
+            }
+
+            if(typeof target === 'string' && typeof document !== 'undefined')
+            {
+                return document.querySelector(target) ?? undefined;
+            }
+
+            return undefined;
+        }
+
+        static RealFacet(host: Element): Real
+        {
+            const existing =
+                Component.#realFacets.get(host);
+
+            if(existing)
+            {
+                return existing;
+            }
+
+            const real =
+                new Real(host);
+
+            Component.#realFacets.set(host, real);
+
+            return real;
+        }
+
+        static Signal<T>(initial?: T, owner?: Element): Binding<T>
+        {
+            return new Binding<T>(initial, owner);
+        }
+
+        static AttributeSignal
+        (
+            host     : Element,
+            name     : string,
+            initial? : unknown
+        ): Reactivity.Signal<string | null>
+        {
+            let map =
+                Component.#attributeSignals.get(host);
+
+            if(!map)
+            {
+                map = new Map();
+                Component.#attributeSignals.set(host, map);
+            }
+
+            const existing =
+                map.get(name);
+
+            if(existing)
+            {
+                return existing;
+            }
+
+            const present =
+                host.getAttribute(name);
+
+            const seed =
+                present !== null
+                    ? present
+                    : initial === undefined
+                        ? null
+                        : String(initial);
+
+            const created =
+                new Reactivity.Signal<string | null>(seed);
+
+            map.set(name, created);
+
+            return created;
+        }
+
+        static NotifyAttribute
+        (
+            host  : Element,
+            name  : string,
+            value : string | null
+        ): void
+        {
+            Component.#attributeSignals
+                .get(host)
+                ?.get(name)
+                ?.Set(value);
+        }
+
+        static Signals(host: Element): Readonly<Record<string, unknown>>
+        {
+            const map =
+                Component.#attributeSignals.get(host);
+
+            if(!map)
+            {
+                return Object.freeze({});
+            }
+
+            const output =
+                Object.create(null) as Record<string, unknown>;
+
+            for(const [name, signal] of map)
+            {
+                output[name] = signal;
+            }
+
+            return Object.freeze(output);
+        }
+
+        static NormalizeBag
+        (
+            source : Record<string, unknown>,
+            extra  : ReadonlyMap<string, string> = new Map()
+        ): Record<string, unknown>
+        {
+            const normalized: Record<string, unknown> = {};
+            const assigned = new Set<string>();
+
+            for(const [key, value] of Object.entries(source))
+            {
+                const lower =
+                    key.toLowerCase();
+
+                const canonical =
+                    extra.get(lower) ??
+                    Component.#typeOptionKeys.get(lower) ??
+                    key;
+
+                if(assigned.has(canonical))
+                {
+                    throw new TypeError
+                    (
+                        `[arianna] Duplicate option '${canonical}' supplied with different casing.`
+                    );
+                }
+
+                assigned.add(canonical);
+                normalized[canonical] = value;
+            }
+
+            return normalized;
+        }
+
+        static InstallPrototypeSurface(Target: Function): void
+        {
+            const prototype =
+                (Target as { prototype: HTMLElement }).prototype;
+
+            const define =
+                (
+                    name       : PropertyKey,
+                    descriptor : PropertyDescriptor
+                ): void =>
+                {
+                    if(name in prototype)
+                    {
+                        return;
+                    }
+
+                    Object.defineProperty
+                    (
+                        prototype,
+                        name,
+                        {
+                            configurable : true,
+                            enumerable   : false,
+                            ...descriptor
+                        }
+                    );
+                };
+
+            define
+            (
+                'signal',
+                {
+                    writable : true,
+                    value<T>(this: HTMLElement, initial?: T): Binding<T>
+                    {
+                        return Component.Signal(initial, this);
+                    }
+                }
+            );
+
+            define
+            (
+                'attributeSignal',
+                {
+                    writable : true,
+                    value(this: HTMLElement, name: string): Reactivity.Signal<string | null>
+                    {
+                        return Component.AttributeSignal(this, name);
+                    }
+                }
+            );
+
+            define
+            (
+                'render',
+                {
+                    writable : true,
+                    value(this: HTMLElement): HTMLElement
+                    {
+                        return this;
+                    }
+                }
+            );
+
+            define
+            (
+                'fire',
+                {
+                    writable : true,
+                    value(this: HTMLElement, event: string | Event, init?: CustomEventInit): HTMLElement
+                    {
+                        this.dispatchEvent
+                        (
+                            typeof event === 'string'
+                                ? new CustomEvent(event, init)
+                                : event
+                        );
+
+                        return this;
+                    }
+                }
+            );
+
+            define
+            (
+                'Sheet',
+                {
+                    get(this: HTMLElement): Css.Stylesheet | null
+                    {
+                        return Component.RealFacet(this).Sheet;
+                    },
+                    set(this: HTMLElement, value: Css.Stylesheet | null)
+                    {
+                        Component.RealFacet(this).Sheet = value;
+                    }
+                }
+            );
+
+            define
+            (
+                'template',
+                {
+                    get(this: HTMLElement): unknown
+                    {
+                        return Component.#templates.get(this);
+                    },
+                    set(this: HTMLElement, value: unknown)
+                    {
+                        Component.#templates.set(this, value);
+                    }
+                }
+            );
+        }
+
         /** @member      {Real} #real       The Real facet (backing native element) owned by this instance. */
         readonly #real    : Real;
         /** @member      {Virtual|null} #virtual   Lazily-built Virtual facet; null until first `.Virtual` access. */
@@ -101,7 +528,7 @@ export namespace Components
          *  @param       {Element|string} arg  An existing element, or a tag/selector to build one.
          *  @param       {Record<string, unknown>=} opts  Initial properties forwarded to the Real facet.
          *  @description Layer-2 instance `new Component(elOrTag, opts?)` owning the Real + Virtual facets
-         *               over one element. Reads the element's definition (attrs/shadow/render/css) off the
+         *               over one element. Reads the element's definition (attributes/shadow/render/css) off the
          *               Core descriptor, and best-effort applies each `opts` entry through Real.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
@@ -111,7 +538,7 @@ export namespace Components
          */
         constructor(arg: Element | string, opts?: Record<string, unknown>)
         {
-            this.#real    = Core.Services.Real?.create(arg) as Real;
+            this.#real    = new Real(arg);
             this.#element = this.#real.render();
             this.#tag     = typeof arg === 'string' ? arg : arg.localName;
 
@@ -174,173 +601,7 @@ export namespace Components
                NOTE: in-place attachment for the `constructor(){ Component(this); }` marker pattern needs
                the Real primitive that mutates an existing element in place — wired here once Real.ts
                exposes it; today we wrap and return the (possibly re-rendered) element. */
-            const real = (Core.Services.Resolve('real') as RealService | undefined)?.create(el) as Real;
-            return real.render();
-        }
-
-        /** @name        #Constructor
-         *  @private @static
-         *  @param       {...Arguments} args `(tag, Base)` | `(tag, Base, css)` | `(tag, Base, css, def)`.
-         *  @returns     {new (...a: unknown[]) => Element} Rebound — a Proxy-constructor over `Base`.
-         *  @description Factory form `class X extends Component('tag', Base, css?, def?)`. It runs INSIDE
-         *               the `extends` clause, before X exists: `Rebound` (a Proxy over `Base`) is a valid
-         *               constructor, so `extends` works. `Base` is MANDATORY — a bare `Component('tag')`
-         *               would require a tag→interface lookup and an implicit default, nailing the component
-         *               to HTML and defeating the multi-namespace / IR model (SVG, MathML, custom bases).
-         *
-         *               At the first `new` (or mint via Core.Create) X is `new.target`: the tag is
-         *               registered once through the PUBLIC `owner.Define(tag, X, Base)` — Compose
-         *               (#Reserve + #Promote) in a single call — then the upgraded element is minted.
-         *               #Reserve/#Promote stay private on Namespace; the Adopt path is not needed.
-         *
-         *               css/def are split by arity: 4 → (css, def); 3 → (css); 2 → neither.
-         *
-         *               CSS is passed RAW through `TypeOptions.Css`. Component performs no parsing,
-         *               serialisation or Rule/Stylesheet discrimination: `Css.Compile`, reached by
-         *               Namespace.Reserve through the css service, is the single source of truth.
-         *
-         *               KNOWN LIMIT (unchanged from v1): pure markup-first is not covered — the tag reaches
-         *               customElements only inside Define, which fires on the first new/create.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         *  @memberof    Component
-         *  @namespace   Core
-         */
-        static #Constructor(...args: Arguments): new (...a: unknown[]) => Element
-        {
-            const tag  = args[0];
-            const Base = args[1];
-
-            let css: CssArguments | undefined;
-            let def: Record<string, unknown> = {};
-
-            if(args.length === 4)
-            {
-                css = args[2];
-                def = args[3];
-            }
-            else if(args.length === 3)
-            {
-                css = args[2];
-            }
-
-            /*
-             * Find the nearest STANDARD native interface in Base's constructor chain.
-             * Base itself may already be an AriannA custom constructor.
-             */
-            let nb: unknown = Base;
-
-            while(typeof nb === 'function')
-            {
-                const descriptor =
-                    Namespaces.Namespace.Resolve
-                    (
-                        nb as Parameters<typeof Namespaces.Namespace.Resolve>[0]
-                    );
-
-                if(descriptor && descriptor?.Standard)
-                {
-                    break;
-                }
-
-                nb =
-                    Object.getPrototypeOf(nb);
-            }
-
-            if(typeof nb !== 'function')
-            {
-                nb = Base;
-            }
-
-            const tg =
-                tag.trim().toLowerCase();
-
-            const nativeBase =
-                nb as Core.Types.Base;
-
-            const owner =
-                Namespaces.Namespace.Owner(nativeBase);
-
-            if(!owner)
-            {
-                throw new TypeError
-                (
-                    `[arianna] No namespace owns the native base for <${tg}>.`
-                );
-            }
-
-            /*
-             * Explicit css argument wins over any Css accidentally present in def.
-             * Component passes it untouched; Reserve delegates to Css.Compile.
-             */
-            const opts =
-                {
-                    ...def,
-                    Css: css
-                } as Core.Types.TypeOptions;
-
-            let done = false;
-
-            const Rebound =
-                new Proxy
-                (
-                    Base,
-                    {
-                        construct(_target, constructorArgs, newTarget): object
-                        {
-                            const isDerivedConstructor =
-                                typeof newTarget === 'function' &&
-                                newTarget !==
-                                (Rebound as unknown as Function);
-
-                            if(!done && isDerivedConstructor)
-                            {
-                                const constructor =
-                                    newTarget as unknown as Core.Types.Constructor;
-
-                                const base =
-                                    nb as Core.Types.Constructor;
-
-                                try
-                                {
-                                    const descriptor =
-                                        owner.Define
-                                        (
-                                            tg,
-                                            constructor,
-                                            base,
-                                            opts
-                                        );
-
-                                    if(!descriptor)
-                                    {
-                                        throw new TypeError
-                                        (
-                                            `[arianna] Definition failed for <${tg}>.`
-                                        );
-                                    }
-
-                                    done = true;
-                                }
-                                catch(error)
-                                {
-                                    done = false;
-                                    throw error;
-                                }
-                            }
-
-                            return Reflect.construct
-                            (
-                                Base,
-                                constructorArgs,
-                                newTarget
-                            );
-                        }
-                    }
-                ) as unknown as new (...a: unknown[]) => Element;
-
-            return Rebound;
+            return Component.RealFacet(el).render();
         }
 
         /** @name        #Decorator
@@ -353,8 +614,8 @@ export namespace Components
          *               PUBLIC `owner.Define` synchronously, then mint direct `new X()` through a per-class
          *               Proxy whose construct trap returns the element produced by Namespace.Create.
          *
-         *               Public lowercase object keys are normalized once into canonical TypeOptions
-         *               (`Css`, `Attrs`, `Shadow`, `Render`, `Bus`, `Template`, `Slot`). CSS remains raw:
+         *               The options bag is case-insensitive and normalized once into canonical TypeOptions
+         *               (`Css`, `Attributes`, `Shadow`, `Render`, `Bus`, `Template`, `Slot`). CSS remains raw:
          *               Component never parses it; Namespace.Reserve delegates to Css.Compile.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
@@ -362,24 +623,34 @@ export namespace Components
          *  @memberof    Component
          *  @namespace   Core
          */
-        static #Decorator(...args: unknown[]): (Target: unknown) => unknown
+        static #Decorator
+        (
+            ...args: unknown[]
+        ):
+            <
+                T extends abstract new (...arguments_: any[]) => object
+            >
+            (
+                Target   : T,
+                context? : ClassDecoratorContext<T>
+            ) => T | void
         {
-            const first =
-                args[0];
+            const first = args[0];
+            const objectForm = typeof first === 'object' && first !== null;
 
-            const objectForm =
-                typeof first === 'object' &&
-                first !== null;
+            const DecoratorKeys = new Map<string, string>
+            (
+                [
+                    ['tag', 'Tag'],
+                    ['def', 'Def']
+                ]
+            );
 
-            const spec =
-                objectForm
-                    ? first as Record<string, unknown>
-                    : null;
+            const spec = objectForm
+                ? Component.NormalizeBag(first as Record<string, unknown>, DecoratorKeys)
+                : null;
 
-            const tag =
-                objectForm
-                    ? spec?.tag
-                    : first;
+            const tag = objectForm ? spec?.Tag : first;
 
             if(typeof tag !== 'string' || !tag.trim())
             {
@@ -389,80 +660,59 @@ export namespace Components
                 );
             }
 
+            const rawCss = objectForm ? spec?.Css : args[1];
+
+            /* An empty plain object means no stylesheet. */
             const css =
-                objectForm
-                    ? spec?.css ?? spec?.style
-                    : args[1];
+                rawCss &&
+                typeof rawCss === 'object' &&
+                !Array.isArray(rawCss) &&
+                Object.getPrototypeOf(rawCss) === Object.prototype &&
+                Object.keys(rawCss as object).length === 0
+                    ? undefined
+                    : rawCss;
 
             const positionalDefinition =
                 !objectForm &&
                 args[2] &&
                 typeof args[2] === 'object'
-                    ? args[2] as Record<string, unknown>
+                    ? Component.NormalizeBag(args[2] as Record<string, unknown>)
                     : {};
 
-            /*
-             * Object form may optionally carry a canonical `def` object.
-             * It is applied first; explicit public fields below take precedence.
-             */
             const objectDefinition =
                 objectForm &&
-                spec?.def &&
-                typeof spec.def === 'object'
-                    ? spec.def as Record<string, unknown>
+                spec?.Def &&
+                typeof spec.Def === 'object'
+                    ? Component.NormalizeBag(spec.Def as Record<string, unknown>)
                     : {};
 
-            const definition =
-                objectForm
-                    ? objectDefinition
-                    : positionalDefinition;
+            const explicitOptions = objectForm && spec
+                ? Object.fromEntries
+                  (
+                      Object.entries(spec).filter(([key]) => key !== 'Tag' && key !== 'Def')
+                  )
+                : {};
 
-            const options: Core.Types.TypeOptions =
-                objectForm
-                    ? {
-                        ...definition,
-
-                        Css:
-                        css,
-
-                        Attrs:
-                            spec?.attrs ??
-                            definition.Attrs,
-
-                        Shadow:
-                            spec?.shadow ??
-                            definition.Shadow,
-
-                        Render:
-                            spec?.render ??
-                            definition.Render,
-
-                        Bus:
-                            spec?.bus ??
-                            definition.Bus,
-
-                        Template:
-                            spec?.template ??
-                            definition.Template,
-
-                        Slot:
-                            spec?.slot ??
-                            definition.Slot
-                    } as Core.Types.TypeOptions
-                    : {
-                        ...definition,
-                        Css: css
-                    } as Core.Types.TypeOptions;
-
-            const tg =
-                tag.trim().toLowerCase();
-
-            return (Target: unknown): unknown =>
+            const options =
             {
-                if(typeof Target !== 'function')
-                {
-                    return Target;
-                }
+                ...(objectForm ? objectDefinition : positionalDefinition),
+                ...explicitOptions,
+                ...(css === undefined ? {} : { Css: css })
+            } as SchemaTypes.TypeOptions;
+
+            const tg = tag.trim().toLowerCase();
+
+            return <
+                T extends abstract new (...arguments_: any[]) => object
+            >
+            (
+                Target   : T,
+                _context?: ClassDecoratorContext<T>
+            ): T | void =>
+            {
+
+                Component.InstallPrototypeSurface(Target);
+
 
                 const parentConstructor =
                     Object.getPrototypeOf(Target);
@@ -526,8 +776,8 @@ export namespace Components
                     owner.Define
                     (
                         tg,
-                        Target as unknown as Core.Types.Constructor,
-                        nb as Core.Types.Constructor,
+                        Target as unknown as Constructor,
+                        nb as Constructor,
                         options
                     );
 
@@ -539,6 +789,14 @@ export namespace Components
                     );
                 }
 
+                const record =
+                    Namespaces.Namespace.Resolve(tg);
+
+                if(record !== false)
+                {
+                    record.Component = true;
+                }
+
                 let constructing =
                     false;
 
@@ -546,7 +804,7 @@ export namespace Components
                     new (...a: unknown[]) => Element =
                     new Proxy
                     (
-                        Target as new (...a: unknown[]) => Element,
+                        Target as unknown as new (...arguments_: unknown[]) => Element,
                         {
                             construct
                             (
@@ -590,19 +848,19 @@ export namespace Components
                         }
                     ) as unknown as new (...a: unknown[]) => Element;
 
-                return proxy;
+                return proxy as unknown as T;
             };
         }
 
         /** @name        Callable
          *  @public @static @readonly
-         *  @type        {ComponentInterface & typeof Component}
+         *  @type        {ComponentContract & typeof Component}
          *  @description The single public callable surface: a Proxy over `Component` whose `apply` trap —
          *               lexically inside the class body, so it can reach the `#` statics — dispatches
          *               `Component(...)` by argument shape:
          *                 · Element                          → #Static      (install / wrap)
          *                 · length 1 && string               → #Static      (CSS selector)
-         *                 · string && args[1] is a function  → #Constructor (factory; Base required)
+         *                 · string && args[1] is a function  → explicit migration error (factory removed)
          *                 · else                             → #Decorator  (decorator)
          *               `new Component(...)` bypasses `apply` (no construct trap) and hits the native
          *               constructor → the Layer-2 instance. Zero hot-path overhead on construction.
@@ -612,16 +870,29 @@ export namespace Components
          *  @memberof    Component
          *  @namespace   Core
          */
-        static readonly Callable = new Proxy(Component, {
-            apply(_t, _thisArg, args): unknown
+        static readonly Callable: Callable &
+        typeof Component = new Proxy
+        (
+            Component,
             {
-                const a0 = args[0];
-                if (a0 instanceof Element)                                    return Component.#Static(...args);
-                if (args.length === 1 && typeof a0 === 'string')             return Component.#Static(...args);
-                if (typeof a0 === 'string' && typeof args[1] === 'function') return Component.#Constructor(...(args as Arguments));
-                return Component.#Decorator(...args);
-            },
-        }) as unknown as ComponentInterface & typeof Component;
+                apply(_t, _thisArg, args): unknown
+                {
+                    const a0 = args[0];
+                    if (a0 instanceof Element)                                    return Component.#Static(...args);
+                    if (args.length === 1 && typeof a0 === 'string')             return Component.#Static(...args);
+                    if (typeof a0 === 'string' && typeof args[1] === 'function')
+                    {
+                        throw new TypeError
+                        (
+                            "[arianna] Component(tag, Base, css?, def?) was removed. " +
+                            "Use @Component(tag, css, def?) on a class that extends Base, " +
+                            "or Namespace.Define(tag, Constructor, Base, options)."
+                        );
+                    }
+                        return Component.#Decorator(...args);
+                    }
+            }
+        ) as unknown as Callable & typeof Component;
 
         /** @name        (window self-install)
          *  @global @static
@@ -637,48 +908,179 @@ export namespace Components
          *  @memberof    Component
          *  @namespace   Core
          */
-        static
-        {
-            if (typeof window !== 'undefined')
-            {
-                Object.defineProperty
-                (
-                    window,
-                    'Component',
-                    {
-                        value: Component.Callable,
-                        writable: false,
-                        enumerable: true,
-                        configurable: false
-                    }
-                );
 
-                /** @name        Service
-                 *  @public @const
-                 *  @description The 'component' service registered in the Core `Services` registry. Its `install`
-                 *               entry routes an element through the PUBLIC callable (`Component.Callable(node)`),
-                 *               which dispatches to `#Static` — never calling a private handler across the class
-                 *               boundary. Consumed by Core's upgrade path.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license)
-                 *  @memberof    Components
-                 *  @namespace   Core
-                 */
-                const Service = new Core.Services.Service
+    }
+
+    /** @name        Service
+     *  @private
+     *  @constant
+     *  @type        {Services.Service}
+     *  @description Registers the canonical Component service while all implementation remains owned by
+     *               `Components.Component`.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    const Service = new Services.Service
+    (
+        'component',
+        {
+            Install(node: Element): void
+            {
+                Component.Callable(node);
+            },
+
+            Signal<T>(initial?: T, owner?: Element): Binding<T>
+            {
+                return Component.Signal(initial, owner);
+            },
+
+            AttributeSignal
+            (
+                host     : Element,
+                name     : string,
+                initial? : unknown
+            ): Reactivity.Signal<string | null>
+            {
+                return Component.AttributeSignal(host, name, initial);
+            },
+
+            Signals(node: Element): Readonly<Record<string, unknown>>
+            {
+                return Component.Signals(node);
+            },
+
+            AttributeChanged
+            (
+                node  : Element,
+                name  : string,
+                old   : string | null,
+                value : string | null
+            ): void
+            {
+                Component.NotifyAttribute(node, name, value);
+
                 (
-                    'component',
+                    node as
                     {
-                        install(node: Element): void
-                        { (Component.Callable as unknown as (n: Element) => unknown)(node); }
+                        onAttributeChanged?:
+                        (
+                            name  : string,
+                            old   : string | null,
+                            value : string | null
+                        ) => void;
                     }
-                );
+                ).onAttributeChanged?.(name, old, value);
+            },
+
+            Connected(node: Element): void
+            {
+                const descriptor =
+                    Namespaces.Namespace.Resolve(node);
+
+                if
+                (
+                    descriptor !== false &&
+                    descriptor.Component
+                )
+                {
+                    const host =
+                        node as
+                            Element &
+                            SchemaInterfaces.DOM.Element;
+
+                    if
+                    (
+                        descriptor.Template != null &&
+                        host.template == null
+                    )
+                    {
+                        host.template =
+                            typeof descriptor.Template === 'string'
+                                ? Services.Call
+                            (
+                                'template',
+                                'Compile',
+                                descriptor.Template
+                            ) ?? descriptor.Template
+                                : descriptor.Template;
+                    }
+
+                    const shadowDefinition =
+                        descriptor.Shadow;
+
+                    const shadow =
+                        Services.Call
+                        (
+                            'shadow',
+                            'Create',
+                            node,
+                            {
+                                Backend:
+                                    shadowDefinition?.Setting === false
+                                        ? 'light'
+                                        : 'native',
+
+                                Mode:
+                                    shadowDefinition?.Mode ??
+                                    'closed',
+
+                                DelegatesFocus:
+                                    shadowDefinition?.DelegatesFocus ??
+                                    false
+                            }
+                        ) as
+                            | {
+                            Template
+                            (
+                                template : unknown,
+                                scope?   : Record<string, unknown>
+                            ): unknown;
+                        }
+                            | undefined;
+
+                    if
+                    (
+                        shadow &&
+                        host.template != null
+                    )
+                    {
+                        shadow.Template
+                        (
+                            host.template,
+                            host as unknown as Record<string, unknown>
+                        );
+                    }
+                }
+
+                (
+                    node as
+                        {
+                            onConnected?: () => void;
+                        }
+                ).onConnected?.();
+            },
+
+            Disconnected(node: Element): void
+            {
+                (
+                    node as
+                    {
+                        onDisconnected?: () => void;
+                    }
+                ).onDisconnected?.();
+            },
+
+            Adopted(node: Element): void
+            {
+                (
+                    node as
+                    {
+                        onAdopted?: () => void;
+                    }
+                ).onAdopted?.();
             }
         }
-    }
+    );
 }
 
-/* Public module surface: the callable Proxy under the single name `Component`. The real class stays
-   `Components.Component`; the world only ever sees the Proxy. */
-export const Component = Components.Component.Callable;
-export default Component;
+export default Components.Component.Callable;

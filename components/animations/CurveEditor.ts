@@ -1,3 +1,9 @@
+import { Component, Css, Reactivity } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/animations/CurveEditor
  * @author    Riccardo Angeli
@@ -21,10 +27,6 @@
  * The widget can stand alone (just attach an editor reference) or be
  * embedded inside KeyframeEditor in 'split' mode.
  */
-
-import { Component } from '../../core/Components.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -32,88 +34,98 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 const SVG_NS = 'http://www.w3.org/2000/svg';
-
 export interface CurveEditorOptions {
-    width?  : number;
-    height? : number;
+    width?: number;
+    height?: number;
 }
-
 interface CurveSample {
-    track    : Element;
-    group    : string;
-    points   : Array<{ frame: number; value: number; selected: boolean; interp: string; hIn: [number, number]; hOut: [number, number] }>;
+    track: Element;
+    group: string;
+    points: Array<{
+        frame: number;
+        value: number;
+        selected: boolean;
+        interp: string;
+        hIn: [
+            number,
+            number
+        ];
+        hOut: [
+            number,
+            number
+        ];
+    }>;
 }
-
-export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, {}, {
-    attrs : ['width', 'height'],
+@Component('arianna-curve-editor', {}, {
+    Attributes: ['width', 'height'],
 })
-{
+export class CurveEditor extends HTMLElement {
     readonly samples$: Signal<CurveSample[]> = signal<CurveSample[]>([]);
-    readonly playhead$: Signal<number>       = signal(0);
-
-    #svg?    : SVGSVGElement;
-    #bound?  : Element;          // bound KeyframeEditor instance
-
+    readonly playhead$: Signal<number> = signal(0);
+    #svg?: SVGSVGElement;
+    #bound?: Element; // bound KeyframeEditor instance
     constructor(opts: CurveEditorOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
-        const el = self.render();
-        if (opts.width  != null) el.setAttribute('width',  String(opts.width));
-        if (opts.height != null) el.setAttribute('height', String(opts.height));
-    }
-
-    build(): void {
+        super();
         const self = this as unknown as {
             render(): HTMLElement;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+        };
+        const el = self.render();
+        if (opts.width != null)
+            el.setAttribute('width', String(opts.width));
+        if (opts.height != null)
+            el.setAttribute('height', String(opts.height));
+    }
+    onConnected(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const root = self.render();
-        if (root.querySelector('svg')) return;
-
-        const w = parseInt(self.attributeSignal('width')?.Peek()  ?? '720', 10) || 720;
-        const h = parseInt(self.attributeSignal('height')?.Peek() ?? '260', 10) || 260;
+        if (root.querySelector('svg'))
+            return;
+        const w = parseInt(self.signal().attribute('width')?.Peek() ?? '720', 10) || 720;
+        const h = parseInt(self.signal().attribute('height')?.Peek() ?? '260', 10) || 260;
         const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
         svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-        svg.setAttribute('width',  String(w));
+        svg.setAttribute('width', String(w));
         svg.setAttribute('height', String(h));
         svg.setAttribute('class', 'ce-svg');
         this.#svg = svg;
         root.appendChild(svg);
-
         effect(() => { this.samples$.Get(); this.playhead$.Get(); this.#redraw(); });
-
         self.Sheet = CurveEditor.DefaultSheet();
     }
-
     /** Bind to a KeyframeEditor element. The CurveEditor will read its
      *  tracks + keyframes on each update event. */
     bindEditor(editor: Element): this {
         this.#bound = editor;
         editor.addEventListener('arianna:keyframe-editor-update', () => this.#refresh());
         editor.addEventListener('arianna:keyframe-editor-playhead', (e: Event) => {
-            const d = (e as CustomEvent<{ frame: number }>).detail;
+            const d = (e as CustomEvent<{
+                frame: number;
+            }>).detail;
             this.playhead$.Set(d.frame);
         });
         this.#refresh();
         return this;
     }
-
     #refresh(): void {
-        if (!this.#bound) { this.samples$.Set([]); return; }
+        if (!this.#bound) {
+            this.samples$.Set([]);
+            return;
+        }
         const tracks = Array.from(this.#bound.querySelectorAll('arianna-anim-track'));
         const samples: CurveSample[] = tracks.map(t => {
             if (t.hasAttribute('hidden')) {
@@ -121,45 +133,60 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
             }
             const kfs = Array.from(t.querySelectorAll('arianna-keyframe'));
             const points = kfs.map(k => ({
-                frame    : parseFloat(k.getAttribute('frame') ?? '0') || 0,
-                value    : parseFloat(k.getAttribute('value') ?? '0') || 0,
-                selected : k.hasAttribute('selected'),
-                interp   : k.getAttribute('interpolation') ?? 'bezier',
-                hIn      : [-1, 0] as [number, number],
-                hOut     : [ 1, 0] as [number, number],
+                frame: parseFloat(k.getAttribute('frame') ?? '0') || 0,
+                value: parseFloat(k.getAttribute('value') ?? '0') || 0,
+                selected: k.hasAttribute('selected'),
+                interp: k.getAttribute('interpolation') ?? 'bezier',
+                hIn: [-1, 0] as [
+                    number,
+                    number
+                ],
+                hOut: [1, 0] as [
+                    number,
+                    number
+                ],
             }));
             points.sort((a, b) => a.frame - b.frame);
             return { track: t, group: t.getAttribute('group') ?? 'custom', points };
         });
         this.samples$.Set(samples);
     }
-
     #redraw(): void {
         const svg = this.#svg;
-        if (!svg) return;
-        while (svg.firstChild) svg.removeChild(svg.firstChild);
-
-        const w = parseInt(svg.getAttribute('width')  ?? '720', 10);
+        if (!svg)
+            return;
+        while (svg.firstChild)
+            svg.removeChild(svg.firstChild);
+        const w = parseInt(svg.getAttribute('width') ?? '720', 10);
         const h = parseInt(svg.getAttribute('height') ?? '260', 10);
         const samples = this.samples$.Peek();
-        if (!samples.length) return;
-
+        if (!samples.length)
+            return;
         const padL = 40, padR = 12, padT = 12, padB = 24;
         const plotW = w - padL - padR;
         const plotH = h - padT - padB;
-
         // Compute domain
         let fMin = 0, fMax = 0, vMin = 0, vMax = 0;
-        for (const s of samples) for (const p of s.points) {
-            if (p.frame < fMin) fMin = p.frame; if (p.frame > fMax) fMax = p.frame;
-            if (p.value < vMin) vMin = p.value; if (p.value > vMax) vMax = p.value;
+        for (const s of samples)
+            for (const p of s.points) {
+                if (p.frame < fMin)
+                    fMin = p.frame;
+                if (p.frame > fMax)
+                    fMax = p.frame;
+                if (p.value < vMin)
+                    vMin = p.value;
+                if (p.value > vMax)
+                    vMax = p.value;
+            }
+        if (fMin === fMax)
+            fMax = fMin + 1;
+        if (vMin === vMax) {
+            vMin -= 0.5;
+            vMax += 0.5;
         }
-        if (fMin === fMax) fMax = fMin + 1;
-        if (vMin === vMax) { vMin -= 0.5; vMax += 0.5; }
         const fR = fMax - fMin, vR = vMax - vMin;
         const xOf = (f: number) => padL + ((f - fMin) / fR) * plotW;
         const yOf = (v: number) => padT + plotH - ((v - vMin) / vR) * plotH;
-
         // Grid
         for (let i = 0; i <= 4; i++) {
             const y = padT + (plotH * i / 4);
@@ -171,33 +198,35 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
             line.setAttribute('class', 'ce-grid');
             svg.appendChild(line);
         }
-
         // Curves
         for (const s of samples) {
-            if (s.points.length < 1) continue;
-            const groupVar =
-                s.group === 'position' ? 'var(--arianna-curve-position, #4dd0e1)' :
+            if (s.points.length < 1)
+                continue;
+            const groupVar = s.group === 'position' ? 'var(--arianna-curve-position, #4dd0e1)' :
                 s.group === 'rotation' ? 'var(--arianna-curve-rotation, #ff9800)' :
-                s.group === 'scale'    ? 'var(--arianna-curve-scale, #7eb8f7)' :
-                                         'var(--ar-muted, #888)';
+                    s.group === 'scale' ? 'var(--arianna-curve-scale, #7eb8f7)' :
+                        'var(--ar-muted, #888)';
             const path = document.createElementNS(SVG_NS, 'path');
             let d = '';
             s.points.forEach((p, i) => {
                 const x = xOf(p.frame);
                 const y = yOf(p.value);
-                if (i === 0) d += `M ${x} ${y}`;
+                if (i === 0)
+                    d += `M ${x} ${y}`;
                 else {
                     const prev = s.points[i - 1]!;
                     if (prev.interp === 'constant') {
                         d += ` H ${x} V ${y}`;
-                    } else if (prev.interp === 'linear') {
+                    }
+                    else if (prev.interp === 'linear') {
                         d += ` L ${x} ${y}`;
-                    } else {
+                    }
+                    else {
                         // Bezier — handles in (frames, value) units
                         const c1x = xOf(prev.frame + Math.max(0.1, prev.hOut[0]));
                         const c1y = yOf(prev.value + prev.hOut[1]);
-                        const c2x = xOf(p.frame   - Math.max(0.1, -p.hIn[0]));
-                        const c2y = yOf(p.value   + p.hIn[1]);
+                        const c2x = xOf(p.frame - Math.max(0.1, -p.hIn[0]));
+                        const c2y = yOf(p.value + p.hIn[1]);
                         d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${x} ${y}`;
                     }
                 }
@@ -207,7 +236,6 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
             path.setAttribute('stroke', groupVar);
             path.setAttribute('class', 'ce-curve');
             svg.appendChild(path);
-
             // Keyframe dots
             for (const p of s.points) {
                 const c = document.createElementNS(SVG_NS, 'circle');
@@ -217,10 +245,12 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
                 c.setAttribute('fill', groupVar);
                 c.setAttribute('class', 'ce-key' + (p.selected ? ' ce-key-selected' : ''));
                 svg.appendChild(c);
-
                 // Bezier handles if selected
                 if (p.selected && p.interp === 'bezier') {
-                    const drawHandle = (off: [number, number]) => {
+                    const drawHandle = (off: [
+                        number,
+                        number
+                    ]) => {
                         const hx = xOf(p.frame + off[0]);
                         const hy = yOf(p.value + off[1]);
                         const line = document.createElementNS(SVG_NS, 'line');
@@ -234,7 +264,7 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
                         const hd = document.createElementNS(SVG_NS, 'rect');
                         hd.setAttribute('x', String(hx - 3));
                         hd.setAttribute('y', String(hy - 3));
-                        hd.setAttribute('width',  '6');
+                        hd.setAttribute('width', '6');
                         hd.setAttribute('height', '6');
                         hd.setAttribute('class', 'ce-handle');
                         hd.setAttribute('fill', groupVar);
@@ -245,7 +275,6 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
                 }
             }
         }
-
         // Playhead
         const ph = this.playhead$.Peek();
         if (ph >= fMin && ph <= fMax) {
@@ -258,15 +287,14 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
             svg.appendChild(phLine);
         }
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                background  : 'var(--ar-bg, #0d0d0d)',
-                border      : '1px solid var(--ar-border, #2a2a2a)',
+                background: 'var(--ar-bg, #0d0d0d)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
-                display     : 'inline-block',
-                padding     : '8px',
+                display: 'inline-block',
+                padding: '8px',
             }),
             new Rule(':host .ce-svg', { display: 'block' }),
             new Rule(':host .ce-grid', { stroke: 'var(--ar-border, #2a2a2a)', strokeWidth: '1', strokeDasharray: '2 3' }),
@@ -279,11 +307,15 @@ export class CurveEditor extends Component('arianna-curve-editor', HTMLElement, 
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'CurveEditor', {
-        value: CurveEditor, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * CurveEditor namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace CurveEditor {
+    export namespace Interfaces {
+        export interface Options extends CurveEditorOptions {
+        }
+        export interface CurveSampleContract extends CurveSample {
+        }
+    }
 }
-
 export default CurveEditor;

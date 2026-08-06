@@ -1,3 +1,9 @@
+import { Component, Components, Css, Templates } from '../../core/index.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/display/Divider
  * @author    Riccardo Angeli
@@ -17,104 +23,93 @@
  *
  * Events: (none)
  * Slots:  default — alternative to `label` attribute
- * Attrs:  orientation, variant, label
+ * Attributes:  orientation, variant, label
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface DividerOptions {
-    orientation? : 'horizontal' | 'vertical';
-    variant?     : 'solid' | 'dashed' | 'dotted';
-    label?       : string;
+    orientation?: 'horizontal' | 'vertical';
+    variant?: 'solid' | 'dashed' | 'dotted';
+    label?: string;
 }
-
-export class Divider extends Component('arianna-divider', HTMLElement, {}, {
-    attrs : ['orientation', 'variant', 'label'],
+@Component('arianna-divider', {}, {
+    Attributes: ['orientation', 'variant', 'label'],
 })
-{
-    build(_opts: DividerOptions = {})
-    {
+export class Divider extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    onConnected(_opts: DividerOptions = {}) {
         this.setAttribute('role', 'separator');
-        const label = this.attributeSignal('label');
-
-        this.hasLabel  = () => !!label.Get();
+        const label = this.signal().attribute('label');
+        this.hasLabel = () => !!label.Get();
         this.labelText = () => label.Get() ?? '';
-
-        this.template = html`
+        this.template = html `
             <span class="ar-divider__line"></span>
             <span class="ar-divider__label" a-if="this.hasLabel()">{{ this.labelText() }}</span>
             <span class="ar-divider__line"  a-if="this.hasLabel()"></span>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Divider.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Divider.DefaultSheet();
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     get orientation(): 'horizontal' | 'vertical' { return (this.getAttribute('orientation') ?? 'horizontal') as never; }
     set orientation(v: 'horizontal' | 'vertical') { this.setAttribute('orientation', v); }
-
     get variant(): 'solid' | 'dashed' | 'dotted' { return (this.getAttribute('variant') ?? 'solid') as never; }
     set variant(v: 'solid' | 'dashed' | 'dotted') { this.setAttribute('variant', v); }
-
-    get label(): string  { return this.getAttribute('label') ?? ''; }
+    get label(): string { return this.getAttribute('label') ?? ''; }
     set label(v: string) { v ? this.setAttribute('label', v) : this.removeAttribute('label'); }
-
-    private hasLabel : () => boolean = () => false;
-    private labelText: () => string  = () => '';
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    display    : 'flex',
-                    alignItems : 'center',
-                    gap        : '10px',
-                }),
-                new Rule(':host([orientation="horizontal"])', { width: '100%' }),
-                new Rule(':host(:not([orientation]))',         { width: '100%' }),
-                new Rule(':host([orientation="vertical"])', {
-                    alignSelf    : 'stretch',
-                    flexDirection: 'column',
-                    width        : 'auto',
-                }),
-                new Rule('.ar-divider__line', {
-                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
-                    flex     : '1',
-                }),
-                new Rule(':host([orientation="vertical"]) .ar-divider__line', {
-                    borderTop : 'none',
-                    borderLeft: '1px solid var(--arianna-border, #d8d8d8)',
-                    flex      : '1',
-                }),
-                new Rule(':host([variant="dashed"]) .ar-divider__line', { borderStyle: 'dashed' }),
-                new Rule(':host([variant="dotted"]) .ar-divider__line', { borderStyle: 'dotted' }),
-                new Rule('.ar-divider__label', {
-                    color     : 'var(--arianna-muted, #8b949e)',
-                    fontSize  : '0.78rem',
-                    whiteSpace: 'nowrap',
-                }),
-            ]
-        );
+    private hasLabel: () => boolean = () => false;
+    private labelText: () => string = () => '';
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+            }),
+            new Rule(':host([orientation="horizontal"])', { width: '100%' }),
+            new Rule(':host(:not([orientation]))', { width: '100%' }),
+            new Rule(':host([orientation="vertical"])', {
+                alignSelf: 'stretch',
+                flexDirection: 'column',
+                width: 'auto',
+            }),
+            new Rule('.ar-divider__line', {
+                borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                flex: '1',
+            }),
+            new Rule(':host([orientation="vertical"]) .ar-divider__line', {
+                borderTop: 'none',
+                borderLeft: '1px solid var(--arianna-border, #d8d8d8)',
+                flex: '1',
+            }),
+            new Rule(':host([variant="dashed"]) .ar-divider__line', { borderStyle: 'dashed' }),
+            new Rule(':host([variant="dotted"]) .ar-divider__line', { borderStyle: 'dotted' }),
+            new Rule('.ar-divider__label', {
+                color: 'var(--arianna-muted, #8b949e)',
+                fontSize: '0.78rem',
+                whiteSpace: 'nowrap',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Divider', {
-        value: Divider, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Divider namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Divider {
+    export namespace Interfaces {
+        export interface Options extends DividerOptions {
+        }
+    }
 }
-
 export default Divider;

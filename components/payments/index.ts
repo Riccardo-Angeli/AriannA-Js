@@ -37,37 +37,21 @@
  *   arianna:card-change       detail: { card, valid }  (CreditCard only)
  *   arianna:method-select     detail: { method }       (PaymentGateway only)
  */
-
 export { ApplePay } from './ApplePay.ts';
-export type {
-    ApplePayNetwork, ApplePayMerchantCapability,
-    ApplePayButtonStyle, ApplePayButtonType, ApplePayOptions,
-} from './ApplePay.ts';
-
+export type { ApplePayNetwork, ApplePayMerchantCapability, ApplePayButtonStyle, ApplePayButtonType, ApplePayOptions, } from './ApplePay.ts';
 export { GooglePay } from './GooglePay.ts';
-export type {
-    GooglePayEnvironment, GooglePayButtonColor, GooglePayButtonType, GooglePayOptions,
-} from './GooglePay.ts';
-
+export type { GooglePayEnvironment, GooglePayButtonColor, GooglePayButtonType, GooglePayOptions, } from './GooglePay.ts';
 export { CreditCard } from './CreditCard.ts';
 export type { CardBrand, CardData, CreditCardOptions } from './CreditCard.ts';
-
 export { PayPal } from './PayPal.ts';
 export type { PayPalOptions } from './PayPal.ts';
-
 export { Stripe } from './Stripe.ts';
 export type { StripeOptions } from './Stripe.ts';
-
 export { Satispay } from './Satispay.ts';
 export type { SatispayOptions } from './Satispay.ts';
-
 export { Nexi } from './Nexi.ts';
 export type { NexiOptions } from './Nexi.ts';
-
 export { AliPay } from './AliPay.ts';
 export type { AliPayMode, AliPayOptions } from './AliPay.ts';
-
 export { PaymentGateway } from './PaymentGateway.ts';
-export type {
-    PaymentMethodId, PaymentGatewayMethodConfig, PaymentGatewayOptions,
-} from './PaymentGateway.ts';
+export type { PaymentMethodId, PaymentGatewayMethodConfig, PaymentGatewayOptions, } from './PaymentGateway.ts';

@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/modifiers/3D/TwistModifier
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -15,35 +19,33 @@
  * @example JS
  *   new TwistModifier(mesh, Math.PI, 'y').apply();
  *
- * Attrs (declarative): for, angle, axis, enabled
+ * Attributes (declarative): for, angle, axis, enabled
  */
-
-import { Component } from '../../../core/Components.ts';
+import { Component } from '../../../core/index.ts';
 import { Modifier3D, Modifier3DElement, _cloneGeom, _recomputeNormals, type MeshLike } from './Base.ts';
-
 export class TwistModifier extends Modifier3D {
     #angle: number;
-    #axis : 'x' | 'y' | 'z';
-
+    #axis: 'x' | 'y' | 'z';
     constructor(mesh: MeshLike, angle: number, axis: 'x' | 'y' | 'z' = 'y') {
         super(mesh);
         this.#angle = angle;
-        this.#axis  = axis;
+        this.#axis = axis;
     }
-
     setAngle(a: number): this { this.#angle = a; return this; }
     setAxis(a: 'x' | 'y' | 'z'): this { this.#axis = a; return this; }
-
     apply(): this {
-        if (!this.enabled) return this;
-        const g    = _cloneGeom(this.mesh.geometry);
+        if (!this.enabled)
+            return this;
+        const g = _cloneGeom(this.mesh.geometry);
         const vals = g.vertices.map(v => this.#axis === 'y' ? v.y : this.#axis === 'x' ? v.x : v.z);
         const vmin = Math.min(...vals), range = (Math.max(...vals) - vmin) || 1;
         g.vertices = g.vertices.map(v => {
             const t = ((this.#axis === 'y' ? v.y : this.#axis === 'x' ? v.x : v.z) - vmin) / range;
             const a = t * this.#angle, c = Math.cos(a), s = Math.sin(a);
-            if (this.#axis === 'y') return { x: c * v.x - s * v.z, y: v.y, z: s * v.x + c * v.z };
-            if (this.#axis === 'x') return { x: v.x, y: c * v.y - s * v.z, z: s * v.y + c * v.z };
+            if (this.#axis === 'y')
+                return { x: c * v.x - s * v.z, y: v.y, z: s * v.x + c * v.z };
+            if (this.#axis === 'x')
+                return { x: v.x, y: c * v.y - s * v.z, z: s * v.y + c * v.z };
             return { x: c * v.x - s * v.y, y: s * v.x + c * v.y, z: v.z };
         });
         _recomputeNormals(g);
@@ -51,21 +53,24 @@ export class TwistModifier extends Modifier3D {
         return this;
     }
 }
-
-export class TwistModifierElement extends (Component('arianna-twist', HTMLElement, {}, {
-    attrs : ['for', 'angle', 'axis', 'enabled'],
-}) as typeof Modifier3DElement) {
+@Component('arianna-twist', {}, {
+    Attributes: ['for', 'angle', 'axis', 'enabled'],
+})
+export class TwistModifierElement extends Modifier3DElement {
     protected createModifier(mesh: MeshLike): Modifier3D {
         const angle = parseFloat(this.getAttribute('angle') ?? '0') || 0;
-        const axis  = ((this.getAttribute('axis') ?? 'y') as 'x' | 'y' | 'z');
+        const axis = ((this.getAttribute('axis') ?? 'y') as 'x' | 'y' | 'z');
         return new TwistModifier(mesh, angle, axis);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'TwistModifier', {
-        value: TwistModifier, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * TwistModifier namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace TwistModifier {
 }
-
+/* ──────────────────────────────────────────────────────────────────────────
+ * TwistModifierElement namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace TwistModifierElement {
+}
 export default TwistModifier;

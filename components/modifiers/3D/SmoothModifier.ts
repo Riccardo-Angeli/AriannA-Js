@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/modifiers/3D/SmoothModifier
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -9,44 +13,38 @@
  * @example HTML
  *   <arianna-smooth for="m1" iterations="3" factor="0.5"></arianna-smooth>
  *
- * Attrs (declarative): for, iterations, factor, enabled
+ * Attributes (declarative): for, iterations, factor, enabled
  */
-
-import { Component } from '../../../core/Components.ts';
-import {
-    Modifier3D, Modifier3DElement,
-    _cloneGeom, _recomputeNormals, _vAdd, _vScale, _vLerp,
-    type MeshLike,
-} from './Base.ts';
-
+import { Component } from '../../../core/index.ts';
+import { Modifier3D, Modifier3DElement, _cloneGeom, _recomputeNormals, _vAdd, _vScale, _vLerp, type MeshLike, } from './Base.ts';
 export class SmoothModifier extends Modifier3D {
     #iterations: number;
-    #factor    : number;
-
+    #factor: number;
     constructor(mesh: MeshLike, iterations = 3, factor = 0.5) {
         super(mesh);
         this.#iterations = iterations;
-        this.#factor     = factor;
+        this.#factor = factor;
     }
-
     apply(): this {
-        if (!this.enabled) return this;
-        const g   = _cloneGeom(this.mesh.geometry);
+        if (!this.enabled)
+            return this;
+        const g = _cloneGeom(this.mesh.geometry);
         const adj = g.vertices.map(() => new Set<number>());
         for (let i = 0; i < g.indices.length; i += 3) {
             const [a, b, c] = g.indices.slice(i, i + 3);
-            adj[a].add(b); adj[a].add(c);
-            adj[b].add(a); adj[b].add(c);
-            adj[c].add(a); adj[c].add(b);
+            adj[a].add(b);
+            adj[a].add(c);
+            adj[b].add(a);
+            adj[b].add(c);
+            adj[c].add(a);
+            adj[c].add(b);
         }
         for (let iter = 0; iter < this.#iterations; iter++) {
             g.vertices = g.vertices.map((v, i) => {
                 const ns = Array.from(adj[i]);
-                if (!ns.length) return v;
-                const avg = _vScale(
-                    ns.reduce((s, ni) => _vAdd(s, g.vertices[ni]), { x: 0, y: 0, z: 0 }),
-                    1 / ns.length,
-                );
+                if (!ns.length)
+                    return v;
+                const avg = _vScale(ns.reduce((s, ni) => _vAdd(s, g.vertices[ni]), { x: 0, y: 0, z: 0 }), 1 / ns.length);
                 return _vLerp(v, avg, this.#factor);
             });
         }
@@ -55,21 +53,24 @@ export class SmoothModifier extends Modifier3D {
         return this;
     }
 }
-
-export class SmoothModifierElement extends (Component('arianna-smooth', HTMLElement, {}, {
-    attrs : ['for', 'iterations', 'factor', 'enabled'],
-}) as typeof Modifier3DElement) {
+@Component('arianna-smooth', {}, {
+    Attributes: ['for', 'iterations', 'factor', 'enabled'],
+})
+export class SmoothModifierElement extends Modifier3DElement {
     protected createModifier(mesh: MeshLike): Modifier3D {
-        const iterations = parseInt  (this.getAttribute('iterations') ?? '3',   10) || 3;
-        const factor     = parseFloat(this.getAttribute('factor')     ?? '0.5')      || 0.5;
+        const iterations = parseInt(this.getAttribute('iterations') ?? '3', 10) || 3;
+        const factor = parseFloat(this.getAttribute('factor') ?? '0.5') || 0.5;
         return new SmoothModifier(mesh, iterations, factor);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'SmoothModifier', {
-        value: SmoothModifier, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * SmoothModifier namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace SmoothModifier {
 }
-
+/* ──────────────────────────────────────────────────────────────────────────
+ * SmoothModifierElement namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace SmoothModifierElement {
+}
 export default SmoothModifier;

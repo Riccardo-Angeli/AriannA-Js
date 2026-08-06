@@ -1,3 +1,9 @@
+import { Component, Components, Css, Templates } from '../../core/index.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/display/Banner
  * @author    Riccardo Angeli
@@ -24,44 +30,38 @@
  * Slots:
  *   default — replaces `message` if provided
  *
- * Attrs:  variant, dismissible, icon, message, action
+ * Attributes:  variant, dismissible, icon, message, action
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface BannerOptions {
-    variant?     : 'default' | 'info' | 'success' | 'warning' | 'danger';
-    dismissible? : boolean;
-    icon?        : string;
-    message?     : string;
-    action?      : string;
+    variant?: 'default' | 'info' | 'success' | 'warning' | 'danger';
+    dismissible?: boolean;
+    icon?: string;
+    message?: string;
+    action?: string;
 }
-
-export class Banner extends Component('arianna-banner', HTMLElement, {}, {
-    attrs : ['variant', 'dismissible', 'icon', 'message', 'action'],
+@Component('arianna-banner', {}, {
+    Attributes: ['variant', 'dismissible', 'icon', 'message', 'action'],
 })
-{
-    build(_opts: BannerOptions = {})
-    {
+export class Banner extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    onConnected(_opts: BannerOptions = {}) {
         this.setAttribute('role', 'alert');
-
-        const icon    = this.attributeSignal('icon');
-        const message = this.attributeSignal('message');
-        const action  = this.attributeSignal('action');
-
-        this.iconText      = () => icon.Get() ?? '';
-        this.messageText   = () => message.Get() ?? '';
-        this.actionText    = () => action.Get() ?? '';
-        this.hasIcon       = () => !!icon.Get();
-        this.hasMessage    = () => !!message.Get();
-        this.hasAction     = () => !!action.Get();
+        const icon = this.signal().attribute('icon');
+        const message = this.signal().attribute('message');
+        const action = this.signal().attribute('action');
+        this.iconText = () => icon.Get() ?? '';
+        this.messageText = () => message.Get() ?? '';
+        this.actionText = () => action.Get() ?? '';
+        this.hasIcon = () => !!icon.Get();
+        this.hasMessage = () => !!message.Get();
+        this.hasAction = () => !!action.Get();
         this.isDismissible = () => this.getAttribute('dismissible') !== 'false';
-
         this.onAction = () => {
             this.dispatchEvent(new CustomEvent('arianna:action', { bubbles: true, detail: {} }));
         };
@@ -69,101 +69,91 @@ export class Banner extends Component('arianna-banner', HTMLElement, {}, {
             this.style.display = 'none';
             this.dispatchEvent(new CustomEvent('arianna:dismiss', { bubbles: true, detail: {} }));
         };
-
-        this.template = html`
+        this.template = html `
             <span class="ar-banner__icon" a-if="this.hasIcon()">{{ this.iconText() }}</span>
             <span class="ar-banner__msg" a-if="this.hasMessage()">{{ this.messageText() }}</span>
             <span class="ar-banner__msg" a-if="!this.hasMessage()"><slot></slot></span>
             <button class="ar-banner__action" a-if="this.hasAction()" @click="this.onAction">{{ this.actionText() }}</button>
             <button class="ar-banner__close"  a-if="this.isDismissible()" @click="this.onDismiss" aria-label="Dismiss">✕</button>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Banner.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Banner.DefaultSheet();
     }
-
     /** Programmatic dismiss (mirrors the user clicking the close button). */
     dismiss(): void { this.onDismiss(); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    get variant(): string  { return this.getAttribute('variant') ?? 'default'; }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    get variant(): string { return this.getAttribute('variant') ?? 'default'; }
     set variant(v: string) { this.setAttribute('variant', v); }
-
-    get dismissible(): boolean  { return this.getAttribute('dismissible') !== 'false'; }
+    get dismissible(): boolean { return this.getAttribute('dismissible') !== 'false'; }
     set dismissible(v: boolean) { this.setAttribute('dismissible', v ? 'true' : 'false'); }
-
-    get icon(): string  { return this.getAttribute('icon') ?? ''; }
+    get icon(): string { return this.getAttribute('icon') ?? ''; }
     set icon(v: string) { v ? this.setAttribute('icon', v) : this.removeAttribute('icon'); }
-
-    get message(): string  { return this.getAttribute('message') ?? ''; }
+    get message(): string { return this.getAttribute('message') ?? ''; }
     set message(v: string) { v ? this.setAttribute('message', v) : this.removeAttribute('message'); }
-
-    get action(): string  { return this.getAttribute('action') ?? ''; }
+    get action(): string { return this.getAttribute('action') ?? ''; }
     set action(v: string) { v ? this.setAttribute('action', v) : this.removeAttribute('action'); }
-
-    private iconText     : () => string  = () => '';
-    private messageText  : () => string  = () => '';
-    private actionText   : () => string  = () => '';
-    private hasIcon      : () => boolean = () => false;
-    private hasMessage   : () => boolean = () => false;
-    private hasAction    : () => boolean = () => false;
+    private iconText: () => string = () => '';
+    private messageText: () => string = () => '';
+    private actionText: () => string = () => '';
+    private hasIcon: () => boolean = () => false;
+    private hasMessage: () => boolean = () => false;
+    private hasAction: () => boolean = () => false;
     private isDismissible: () => boolean = () => true;
-    private onAction     : () => void    = () => {};
-    private onDismiss    : () => void    = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    alignItems: 'center',
-                    display   : 'flex',
-                    gap       : '10px',
-                    padding   : '10px 16px',
-                    fontSize  : '0.83rem',
-                    color     : 'var(--arianna-text, #1f2328)',
-                    background    : 'var(--arianna-bg-3, #f3f3f3)',
-                    borderBottom  : '1px solid var(--arianna-border, #d8d8d8)',
-                }),
-                new Rule(':host([variant="info"])',    { background: 'rgba(77,208,225,0.12)',  borderBottom: '1px solid var(--arianna-info, #4dd0e1)' }),
-                new Rule(':host([variant="success"])', { background: 'rgba(46,160,67,0.12)',   borderBottom: '1px solid var(--arianna-success, #2ea043)' }),
-                new Rule(':host([variant="warning"])', { background: 'rgba(210,153,34,0.12)',  borderBottom: '1px solid var(--arianna-warning, #d29922)' }),
-                new Rule(':host([variant="danger"])',  { background: 'rgba(207,34,46,0.12)',   borderBottom: '1px solid var(--arianna-danger, #cf222e)' }),
-                new Rule('.ar-banner__msg',    { flex: '1' }),
-                new Rule('.ar-banner__icon',   { flexShrink: '0' }),
-                new Rule('.ar-banner__action', {
-                    background    : 'none',
-                    border        : 'none',
-                    color         : 'var(--arianna-primary, #1f6feb)',
-                    cursor        : 'pointer',
-                    font          : 'inherit',
-                    fontSize      : '0.78rem',
-                    fontWeight    : '600',
-                    textDecoration: 'underline',
-                }),
-                new Rule('.ar-banner__close',  {
-                    background: 'none',
-                    border    : 'none',
-                    color     : 'var(--arianna-muted, #8b949e)',
-                    cursor    : 'pointer',
-                    fontSize  : '0.85rem',
-                    marginLeft: 'auto',
-                }),
-            ]
-        );
+    private onAction: () => void = () => { };
+    private onDismiss: () => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                alignItems: 'center',
+                display: 'flex',
+                gap: '10px',
+                padding: '10px 16px',
+                fontSize: '0.83rem',
+                color: 'var(--arianna-text, #1f2328)',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+            }),
+            new Rule(':host([variant="info"])', { background: 'rgba(77,208,225,0.12)', borderBottom: '1px solid var(--arianna-info, #4dd0e1)' }),
+            new Rule(':host([variant="success"])', { background: 'rgba(46,160,67,0.12)', borderBottom: '1px solid var(--arianna-success, #2ea043)' }),
+            new Rule(':host([variant="warning"])', { background: 'rgba(210,153,34,0.12)', borderBottom: '1px solid var(--arianna-warning, #d29922)' }),
+            new Rule(':host([variant="danger"])', { background: 'rgba(207,34,46,0.12)', borderBottom: '1px solid var(--arianna-danger, #cf222e)' }),
+            new Rule('.ar-banner__msg', { flex: '1' }),
+            new Rule('.ar-banner__icon', { flexShrink: '0' }),
+            new Rule('.ar-banner__action', {
+                background: 'none',
+                border: 'none',
+                color: 'var(--arianna-primary, #1f6feb)',
+                cursor: 'pointer',
+                font: 'inherit',
+                fontSize: '0.78rem',
+                fontWeight: '600',
+                textDecoration: 'underline',
+            }),
+            new Rule('.ar-banner__close', {
+                background: 'none',
+                border: 'none',
+                color: 'var(--arianna-muted, #8b949e)',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                marginLeft: 'auto',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Banner', {
-        value: Banner, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Banner namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Banner {
+    export namespace Interfaces {
+        export interface Options extends BannerOptions {
+        }
+    }
 }
-
 export default Banner;

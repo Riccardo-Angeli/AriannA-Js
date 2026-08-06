@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/maps/GoogleMap
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -31,42 +35,36 @@
  *   m.setZoom(15);
  *   document.body.append(m);
  *
- * Attrs (inherited + own):
+ * Attributes (inherited + own):
  *   center-lat, center-lng, zoom, marker, address, aspect-ratio, label,
  *   api-key, mode ('place' | 'view' | 'directions' | 'streetview' | 'search')
  */
-
+import { Component } from '../../core/index.ts';
 import { MapEmbed, type MapProvider } from './MapEmbed.ts';
-import { Component } from '../../core/Components.ts';
-
-export class GoogleMap extends (Component('arianna-google-map', HTMLElement, {}, {
-    attrs : [
+@Component('arianna-google-map', {}, {
+    Attributes: [
         'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
         'aspect-ratio', 'api-key', 'mode',
     ],
-}) as unknown as typeof MapEmbed)
-{
+})
+export class GoogleMap extends MapEmbed {
     getProvider(): MapProvider { return 'google'; }
-
-    protected getEmbedUrl(): string
-    {
+    protected getEmbedUrl(): string {
         const apiKey = this.getAttribute('api-key');
-        if (apiKey) return this.#officialEmbedUrl(apiKey);
+        if (apiKey)
+            return this.#officialEmbedUrl(apiKey);
         return this.#publicEmbedUrl();
     }
-
     /**
      * Official Maps Embed API. Requires a project key but is free with
      * unlimited usage. Supports place, view, directions, streetview, search.
      */
-    #officialEmbedUrl(apiKey: string): string
-    {
-        const mode    = (this.getAttribute('mode') ?? 'place');
-        const lat     = this.centerLatNum();
-        const lng     = this.centerLngNum();
-        const zoom    = this.zoomNum();
+    #officialEmbedUrl(apiKey: string): string {
+        const mode = (this.getAttribute('mode') ?? 'place');
+        const lat = this.centerLatNum();
+        const lng = this.centerLngNum();
+        const zoom = this.zoomNum();
         const address = this.getAttribute('address') ?? '';
-
         const base = `https://www.google.com/maps/embed/v1/${mode}?key=${encodeURIComponent(apiKey)}`;
         switch (mode) {
             case 'place':
@@ -78,45 +76,40 @@ export class GoogleMap extends (Component('arianna-google-map', HTMLElement, {},
             case 'search':
                 return `${base}&q=${encodeURIComponent(address)}`;
             case 'directions': {
-                // Caller can pass `origin` and `destination` as data attrs
+                // Caller can pass `origin` and `destination` as data attributes
                 const origin = this.getAttribute('origin') ?? '';
-                const dest   = this.getAttribute('destination') ?? address;
+                const dest = this.getAttribute('destination') ?? address;
                 return `${base}&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}`;
             }
             default:
                 return `${base}&q=${encodeURIComponent(address || `${lat},${lng}`)}`;
         }
     }
-
     /**
      * Public no-key embed. Still works (verified May 2026). Limited to a
      * single map view; the `output=embed` parameter tells Google to render
      * the iframe-safe variant.
      */
-    #publicEmbedUrl(): string
-    {
-        const lat     = this.centerLatNum();
-        const lng     = this.centerLngNum();
-        const zoom    = this.zoomNum();
+    #publicEmbedUrl(): string {
+        const lat = this.centerLatNum();
+        const lng = this.centerLngNum();
+        const zoom = this.zoomNum();
         const address = this.getAttribute('address') ?? '';
         const q = address ? encodeURIComponent(address) : `${lat},${lng}`;
         return `https://www.google.com/maps?q=${q}&z=${zoom}&output=embed`;
     }
-
-    protected getOpenUrl(): string
-    {
+    protected getOpenUrl(): string {
         const lat = this.centerLatNum();
         const lng = this.centerLngNum();
         const address = this.getAttribute('address');
-        if (address) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+        if (address)
+            return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
         return `https://www.google.com/maps/@${lat},${lng},${this.zoomNum()}z`;
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'GoogleMap', {
-        value: GoogleMap, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * GoogleMap namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace GoogleMap {
 }
-
 export default GoogleMap;

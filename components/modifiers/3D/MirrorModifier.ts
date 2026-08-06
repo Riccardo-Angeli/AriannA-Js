@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/modifiers/3D/MirrorModifier
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -9,33 +13,25 @@
  * @example HTML
  *   <arianna-mirror for="m1" axis="x" merge="true" threshold="0.001"></arianna-mirror>
  *
- * Attrs (declarative): for, axis, merge, threshold, enabled
+ * Attributes (declarative): for, axis, merge, threshold, enabled
  */
-
-import { Component } from '../../../core/Components.ts';
-import {
-    Modifier3D, Modifier3DElement,
-    _cloneGeom, _recomputeNormals, _vLen, _vSub,
-    type MeshLike, type Vec3Like,
-} from './Base.ts';
-
+import { Component } from '../../../core/index.ts';
+import { Modifier3D, Modifier3DElement, _cloneGeom, _recomputeNormals, _vLen, _vSub, type MeshLike, type Vec3Like, } from './Base.ts';
 export type MirrorAxis = 'x' | 'y' | 'z';
-
 export class MirrorModifier extends Modifier3D {
-    #axis     : MirrorAxis;
-    #merge    : boolean;
+    #axis: MirrorAxis;
+    #merge: boolean;
     #threshold: number;
-
     constructor(mesh: MeshLike, axis: MirrorAxis = 'x', merge = true, threshold = 0.001) {
         super(mesh);
-        this.#axis      = axis;
-        this.#merge     = merge;
+        this.#axis = axis;
+        this.#merge = merge;
         this.#threshold = threshold;
     }
-
     apply(): this {
-        if (!this.enabled) return this;
-        const g    = _cloneGeom(this.mesh.geometry);
+        if (!this.enabled)
+            return this;
+        const g = _cloneGeom(this.mesh.geometry);
         const base = g.vertices.length;
         const mirror = (v: Vec3Like): Vec3Like => ({
             x: this.#axis === 'x' ? -v.x : v.x,
@@ -52,9 +48,10 @@ export class MirrorModifier extends Modifier3D {
             const t = this.#threshold;
             const onPlane = g.vertices.reduce((acc: number[], v, i) => {
                 const onP = (this.#axis === 'x' && Math.abs(v.x) < t)
-                         || (this.#axis === 'y' && Math.abs(v.y) < t)
-                         || (this.#axis === 'z' && Math.abs(v.z) < t);
-                if (onP) acc.push(i);
+                    || (this.#axis === 'y' && Math.abs(v.y) < t)
+                    || (this.#axis === 'z' && Math.abs(v.z) < t);
+                if (onP)
+                    acc.push(i);
                 return acc;
             }, []);
             for (const i of onPlane)
@@ -67,22 +64,28 @@ export class MirrorModifier extends Modifier3D {
         return this;
     }
 }
-
-export class MirrorModifierElement extends (Component('arianna-mirror', HTMLElement, {}, {
-    attrs : ['for', 'axis', 'merge', 'threshold', 'enabled'],
-}) as typeof Modifier3DElement) {
+@Component('arianna-mirror', {}, {
+    Attributes: ['for', 'axis', 'merge', 'threshold', 'enabled'],
+})
+export class MirrorModifierElement extends Modifier3DElement {
     protected createModifier(mesh: MeshLike): Modifier3D {
-        const axis      = ((this.getAttribute('axis') ?? 'x') as MirrorAxis);
-        const merge     = this.getAttribute('merge') !== 'false';
+        const axis = ((this.getAttribute('axis') ?? 'x') as MirrorAxis);
+        const merge = this.getAttribute('merge') !== 'false';
         const threshold = parseFloat(this.getAttribute('threshold') ?? '0.001') || 0.001;
         return new MirrorModifier(mesh, axis, merge, threshold);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'MirrorModifier', {
-        value: MirrorModifier, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * MirrorModifier namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace MirrorModifier {
+    export namespace Types {
+        export type MirrorAxisType = MirrorAxis;
+    }
 }
-
+/* ──────────────────────────────────────────────────────────────────────────
+ * MirrorModifierElement namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace MirrorModifierElement {
+}
 export default MirrorModifier;

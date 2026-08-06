@@ -1,3 +1,9 @@
+import { Component, Css, Reactivity } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/charts/LineChart
  * @author    Riccardo Angeli
@@ -17,10 +23,6 @@
  * Events:
  *   arianna:chart-point-hover { series, point, index }
  */
-
-import { Component } from '../../core/Components.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -28,120 +30,130 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
-export type LinePoint = [number, number];   // [x, y]
-
+export type LinePoint = [
+    number,
+    number
+]; // [x, y]
 export interface LineSeries {
-    name   : string;
-    points : LinePoint[];
-    color? : string;
+    name: string;
+    points: LinePoint[];
+    color?: string;
 }
-
 export interface LineChartOptions {
-    width?     : number;
-    height?    : number;
-    area?      : boolean;        // fill below the line
-    smooth?    : boolean;        // Catmull-Rom smoothing
-    showGrid?  : boolean;
-    showDots?  : boolean;
+    width?: number;
+    height?: number;
+    area?: boolean; // fill below the line
+    smooth?: boolean; // Catmull-Rom smoothing
+    showGrid?: boolean;
+    showDots?: boolean;
 }
-
 const SVG_NS = 'http://www.w3.org/2000/svg';
-
-export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, {
-    attrs : ['width', 'height', 'area', 'smooth', 'show-grid', 'show-dots'],
+@Component('arianna-line-chart', {}, {
+    Attributes: ['width', 'height', 'area', 'smooth', 'show-grid', 'show-dots'],
 })
-{
+export class LineChart extends HTMLElement {
     readonly series$: Signal<LineSeries[]> = signal<LineSeries[]>([]);
-
     #svg?: SVGSVGElement;
-
     constructor(opts: LineChartOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
-        const el = self.render();
-        if (opts.width      != null) el.setAttribute('width',  String(opts.width));
-        if (opts.height     != null) el.setAttribute('height', String(opts.height));
-        if (opts.area)               el.setAttribute('area',   '');
-        if (opts.smooth)             el.setAttribute('smooth', '');
-        if (opts.showGrid === false) el.setAttribute('show-grid', 'false');
-        if (opts.showDots === true)  el.setAttribute('show-dots', '');
-    }
-
-    build(): void {
+        super();
         const self = this as unknown as {
             render(): HTMLElement;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+        };
+        const el = self.render();
+        if (opts.width != null)
+            el.setAttribute('width', String(opts.width));
+        if (opts.height != null)
+            el.setAttribute('height', String(opts.height));
+        if (opts.area)
+            el.setAttribute('area', '');
+        if (opts.smooth)
+            el.setAttribute('smooth', '');
+        if (opts.showGrid === false)
+            el.setAttribute('show-grid', 'false');
+        if (opts.showDots === true)
+            el.setAttribute('show-dots', '');
+    }
+    onConnected(): void {
+        const self = this as unknown as {
+            render(): HTMLElement;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const root = self.render();
-        if (root.querySelector('svg')) return;
-
-        const w = parseInt(self.attributeSignal('width')?.Peek()  ?? '480', 10) || 480;
-        const h = parseInt(self.attributeSignal('height')?.Peek() ?? '240', 10) || 240;
+        if (root.querySelector('svg'))
+            return;
+        const w = parseInt(self.signal().attribute('width')?.Peek() ?? '480', 10) || 480;
+        const h = parseInt(self.signal().attribute('height')?.Peek() ?? '240', 10) || 240;
         const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
         svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-        svg.setAttribute('width',  String(w));
+        svg.setAttribute('width', String(w));
         svg.setAttribute('height', String(h));
         svg.setAttribute('class', 'lc-svg');
         this.#svg = svg;
         root.appendChild(svg);
-
         effect(() => { this.series$.Get(); this.#redraw(); });
-
         self.Sheet = LineChart.DefaultSheet();
     }
-
     set series(s: LineSeries[]) { this.series$.Set(s); }
-    get series(): LineSeries[]  { return this.series$.Get(); }
-
+    get series(): LineSeries[] { return this.series$.Get(); }
     #redraw(): void {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
         };
         const svg = this.#svg;
-        if (!svg) return;
-        while (svg.firstChild) svg.removeChild(svg.firstChild);
-
+        if (!svg)
+            return;
+        while (svg.firstChild)
+            svg.removeChild(svg.firstChild);
         const root = self.render();
-        const w = parseInt(svg.getAttribute('width')  ?? '480', 10);
+        const w = parseInt(svg.getAttribute('width') ?? '480', 10);
         const h = parseInt(svg.getAttribute('height') ?? '240', 10);
         const series = this.series$.Peek();
-        if (!series.length) return;
-
-        const showGrid = self.attributeSignal('show-grid')?.Peek() !== 'false';
-        const showDots = self.attributeSignal('show-dots')?.Peek() != null;
+        if (!series.length)
+            return;
+        const showGrid = self.signal().attribute('show-grid')?.Peek() !== 'false';
+        const showDots = self.signal().attribute('show-dots')?.Peek() != null;
         const fillArea = root.hasAttribute('area');
-        const smooth   = root.hasAttribute('smooth');
-
+        const smooth = root.hasAttribute('smooth');
         const padL = 40, padR = 12, padT = 12, padB = 28;
         const plotW = w - padL - padR;
         const plotH = h - padT - padB;
-
         // Compute range
         let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
-        for (const s of series) for (const [x, y] of s.points) {
-            if (x < xMin) xMin = x; if (x > xMax) xMax = x;
-            if (y < yMin) yMin = y; if (y > yMax) yMax = y;
+        for (const s of series)
+            for (const [x, y] of s.points) {
+                if (x < xMin)
+                    xMin = x;
+                if (x > xMax)
+                    xMax = x;
+                if (y < yMin)
+                    yMin = y;
+                if (y > yMax)
+                    yMax = y;
+            }
+        if (!isFinite(xMin)) {
+            xMin = 0;
+            xMax = 1;
+            yMin = 0;
+            yMax = 1;
         }
-        if (!isFinite(xMin)) { xMin = 0; xMax = 1; yMin = 0; yMax = 1; }
         const xR = (xMax - xMin) || 1, yR = (yMax - yMin) || 1;
         const xOf = (x: number) => padL + ((x - xMin) / xR) * plotW;
         const yOf = (y: number) => padT + plotH - ((y - yMin) / yR) * plotH;
-
         // Grid
         if (showGrid) {
             const ticks = 4;
@@ -164,12 +176,11 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
                 svg.appendChild(lbl);
             }
         }
-
         // Each series
         series.forEach((s, sIdx) => {
-            if (!s.points.length) return;
+            if (!s.points.length)
+                return;
             const color = s.color ?? this.#defaultColor(sIdx);
-
             // Path
             const path = this.#buildPath(s.points, xOf, yOf, smooth);
             if (fillArea) {
@@ -177,8 +188,7 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
                 const y0 = yOf(Math.max(0, yMin));
                 const xs = s.points[0]?.[0] ?? 0;
                 const xe = s.points[s.points.length - 1]?.[0] ?? 0;
-                area.setAttribute('d',
-                    `M ${xOf(xs)} ${y0} ` + path.replace(/^M /, 'L ') + ` L ${xOf(xe)} ${y0} Z`);
+                area.setAttribute('d', `M ${xOf(xs)} ${y0} ` + path.replace(/^M /, 'L ') + ` L ${xOf(xe)} ${y0} Z`);
                 area.setAttribute('fill', color);
                 area.setAttribute('class', 'lc-area');
                 svg.appendChild(area);
@@ -189,7 +199,6 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
             ln.setAttribute('stroke', color);
             ln.setAttribute('class', 'lc-line');
             svg.appendChild(ln);
-
             // Dots
             if (showDots) {
                 s.points.forEach(([x, y], i) => {
@@ -199,22 +208,23 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
                     c.setAttribute('r', '3');
                     c.setAttribute('fill', color);
                     c.setAttribute('class', 'lc-dot');
-                    c.addEventListener('mouseenter', () =>
-                        self.fire('arianna:chart-point-hover',
-                            { detail: { series: s, point: [x, y], index: i, source: this }, bubbles: true }));
+                    c.addEventListener('mouseenter', () => self.fire('arianna:chart-point-hover', { detail: { series: s, point: [x, y], index: i, source: this }, bubbles: true }));
                     svg.appendChild(c);
                 });
             }
         });
     }
-
     #buildPath(pts: LinePoint[], xOf: (x: number) => number, yOf: (y: number) => number, smooth: boolean): string {
-        if (!pts.length) return '';
+        if (!pts.length)
+            return '';
         if (!smooth || pts.length < 3) {
             return 'M ' + pts.map(([x, y]) => `${xOf(x)} ${yOf(y)}`).join(' L ');
         }
         // Catmull-Rom → Bezier
-        const points = pts.map(([x, y]) => [xOf(x), yOf(y)] as [number, number]);
+        const points = pts.map(([x, y]) => [xOf(x), yOf(y)] as [
+            number,
+            number
+        ]);
         let d = `M ${points[0]![0]} ${points[0]![1]}`;
         for (let i = 0; i < points.length - 1; i++) {
             const p0 = points[i - 1] ?? points[i]!;
@@ -229,37 +239,42 @@ export class LineChart extends Component('arianna-line-chart', HTMLElement, {}, 
         }
         return d;
     }
-
     #defaultColor(i: number): string {
         const palette = ['#7eb8f7', '#f47e7e', '#7ef7a8', '#f7c97e', '#b87ef7', '#7ef7e3'];
         return palette[i % palette.length] ?? '#7eb8f7';
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                background  : 'var(--ar-bg, #fff)',
-                border      : '1px solid var(--ar-border, #e0e0e0)',
+                background: 'var(--ar-bg, #fff)',
+                border: '1px solid var(--ar-border, #e0e0e0)',
                 borderRadius: 'var(--ar-radius, 5px)',
-                color       : 'var(--ar-text, #1a1a1a)',
-                display     : 'inline-block',
-                font        : 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
-                padding     : '8px',
+                color: 'var(--ar-text, #1a1a1a)',
+                display: 'inline-block',
+                font: 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
+                padding: '8px',
             }),
             new Rule(':host .lc-svg', { display: 'block' }),
             new Rule(':host .lc-grid', { stroke: 'var(--ar-border, #e0e0e0)', strokeWidth: '1' }),
             new Rule(':host .lc-tick', { fill: 'var(--ar-muted, #888)', fontSize: '11px' }),
             new Rule(':host .lc-line', { strokeWidth: '2', fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' }),
             new Rule(':host .lc-area', { opacity: '0.15' }),
-            new Rule(':host .lc-dot',  { cursor: 'pointer' }),
+            new Rule(':host .lc-dot', { cursor: 'pointer' }),
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'LineChart', {
-        value: LineChart, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * LineChart namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace LineChart {
+    export namespace Types {
+        export type LinePointType = LinePoint;
+    }
+    export namespace Interfaces {
+        export interface LineSeriesContract extends LineSeries {
+        }
+        export interface Options extends LineChartOptions {
+        }
+    }
 }
-
 export default LineChart;

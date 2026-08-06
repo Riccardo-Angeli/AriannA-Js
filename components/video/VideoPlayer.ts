@@ -1,3 +1,10 @@
+import { Component, Css, Reactivity, Templates, Components } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/video/VideoPlayer
  * @author    Riccardo Angeli
@@ -38,14 +45,9 @@
  *   arianna:video-ended        detail: { provider }
  *   arianna:video-source       detail: { source: string, provider }
  *
- * Attrs: source, src (legacy), poster, loop, volume, autoplay,
+ * Attributes: source, src (legacy), poster, loop, volume, autoplay,
  *        show-controls, aspect-ratio, twitch-parent
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -53,88 +55,85 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export type VideoProvider = 'native' | 'youtube' | 'twitch' | 'vimeo';
-
 interface ProviderInfo {
     provider: VideoProvider;
-    id      : string;
-    embed   : string;
+    id: string;
+    embed: string;
 }
-
 export interface VideoPlayerOptions {
-    Source?       : string;
-    src?          : string;          // legacy
-    poster?       : string;
-    loop?         : boolean;
-    volume?       : number;
-    autoplay?     : boolean;
-    showControls? : boolean;
-    aspectRatio?  : string;
-    twitchParent? : string | string[];
+    Source?: string;
+    src?: string; // legacy
+    poster?: string;
+    loop?: boolean;
+    volume?: number;
+    autoplay?: boolean;
+    showControls?: boolean;
+    aspectRatio?: string;
+    twitchParent?: string | string[];
 }
-
 // ── Provider detection ──────────────────────────────────────────────────────
-
 function resolveTwitchParents(override?: string | string[]): string[] {
     if (override !== undefined) {
         const list = Array.isArray(override) ? override : [override];
         const cleaned = list.map(s => s.trim()).filter(Boolean);
-        if (cleaned.length > 0) return cleaned;
+        if (cleaned.length > 0)
+            return cleaned;
     }
     const host = (typeof location !== 'undefined' && location.hostname) || '';
     return host ? [host] : ['localhost'];
 }
-
 export function detectVideoProvider(url: string, twitchParent?: string | string[]): ProviderInfo | null {
-    if (!url) return null;
-
+    if (!url)
+        return null;
     // YouTube
     let m = url.match(/^https?:\/\/(?:www\.)?youtu\.be\/([\w-]{6,})/i);
-    if (m) return ytEmbed(m[1]!);
+    if (m)
+        return ytEmbed(m[1]!);
     m = url.match(/^https?:\/\/(?:www\.|m\.)?youtube\.com\/watch\?(?:[^#]*&)?v=([\w-]{6,})/i);
-    if (m) return ytEmbed(m[1]!);
+    if (m)
+        return ytEmbed(m[1]!);
     m = url.match(/^https?:\/\/(?:www\.|m\.)?youtube\.com\/(?:shorts|embed|v)\/([\w-]{6,})/i);
-    if (m) return ytEmbed(m[1]!);
-
+    if (m)
+        return ytEmbed(m[1]!);
     // Vimeo
     m = url.match(/^https?:\/\/(?:www\.)?vimeo\.com\/(?:video\/)?(\d{6,})/i);
-    if (m) return vimeoEmbed(m[1]!);
+    if (m)
+        return vimeoEmbed(m[1]!);
     m = url.match(/^https?:\/\/player\.vimeo\.com\/video\/(\d{6,})/i);
-    if (m) return vimeoEmbed(m[1]!);
-
+    if (m)
+        return vimeoEmbed(m[1]!);
     // Twitch
     const parents = resolveTwitchParents(twitchParent);
     m = url.match(/^https?:\/\/(?:www\.)?twitch\.tv\/videos\/(\d+)/i);
-    if (m) return twitchEmbed('video', m[1]!, parents);
+    if (m)
+        return twitchEmbed('video', m[1]!, parents);
     m = url.match(/^https?:\/\/clips\.twitch\.tv\/([\w-]+)/i);
-    if (m) return twitchEmbed('clip', m[1]!, parents);
+    if (m)
+        return twitchEmbed('clip', m[1]!, parents);
     m = url.match(/^https?:\/\/(?:www\.)?twitch\.tv\/([\w-]+)\/clip\/([\w-]+)/i);
-    if (m) return twitchEmbed('clip', m[2]!, parents);
+    if (m)
+        return twitchEmbed('clip', m[2]!, parents);
     m = url.match(/^https?:\/\/(?:www\.)?twitch\.tv\/([a-zA-Z0-9_]{3,})$/i);
-    if (m) return twitchEmbed('channel', m[1]!, parents);
-
-    return null;  // → native
+    if (m)
+        return twitchEmbed('channel', m[1]!, parents);
+    return null; // → native
 }
-
 function ytEmbed(id: string): ProviderInfo {
     return { provider: 'youtube', id,
-             embed: `https://www.youtube.com/embed/${id}?enablejsapi=1&playsinline=1&rel=0` };
+        embed: `https://www.youtube.com/embed/${id}?enablejsapi=1&playsinline=1&rel=0` };
 }
 function vimeoEmbed(id: string): ProviderInfo {
     return { provider: 'vimeo', id,
-             embed: `https://player.vimeo.com/video/${id}?api=1` };
+        embed: `https://player.vimeo.com/video/${id}?api=1` };
 }
 function twitchEmbed(kind: 'video' | 'clip' | 'channel', id: string, parents: string[]): ProviderInfo {
     const base = kind === 'clip' ? 'https://clips.twitch.tv/embed' : 'https://player.twitch.tv';
@@ -145,93 +144,90 @@ function twitchEmbed(kind: 'video' | 'clip' | 'channel', id: string, parents: st
         embed: `${base}/?${param}${encodeURIComponent(id)}${parentParams}`,
     };
 }
-
 // ── Component ───────────────────────────────────────────────────────────────
-
-export class VideoPlayer extends Component('arianna-video-player', HTMLElement, {}, {
-    attrs : ['source', 'src', 'poster', 'loop', 'volume', 'autoplay',
-             'show-controls', 'aspect-ratio', 'twitch-parent'],
+@Component('arianna-video-player', {}, {
+    Attributes: ['source', 'src', 'poster', 'loop', 'volume', 'autoplay',
+        'show-controls', 'aspect-ratio', 'twitch-parent'],
 })
-{
+export class VideoPlayer extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible template slot installed by @Component. */
+    declare template: unknown;
     provider$: Signal<VideoProvider> = signal<VideoProvider>('native');
-    playing$ : Signal<boolean> = signal<boolean>(false);
-    curTime$ : Signal<number>  = signal<number>(0);
-    duration$: Signal<number>  = signal<number>(0);
-    volume$  : Signal<number>  = signal<number>(1);
-    muted$   : Signal<boolean> = signal<boolean>(false);
-
-    #video?  : HTMLVideoElement;
-    #iframe? : HTMLIFrameElement;
-    #source  : string = '';
-    #embed   : string = '';
-
+    playing$: Signal<boolean> = signal<boolean>(false);
+    curTime$: Signal<number> = signal<number>(0);
+    duration$: Signal<number> = signal<number>(0);
+    volume$: Signal<number> = signal<number>(1);
+    muted$: Signal<boolean> = signal<boolean>(false);
+    #video?: HTMLVideoElement;
+    #iframe?: HTMLIFrameElement;
+    #source: string = '';
+    #embed: string = '';
     static #formatTime(seconds: number): string {
-        if (!isFinite(seconds) || seconds < 0) return '0:00';
+        if (!isFinite(seconds) || seconds < 0)
+            return '0:00';
         const s = Math.floor(seconds % 60);
         const m = Math.floor(seconds / 60) % 60;
         const h = Math.floor(seconds / 3600);
         const pad = (n: number) => String(n).padStart(2, '0');
         return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
     }
-
-    build(_opts: VideoPlayerOptions = {})
-    {
-        const sourceAttr = this.attributeSignal('source');
-        const legacySrcAttr = this.attributeSignal('src');
-        const posterAttr = this.attributeSignal('poster');
-        const aspectAttr = this.attributeSignal('aspect-ratio');
-
+    onConnected(_opts: VideoPlayerOptions = {}) {
+        const sourceAttr = this.signal().attribute('source');
+        const legacySrcAttr = this.signal().attribute('src');
+        const posterAttr = this.signal().attribute('poster');
+        const aspectAttr = this.signal().attribute('aspect-ratio');
         this.stageStyle = () => {
             const ar = aspectAttr.Get() ?? '16/9';
             return `aspect-ratio: ${ar}`;
         };
-
-        this.isNative  = () => this.provider$.Get() === 'native';
-        this.isEmbed   = () => this.provider$.Get() !== 'native';
-        this.embedSrc  = () => this.#embed;
+        this.isNative = () => this.provider$.Get() === 'native';
+        this.isEmbed = () => this.provider$.Get() !== 'native';
+        this.embedSrc = () => this.#embed;
         this.nativeSrc = () => this.#source;
         this.posterSrc = () => posterAttr.Get() ?? '';
-
         this.timeLabel = () => VideoPlayer.#formatTime(this.curTime$.Get());
-        this.durLabel  = () => VideoPlayer.#formatTime(this.duration$.Get());
+        this.durLabel = () => VideoPlayer.#formatTime(this.duration$.Get());
         this.playLabel = () => this.playing$.Get() ? '❙❙' : '▶';
         this.seekValue = () => {
             const d = this.duration$.Get();
             return d > 0 ? String((this.curTime$.Get() / d) * 100) : '0';
         };
-        this.volValue  = () => String(this.volume$.Get() * 100);
-
+        this.volValue = () => String(this.volume$.Get() * 100);
         this.showControls = () => this.getAttribute('show-controls') !== 'false';
-
         // ── Handlers ────────────────────────────────────────────────────
         this.onPlayClick = () => {
-            if (this.playing$.Get()) this.pause();
-            else this.play();
+            if (this.playing$.Get())
+                this.pause();
+            else
+                this.play();
         };
         this.onSeekInput = (e: Event) => {
             const pct = parseFloat((e.target as HTMLInputElement).value);
             const d = this.duration$.Get();
-            if (d > 0) this.seek((pct / 100) * d);
+            if (d > 0)
+                this.seek((pct / 100) * d);
         };
         this.onVolInput = (e: Event) => {
             const pct = parseFloat((e.target as HTMLInputElement).value);
             this.setVolume(pct / 100);
         };
         this.onFullscreen = () => { void this.toggleFullscreen(); };
-
         // Source signal: re-detect provider on attr change. effect() runs
         // whenever any signal it reads (.Get()) changes — we read both
         // primary `source` and legacy `src`.
         effect(() => {
             const v = sourceAttr.Get();
-            if (v) this.setSource(v);
+            if (v)
+                this.setSource(v);
         });
         effect(() => {
             const v = legacySrcAttr.Get();
-            if (v && !sourceAttr.Peek()) this.setSource(v);
+            if (v && !sourceAttr.Peek())
+                this.setSource(v);
         });
-
-        this.template = html`
+        this.template = html `
             <div class="ar-vp">
                 <div class="ar-vp__stage" :style="this.stageStyle()">
                     <video a-if="this.isNative()" data-r="video"
@@ -258,12 +254,11 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
                 </div>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = VideoPlayer.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = VideoPlayer.DefaultSheet();
     }
-
     // ── Public API ───────────────────────────────────────────────────────────
-
     setSource(url: string, twitchParent?: string | string[]): this {
         this.#source = url;
         const tp = twitchParent ?? this.getAttribute('twitch-parent') ?? undefined;
@@ -271,7 +266,8 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
         if (info) {
             this.provider$.Set(info.provider);
             this.#embed = info.embed;
-        } else {
+        }
+        else {
             this.provider$.Set('native');
             this.#embed = '';
         }
@@ -282,30 +278,37 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
     }
     getSource(): string { return this.#source; }
     getProvider(): VideoProvider { return this.provider$.Get(); }
-
     async play(): Promise<void> {
         if (this.provider$.Get() === 'native') {
             const v = this.#getVideo();
             if (v) {
-                try { await v.play(); }
-                catch (err) { console.warn('VideoPlayer.play():', err); }
+                try {
+                    await v.play();
+                }
+                catch (err) {
+                    console.warn('VideoPlayer.play():', err);
+                }
             }
-        } else {
+        }
+        else {
             this.#postIframe(this.provider$.Get(), 'play');
         }
     }
     pause(): void {
         if (this.provider$.Get() === 'native') {
             this.#getVideo()?.pause();
-        } else {
+        }
+        else {
             this.#postIframe(this.provider$.Get(), 'pause');
         }
     }
     seek(seconds: number): void {
         if (this.provider$.Get() === 'native') {
             const v = this.#getVideo();
-            if (v) v.currentTime = seconds;
-        } else {
+            if (v)
+                v.currentTime = seconds;
+        }
+        else {
             this.#postIframe(this.provider$.Get(), 'seek', seconds);
         }
         this.curTime$.Set(seconds);
@@ -314,28 +317,31 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
         const clamped = Math.max(0, Math.min(1, v));
         this.volume$.Set(clamped);
         const video = this.#getVideo();
-        if (video) video.volume = clamped;
-        else this.#postIframe(this.provider$.Get(), 'volume', clamped);
+        if (video)
+            video.volume = clamped;
+        else
+            this.#postIframe(this.provider$.Get(), 'volume', clamped);
     }
     getVolume(): number { return this.volume$.Get(); }
-
     async toggleFullscreen(): Promise<void> {
         if (document.fullscreenElement) {
             await document.exitFullscreen().catch(() => undefined);
-        } else {
-            try { await this.requestFullscreen(); } catch { /* ignore */ }
+        }
+        else {
+            try {
+                await this.requestFullscreen();
+            }
+            catch { /* ignore */ }
         }
     }
-
     // ── Internal ─────────────────────────────────────────────────────────────
-
     #getVideo(): HTMLVideoElement | null {
         return this.querySelector<HTMLVideoElement>('[data-r="video"]');
     }
-
     #postIframe(provider: VideoProvider, command: string, value?: number): void {
         const iframe = this.querySelector<HTMLIFrameElement>('[data-r="iframe"]');
-        if (!iframe || !iframe.contentWindow) return;
+        if (!iframe || !iframe.contentWindow)
+            return;
         let message: unknown = null;
         if (provider === 'youtube') {
             const funcMap: Record<string, string> = {
@@ -343,39 +349,43 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
                 seek: 'seekTo', volume: 'setVolume',
             };
             const func = funcMap[command];
-            if (!func) return;
+            if (!func)
+                return;
             message = JSON.stringify({
                 event: 'command', func,
                 args: command === 'volume' && value != null ? [value * 100]
                     : value != null ? [value] : [],
             });
             iframe.contentWindow.postMessage(message, '*');
-        } else if (provider === 'vimeo') {
+        }
+        else if (provider === 'vimeo') {
             const methodMap: Record<string, string> = {
                 play: 'play', pause: 'pause',
                 seek: 'setCurrentTime', volume: 'setVolume',
             };
             const method = methodMap[command];
-            if (!method) return;
+            if (!method)
+                return;
             message = JSON.stringify({ method, value });
             iframe.contentWindow.postMessage(message, '*');
-        } else if (provider === 'twitch') {
+        }
+        else if (provider === 'twitch') {
             // Twitch's documented API needs a separate `Twitch.Embed` JS object.
             // postMessage doesn't expose a public command surface.
             console.warn('VideoPlayer: programmatic control of Twitch embeds requires the Twitch Embed JS API.');
         }
     }
-
     #wireNativeListeners(): void {
         const v = this.#getVideo();
-        if (!v) return;
-        v.addEventListener('play',       () => {
+        if (!v)
+            return;
+        v.addEventListener('play', () => {
             this.playing$.Set(true);
             this.dispatchEvent(new CustomEvent('arianna:video-play', {
                 bubbles: true, detail: { provider: 'native' },
             }));
         });
-        v.addEventListener('pause',      () => {
+        v.addEventListener('pause', () => {
             this.playing$.Set(false);
             this.dispatchEvent(new CustomEvent('arianna:video-pause', {
                 bubbles: true, detail: { provider: 'native' },
@@ -402,106 +412,116 @@ export class VideoPlayer extends Component('arianna-video-player', HTMLElement, 
         });
         // Restore volume from attr
         const volAttr = parseFloat(this.getAttribute('volume') ?? '1');
-        if (!isNaN(volAttr)) v.volume = Math.max(0, Math.min(1, volAttr));
-        if (this.hasAttribute('loop'))     v.loop     = true;
-        if (this.hasAttribute('autoplay')) v.autoplay = true;
+        if (!isNaN(volAttr))
+            v.volume = Math.max(0, Math.min(1, volAttr));
+        if (this.hasAttribute('loop'))
+            v.loop = true;
+        if (this.hasAttribute('autoplay'))
+            v.autoplay = true;
     }
-
-    onCreated()       {}
-    onBeforeMount()   {
+    onCreated() { }
+    onBeforeMount() {
         // Initial source from attr
         const src = this.getAttribute('source') ?? this.getAttribute('src');
-        if (src) this.setSource(src);
+        if (src)
+            this.setSource(src);
     }
     onMount() {
         this.#wireNativeListeners();
     }
-    onBeforeUpdate()  {}
+    onBeforeUpdate() { }
     onUpdate() {
         // Re-wire listeners if native video was just (re-)created
         this.#wireNativeListeners();
     }
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    private stageStyle  : () => string = () => 'aspect-ratio: 16/9';
-    private isNative    : () => boolean = () => true;
-    private isEmbed     : () => boolean = () => false;
-    private embedSrc    : () => string = () => '';
-    private nativeSrc   : () => string = () => '';
-    private posterSrc   : () => string = () => '';
-    private timeLabel   : () => string = () => '0:00';
-    private durLabel    : () => string = () => '0:00';
-    private playLabel   : () => string = () => '▶';
-    private seekValue   : () => string = () => '0';
-    private volValue    : () => string = () => '100';
+    onBeforeUnmount() { }
+    onUnmount() { }
+    private stageStyle: () => string = () => 'aspect-ratio: 16/9';
+    private isNative: () => boolean = () => true;
+    private isEmbed: () => boolean = () => false;
+    private embedSrc: () => string = () => '';
+    private nativeSrc: () => string = () => '';
+    private posterSrc: () => string = () => '';
+    private timeLabel: () => string = () => '0:00';
+    private durLabel: () => string = () => '0:00';
+    private playLabel: () => string = () => '▶';
+    private seekValue: () => string = () => '0';
+    private volValue: () => string = () => '100';
     private showControls: () => boolean = () => true;
-    private onPlayClick : (e: Event) => void = () => {};
-    private onSeekInput : (e: Event) => void = () => {};
-    private onVolInput  : (e: Event) => void = () => {};
-    private onFullscreen: (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    display: 'block', position: 'relative',
-                    fontFamily: '-apple-system, system-ui, sans-serif',
-                    fontSize: '12px',
-                    color: 'var(--arianna-text, #1f2328)',
-                    background: '#000',
-                    borderRadius: 'var(--arianna-radius, 8px)',
-                    overflow: 'hidden',
-                }),
-                new Rule('.ar-vp', { display: 'flex', flexDirection: 'column' }),
-                new Rule('.ar-vp__stage', {
-                    position: 'relative',
-                    width: '100%',
-                    background: '#000',
-                    overflow: 'hidden',
-                }),
-                new Rule('.ar-vp__stage video, .ar-vp__stage iframe', {
-                    position: 'absolute', inset: '0',
-                    width: '100%', height: '100%',
-                    border: 'none',
-                }),
-                new Rule('.ar-vp__controls', {
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '8px 12px',
-                    background: 'rgba(0,0,0,0.7)',
-                    color: '#fff',
-                }),
-                new Rule('.ar-vp__play, .ar-vp__fs', {
-                    background: 'transparent',
-                    color: '#fff',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    width: '28px', height: '28px',
-                    display: 'inline-flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    borderRadius: '3px',
-                }),
-                new Rule('.ar-vp__play:hover, .ar-vp__fs:hover', { background: 'rgba(255,255,255,0.1)' }),
-                new Rule('.ar-vp__time, .ar-vp__dur', {
-                    fontFamily: 'ui-monospace, monospace',
-                    fontSize: '11px',
-                    minWidth: '40px',
-                    textAlign: 'center',
-                }),
-                new Rule('.ar-vp__seek', { flex: '1', minWidth: '0', cursor: 'pointer' }),
-                new Rule('.ar-vp__vol', { width: '70px', cursor: 'pointer' }),
-                new Rule('input[type="range"]', { accentColor: 'var(--arianna-primary, #1f6feb)' }),
-            ]
-        );
+    private onPlayClick: (e: Event) => void = () => { };
+    private onSeekInput: (e: Event) => void = () => { };
+    private onVolInput: (e: Event) => void = () => { };
+    private onFullscreen: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                display: 'block', position: 'relative',
+                fontFamily: '-apple-system, system-ui, sans-serif',
+                fontSize: '12px',
+                color: 'var(--arianna-text, #1f2328)',
+                background: '#000',
+                borderRadius: 'var(--arianna-radius, 8px)',
+                overflow: 'hidden',
+            }),
+            new Rule('.ar-vp', { display: 'flex', flexDirection: 'column' }),
+            new Rule('.ar-vp__stage', {
+                position: 'relative',
+                width: '100%',
+                background: '#000',
+                overflow: 'hidden',
+            }),
+            new Rule('.ar-vp__stage video, .ar-vp__stage iframe', {
+                position: 'absolute', inset: '0',
+                width: '100%', height: '100%',
+                border: 'none',
+            }),
+            new Rule('.ar-vp__controls', {
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '8px 12px',
+                background: 'rgba(0,0,0,0.7)',
+                color: '#fff',
+            }),
+            new Rule('.ar-vp__play, .ar-vp__fs', {
+                background: 'transparent',
+                color: '#fff',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '14px',
+                width: '28px', height: '28px',
+                display: 'inline-flex',
+                alignItems: 'center', justifyContent: 'center',
+                borderRadius: '3px',
+            }),
+            new Rule('.ar-vp__play:hover, .ar-vp__fs:hover', { background: 'rgba(255,255,255,0.1)' }),
+            new Rule('.ar-vp__time, .ar-vp__dur', {
+                fontFamily: 'ui-monospace, monospace',
+                fontSize: '11px',
+                minWidth: '40px',
+                textAlign: 'center',
+            }),
+            new Rule('.ar-vp__seek', { flex: '1', minWidth: '0', cursor: 'pointer' }),
+            new Rule('.ar-vp__vol', { width: '70px', cursor: 'pointer' }),
+            new Rule('input[type="range"]', { accentColor: 'var(--arianna-primary, #1f6feb)' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'VideoPlayer', {
-        value: VideoPlayer, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * VideoPlayer namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace VideoPlayer {
+    export namespace Types {
+        export type VideoProviderType = VideoProvider;
+    }
+    export namespace Interfaces {
+        export interface ProviderInfoContract extends ProviderInfo {
+        }
+        export interface Options extends VideoPlayerOptions {
+        }
+    }
+    export const ResolveTwitchParents = resolveTwitchParents;
+    export const DetectVideoProvider = detectVideoProvider;
+    export const YtEmbed = ytEmbed;
+    export const VimeoEmbed = vimeoEmbed;
+    export const TwitchEmbed = twitchEmbed;
 }
-
 export default VideoPlayer;

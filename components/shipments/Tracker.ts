@@ -1,3 +1,10 @@
+import { Component, Css, Reactivity, Templates, Components } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/shipments/Tracker
  * @author    Riccardo Angeli
@@ -55,13 +62,8 @@
  *   arianna:tracking-portal  detail: { carrier: string, url: string }
  *   arianna:tracking-event   detail: { event: TrackingEvent }  (fired per setEvents change)
  *
- * Attrs: tracking-number, carrier, locale
+ * Attributes: tracking-number, carrier, locale
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -69,157 +71,142 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
-export type TrackingEventKind =
-    | 'created'
-    | 'picked-up'
-    | 'in-transit'
-    | 'arrived'
-    | 'customs'
-    | 'out-delivery'
-    | 'delivered'
-    | 'failed'
-    | 'returned'
-    | 'exception'
-    | 'unknown';
-
+export type TrackingEventKind = 'created' | 'picked-up' | 'in-transit' | 'arrived' | 'customs' | 'out-delivery' | 'delivered' | 'failed' | 'returned' | 'exception' | 'unknown';
 export interface TrackingEvent {
-    kind     : TrackingEventKind;
-    raw?     : string;
+    kind: TrackingEventKind;
+    raw?: string;
     location?: string;
     /** Unix ms. */
-    at       : number;
+    at: number;
 }
-
 export interface CarrierConfig {
-    id        : string;
-    name      : string;
-    publicUrl : string;
-    color     : string;
-    logo      : string;
-    pattern?  : RegExp;
+    id: string;
+    name: string;
+    publicUrl: string;
+    color: string;
+    logo: string;
+    pattern?: RegExp;
 }
-
 export interface TrackerOptions {
-    trackingNumber? : string;
-    carrier?        : CarrierConfig;
-    events?         : TrackingEvent[];
-    locale?         : string;
+    trackingNumber?: string;
+    carrier?: CarrierConfig;
+    events?: TrackingEvent[];
+    locale?: string;
 }
-
 const KIND_LABELS: Record<TrackingEventKind, string> = {
-    'created'      : 'Created',
-    'picked-up'    : 'Picked up',
-    'in-transit'   : 'In transit',
-    'arrived'      : 'Arrived at hub',
-    'customs'      : 'In customs',
-    'out-delivery' : 'Out for delivery',
-    'delivered'    : 'Delivered',
-    'failed'       : 'Delivery failed',
-    'returned'     : 'Returned',
-    'exception'    : 'Exception',
-    'unknown'      : 'Unknown',
+    'created': 'Created',
+    'picked-up': 'Picked up',
+    'in-transit': 'In transit',
+    'arrived': 'Arrived at hub',
+    'customs': 'In customs',
+    'out-delivery': 'Out for delivery',
+    'delivered': 'Delivered',
+    'failed': 'Delivery failed',
+    'returned': 'Returned',
+    'exception': 'Exception',
+    'unknown': 'Unknown',
 };
-
 const KIND_ICONS: Record<TrackingEventKind, string> = {
-    'created'      : '○',
-    'picked-up'    : '○',
-    'in-transit'   : '○',
-    'arrived'      : '○',
-    'customs'      : '⊘',
-    'out-delivery' : '◐',
-    'delivered'    : '●',
-    'failed'       : '✕',
-    'returned'     : '↩',
-    'exception'    : '⚠',
-    'unknown'      : '?',
+    'created': '○',
+    'picked-up': '○',
+    'in-transit': '○',
+    'arrived': '○',
+    'customs': '⊘',
+    'out-delivery': '◐',
+    'delivered': '●',
+    'failed': '✕',
+    'returned': '↩',
+    'exception': '⚠',
+    'unknown': '?',
 };
-
 const TERMINAL: TrackingEventKind[] = ['delivered', 'returned'];
-
 function formatDate(ts: number, locale: string): string {
     try {
         return new Intl.DateTimeFormat(locale, {
             day: '2-digit', month: 'short',
             hour: '2-digit', minute: '2-digit',
         }).format(new Date(ts));
-    } catch {
+    }
+    catch {
         return new Date(ts).toLocaleString();
     }
 }
-
-export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
-    attrs : ['tracking-number', 'carrier', 'locale'],
+@Component('arianna-tracker', {}, {
+    Attributes: ['tracking-number', 'carrier', 'locale'],
 })
-{
-    events$  : Signal<TrackingEvent[]> = signal<TrackingEvent[]>([]);
-    carrier$ : Signal<CarrierConfig | null> = signal<CarrierConfig | null>(null);
-
-    build(_opts: TrackerOptions = {})
-    {
-        const numberAttr = this.attributeSignal('tracking-number');
-        const localeAttr = this.attributeSignal('locale');
-
+export class Tracker extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible template slot installed by @Component. */
+    declare template: unknown;
+    events$: Signal<TrackingEvent[]> = signal<TrackingEvent[]>([]);
+    carrier$: Signal<CarrierConfig | null> = signal<CarrierConfig | null>(null);
+    onConnected(_opts: TrackerOptions = {}) {
+        const numberAttr = this.signal().attribute('tracking-number');
+        const localeAttr = this.signal().attribute('locale');
         this.headerTitle = () => {
             const c = this.carrier$.Get();
             const n = numberAttr.Get();
-            if (!c && !n) return 'Shipment tracker';
+            if (!c && !n)
+                return 'Shipment tracker';
             const parts: string[] = [];
-            if (c?.name) parts.push(c.name);
-            if (n)       parts.push(n);
+            if (c?.name)
+                parts.push(c.name);
+            if (n)
+                parts.push(n);
             return parts.join(' · ');
         };
-
         this.headerStyle = () => {
             const c = this.carrier$.Get();
             return c?.color ? `border-left: 3px solid ${c.color}` : '';
         };
-
         this.logoHtml = () => this.carrier$.Get()?.logo ?? '';
-
         this.hasEvents = () => this.events$.Get().length > 0;
         this.hasCarrierLink = () => {
             const c = this.carrier$.Get();
             const n = numberAttr.Get();
             return !!(c?.publicUrl && n);
         };
-
         this.portalLabel = () => {
             const c = this.carrier$.Get();
             return c ? `Track on ${c.name} →` : 'Open portal →';
         };
-
-        this.eventList = (): Array<{ icon: string; label: string; raw: string; location: string; date: string; cls: string }> => {
+        this.eventList = (): Array<{
+            icon: string;
+            label: string;
+            raw: string;
+            location: string;
+            date: string;
+            cls: string;
+        }> => {
             const locale = localeAttr.Get() ?? 'en';
             // Sort descending by `at` (most recent first)
             return [...this.events$.Get()].sort((a, b) => b.at - a.at).map(e => ({
-                icon    : KIND_ICONS[e.kind] ?? KIND_ICONS.unknown,
-                label   : KIND_LABELS[e.kind] ?? e.kind,
-                raw     : e.raw     ?? '',
+                icon: KIND_ICONS[e.kind] ?? KIND_ICONS.unknown,
+                label: KIND_LABELS[e.kind] ?? e.kind,
+                raw: e.raw ?? '',
                 location: e.location ?? '',
-                date    : formatDate(e.at, locale),
-                cls     : 'ar-trk__event ar-trk__event--' + e.kind
-                          + (TERMINAL.includes(e.kind) ? ' ar-trk__event--terminal' : ''),
+                date: formatDate(e.at, locale),
+                cls: 'ar-trk__event ar-trk__event--' + e.kind
+                    + (TERMINAL.includes(e.kind) ? ' ar-trk__event--terminal' : ''),
             }));
         };
-
         this.onPortalClick = () => {
             const c = this.carrier$.Get();
             const n = numberAttr.Get();
-            if (!c?.publicUrl || !n) return;
+            if (!c?.publicUrl || !n)
+                return;
             const url = c.publicUrl.replace('{n}', encodeURIComponent(n));
             this.dispatchEvent(new CustomEvent('arianna:tracking-portal', {
                 bubbles: true, detail: { carrier: c.id, url },
             }));
             window.open(url, '_blank', 'noopener');
         };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-trk">
                 <header class="ar-trk__header" :style="this.headerStyle()">
                     <span class="ar-trk__logo" a-if="this.logoHtml()"
@@ -247,25 +234,22 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
                         @click="this.onPortalClick">{{ this.portalLabel() }}</button>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Tracker.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Tracker.DefaultSheet();
     }
-
     // ── Public API ───────────────────────────────────────────────────────────
-
     setCarrier(c: CarrierConfig): this {
         this.carrier$.Set({ ...c });
         this.setAttribute('carrier', c.id);
         return this;
     }
     getCarrier(): CarrierConfig | null { return this.carrier$.Get(); }
-
     setTrackingNumber(n: string): this {
         this.setAttribute('tracking-number', n);
         return this;
     }
     getTrackingNumber(): string { return this.getAttribute('tracking-number') ?? ''; }
-
     setEvents(events: TrackingEvent[]): this {
         const sanitized = events.map(e => ({ ...e }));
         this.events$.Set(sanitized);
@@ -279,132 +263,143 @@ export class Tracker extends Component('arianna-tracker', HTMLElement, {}, {
         return this;
     }
     getEvents(): TrackingEvent[] { return this.events$.Get().map(e => ({ ...e })); }
-
     validateNumber(n: string): boolean {
         const c = this.carrier$.Get();
-        if (!c?.pattern) return n.length > 0;
+        if (!c?.pattern)
+            return n.length > 0;
         return c.pattern.test(n);
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    private headerTitle    : () => string = () => 'Shipment tracker';
-    private headerStyle    : () => string = () => '';
-    private logoHtml       : () => string = () => '';
-    private hasEvents      : () => boolean = () => false;
-    private hasCarrierLink : () => boolean = () => false;
-    private portalLabel    : () => string = () => 'Open portal →';
-    private eventList      : () => Array<{ icon: string; label: string; raw: string; location: string; date: string; cls: string }> = () => [];
-    private onPortalClick  : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    display: 'block',
-                    fontFamily: '-apple-system, system-ui, sans-serif',
-                    fontSize: '13px',
-                    color: 'var(--arianna-text, #1f2328)',
-                    maxWidth: '480px',
-                }),
-                new Rule('.ar-trk', {
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 8px)',
-                    overflow: 'hidden',
-                }),
-                new Rule('.ar-trk__header', {
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '12px 16px',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                }),
-                new Rule('.ar-trk__logo', { display: 'inline-flex', alignItems: 'center' }),
-                new Rule('.ar-trk__logo svg', { height: '20px' }),
-                new Rule('.ar-trk__title', { fontWeight: '600', fontSize: '13px' }),
-                new Rule('.ar-trk__events', {
-                    listStyle: 'none', margin: '0', padding: '12px 16px',
-                    display: 'flex', flexDirection: 'column', gap: '14px',
-                }),
-                new Rule('.ar-trk__event', {
-                    display: 'flex', gap: '12px',
-                    position: 'relative',
-                }),
-                new Rule('.ar-trk__event:not(:last-child)::after', {
-                    content: '""',
-                    position: 'absolute',
-                    left: '8px', top: '20px', bottom: '-14px',
-                    width: '1px',
-                    background: 'var(--arianna-border, #d8d8d8)',
-                }),
-                new Rule('.ar-trk__icon', {
-                    width: '18px', height: '18px',
-                    display: 'inline-flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    fontSize: '14px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    flexShrink: '0',
-                    background: 'var(--arianna-bg, #fff)',
-                    position: 'relative',
-                    zIndex: '1',
-                }),
-                new Rule('.ar-trk__event--terminal .ar-trk__icon', {
-                    color: 'var(--arianna-bull, #1f883d)',
-                }),
-                new Rule('.ar-trk__event--failed .ar-trk__icon, .ar-trk__event--exception .ar-trk__icon', {
-                    color: 'var(--arianna-danger, #cf222e)',
-                }),
-                new Rule('.ar-trk__body', { flex: '1', minWidth: '0' }),
-                new Rule('.ar-trk__label', { fontWeight: '600', fontSize: '13px' }),
-                new Rule('.ar-trk__meta', {
-                    display: 'flex',
-                    gap: '8px',
-                    fontSize: '11px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    marginTop: '2px',
-                }),
-                new Rule('.ar-trk__date', { fontFamily: 'ui-monospace, monospace' }),
-                new Rule('.ar-trk__raw', {
-                    fontSize: '11px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    marginTop: '4px',
-                    fontStyle: 'italic',
-                }),
-                new Rule('.ar-trk__empty', {
-                    padding: '24px 16px',
-                    textAlign: 'center',
-                    fontSize: '12px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                }),
-                new Rule('.ar-trk__portal', {
-                    width: '100%',
-                    padding: '11px',
-                    background: 'transparent',
-                    color: 'var(--arianna-text, #1f2328)',
-                    border: 'none',
-                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'background 0.1s',
-                }),
-                new Rule('.ar-trk__portal:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
-            ]
-        );
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    private headerTitle: () => string = () => 'Shipment tracker';
+    private headerStyle: () => string = () => '';
+    private logoHtml: () => string = () => '';
+    private hasEvents: () => boolean = () => false;
+    private hasCarrierLink: () => boolean = () => false;
+    private portalLabel: () => string = () => 'Open portal →';
+    private eventList: () => Array<{
+        icon: string;
+        label: string;
+        raw: string;
+        location: string;
+        date: string;
+        cls: string;
+    }> = () => [];
+    private onPortalClick: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                display: 'block',
+                fontFamily: '-apple-system, system-ui, sans-serif',
+                fontSize: '13px',
+                color: 'var(--arianna-text, #1f2328)',
+                maxWidth: '480px',
+            }),
+            new Rule('.ar-trk', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 8px)',
+                overflow: 'hidden',
+            }),
+            new Rule('.ar-trk__header', {
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '12px 16px',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+            }),
+            new Rule('.ar-trk__logo', { display: 'inline-flex', alignItems: 'center' }),
+            new Rule('.ar-trk__logo svg', { height: '20px' }),
+            new Rule('.ar-trk__title', { fontWeight: '600', fontSize: '13px' }),
+            new Rule('.ar-trk__events', {
+                listStyle: 'none', margin: '0', padding: '12px 16px',
+                display: 'flex', flexDirection: 'column', gap: '14px',
+            }),
+            new Rule('.ar-trk__event', {
+                display: 'flex', gap: '12px',
+                position: 'relative',
+            }),
+            new Rule('.ar-trk__event:not(:last-child)::after', {
+                content: '""',
+                position: 'absolute',
+                left: '8px', top: '20px', bottom: '-14px',
+                width: '1px',
+                background: 'var(--arianna-border, #d8d8d8)',
+            }),
+            new Rule('.ar-trk__icon', {
+                width: '18px', height: '18px',
+                display: 'inline-flex',
+                alignItems: 'center', justifyContent: 'center',
+                fontSize: '14px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                flexShrink: '0',
+                background: 'var(--arianna-bg, #fff)',
+                position: 'relative',
+                zIndex: '1',
+            }),
+            new Rule('.ar-trk__event--terminal .ar-trk__icon', {
+                color: 'var(--arianna-bull, #1f883d)',
+            }),
+            new Rule('.ar-trk__event--failed .ar-trk__icon, .ar-trk__event--exception .ar-trk__icon', {
+                color: 'var(--arianna-danger, #cf222e)',
+            }),
+            new Rule('.ar-trk__body', { flex: '1', minWidth: '0' }),
+            new Rule('.ar-trk__label', { fontWeight: '600', fontSize: '13px' }),
+            new Rule('.ar-trk__meta', {
+                display: 'flex',
+                gap: '8px',
+                fontSize: '11px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                marginTop: '2px',
+            }),
+            new Rule('.ar-trk__date', { fontFamily: 'ui-monospace, monospace' }),
+            new Rule('.ar-trk__raw', {
+                fontSize: '11px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                marginTop: '4px',
+                fontStyle: 'italic',
+            }),
+            new Rule('.ar-trk__empty', {
+                padding: '24px 16px',
+                textAlign: 'center',
+                fontSize: '12px',
+                color: 'var(--arianna-muted, #6e6b62)',
+            }),
+            new Rule('.ar-trk__portal', {
+                width: '100%',
+                padding: '11px',
+                background: 'transparent',
+                color: 'var(--arianna-text, #1f2328)',
+                border: 'none',
+                borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                fontSize: '13px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'background 0.1s',
+            }),
+            new Rule('.ar-trk__portal:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Tracker', {
-        value: Tracker, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Tracker namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Tracker {
+    export namespace Types {
+        export type TrackingEventKindType = TrackingEventKind;
+    }
+    export namespace Interfaces {
+        export interface TrackingEventContract extends TrackingEvent {
+        }
+        export interface CarrierConfigContract extends CarrierConfig {
+        }
+        export interface Options extends TrackerOptions {
+        }
+    }
+    export const FormatDate = formatDate;
 }
-
 export default Tracker;

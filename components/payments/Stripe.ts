@@ -1,3 +1,10 @@
+import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/payments/Stripe
  * @author    Riccardo Angeli
@@ -28,13 +35,8 @@
  *   arianna:payment-success  detail: { method: 'stripe', paymentIntent: unknown }
  *   arianna:payment-error    detail: { method: 'stripe', message: string }
  *
- * Attrs: publishable-key, client-secret, return-url, locale, appearance-theme
+ * Attributes: publishable-key, client-secret, return-url, locale, appearance-theme
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -42,58 +44,58 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface StripeOptions {
-    publishableKey   : string;
-    clientSecret     : string;
-    returnUrl        : string;
-    locale?          : string;
-    appearanceTheme? : 'stripe' | 'flat' | 'night';
+    publishableKey: string;
+    clientSecret: string;
+    returnUrl: string;
+    locale?: string;
+    appearanceTheme?: 'stripe' | 'flat' | 'night';
 }
-
 const SDK_URL = 'https://js.stripe.com/v3/';
 let sdkLoadPromise: Promise<unknown> | null = null;
-
 function loadStripeSDK(): Promise<unknown> {
-    if (sdkLoadPromise) return sdkLoadPromise;
+    if (sdkLoadPromise)
+        return sdkLoadPromise;
     sdkLoadPromise = new Promise((resolve, reject) => {
-        const w = window as unknown as { Stripe?: unknown };
-        if (w.Stripe) { resolve(w.Stripe); return; }
+        const w = window as unknown as {
+            Stripe?: unknown;
+        };
+        if (w.Stripe) {
+            resolve(w.Stripe);
+            return;
+        }
         const s = document.createElement('script');
         s.src = SDK_URL;
         s.async = true;
-        s.onload = () => resolve((window as unknown as { Stripe?: unknown }).Stripe);
+        s.onload = () => resolve((window as unknown as {
+            Stripe?: unknown;
+        }).Stripe);
         s.onerror = () => reject(new Error('Stripe SDK failed to load'));
         document.head.appendChild(s);
     });
     return sdkLoadPromise;
 }
-
-export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
-    attrs : ['publishable-key', 'client-secret', 'return-url', 'locale', 'appearance-theme'],
+@Component('arianna-stripe', {}, {
+    Attributes: ['publishable-key', 'client-secret', 'return-url', 'locale', 'appearance-theme'],
 })
-{
+export class Stripe extends HTMLElement {
+    /** Compiler-visible template slot installed by the Component decorator. */
+    declare template: unknown;
     ready$: Signal<boolean> = signal<boolean>(false);
     error$: Signal<string | null> = signal<string | null>(null);
-    busy$ : Signal<boolean> = signal<boolean>(false);
-
+    busy$: Signal<boolean> = signal<boolean>(false);
     #stripe: unknown = null;
     #elements: unknown = null;
-
-    build(_opts: StripeOptions = {} as StripeOptions)
-    {
+    onConnected(_opts: StripeOptions = {} as StripeOptions) {
         this.statusMsg = () => this.error$.Get() ?? (this.ready$.Get() ? '' : 'Loading Stripe…');
         this.payDisabled = () => !this.ready$.Get() || this.busy$.Get();
         this.payLabel = () => this.busy$.Get() ? 'Processing…' : 'Pay';
-
         this.onPay = () => { void this.pay(); };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-stripe">
                 <div class="ar-stripe__mount" data-r="mount"></div>
                 <div class="ar-stripe__status" a-if="this.statusMsg()">{{ this.statusMsg() }}</div>
@@ -102,16 +104,28 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
                         @click="this.onPay">{{ this.payLabel() }}</button>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Stripe.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Stripe.DefaultSheet();
     }
-
     async pay(): Promise<void> {
-        if (!this.ready$.Get() || this.busy$.Get()) return;
+        if (!this.ready$.Get() || this.busy$.Get())
+            return;
         this.busy$.Set(true);
         try {
             const stripe = this.#stripe as {
-                confirmPayment(opts: { elements: unknown; confirmParams: { return_url: string }; redirect?: 'if_required' | 'always' }): Promise<{ error?: { message?: string }; paymentIntent?: unknown }>;
+                confirmPayment(opts: {
+                    elements: unknown;
+                    confirmParams: {
+                        return_url: string;
+                    };
+                    redirect?: 'if_required' | 'always';
+                }): Promise<{
+                    error?: {
+                        message?: string;
+                    };
+                    paymentIntent?: unknown;
+                }>;
             };
             const result = await stripe.confirmPayment({
                 elements: this.#elements,
@@ -123,22 +137,24 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
                     bubbles: true,
                     detail: { method: 'stripe', message: result.error.message ?? 'Stripe confirmation failed' },
                 }));
-            } else {
+            }
+            else {
                 this.dispatchEvent(new CustomEvent('arianna:payment-success', {
                     bubbles: true,
                     detail: { method: 'stripe', paymentIntent: result.paymentIntent },
                 }));
             }
-        } catch (err) {
+        }
+        catch (err) {
             this.dispatchEvent(new CustomEvent('arianna:payment-error', {
                 bubbles: true,
                 detail: { method: 'stripe', message: err instanceof Error ? err.message : String(err) },
             }));
-        } finally {
+        }
+        finally {
             this.busy$.Set(false);
         }
     }
-
     async #initStripe(): Promise<void> {
         const pk = this.getAttribute('publishable-key');
         const cs = this.getAttribute('client-secret');
@@ -153,7 +169,9 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
             });
             const stripe = this.#stripe as {
                 elements(opts: unknown): {
-                    create(type: string, opts?: unknown): { mount(selOrEl: HTMLElement | string): void };
+                    create(type: string, opts?: unknown): {
+                        mount(selOrEl: HTMLElement | string): void;
+                    };
                 };
             };
             this.#elements = stripe.elements({
@@ -161,78 +179,78 @@ export class Stripe extends Component('arianna-stripe', HTMLElement, {}, {
                 appearance: { theme: (this.getAttribute('appearance-theme') ?? 'stripe') as 'stripe' | 'flat' | 'night' },
             });
             const paymentEl = (this.#elements as {
-                create(type: string, opts?: unknown): { mount(selOrEl: HTMLElement | string): void };
+                create(type: string, opts?: unknown): {
+                    mount(selOrEl: HTMLElement | string): void;
+                };
             }).create('payment');
             const host = this.querySelector<HTMLElement>('[data-r="mount"]');
             if (host) {
                 paymentEl.mount(host);
                 this.ready$.Set(true);
             }
-        } catch (err) {
+        }
+        catch (err) {
             this.error$.Set(err instanceof Error ? err.message : String(err));
         }
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
+    onCreated() { }
+    onBeforeMount() { }
     async onMount() {
         await this.#initStripe();
     }
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    private statusMsg  : () => string = () => '';
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    private statusMsg: () => string = () => '';
     private payDisabled: () => boolean = () => true;
-    private payLabel   : () => string = () => 'Pay';
-    private onPay      : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    display: 'block',
-                    width: '100%', maxWidth: '420px',
-                    fontFamily: '-apple-system, system-ui, sans-serif',
-                    fontSize: '13px',
-                    color: 'var(--arianna-text, #1f2328)',
-                }),
-                new Rule('.ar-stripe', {
-                    display: 'flex', flexDirection: 'column', gap: '12px',
-                    padding: '14px',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 8px)',
-                }),
-                new Rule('.ar-stripe__mount', { minHeight: '60px' }),
-                new Rule('.ar-stripe__status', {
-                    fontSize: '11px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    textAlign: 'center',
-                }),
-                new Rule('.ar-stripe__pay', {
-                    padding: '11px',
-                    background: '#635bff',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '600',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                }),
-                new Rule('.ar-stripe__pay:hover:not(:disabled)', { background: '#5a52e8' }),
-                new Rule('.ar-stripe__pay:disabled', { opacity: '0.4', cursor: 'not-allowed' }),
-            ]
-        );
+    private payLabel: () => string = () => 'Pay';
+    private onPay: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                display: 'block',
+                width: '100%', maxWidth: '420px',
+                fontFamily: '-apple-system, system-ui, sans-serif',
+                fontSize: '13px',
+                color: 'var(--arianna-text, #1f2328)',
+            }),
+            new Rule('.ar-stripe', {
+                display: 'flex', flexDirection: 'column', gap: '12px',
+                padding: '14px',
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 8px)',
+            }),
+            new Rule('.ar-stripe__mount', { minHeight: '60px' }),
+            new Rule('.ar-stripe__status', {
+                fontSize: '11px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                textAlign: 'center',
+            }),
+            new Rule('.ar-stripe__pay', {
+                padding: '11px',
+                background: '#635bff',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: '600',
+                fontSize: '14px',
+                cursor: 'pointer',
+            }),
+            new Rule('.ar-stripe__pay:hover:not(:disabled)', { background: '#5a52e8' }),
+            new Rule('.ar-stripe__pay:disabled', { opacity: '0.4', cursor: 'not-allowed' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Stripe', {
-        value: Stripe, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Stripe namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Stripe {
+    export namespace Interfaces {
+        export interface Options extends StripeOptions {
+        }
+    }
+    export const LoadStripeSDK = loadStripeSDK;
 }
-
 export default Stripe;

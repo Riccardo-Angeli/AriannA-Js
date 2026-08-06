@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/shipments/BRTTracker
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -13,82 +17,81 @@
  * Composes a base `Tracker` internally. Custom tag `arianna-brt-tracker`.
  *
  * Events: bubble through unchanged
- * Attrs:  tracking-number, locale
+ * Attributes:  tracking-number, locale
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
+import { Component, Templates } from '../../core/index.ts';
 import { Tracker, type CarrierConfig, type TrackingEvent } from './Tracker.ts';
-
+const html = Templates.Template.Html;
 const BRT: CarrierConfig = {
-    id        : 'brt',
-    name      : 'BRT',
-    color     : '#e30613',
-    publicUrl : 'https://vas.brt.it/vas/sped_det_show.hsm?referer=sped_numspe_par.htm&Nspedizione={n}',
-    pattern   : /^\d{10,12}$/,
+    id: 'brt',
+    name: 'BRT',
+    color: '#e30613',
+    publicUrl: 'https://vas.brt.it/vas/sped_det_show.hsm?referer=sped_numspe_par.htm&Nspedizione={n}',
+    pattern: /^\d{10,12}$/,
     logo: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 22"><rect width="64" height="22" rx="3" fill="#e30613"/><text x="32" y="16" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="900" fill="#fff" letter-spacing="1">BRT</text></svg>`,
 };
-
 export interface BRTTrackerOptions {
-    trackingNumber? : string;
-    events?         : TrackingEvent[];
-    locale?         : string;
+    trackingNumber?: string;
+    events?: TrackingEvent[];
+    locale?: string;
 }
-
-export class BRTTracker extends Component('arianna-brt-tracker', HTMLElement, {}, {
-    attrs : ['tracking-number', 'locale'],
+@Component('arianna-brt-tracker', {}, {
+    Attributes: ['tracking-number', 'locale'],
 })
-{
+export class BRTTracker extends HTMLElement {
+    /** Compiler-visible template slot installed by the Component decorator. */
+    declare template: unknown;
     #inner: Tracker | null = null;
-
-    build(_opts: BRTTrackerOptions = {}) {
-        this.template = html`<div class="ar-carrier-host" data-r="host"></div>`;
+    onConnected(_opts: BRTTrackerOptions = {}) {
+        this.template = html `<div class="ar-carrier-host" data-r="host"></div>`;
     }
-
     static get carrier(): CarrierConfig { return BRT; }
     get carrier(): CarrierConfig { return BRT; }
-
     setTrackingNumber(n: string): this {
         this.setAttribute('tracking-number', n);
-        if (this.#inner) this.#inner.setTrackingNumber(n);
+        if (this.#inner)
+            this.#inner.setTrackingNumber(n);
         return this;
     }
     getTrackingNumber(): string { return this.getAttribute('tracking-number') ?? ''; }
-
     setEvents(events: TrackingEvent[]): this {
-        if (this.#inner) this.#inner.setEvents(events);
+        if (this.#inner)
+            this.#inner.setEvents(events);
         return this;
     }
     getEvents(): TrackingEvent[] { return this.#inner?.getEvents() ?? []; }
-
     validateNumber(n: string): boolean {
         return BRT.pattern ? BRT.pattern.test(n) : n.length > 0;
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
+    onCreated() { }
+    onBeforeMount() { }
     onMount() {
         const host = this.querySelector<HTMLElement>('[data-r="host"]');
-        if (!host) return;
+        if (!host)
+            return;
         const inner = new Tracker();
         inner.setCarrier(BRT);
         const n = this.getAttribute('tracking-number');
-        if (n) inner.setTrackingNumber(n);
+        if (n)
+            inner.setTrackingNumber(n);
         const loc = this.getAttribute('locale');
-        if (loc) inner.setAttribute('locale', loc);
+        if (loc)
+            inner.setAttribute('locale', loc);
         host.appendChild(inner);
         this.#inner = inner;
     }
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
     onUnmount() { this.#inner = null; }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'BRTTracker', {
-        value: BRTTracker, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * BRTTracker namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace BRTTracker {
+    export namespace Interfaces {
+        export interface Options extends BRTTrackerOptions {
+        }
+    }
 }
-
 export default BRTTracker;

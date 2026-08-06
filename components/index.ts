@@ -28,7 +28,7 @@
  *   shipments/    — shipment trackers
  *   video/        — VideoPlayer
  *
- * The AriannA component surface (`attributeSignal`, `fire`, `render`, `Sheet`,
+ * The AriannA component surface (`signal().attribute`, `fire`, `render`, `Sheet`,
  * `template`, lifecycle hooks) is declared by the `AriannaElement` interface
  * in `core/Components.ts` itself — the factory's return type uses it, so
  * subclasses inherit the surface automatically with no separate ambient
@@ -40,81 +40,34 @@
  *   Chip           canonical: display/                 alias: InputChip              (inputs/)
  *   ColorPicker    canonical: inputs/                  alias: GraphicsColorPicker    (graphics/colors/)
  */
-
 // Modules without name conflicts — bulk re-export.
 export * from './animations/index.ts';
 export * from './audio/index.ts';
-export * from './charts/index.ts';              // canonical LineChart
+export * from './charts/index.ts'; // canonical LineChart
 export * from './composite/index.ts';
-export * from './display/index.ts';             // canonical Chip
-export * from './layout/index.ts';              // canonical Table (also exposed via data/Table re-export)
+export * from './display/index.ts'; // canonical Chip
+export * from './layout/index.ts'; // canonical Table (also exposed via data/Table re-export)
 export * from './maps/index.ts';
 export * from './modifiers/index.ts';
 export * from './navigation/index.ts';
 export * from './payments/index.ts';
 export * from './shipments/index.ts';
 export * from './video/index.ts';
-
 // data — Table is already exported by layout/ (canonical source); we only
 // re-export what's unique to data here.
 export { TreeView } from './data/TreeView.ts';
 export type { TreeNode, TreeViewOptions } from './data/TreeView.ts';
-
 // ── finance — alias LineChart, re-export everything else ───────────────────
-export {
-    CandlestickChart,
-    DepthChart,
-    HeatmapChart,
-    PortfolioDonut,
-    PnLChart,
-    RiskGauge,
-    OrderBook,
-    Screener,
-    Sparkline,
-    LineChart as FinanceLineChart,
-} from './finance/index.ts';
-
+export { CandlestickChart, DepthChart, HeatmapChart, PortfolioDonut, PnLChart, RiskGauge, OrderBook, Screener, Sparkline, FinanceLineChart, } from './finance/index.ts';
 // ── inputs — alias Chip, canonical ColorPicker, re-export everything else ──
-export {
-    Button,
-    Switch,
-    Checkbox,
-    Radio,
-    TextField,
-    SearchBar,
-    Dropdown,
-    Rating,
-    FileUpload,
-    TimePicker,
-    ColorPicker,
-    RangeSlider,
-    Calendar,
-    DatePicker,
-    RichTextEditor,
-    Chip as InputChip,
-} from './inputs/index.ts';
-
+export { Button, Switch, Checkbox, Radio, TextField, SearchBar, Dropdown, Rating, FileUpload, TimePicker, ColorPicker, RangeSlider, Calendar, DatePicker, RichTextEditor, InputChip, } from './inputs/index.ts';
 // ── graphics — alias ColorPicker, re-export everything else ────────────────
-export {
-    // 2D
-    Canvas2D,
-    BezierEditor,
-    LayersPanel,
-    LinesPalette2D,
-    ToolsPalette,
-    // 3D
-    CameraViewer3D,
-    MaterialsPalette,
-    Modifiers3DPalette,
-    // colors (canonical inputs/ColorPicker — aliasing this one)
-    ColorPickerSquare,
-    ColorPickerTile,
-    ColorPickerWheel,
-    LinearGradientEditor,
-    RadialGradientEditor,
-    ShapeGradientEditor,
-    ColorPicker as GraphicsColorPicker,
-} from './graphics/index.ts';
-
+export { 
+// 2D
+Canvas2D, BezierEditor, LayersPanel, LinesPalette2D, ToolsPalette, 
+// 3D
+CameraViewer3D, MaterialsPalette, Modifiers3DPalette, 
+// colors (canonical inputs/ColorPicker — aliasing this one)
+ColorPickerSquare, ColorPickerTile, ColorPickerWheel, LinearGradientEditor, RadialGradientEditor, ShapeGradientEditor, GraphicsColorPicker, } from './graphics/index.ts';
 // Re-export the colour utility functions (not classes)
-export { parseHexRgba, rgbToHex, rgbToHsl, hslToRgb } from './graphics/colors/ColorPicker.ts';
+export { parseHexRgba, rgbToHex, rgbToHsl, hslToRgb } from './graphics/colors/GraphicsColorPicker.ts';

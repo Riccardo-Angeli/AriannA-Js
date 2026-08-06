@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/graphics/colors/ShapeGradientEditor
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -16,17 +20,11 @@
  *   <arianna-shape-gradient-editor width="320" height="240"></arianna-shape-gradient-editor>
  *
  * Events: arianna:change  detail: { points }
- * Attrs:  width, height
+ * Attributes:  width, height
  */
-
-import { Component } from '../../../core/Components.ts';
-import { Css } from '../../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-import { html }      from '../../../core/Template.ts';
-import { Reactivity } from '../../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -34,61 +32,63 @@ import { Reactivity } from '../../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
+import { Component, Components, Css, Reactivity, Templates } from '../../../core/index.ts';
 import { LinearGradientEditor } from './LinearGradientEditor.ts';
 import { type RGBA, colorFieldHex, parseColorString } from './GradientEditor.ts';
-
+import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
 export interface ShapeStop {
     /** Normalised position in [0,1]. */
-    x      : number;
-    y      : number;
-    color  : RGBA;
+    x: number;
+    y: number;
+    color: RGBA;
     /** Influence radius in normalised units. Default 0.3. */
     radius?: number;
 }
-
 export interface ShapeGradientEditorOptions {
-    points? : ShapeStop[];
-    width?  : number;
-    height? : number;
+    points?: ShapeStop[];
+    width?: number;
+    height?: number;
 }
-
 const DEFAULT_POINTS = (): ShapeStop[] => [
-    { x: 0.25, y: 0.25, color: { r: 228, g: 12,  b: 136, a: 1 } },
-    { x: 0.75, y: 0.25, color: { r: 31,  g: 111, b: 235, a: 1 } },
-    { x: 0.50, y: 0.75, color: { r: 38,  g: 166, b: 154, a: 1 } },
+    { x: 0.25, y: 0.25, color: { r: 228, g: 12, b: 136, a: 1 } },
+    { x: 0.75, y: 0.25, color: { r: 31, g: 111, b: 235, a: 1 } },
+    { x: 0.50, y: 0.75, color: { r: 38, g: 166, b: 154, a: 1 } },
 ];
-
-export class ShapeGradientEditor extends Component('arianna-shape-gradient-editor', HTMLElement, {}, {
-    attrs : ['width', 'height'],
+@Component('arianna-shape-gradient-editor', {}, {
+    Attributes: ['width', 'height'],
 })
-{
-    points$  : Signal<ShapeStop[]> = signal<ShapeStop[]>(DEFAULT_POINTS());
+export class ShapeGradientEditor extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    points$: Signal<ShapeStop[]> = signal<ShapeStop[]>(DEFAULT_POINTS());
     selected$: Signal<number> = signal<number>(0);
-
-    build(_opts: ShapeGradientEditorOptions = {})
-    {
-        const wAttr = this.attributeSignal('width');
-        const hAttr = this.attributeSignal('height');
-
+    onConnected(_opts: ShapeGradientEditorOptions = {}) {
+        const wAttr = this.signal().attribute('width');
+        const hAttr = this.signal().attribute('height');
         const w = () => parseInt(wAttr.Get() ?? '320', 10) || 320;
         const h = () => parseInt(hAttr.Get() ?? '240', 10) || 240;
-
         this.canvasStyle = () => `width: ${w()}px; height: ${h()}px; position: relative; display: block`;
         this.dimW = () => String(w());
         this.dimH = () => String(h());
-
-        this.pinList = (): Array<{ style: string; idx: number; cls: string; bg: string }> => {
+        this.pinList = (): Array<{
+            style: string;
+            idx: number;
+            cls: string;
+            bg: string;
+        }> => {
             const sel = this.selected$.Get();
             const W = w(), H = h();
             return this.points$.Get().map((p, i) => ({
                 style: `left: ${p.x * W}px; top: ${p.y * H}px; background: ${colorFieldHex(p.color)}`,
-                idx  : i,
-                cls  : 'ar-grad__mesh-pt' + (i === sel ? ' ar-grad__mesh-pt--sel' : ''),
-                bg   : colorFieldHex(p.color),
+                idx: i,
+                cls: 'ar-grad__mesh-pt' + (i === sel ? ' ar-grad__mesh-pt--sel' : ''),
+                bg: colorFieldHex(p.color),
             }));
         };
-
         this.hasSel = () => this.points$.Get().length > 0;
         this.selPt = () => this.points$.Get()[this.selected$.Get()] ?? this.points$.Get()[0]!;
         this.selHex = () => colorFieldHex(this.selPt().color);
@@ -96,16 +96,16 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
         this.selY = () => (this.selPt().y * 100).toFixed(1);
         this.selR = () => (this.selPt().radius ?? 0.3).toFixed(2);
         this.selA = () => (this.selPt().color.a ?? 1).toFixed(2);
-
         // ── Handlers ────────────────────────────────────────────────────
         this.onCanvasClick = (e: Event) => {
             const me = e as MouseEvent;
             const target = me.target as HTMLElement;
-            if (target.classList.contains('ar-grad__mesh-pt')) return;
+            if (target.classList.contains('ar-grad__mesh-pt'))
+                return;
             const canvas = me.currentTarget as HTMLElement;
             const rect = canvas.getBoundingClientRect();
             const x = (me.clientX - rect.left) / rect.width;
-            const y = (me.clientY - rect.top)  / rect.height;
+            const y = (me.clientY - rect.top) / rect.height;
             this.addPoint(x, y, { r: 200, g: 200, b: 200, a: 1 });
         };
         this.onPtPointer = (e: Event) => {
@@ -116,11 +116,13 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
             if (me.type === 'pointerdown') {
                 pt.setPointerCapture?.(me.pointerId);
                 this.selected$.Set(idx);
-            } else if (!(me.buttons & 1)) return;
+            }
+            else if (!(me.buttons & 1))
+                return;
             const canvas = pt.parentElement as HTMLElement;
             const rect = canvas.getBoundingClientRect();
             const x = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
-            const y = Math.max(0, Math.min(1, (me.clientY - rect.top)  / rect.height));
+            const y = Math.max(0, Math.min(1, (me.clientY - rect.top) / rect.height));
             this.updatePoint(idx, { x, y });
         };
         this.onPtDblClick = (e: Event) => {
@@ -129,7 +131,6 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
             const idx = parseInt((me.currentTarget as HTMLElement).dataset.idx ?? '0', 10);
             this.removePoint(idx);
         };
-
         this.onSelColorChange = (e: Event) => {
             const c = parseColorString((e.target as HTMLInputElement).value);
             if (c) {
@@ -157,8 +158,7 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
             });
         };
         this.onRemove = () => this.removePoint(this.selected$.Get());
-
-        this.template = html`
+        this.template = html `
             <div class="ar-grad__row">
                 <div class="ar-grad__col">
                     <div class="ar-grad__mesh-canvas-wrap" :style="this.canvasStyle()">
@@ -206,24 +206,27 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
                 </div>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = LinearGradientEditor.SharedSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = LinearGradientEditor.SharedSheet();
     }
-
     /** Paint the freeform mesh into the canvas using inverse-distance weighting. */
     #paint(): void {
         const canvas = this.querySelector<HTMLCanvasElement>('canvas.ar-grad__mesh-canvas-bg');
-        if (!canvas) return;
+        if (!canvas)
+            return;
         const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        if (!ctx)
+            return;
         const W = canvas.width, H = canvas.height;
         const pts = this.points$.Get();
-        if (!pts.length) { ctx.clearRect(0, 0, W, H); return; }
-
+        if (!pts.length) {
+            ctx.clearRect(0, 0, W, H);
+            return;
+        }
         const img = ctx.createImageData(W, H);
         // Step factor for perf — paints every other pixel and stretches
         const step = (W * H > 80000) ? 2 : 1;
-
         for (let py = 0; py < H; py += step) {
             for (let px = 0; px < W; px += step) {
                 const nx = px / (W - 1);
@@ -243,33 +246,31 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
                 }
                 const r = sumR / sumW, g = sumG / sumW, b = sumB / sumW, a = sumA / sumW;
                 const i = (py * W + px) * 4;
-                img.data[i]   = Math.max(0, Math.min(255, Math.round(r)));
-                img.data[i+1] = Math.max(0, Math.min(255, Math.round(g)));
-                img.data[i+2] = Math.max(0, Math.min(255, Math.round(b)));
-                img.data[i+3] = Math.max(0, Math.min(255, Math.round(a * 255)));
+                img.data[i] = Math.max(0, Math.min(255, Math.round(r)));
+                img.data[i + 1] = Math.max(0, Math.min(255, Math.round(g)));
+                img.data[i + 2] = Math.max(0, Math.min(255, Math.round(b)));
+                img.data[i + 3] = Math.max(0, Math.min(255, Math.round(a * 255)));
                 if (step === 2) {
                     const j = (py * W + (px + 1)) * 4;
                     if (j + 3 < img.data.length) {
-                        img.data[j]   = img.data[i]!;
-                        img.data[j+1] = img.data[i+1]!;
-                        img.data[j+2] = img.data[i+2]!;
-                        img.data[j+3] = img.data[i+3]!;
+                        img.data[j] = img.data[i]!;
+                        img.data[j + 1] = img.data[i + 1]!;
+                        img.data[j + 2] = img.data[i + 2]!;
+                        img.data[j + 3] = img.data[i + 3]!;
                     }
                     const k = ((py + 1) * W + px) * 4;
                     if (k + 3 < img.data.length) {
-                        img.data[k]   = img.data[i]!;
-                        img.data[k+1] = img.data[i+1]!;
-                        img.data[k+2] = img.data[i+2]!;
-                        img.data[k+3] = img.data[i+3]!;
+                        img.data[k] = img.data[i]!;
+                        img.data[k + 1] = img.data[i + 1]!;
+                        img.data[k + 2] = img.data[i + 2]!;
+                        img.data[k + 3] = img.data[i + 3]!;
                     }
                 }
             }
         }
         ctx.putImageData(img, 0, 0);
     }
-
     // ── Public API ───────────────────────────────────────────────────────────
-
     addPoint(x: number, y: number, color: RGBA): ShapeStop {
         const p: ShapeStop = {
             x: Math.max(0, Math.min(1, x)),
@@ -285,19 +286,23 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
     }
     removePoint(idx: number): this {
         const cur = this.points$.Get();
-        if (cur.length <= 1) return this;
-        if (idx < 0 || idx >= cur.length) return this;
+        if (cur.length <= 1)
+            return this;
+        if (idx < 0 || idx >= cur.length)
+            return this;
         const next = cur.slice();
         next.splice(idx, 1);
         this.points$.Set(next);
-        if (this.selected$.Get() >= next.length) this.selected$.Set(next.length - 1);
+        if (this.selected$.Get() >= next.length)
+            this.selected$.Set(next.length - 1);
         this.#fire();
         return this;
     }
     updatePoint(idx: number, patch: Partial<ShapeStop>): this {
         const cur = this.points$.Get();
         const p = cur[idx];
-        if (!p) return this;
+        if (!p)
+            return this;
         const next = cur.slice();
         const updated: ShapeStop = {
             x: patch.x ?? p.x,
@@ -310,22 +315,20 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
         this.#fire();
         return this;
     }
-
     setPoints(pts: ShapeStop[]): this {
         this.points$.Set(pts.map(p => ({ ...p, color: { ...p.color } })));
-        if (this.selected$.Get() >= this.points$.Get().length) this.selected$.Set(0);
+        if (this.selected$.Get() >= this.points$.Get().length)
+            this.selected$.Set(0);
         this.#fire();
         return this;
     }
     getPoints(): ShapeStop[] {
         return this.points$.Get().map(p => ({ ...p, color: { ...p.color } }));
     }
-
     toCanvasDataURL(type: string = 'image/png'): string {
         const canvas = this.querySelector<HTMLCanvasElement>('canvas.ar-grad__mesh-canvas-bg');
         return canvas?.toDataURL(type) ?? '';
     }
-
     #fire(): void {
         this.#paint();
         this.dispatchEvent(new CustomEvent('arianna:change', {
@@ -333,41 +336,48 @@ export class ShapeGradientEditor extends Component('arianna-shape-gradient-edito
             detail: { points: this.getPoints() },
         }));
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
+    onCreated() { }
+    onBeforeMount() { }
     onMount() { this.#paint(); }
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    private canvasStyle  : () => string = () => '';
-    private dimW         : () => string = () => '320';
-    private dimH         : () => string = () => '240';
-    private pinList      : () => Array<{ style: string; idx: number; cls: string; bg: string }> = () => [];
-    private hasSel       : () => boolean = () => false;
-    private selPt        : () => ShapeStop = () => ({ x: 0.5, y: 0.5, color: { r: 0, g: 0, b: 0, a: 1 } });
-    private selHex       : () => string = () => '#000000';
-    private selX         : () => string = () => '50';
-    private selY         : () => string = () => '50';
-    private selR         : () => string = () => '0.30';
-    private selA         : () => string = () => '1';
-    private onCanvasClick: (e: Event) => void = () => {};
-    private onPtPointer  : (e: Event) => void = () => {};
-    private onPtDblClick : (e: Event) => void = () => {};
-    private onSelColorChange: (e: Event) => void = () => {};
-    private onSelXChange    : (e: Event) => void = () => {};
-    private onSelYChange    : (e: Event) => void = () => {};
-    private onSelRChange    : (e: Event) => void = () => {};
-    private onSelAChange    : (e: Event) => void = () => {};
-    private onRemove        : (e: Event) => void = () => {};
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    private canvasStyle: () => string = () => '';
+    private dimW: () => string = () => '320';
+    private dimH: () => string = () => '240';
+    private pinList: () => Array<{
+        style: string;
+        idx: number;
+        cls: string;
+        bg: string;
+    }> = () => [];
+    private hasSel: () => boolean = () => false;
+    private selPt: () => ShapeStop = () => ({ x: 0.5, y: 0.5, color: { r: 0, g: 0, b: 0, a: 1 } });
+    private selHex: () => string = () => '#000000';
+    private selX: () => string = () => '50';
+    private selY: () => string = () => '50';
+    private selR: () => string = () => '0.30';
+    private selA: () => string = () => '1';
+    private onCanvasClick: (e: Event) => void = () => { };
+    private onPtPointer: (e: Event) => void = () => { };
+    private onPtDblClick: (e: Event) => void = () => { };
+    private onSelColorChange: (e: Event) => void = () => { };
+    private onSelXChange: (e: Event) => void = () => { };
+    private onSelYChange: (e: Event) => void = () => { };
+    private onSelRChange: (e: Event) => void = () => { };
+    private onSelAChange: (e: Event) => void = () => { };
+    private onRemove: (e: Event) => void = () => { };
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'ShapeGradientEditor', {
-        value: ShapeGradientEditor, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * ShapeGradientEditor namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace ShapeGradientEditor {
+    export namespace Interfaces {
+        export interface ShapeStopContract extends ShapeStop {
+        }
+        export interface Options extends ShapeGradientEditorOptions {
+        }
+    }
 }
-
 export default ShapeGradientEditor;

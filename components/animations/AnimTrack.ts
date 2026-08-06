@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/animations/AnimTrack
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -24,220 +28,230 @@
  *   arianna:track-lock   { track, value }
  *   arianna:track-hidden { track, value }
  */
-
-import { Component } from '../../core/Components.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
    not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
+import { Component, Css, Reactivity } from '../../core/index.ts';
 import type { Keyframe } from './Keyframe.ts';
-
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
 export type ChannelGroup = 'position' | 'rotation' | 'scale' | 'custom';
-
 export interface AnimTrackOptions {
-    name?    : string;
-    channel? : string;
-    group?   : ChannelGroup;
-    muted?   : boolean;
-    locked?  : boolean;
-    hidden?  : boolean;
+    name?: string;
+    channel?: string;
+    group?: ChannelGroup;
+    muted?: boolean;
+    locked?: boolean;
+    hidden?: boolean;
 }
-
-export class AnimTrack extends Component('arianna-anim-track', HTMLElement, {}, {
-    attrs : ['name', 'channel', 'group', 'muted', 'locked', 'hidden'],
-    bus   : 'arianna-keyframe-editor',
+@Component('arianna-anim-track', {}, {
+    Attributes: ['name', 'channel', 'group', 'muted', 'locked', 'hidden'],
+    bus: 'arianna-keyframe-editor',
 })
-{
+export class AnimTrack extends HTMLElement {
     constructor(opts: AnimTrackOptions = {}) {
-        super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
+        super();
+        const self = this as unknown as {
+            render(): HTMLElement;
+        };
         const el = self.render();
-        if (opts.name)    el.setAttribute('name',    opts.name);
-        if (opts.channel) el.setAttribute('channel', opts.channel);
-        if (opts.group)   el.setAttribute('group',   opts.group);
-        if (opts.muted)   el.setAttribute('muted',   '');
-        if (opts.locked)  el.setAttribute('locked',  '');
-        if (opts.hidden)  el.setAttribute('hidden',  '');
+        if (opts.name)
+            el.setAttribute('name', opts.name);
+        if (opts.channel)
+            el.setAttribute('channel', opts.channel);
+        if (opts.group)
+            el.setAttribute('group', opts.group);
+        if (opts.muted)
+            el.setAttribute('muted', '');
+        if (opts.locked)
+            el.setAttribute('locked', '');
+        if (opts.hidden)
+            el.setAttribute('hidden', '');
     }
-
-    build(): void {
+    onConnected(): void {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const el = self.render();
-        if (el.querySelector('.at-head')) return;
-
+        if (el.querySelector('.at-head'))
+            return;
         // Track header (left column inside the editor grid)
         const head = document.createElement('div');
         head.className = 'at-head';
-
         const name = document.createElement('span');
         name.className = 'at-name';
-        const sName = self.attributeSignal('name');
+        const sName = self.signal().attribute('name');
         effect(() => { name.textContent = sName?.Get() ?? 'Channel'; });
-
         const btnMute = document.createElement('button');
-        btnMute.type = 'button'; btnMute.className = 'at-icon at-mute';
+        btnMute.type = 'button';
+        btnMute.className = 'at-icon at-mute';
         btnMute.title = 'mute';
         btnMute.textContent = '◉';
-
         const btnHide = document.createElement('button');
-        btnHide.type = 'button'; btnHide.className = 'at-icon at-hide';
+        btnHide.type = 'button';
+        btnHide.className = 'at-icon at-hide';
         btnHide.title = 'hide';
         btnHide.textContent = '◎';
-
         const btnLock = document.createElement('button');
-        btnLock.type = 'button'; btnLock.className = 'at-icon at-lock';
+        btnLock.type = 'button';
+        btnLock.className = 'at-icon at-lock';
         btnLock.title = 'lock';
         btnLock.textContent = '⚿';
-
         head.append(name, btnMute, btnHide, btnLock);
-
         // Track lane (right column — where keyframes are positioned)
         const lane = document.createElement('div');
         lane.className = 'at-lane';
-
         // Group dot (color marker — set by CSS variable picked by 'group' attr)
         const groupDot = document.createElement('span');
         groupDot.className = 'at-group-dot';
         head.insertBefore(groupDot, name);
-
         // Migrate any pre-existing arianna-keyframe children into the lane
         Array.from(el.querySelectorAll('arianna-keyframe'))
-             .forEach(kf => lane.appendChild(kf));
-
+            .forEach(kf => lane.appendChild(kf));
         el.appendChild(head);
         el.appendChild(lane);
-
         // Reactive group-class
-        const sGroup = self.attributeSignal('group');
+        const sGroup = self.signal().attribute('group');
         effect(() => {
             const g = sGroup?.Get() ?? 'custom';
             el.dataset.group = g;
         });
-
         btnMute.addEventListener('click', () => {
             const v = !el.hasAttribute('muted');
-            if (v) el.setAttribute('muted', ''); else el.removeAttribute('muted');
+            if (v)
+                el.setAttribute('muted', '');
+            else
+                el.removeAttribute('muted');
             self.fire('arianna:track-mute', { detail: { track: this, value: v, source: this }, bubbles: true });
         });
         btnHide.addEventListener('click', () => {
             const v = !el.hasAttribute('hidden');
-            if (v) el.setAttribute('hidden', ''); else el.removeAttribute('hidden');
+            if (v)
+                el.setAttribute('hidden', '');
+            else
+                el.removeAttribute('hidden');
             self.fire('arianna:track-hidden', { detail: { track: this, value: v, source: this }, bubbles: true });
         });
         btnLock.addEventListener('click', () => {
             const v = !el.hasAttribute('locked');
-            if (v) el.setAttribute('locked', ''); else el.removeAttribute('locked');
+            if (v)
+                el.setAttribute('locked', '');
+            else
+                el.removeAttribute('locked');
             self.fire('arianna:track-lock', { detail: { track: this, value: v, source: this }, bubbles: true });
         });
-
         effect(() => { btnMute.classList.toggle('active', el.hasAttribute('muted')); });
         effect(() => { btnHide.classList.toggle('active', el.hasAttribute('hidden')); });
         effect(() => { btnLock.classList.toggle('active', el.hasAttribute('locked')); });
-
         self.Sheet = AnimTrack.DefaultSheet();
     }
-
     /** Append a Keyframe to this track. */
     addKeyframe(kf: Keyframe): this {
-        const self = this as unknown as { render(): HTMLElement };
+        const self = this as unknown as {
+            render(): HTMLElement;
+        };
         const lane = self.render().querySelector('.at-lane');
-        if (!lane) return this;
-        const kfEl = (kf as unknown as { render(): HTMLElement }).render();
+        if (!lane)
+            return this;
+        const kfEl = (kf as unknown as {
+            render(): HTMLElement;
+        }).render();
         lane.appendChild(kfEl);
         return this;
     }
-
     /** All keyframes on this track. */
     getKeyframes(): Keyframe[] {
-        const self = this as unknown as { _children?: unknown[] };
+        const self = this as unknown as {
+            _children?: unknown[];
+        };
         return (self._children ?? []) as Keyframe[];
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
                 borderBottom: '1px solid var(--ar-border, #2a2a2a)',
-                display     : 'grid',
+                display: 'grid',
                 gridTemplateColumns: 'var(--track-head-width, 160px) 1fr',
-                height      : 'var(--track-height, 22px)',
-                position    : 'relative',
+                height: 'var(--track-height, 22px)',
+                position: 'relative',
             }),
             new Rule(':host([hidden])', { opacity: '0.35' }),
             new Rule(':host .at-head', {
-                alignItems   : 'center',
-                background   : 'var(--ar-bg2, #161616)',
-                borderRight  : '1px solid var(--ar-border, #2a2a2a)',
-                display      : 'flex',
-                gap          : '4px',
-                paddingLeft  : '6px',
-                paddingRight : '4px',
+                alignItems: 'center',
+                background: 'var(--ar-bg2, #161616)',
+                borderRight: '1px solid var(--ar-border, #2a2a2a)',
+                display: 'flex',
+                gap: '4px',
+                paddingLeft: '6px',
+                paddingRight: '4px',
             }),
             new Rule(':host .at-group-dot', {
-                background  : 'var(--ar-muted, #888)',
+                background: 'var(--ar-muted, #888)',
                 borderRadius: '50%',
-                display     : 'inline-block',
-                flexShrink  : '0',
-                height      : '8px',
-                width       : '8px',
+                display: 'inline-block',
+                flexShrink: '0',
+                height: '8px',
+                width: '8px',
             }),
             new Rule(":host([data-group='position']) .at-group-dot", { background: 'var(--arianna-curve-position, #4dd0e1)' }),
             new Rule(":host([data-group='rotation']) .at-group-dot", { background: 'var(--arianna-curve-rotation, #ff9800)' }),
             new Rule(":host([data-group='scale'])    .at-group-dot", { background: 'var(--arianna-curve-scale,    #7eb8f7)' }),
             new Rule(':host .at-name', {
-                color     : 'var(--ar-text, #e0e0e0)',
-                flex      : '1',
-                fontSize  : '0.74rem',
-                overflow  : 'hidden',
+                color: 'var(--ar-text, #e0e0e0)',
+                flex: '1',
+                fontSize: '0.74rem',
+                overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
             }),
             new Rule(':host .at-icon', {
-                background  : 'transparent',
-                border      : '0',
-                color       : 'var(--ar-muted, #888)',
-                cursor      : 'pointer',
-                font        : 'inherit',
-                fontSize    : '0.85rem',
-                lineHeight  : '1',
-                padding     : '0 2px',
+                background: 'transparent',
+                border: '0',
+                color: 'var(--ar-muted, #888)',
+                cursor: 'pointer',
+                font: 'inherit',
+                fontSize: '0.85rem',
+                lineHeight: '1',
+                padding: '0 2px',
             }),
             new Rule(':host .at-icon.active', { color: 'var(--ar-warning, #ff9800)' }),
-            new Rule(':host .at-icon:hover',  { color: 'var(--ar-text, #e0e0e0)' }),
+            new Rule(':host .at-icon:hover', { color: 'var(--ar-text, #e0e0e0)' }),
             new Rule(':host .at-lane', {
-                background      : 'transparent',
-                backgroundImage : 'linear-gradient(to right, var(--ar-border, #2a2a2a) 1px, transparent 1px)',
-                backgroundSize  : 'var(--frame-step-px, 70px) 100%',
-                position        : 'relative',
+                background: 'transparent',
+                backgroundImage: 'linear-gradient(to right, var(--ar-border, #2a2a2a) 1px, transparent 1px)',
+                backgroundSize: 'var(--frame-step-px, 70px) 100%',
+                position: 'relative',
             }),
             new Rule(':host([muted]) .at-lane', { opacity: '0.4' }),
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'AnimTrack', {
-        value: AnimTrack, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * AnimTrack namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace AnimTrack
+{
+    export namespace Types {
+        export type ChannelGroupType = ChannelGroup;
+    }
+    export namespace Interfaces {
+        export interface Options extends AnimTrackOptions {
+        }
+    }
 }
-
 export default AnimTrack;

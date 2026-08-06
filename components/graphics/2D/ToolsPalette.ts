@@ -1,3 +1,10 @@
+import { Component, Components, Css, Reactivity, Templates } from '../../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/graphics/2D/ToolsPalette
  * @author    Riccardo Angeli
@@ -16,13 +23,8 @@
  *   arianna:tool   detail: { tool: string }
  *   arianna:action detail: { action: string }
  *
- * Attrs: active-tool, layout, show-shortcuts
+ * Attributes: active-tool, layout, show-shortcuts
  */
-
-import { Component } from '../../../core/Components.ts';
-import { html }      from '../../../core/Template.ts';
-import { Reactivity } from '../../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -30,53 +32,48 @@ import { Reactivity } from '../../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface PaletteTool {
-    id        : string;
-    label     : string;
-    icon      : string;
-    shortcut? : string;
-    behaviour : 'tool' | 'action';
+    id: string;
+    label: string;
+    icon: string;
+    shortcut?: string;
+    behaviour: 'tool' | 'action';
 }
-
 const BUILTIN: PaletteTool[] = [
-    { id: 'select',     label: 'Select',     icon: '↖', shortcut: 'V', behaviour: 'tool' },
-    { id: 'pan',        label: 'Pan',        icon: '✋', shortcut: 'H', behaviour: 'tool' },
-    { id: 'zoom',       label: 'Zoom',       icon: '🔍', shortcut: 'Z', behaviour: 'tool' },
-    { id: 'rotate',     label: 'Rotate',     icon: '↻', shortcut: 'E', behaviour: 'tool' },
-    { id: 'scale',      label: 'Scale',      icon: '⤢', shortcut: 'S', behaviour: 'tool' },
+    { id: 'select', label: 'Select', icon: '↖', shortcut: 'V', behaviour: 'tool' },
+    { id: 'pan', label: 'Pan', icon: '✋', shortcut: 'H', behaviour: 'tool' },
+    { id: 'zoom', label: 'Zoom', icon: '🔍', shortcut: 'Z', behaviour: 'tool' },
+    { id: 'rotate', label: 'Rotate', icon: '↻', shortcut: 'E', behaviour: 'tool' },
+    { id: 'scale', label: 'Scale', icon: '⤢', shortcut: 'S', behaviour: 'tool' },
     { id: 'eyedropper', label: 'Eyedropper', icon: '💧', shortcut: 'I', behaviour: 'tool' },
-    { id: 'measure',    label: 'Measure',    icon: '📏', shortcut: 'M', behaviour: 'tool' },
-    { id: 'undo',       label: 'Undo',       icon: '↶', shortcut: 'Z', behaviour: 'action' },
-    { id: 'redo',       label: 'Redo',       icon: '↷', shortcut: 'Y', behaviour: 'action' },
-    { id: 'delete',     label: 'Delete',     icon: '🗑', shortcut: 'Delete', behaviour: 'action' },
+    { id: 'measure', label: 'Measure', icon: '📏', shortcut: 'M', behaviour: 'tool' },
+    { id: 'undo', label: 'Undo', icon: '↶', shortcut: 'Z', behaviour: 'action' },
+    { id: 'redo', label: 'Redo', icon: '↷', shortcut: 'Y', behaviour: 'action' },
+    { id: 'delete', label: 'Delete', icon: '🗑', shortcut: 'Delete', behaviour: 'action' },
 ];
-
 export interface ToolsPaletteOptions {
-    activeTool?    : string;
-    layout?        : 'vertical' | 'horizontal';
-    showShortcuts? : boolean;
+    activeTool?: string;
+    layout?: 'vertical' | 'horizontal';
+    showShortcuts?: boolean;
 }
-
-export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement, {}, {
-    attrs : ['active-tool', 'layout', 'show-shortcuts'],
+@Component('arianna-tools-palette', {}, {
+    Attributes: ['active-tool', 'layout', 'show-shortcuts'],
 })
-{
+export class ToolsPalette extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     tools$: Signal<PaletteTool[]> = signal<PaletteTool[]>(BUILTIN.slice());
-
-    build(_opts: ToolsPaletteOptions = {})
-    {
-        const layoutAttr = this.attributeSignal('layout');
-        const activeAttr = this.attributeSignal('active-tool');
-
+    onConnected(_opts: ToolsPaletteOptions = {}) {
+        const layoutAttr = this.signal().attribute('layout');
+        const activeAttr = this.signal().attribute('active-tool');
         this.layoutCls = () => 'ar-tp ar-tp--' + (layoutAttr.Get() ?? 'vertical');
         this.showShortcuts = () => this.getAttribute('show-shortcuts') !== 'false';
-
         this.buttons = () => this.tools$.Get().map(t => ({
             id: t.id,
             icon: t.icon,
@@ -85,19 +82,20 @@ export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement
             cls: 'ar-tp__btn'
                 + (activeAttr.Get() === t.id && t.behaviour === 'tool' ? ' ar-tp__btn--active' : ''),
         }));
-
         this.onBtnClick = (e: Event) => {
             const btn = e.currentTarget as HTMLButtonElement;
             const id = btn.dataset.id;
             const behaviour = btn.dataset.behaviour;
-            if (!id || !behaviour) return;
-            if (behaviour === 'tool') this.setTool(id);
-            else this.dispatchEvent(new CustomEvent('arianna:action', {
-                bubbles: true, detail: { action: id },
-            }));
+            if (!id || !behaviour)
+                return;
+            if (behaviour === 'tool')
+                this.setTool(id);
+            else
+                this.dispatchEvent(new CustomEvent('arianna:action', {
+                    bubbles: true, detail: { action: id },
+                }));
         };
-
-        this.template = html`
+        this.template = html `
             <div :class="this.layoutCls()">
                 <button type="button" a-for="b in this.buttons()"
                         :class="b.cls" :title="b.title"
@@ -105,13 +103,14 @@ export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement
                         @click="this.onBtnClick">{{ b.icon }}</button>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = ToolsPalette.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = ToolsPalette.DefaultSheet();
     }
-
     setTool(id: string): this {
         const t = this.tools$.Get().find(x => x.id === id);
-        if (!t || t.behaviour !== 'tool') return this;
+        if (!t || t.behaviour !== 'tool')
+            return this;
         this.setAttribute('active-tool', id);
         this.dispatchEvent(new CustomEvent('arianna:tool', {
             bubbles: true, detail: { tool: id },
@@ -119,63 +118,66 @@ export class ToolsPalette extends Component('arianna-tools-palette', HTMLElement
         return this;
     }
     getTool(): string | null { return this.getAttribute('active-tool'); }
-
     setTools(tools: PaletteTool[]): this { this.tools$.Set(tools); return this; }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    private layoutCls    : () => string = () => '';
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    private layoutCls: () => string = () => '';
     private showShortcuts: () => boolean = () => true;
-    private buttons      : () => Array<{ id: string; icon: string; title: string; behaviour: string; cls: string }> = () => [];
-    private onBtnClick   : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', { display: 'inline-block' }),
-                new Rule('.ar-tp', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    display     : 'flex',
-                    padding     : '4px',
-                    gap         : '3px',
-                }),
-                new Rule('.ar-tp--vertical',   { flexDirection: 'column' }),
-                new Rule('.ar-tp--horizontal', { flexDirection: 'row' }),
-                new Rule('.ar-tp__btn', {
-                    width: '32px', height: '32px',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: '3px',
-                    color: 'var(--arianna-text, #1f2328)',
-                    fontSize: '15px',
-                    cursor: 'pointer',
-                    padding: '0',
-                    transition: 'background 0.08s',
-                }),
-                new Rule('.ar-tp__btn:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
-                new Rule('.ar-tp__btn--active', {
-                    background: 'var(--arianna-primary, #1f6feb)',
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
-                    color: '#fff',
-                }),
-            ]
-        );
+    private buttons: () => Array<{
+        id: string;
+        icon: string;
+        title: string;
+        behaviour: string;
+        cls: string;
+    }> = () => [];
+    private onBtnClick: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', { display: 'inline-block' }),
+            new Rule('.ar-tp', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                display: 'flex',
+                padding: '4px',
+                gap: '3px',
+            }),
+            new Rule('.ar-tp--vertical', { flexDirection: 'column' }),
+            new Rule('.ar-tp--horizontal', { flexDirection: 'row' }),
+            new Rule('.ar-tp__btn', {
+                width: '32px', height: '32px',
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: '3px',
+                color: 'var(--arianna-text, #1f2328)',
+                fontSize: '15px',
+                cursor: 'pointer',
+                padding: '0',
+                transition: 'background 0.08s',
+            }),
+            new Rule('.ar-tp__btn:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+            new Rule('.ar-tp__btn--active', {
+                background: 'var(--arianna-primary, #1f6feb)',
+                borderColor: 'var(--arianna-primary, #1f6feb)',
+                color: '#fff',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'ToolsPalette', {
-        value: ToolsPalette, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * ToolsPalette namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace ToolsPalette {
+    export namespace Interfaces {
+        export interface PaletteToolContract extends PaletteTool {
+        }
+        export interface Options extends ToolsPaletteOptions {
+        }
+    }
 }
-
 export default ToolsPalette;

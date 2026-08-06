@@ -27,9 +27,7 @@
  * (YouTube/Vimeo/Twitch) the audio is sandboxed by the provider's origin
  * and cannot be tapped from the page.
  */
-
 export { VideoPlayer, detectVideoProvider } from './VideoPlayer.ts';
 export type { VideoProvider, VideoPlayerOptions } from './VideoPlayer.ts';
-
 export { VideoTrackEditor } from './VideoTrackEditor.ts';
 export type { VideoClip } from './VideoTrackEditor.ts';

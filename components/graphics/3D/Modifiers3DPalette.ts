@@ -1,3 +1,10 @@
+import { Component, Css, Reactivity, Templates } from '../../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/graphics/3D/Modifiers3DPalette
  * @author    Riccardo Angeli
@@ -21,13 +28,8 @@
  *     applyToMesh(mesh, e.detail.stack));
  *
  * Events: arianna:modifiers-change  detail: { stack: ModifierEntry[] }
- * Attrs:  (none — programmatic state)
+ * Attributes:  (none — programmatic state)
  */
-
-import { Component } from '../../../core/Components.ts';
-import { html }      from '../../../core/Template.ts';
-import { Reactivity } from '../../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -35,81 +37,74 @@ import { Reactivity } from '../../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
-export type ModifierKind =
-    | 'bend' | 'twist' | 'taper' | 'mirror' | 'array' | 'displace'
-    | 'wave' | 'shear' | 'lattice' | 'smooth' | 'decimate' | 'subdivide'
-    | 'boolean' | 'extrude-2d';
-
+export type ModifierKind = 'bend' | 'twist' | 'taper' | 'mirror' | 'array' | 'displace' | 'wave' | 'shear' | 'lattice' | 'smooth' | 'decimate' | 'subdivide' | 'boolean' | 'extrude-2d';
 export interface ModifierEntry {
-    id      : string;
-    kind    : ModifierKind;
-    enabled : boolean;
-    params  : Record<string, number | string | boolean>;
+    id: string;
+    kind: ModifierKind;
+    enabled: boolean;
+    params: Record<string, number | string | boolean>;
 }
-
 export interface Modifiers3DPaletteOptions {
-    stack? : ModifierEntry[];
+    stack?: ModifierEntry[];
 }
-
-const KIND_INFO: Array<{ kind: ModifierKind; label: string; icon: string }> = [
-    { kind: 'bend',       label: 'Bend',       icon: '⏜' },
-    { kind: 'twist',      label: 'Twist',      icon: '⌇' },
-    { kind: 'taper',      label: 'Taper',      icon: '◣' },
-    { kind: 'mirror',     label: 'Mirror',     icon: '⇋' },
-    { kind: 'array',      label: 'Array',      icon: '▦' },
-    { kind: 'displace',   label: 'Displace',   icon: '∿' },
-    { kind: 'wave',       label: 'Wave',       icon: '〰' },
-    { kind: 'shear',      label: 'Shear',      icon: '◢' },
-    { kind: 'lattice',    label: 'Lattice',    icon: '⊞' },
-    { kind: 'smooth',     label: 'Smooth',     icon: '◔' },
-    { kind: 'decimate',   label: 'Decimate',   icon: '◣' },
-    { kind: 'subdivide',  label: 'Subdivide',  icon: '⊕' },
-    { kind: 'boolean',    label: 'Boolean',    icon: '◐' },
+const KIND_INFO: Array<{
+    kind: ModifierKind;
+    label: string;
+    icon: string;
+}> = [
+    { kind: 'bend', label: 'Bend', icon: '⏜' },
+    { kind: 'twist', label: 'Twist', icon: '⌇' },
+    { kind: 'taper', label: 'Taper', icon: '◣' },
+    { kind: 'mirror', label: 'Mirror', icon: '⇋' },
+    { kind: 'array', label: 'Array', icon: '▦' },
+    { kind: 'displace', label: 'Displace', icon: '∿' },
+    { kind: 'wave', label: 'Wave', icon: '〰' },
+    { kind: 'shear', label: 'Shear', icon: '◢' },
+    { kind: 'lattice', label: 'Lattice', icon: '⊞' },
+    { kind: 'smooth', label: 'Smooth', icon: '◔' },
+    { kind: 'decimate', label: 'Decimate', icon: '◣' },
+    { kind: 'subdivide', label: 'Subdivide', icon: '⊕' },
+    { kind: 'boolean', label: 'Boolean', icon: '◐' },
     { kind: 'extrude-2d', label: 'Extrude 2D', icon: '⬚' },
 ];
-
 const DEFAULT_PARAMS: Record<ModifierKind, Record<string, number | string | boolean>> = {
-    bend:         { angle: 90, axis: 'y' },
-    twist:        { angle: 45, axis: 'y' },
-    taper:        { factor: 0.5, axis: 'y' },
-    mirror:       { axis: 'x' },
-    array:        { count: 3, offsetX: 1, offsetY: 0, offsetZ: 0 },
-    displace:     { strength: 0.5 },
-    wave:         { amplitude: 0.2, frequency: 2 },
-    shear:        { x: 0, y: 0, z: 0 },
-    lattice:      { rows: 3, cols: 3 },
-    smooth:       { iterations: 1 },
-    decimate:     { ratio: 0.5 },
-    subdivide:    { levels: 1 },
-    boolean:      { op: 'union' },
+    bend: { angle: 90, axis: 'y' },
+    twist: { angle: 45, axis: 'y' },
+    taper: { factor: 0.5, axis: 'y' },
+    mirror: { axis: 'x' },
+    array: { count: 3, offsetX: 1, offsetY: 0, offsetZ: 0 },
+    displace: { strength: 0.5 },
+    wave: { amplitude: 0.2, frequency: 2 },
+    shear: { x: 0, y: 0, z: 0 },
+    lattice: { rows: 3, cols: 3 },
+    smooth: { iterations: 1 },
+    decimate: { ratio: 0.5 },
+    subdivide: { levels: 1 },
+    boolean: { op: 'union' },
     'extrude-2d': { depth: 1, bevel: 0 },
 };
-
 let modCounter = 0;
 const newModId = () => `M${++modCounter}`;
-
-export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette', HTMLElement, {}, {
-    attrs : [],
+@Component('arianna-modifiers-3d-palette', {}, {
+    Attributes: [],
 })
-{
-    stack$   : Signal<ModifierEntry[]> = signal<ModifierEntry[]>([]);
+export class Modifiers3DPalette extends HTMLElement {
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    stack$: Signal<ModifierEntry[]> = signal<ModifierEntry[]>([]);
     expanded$: Signal<string | null> = signal<string | null>(null);
-
-    build(_opts: Modifiers3DPaletteOptions = {})
-    {
+    onConnected(_opts: Modifiers3DPaletteOptions = {}) {
         this.stackList = () => {
             const exp = this.expanded$.Get();
             return this.stack$.Get().map(m => ({
                 id: m.id,
                 kind: m.kind,
                 label: KIND_INFO.find(k => k.kind === m.kind)?.label ?? m.kind,
-                icon:  KIND_INFO.find(k => k.kind === m.kind)?.icon  ?? '◆',
+                icon: KIND_INFO.find(k => k.kind === m.kind)?.icon ?? '◆',
                 enabled: m.enabled,
                 expanded: exp === m.id,
                 rowCls: 'ar-m3p__row' + (m.enabled ? '' : ' ar-m3p__row--disabled')
@@ -122,56 +117,63 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
                 })),
             }));
         };
-
         this.addKinds = () => KIND_INFO;
-
         // ── Handlers ────────────────────────────────────────────────────
         this.onAddClick = (e: Event) => {
             const btn = e.currentTarget as HTMLButtonElement;
             const kind = btn.dataset.kind as ModifierKind;
-            if (kind) this.addModifier({ kind });
+            if (kind)
+                this.addModifier({ kind });
         };
         this.onToggleEnable = (e: Event) => {
             e.stopPropagation();
             const btn = e.currentTarget as HTMLElement;
             const id = btn.dataset.id;
-            if (id) this.toggleEnable(id);
+            if (id)
+                this.toggleEnable(id);
         };
         this.onRowClick = (e: Event) => {
             const row = e.currentTarget as HTMLElement;
             const id = row.dataset.id;
-            if (!id) return;
+            if (!id)
+                return;
             this.expanded$.Set(this.expanded$.Get() === id ? null : id);
         };
         this.onRemove = (e: Event) => {
             e.stopPropagation();
             const btn = e.currentTarget as HTMLElement;
             const id = btn.dataset.id;
-            if (id) this.removeModifier(id);
+            if (id)
+                this.removeModifier(id);
         };
         this.onMoveUp = (e: Event) => {
             e.stopPropagation();
             const id = (e.currentTarget as HTMLElement).dataset.id;
-            if (id) this.moveModifier(id, -1);
+            if (id)
+                this.moveModifier(id, -1);
         };
         this.onMoveDown = (e: Event) => {
             e.stopPropagation();
             const id = (e.currentTarget as HTMLElement).dataset.id;
-            if (id) this.moveModifier(id, 1);
+            if (id)
+                this.moveModifier(id, 1);
         };
         this.onParamChange = (e: Event) => {
             const inp = e.target as HTMLInputElement;
             const id = inp.dataset.id;
             const key = inp.dataset.key;
-            if (!id || !key) return;
+            if (!id || !key)
+                return;
             let value: number | string | boolean;
-            if (inp.type === 'number') value = parseFloat(inp.value);
-            else if (inp.type === 'checkbox') value = inp.checked;
-            else value = inp.value;
+            if (inp.type === 'number')
+                value = parseFloat(inp.value);
+            else if (inp.type === 'checkbox')
+                value = inp.checked;
+            else
+                value = inp.value;
             this.updateParam(id, key, value);
         };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-m3p__addbar">
                 <span class="ar-m3p__addlabel">Add modifier:</span>
                 <select @change="this.onAddSelect">
@@ -218,23 +220,26 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
                 </div>
             </div>
         `;
-
         // Add-select handler binding (special: select with handler on option click)
         this.onAddSelect = (e: Event) => {
             const sel = e.target as HTMLSelectElement;
             const kind = sel.value as ModifierKind;
-            if (kind) this.addModifier({ kind });
+            if (kind)
+                this.addModifier({ kind });
             sel.value = '';
         };
         // bind missing entry in handler bag — keep compat with template
         this.onAddClick;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Modifiers3DPalette.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Modifiers3DPalette.DefaultSheet();
     }
-
     // ── Public API ───────────────────────────────────────────────────────────
-
-    addModifier(opts: { kind: ModifierKind; params?: Record<string, number | string | boolean>; enabled?: boolean }): ModifierEntry {
+    addModifier(opts: {
+        kind: ModifierKind;
+        params?: Record<string, number | string | boolean>;
+        enabled?: boolean;
+    }): ModifierEntry {
         const entry: ModifierEntry = {
             id: newModId(),
             kind: opts.kind,
@@ -251,7 +256,8 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
     removeModifier(id: string): this {
         const next = this.stack$.Get().filter(m => m.id !== id);
         this.stack$.Set(next);
-        if (this.expanded$.Get() === id) this.expanded$.Set(null);
+        if (this.expanded$.Get() === id)
+            this.expanded$.Set(null);
         this.#fire();
         return this;
     }
@@ -264,10 +270,12 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
     moveModifier(id: string, dir: -1 | 1): this {
         const cur = this.stack$.Get();
         const idx = cur.findIndex(m => m.id === id);
-        if (idx === -1) return this;
+        if (idx === -1)
+            return this;
         const next = cur.slice();
         const target = idx + dir;
-        if (target < 0 || target >= next.length) return this;
+        if (target < 0 || target >= next.length)
+            return this;
         const [moved] = next.splice(idx, 1);
         next.splice(target, 0, moved!);
         this.stack$.Set(next);
@@ -280,7 +288,6 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
         this.#fire();
         return this;
     }
-
     setStack(stack: ModifierEntry[]): this {
         this.stack$.Set(stack.map(m => ({ ...m, params: { ...m.params } })));
         this.#fire();
@@ -289,142 +296,156 @@ export class Modifiers3DPalette extends Component('arianna-modifiers-3d-palette'
     getStack(): ModifierEntry[] {
         return this.stack$.Get().map(m => ({ ...m, params: { ...m.params } }));
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     #fire(): void {
         this.dispatchEvent(new CustomEvent('arianna:modifiers-change', {
             bubbles: true, detail: { stack: this.getStack() },
         }));
     }
-
-    private stackList     : () => Array<{ id: string; kind: ModifierKind; label: string; icon: string; enabled: boolean; expanded: boolean; rowCls: string; params: Array<{ key: string; val: string; isNumber: boolean; isBoolean: boolean }> }> = () => [];
-    private addKinds      : () => typeof KIND_INFO = () => KIND_INFO;
-    private onAddClick    : (e: Event) => void = () => {};
-    private onAddSelect   : (e: Event) => void = () => {};
-    private onToggleEnable: (e: Event) => void = () => {};
-    private onRowClick    : (e: Event) => void = () => {};
-    private onRemove      : (e: Event) => void = () => {};
-    private onMoveUp      : (e: Event) => void = () => {};
-    private onMoveDown    : (e: Event) => void = () => {};
-    private onParamChange : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    color       : 'var(--arianna-text, #1f2328)',
-                    display     : 'flex',
-                    flexDirection: 'column',
-                    fontFamily  : '-apple-system, system-ui, sans-serif',
-                    fontSize    : '12px',
-                    width       : '280px',
-                    minHeight   : '200px',
-                    overflow    : 'hidden',
-                }),
-                new Rule('.ar-m3p__addbar', {
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '6px 8px',
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                }),
-                new Rule('.ar-m3p__addlabel', {
-                    fontSize: '10px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    textTransform: 'uppercase',
-                }),
-                new Rule('.ar-m3p__addbar select', {
-                    flex: '1',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    padding: '3px 6px',
-                    font: '11px sans-serif',
-                    borderRadius: '2px',
-                }),
-                new Rule('.ar-m3p__stack', { flex: '1', overflowY: 'auto' }),
-                new Rule('.ar-m3p__row', {
-                    borderBottom: '1px solid var(--arianna-bg-3, #f3f3f3)',
-                    cursor: 'pointer',
-                }),
-                new Rule('.ar-m3p__row--disabled .ar-m3p__lbl', { opacity: '0.4' }),
-                new Rule('.ar-m3p__head', {
-                    display: 'flex', alignItems: 'center', gap: '4px',
-                    padding: '5px 8px',
-                }),
-                new Rule('.ar-m3p__row:hover .ar-m3p__head', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
-                new Rule('.ar-m3p__row--expanded .ar-m3p__head', {
-                    background: 'rgba(31,111,235,0.06)',
-                }),
-                new Rule('.ar-m3p__toggle', {
-                    width: '18px', height: '18px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'inherit',
-                    cursor: 'pointer',
-                    padding: '0',
-                    fontSize: '11px',
-                }),
-                new Rule('.ar-m3p__icon', { fontSize: '13px' }),
-                new Rule('.ar-m3p__lbl', { flex: '1' }),
-                new Rule('.ar-m3p__small-btn', {
-                    width: '20px', height: '20px',
-                    background: 'transparent',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    borderRadius: '2px',
-                    cursor: 'pointer',
-                    padding: '0',
-                    fontSize: '10px',
-                }),
-                new Rule('.ar-m3p__small-btn:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
-                new Rule('.ar-m3p__small-btn--danger:hover', {
-                    background: 'var(--arianna-danger, #cf222e)',
-                    borderColor: 'var(--arianna-danger, #cf222e)',
-                    color: '#fff',
-                }),
-                new Rule('.ar-m3p__params', {
-                    padding: '6px 12px 10px 28px',
-                    display: 'flex', flexDirection: 'column', gap: '4px',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                }),
-                new Rule('.ar-m3p__pfield', {
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                }),
-                new Rule('.ar-m3p__pfield span', {
-                    width: '70px',
-                    fontSize: '10px',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    textTransform: 'uppercase',
-                }),
-                new Rule('.ar-m3p__pfield input[type="text"], .ar-m3p__pfield input[type="number"]', {
-                    flex: '1',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    padding: '2px 6px',
-                    font: '11px ui-monospace, monospace',
-                    borderRadius: '2px',
-                }),
-            ]
-        );
+    private stackList: () => Array<{
+        id: string;
+        kind: ModifierKind;
+        label: string;
+        icon: string;
+        enabled: boolean;
+        expanded: boolean;
+        rowCls: string;
+        params: Array<{
+            key: string;
+            val: string;
+            isNumber: boolean;
+            isBoolean: boolean;
+        }>;
+    }> = () => [];
+    private addKinds: () => typeof KIND_INFO = () => KIND_INFO;
+    private onAddClick: (e: Event) => void = () => { };
+    private onAddSelect: (e: Event) => void = () => { };
+    private onToggleEnable: (e: Event) => void = () => { };
+    private onRowClick: (e: Event) => void = () => { };
+    private onRemove: (e: Event) => void = () => { };
+    private onMoveUp: (e: Event) => void = () => { };
+    private onMoveDown: (e: Event) => void = () => { };
+    private onParamChange: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                color: 'var(--arianna-text, #1f2328)',
+                display: 'flex',
+                flexDirection: 'column',
+                fontFamily: '-apple-system, system-ui, sans-serif',
+                fontSize: '12px',
+                width: '280px',
+                minHeight: '200px',
+                overflow: 'hidden',
+            }),
+            new Rule('.ar-m3p__addbar', {
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '6px 8px',
+                borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+            }),
+            new Rule('.ar-m3p__addlabel', {
+                fontSize: '10px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                textTransform: 'uppercase',
+            }),
+            new Rule('.ar-m3p__addbar select', {
+                flex: '1',
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                color: 'var(--arianna-text, #1f2328)',
+                padding: '3px 6px',
+                font: '11px sans-serif',
+                borderRadius: '2px',
+            }),
+            new Rule('.ar-m3p__stack', { flex: '1', overflowY: 'auto' }),
+            new Rule('.ar-m3p__row', {
+                borderBottom: '1px solid var(--arianna-bg-3, #f3f3f3)',
+                cursor: 'pointer',
+            }),
+            new Rule('.ar-m3p__row--disabled .ar-m3p__lbl', { opacity: '0.4' }),
+            new Rule('.ar-m3p__head', {
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '5px 8px',
+            }),
+            new Rule('.ar-m3p__row:hover .ar-m3p__head', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+            new Rule('.ar-m3p__row--expanded .ar-m3p__head', {
+                background: 'rgba(31,111,235,0.06)',
+            }),
+            new Rule('.ar-m3p__toggle', {
+                width: '18px', height: '18px',
+                background: 'transparent',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                padding: '0',
+                fontSize: '11px',
+            }),
+            new Rule('.ar-m3p__icon', { fontSize: '13px' }),
+            new Rule('.ar-m3p__lbl', { flex: '1' }),
+            new Rule('.ar-m3p__small-btn', {
+                width: '20px', height: '20px',
+                background: 'transparent',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                color: 'var(--arianna-muted, #6e6b62)',
+                borderRadius: '2px',
+                cursor: 'pointer',
+                padding: '0',
+                fontSize: '10px',
+            }),
+            new Rule('.ar-m3p__small-btn:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+            new Rule('.ar-m3p__small-btn--danger:hover', {
+                background: 'var(--arianna-danger, #cf222e)',
+                borderColor: 'var(--arianna-danger, #cf222e)',
+                color: '#fff',
+            }),
+            new Rule('.ar-m3p__params', {
+                padding: '6px 12px 10px 28px',
+                display: 'flex', flexDirection: 'column', gap: '4px',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+            }),
+            new Rule('.ar-m3p__pfield', {
+                display: 'flex', alignItems: 'center', gap: '6px',
+            }),
+            new Rule('.ar-m3p__pfield span', {
+                width: '70px',
+                fontSize: '10px',
+                color: 'var(--arianna-muted, #6e6b62)',
+                textTransform: 'uppercase',
+            }),
+            new Rule('.ar-m3p__pfield input[type="text"], .ar-m3p__pfield input[type="number"]', {
+                flex: '1',
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                color: 'var(--arianna-text, #1f2328)',
+                padding: '2px 6px',
+                font: '11px ui-monospace, monospace',
+                borderRadius: '2px',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Modifiers3DPalette', {
-        value: Modifiers3DPalette, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Modifiers3DPalette namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Modifiers3DPalette {
+    export namespace Types {
+        export type ModifierKindType = ModifierKind;
+    }
+    export namespace Interfaces {
+        export interface ModifierEntryContract extends ModifierEntry {
+        }
+        export interface Options extends Modifiers3DPaletteOptions {
+        }
+    }
 }
-
 export default Modifiers3DPalette;

@@ -28,31 +28,26 @@
  * All six modifiers extend the same `Modifier2D` base class, exported here
  * for custom modifier development.
  */
-
 export { Modifier2D, resolveTargets } from './Base.ts';
-export type { ModifierContext }       from './Base.ts';
-
-export { Resizer }   from './Resizer.ts';
-export { Mover }     from './Mover.ts';
-export { Rotator }   from './Rotator.ts';
+export type { ModifierContext } from './Base.ts';
+export { Resizer } from './Resizer.ts';
+export { Mover } from './Mover.ts';
+export { Rotator } from './Rotator.ts';
 export { Reflector } from './Reflector.ts';
-export { Rounder }   from './Rounder.ts';
-export { Skewer }    from './Skewer.ts';
-
-export type { ResizeDir, ResizerOptions }   from './Resizer.ts';
-export type { MoverOptions }                from './Mover.ts';
-export type { RotatorOptions }              from './Rotator.ts';
-export type { ReflectorOptions }            from './Reflector.ts';
-export type { Corner, RounderOptions }      from './Rounder.ts';
-export type { SkewerOptions }               from './Skewer.ts';
-
+export { Rounder } from './Rounder.ts';
+export { Skewer } from './Skewer.ts';
+export type { ResizeDir, ResizerOptions } from './Resizer.ts';
+export type { MoverOptions } from './Mover.ts';
+export type { RotatorOptions } from './Rotator.ts';
+export type { ReflectorOptions } from './Reflector.ts';
+export type { Corner, RounderOptions } from './Rounder.ts';
+export type { SkewerOptions } from './Skewer.ts';
 // Convenience bundle
-import { Resizer }   from './Resizer.ts';
-import { Mover }     from './Mover.ts';
-import { Rotator }   from './Rotator.ts';
+import { Resizer } from './Resizer.ts';
+import { Mover } from './Mover.ts';
+import { Rotator } from './Rotator.ts';
 import { Reflector } from './Reflector.ts';
-import { Rounder }   from './Rounder.ts';
-import { Skewer }    from './Skewer.ts';
-
+import { Rounder } from './Rounder.ts';
+import { Skewer } from './Skewer.ts';
 export const Modifiers2D = { Resizer, Mover, Rotator, Reflector, Rounder, Skewer };
 export default Modifiers2D;

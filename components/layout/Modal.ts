@@ -1,3 +1,9 @@
+import { Component, Components, Css, Templates } from '../../core/index.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/layout/Modal
  * @author    Riccardo Angeli
@@ -27,38 +33,34 @@
  *   - arianna:close
  *
  * Slots:  default / body, footer (optional), header (overrides title attr)
- * Attrs:  title, open, size, dismissable
+ * Attributes:  title, open, size, dismissable
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface ModalOptions {
-    title?       : string;
-    open?        : boolean;
-    size?        : 'sm' | 'md' | 'lg' | 'xl';
-    dismissable? : boolean;
+    title?: string;
+    open?: boolean;
+    size?: 'sm' | 'md' | 'lg' | 'xl';
+    dismissable?: boolean;
 }
-
-export class Modal extends Component('arianna-modal', HTMLElement, {}, {
-    attrs : ['title', 'open', 'size', 'dismissable'],
+@Component('arianna-modal', {}, {
+    Attributes: ['title', 'open', 'size', 'dismissable'],
 })
-{
-    build(_opts: ModalOptions = {})
-    {
-        const title = this.attributeSignal('title');
-
-        this.hasTitle      = () => !!title.Get();
-        this.titleText     = () => title.Get() ?? '';
-        this.onBackdrop    = () => {
-            if (this.getAttribute('dismissable') !== 'false') this.close();
+export class Modal extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    onConnected(_opts: ModalOptions = {}) {
+        const title = this.signal().attribute('title');
+        this.hasTitle = () => !!title.Get();
+        this.titleText = () => title.Get() ?? '';
+        this.onBackdrop = () => {
+            if (this.getAttribute('dismissable') !== 'false')
+                this.close();
         };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-modal__backdrop" @click="this.onBackdrop"></div>
             <div class="ar-modal__dialog">
                 <header class="ar-modal__header" a-if="this.hasTitle()">{{ this.titleText() }}</header>
@@ -67,103 +69,92 @@ export class Modal extends Component('arianna-modal', HTMLElement, {}, {
                 <footer class="ar-modal__footer"><slot name="footer"></slot></footer>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Modal.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Modal.DefaultSheet();
     }
-
-    open(): this
-    {
+    open(): this {
         this.setAttribute('open', '');
         this.dispatchEvent(new CustomEvent('arianna:open', { bubbles: true, detail: { source: this } }));
         return this;
     }
-
-    close(): this
-    {
+    close(): this {
         this.removeAttribute('open');
         this.dispatchEvent(new CustomEvent('arianna:close', { bubbles: true, detail: { source: this } }));
         return this;
     }
-
     get isOpen(): boolean { return this.hasAttribute('open'); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    get title(): string  { return this.getAttribute('title') ?? ''; }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    get title(): string { return this.getAttribute('title') ?? ''; }
     set title(v: string) { v ? this.setAttribute('title', v) : this.removeAttribute('title'); }
-
     get size(): 'sm' | 'md' | 'lg' | 'xl' { return (this.getAttribute('size') ?? 'md') as never; }
     set size(v: 'sm' | 'md' | 'lg' | 'xl') { this.setAttribute('size', v); }
-
-    get dismissable(): boolean  { return this.getAttribute('dismissable') !== 'false'; }
+    get dismissable(): boolean { return this.getAttribute('dismissable') !== 'false'; }
     set dismissable(v: boolean) { this.setAttribute('dismissable', v ? 'true' : 'false'); }
-
-    private hasTitle    : () => boolean = () => false;
-    private titleText   : () => string  = () => '';
-    private onBackdrop  : () => void    = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    display : 'none',
-                    position: 'fixed',
-                    inset   : '0',
-                    zIndex  : '1000',
-                }),
-                new Rule(':host([open])', { display: 'block' }),
-                new Rule('.ar-modal__backdrop', {
-                    background: 'rgba(0,0,0,0.45)',
-                    position  : 'absolute',
-                    inset     : '0',
-                }),
-                new Rule('.ar-modal__dialog', {
-                    background  : 'var(--arianna-bg, #ffffff)',
-                    borderRadius: 'var(--arianna-radius, 10px)',
-                    boxShadow   : '0 16px 48px rgba(0,0,0,0.30)',
-                    color       : 'var(--arianna-text, #1f2328)',
-                    left        : '50%',
-                    maxWidth    : '92vw',
-                    maxHeight   : '92vh',
-                    overflow    : 'auto',
-                    position    : 'absolute',
-                    top         : '50%',
-                    transform   : 'translate(-50%, -50%)',
-                    width       : '420px',
-                }),
-                new Rule(':host([size="sm"]) .ar-modal__dialog', { width: '320px' }),
-                new Rule(':host([size="md"]) .ar-modal__dialog', { width: '420px' }),
-                new Rule(':host([size="lg"]) .ar-modal__dialog', { width: '640px' }),
-                new Rule(':host([size="xl"]) .ar-modal__dialog', { width: '880px' }),
-                new Rule('.ar-modal__header', {
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    fontWeight  : '600',
-                    padding     : '12px 16px',
-                }),
-                new Rule('.ar-modal__header:empty', { display: 'none' }),
-                new Rule('.ar-modal__body',         { padding: '14px 16px' }),
-                new Rule('.ar-modal__footer', {
-                    borderTop  : '1px solid var(--arianna-border, #d8d8d8)',
-                    padding    : '10px 16px',
-                    textAlign  : 'right',
-                }),
-                new Rule('.ar-modal__footer:empty', { display: 'none' }),
-            ]
-        );
+    private hasTitle: () => boolean = () => false;
+    private titleText: () => string = () => '';
+    private onBackdrop: () => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                display: 'none',
+                position: 'fixed',
+                inset: '0',
+                zIndex: '1000',
+            }),
+            new Rule(':host([open])', { display: 'block' }),
+            new Rule('.ar-modal__backdrop', {
+                background: 'rgba(0,0,0,0.45)',
+                position: 'absolute',
+                inset: '0',
+            }),
+            new Rule('.ar-modal__dialog', {
+                background: 'var(--arianna-bg, #ffffff)',
+                borderRadius: 'var(--arianna-radius, 10px)',
+                boxShadow: '0 16px 48px rgba(0,0,0,0.30)',
+                color: 'var(--arianna-text, #1f2328)',
+                left: '50%',
+                maxWidth: '92vw',
+                maxHeight: '92vh',
+                overflow: 'auto',
+                position: 'absolute',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '420px',
+            }),
+            new Rule(':host([size="sm"]) .ar-modal__dialog', { width: '320px' }),
+            new Rule(':host([size="md"]) .ar-modal__dialog', { width: '420px' }),
+            new Rule(':host([size="lg"]) .ar-modal__dialog', { width: '640px' }),
+            new Rule(':host([size="xl"]) .ar-modal__dialog', { width: '880px' }),
+            new Rule('.ar-modal__header', {
+                borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                fontWeight: '600',
+                padding: '12px 16px',
+            }),
+            new Rule('.ar-modal__header:empty', { display: 'none' }),
+            new Rule('.ar-modal__body', { padding: '14px 16px' }),
+            new Rule('.ar-modal__footer', {
+                borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                padding: '10px 16px',
+                textAlign: 'right',
+            }),
+            new Rule('.ar-modal__footer:empty', { display: 'none' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Modal', {
-        value: Modal, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Modal namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Modal {
+    export namespace Interfaces {
+        export interface Options extends ModalOptions {
+        }
+    }
 }
-
 export default Modal;

@@ -1,3 +1,9 @@
+import { Component, Components, Css, Templates } from '../../core/index.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/layout/Card
  * @author    Riccardo Angeli
@@ -31,111 +37,101 @@
  *   - arianna:click   fired when `interactive` and the card is clicked
  *
  * Slots:  header, body (default), footer
- * Attrs:  title, elevation, interactive
+ * Attributes:  title, elevation, interactive
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface CardOptions {
-    title?       : string;
-    elevation?   : 0 | 1 | 2 | 3;
-    interactive? : boolean;
+    title?: string;
+    elevation?: 0 | 1 | 2 | 3;
+    interactive?: boolean;
 }
-
-export class Card extends Component('arianna-card', HTMLElement, {}, {
-    attrs : ['title', 'elevation', 'interactive'],
+@Component('arianna-card', {}, {
+    Attributes: ['title', 'elevation', 'interactive'],
 })
-{
-    build(_opts: CardOptions = {})
-    {
-        const title = this.attributeSignal('title');
-
-        this.hasTitle      = () => !!title.Get();
-        this.titleText     = () => title.Get() ?? '';
+export class Card extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    onConnected(_opts: CardOptions = {}) {
+        const title = this.signal().attribute('title');
+        this.hasTitle = () => !!title.Get();
+        this.titleText = () => title.Get() ?? '';
         this.isInteractive = () => this.hasAttribute('interactive');
-        this.onCardClick   = () => {
-            if (!this.isInteractive()) return;
+        this.onCardClick = () => {
+            if (!this.isInteractive())
+                return;
             this.dispatchEvent(new CustomEvent('arianna:click', {
                 bubbles: true, detail: { source: this },
             }));
         };
-
-        this.template = html`
+        this.template = html `
             <header class="ar-card__header" a-if="this.hasTitle()">{{ this.titleText() }}</header>
             <header class="ar-card__header"><slot name="header"></slot></header>
             <section class="ar-card__body" @click="this.onCardClick"><slot></slot></section>
             <footer class="ar-card__footer"><slot name="footer"></slot></footer>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Card.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Card.DefaultSheet();
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    get title(): string  { return this.getAttribute('title') ?? ''; }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    get title(): string { return this.getAttribute('title') ?? ''; }
     set title(v: string) { v ? this.setAttribute('title', v) : this.removeAttribute('title'); }
-
-    get elevation(): number  { return parseInt(this.getAttribute('elevation') ?? '0', 10); }
+    get elevation(): number { return parseInt(this.getAttribute('elevation') ?? '0', 10); }
     set elevation(v: number) { this.setAttribute('elevation', String(v)); }
-
-    get interactive(): boolean  { return this.hasAttribute('interactive'); }
+    get interactive(): boolean { return this.hasAttribute('interactive'); }
     set interactive(v: boolean) { v ? this.setAttribute('interactive', '') : this.removeAttribute('interactive'); }
-
-    private hasTitle     : () => boolean = () => false;
-    private titleText    : () => string = () => '';
+    private hasTitle: () => boolean = () => false;
+    private titleText: () => string = () => '';
     private isInteractive: () => boolean = () => false;
-    private onCardClick  : () => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #ffffff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 8px)',
-                    color       : 'var(--arianna-text, #1f2328)',
-                    display     : 'block',
-                    overflow    : 'hidden',
-                    padding     : '0',
-                }),
-                new Rule(':host([elevation="1"])', { boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }),
-                new Rule(':host([elevation="2"])', { boxShadow: '0 2px 6px rgba(0,0,0,0.10)' }),
-                new Rule(':host([elevation="3"])', { boxShadow: '0 6px 18px rgba(0,0,0,0.14)' }),
-                new Rule(':host([interactive])',       { cursor: 'pointer', transition: 'transform 0.15s' }),
-                new Rule(':host([interactive]):hover', { transform: 'translateY(-1px)' }),
-                new Rule('.ar-card__header', {
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    fontWeight  : '600',
-                    padding     : '10px 14px',
-                }),
-                new Rule('.ar-card__header:empty', { display: 'none' }),
-                new Rule('.ar-card__body',   { padding: '12px 14px' }),
-                new Rule('.ar-card__footer', {
-                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
-                    padding  : '10px 14px',
-                }),
-                new Rule('.ar-card__footer:empty', { display: 'none' }),
-            ]
-        );
+    private onCardClick: () => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #ffffff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 8px)',
+                color: 'var(--arianna-text, #1f2328)',
+                display: 'block',
+                overflow: 'hidden',
+                padding: '0',
+            }),
+            new Rule(':host([elevation="1"])', { boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }),
+            new Rule(':host([elevation="2"])', { boxShadow: '0 2px 6px rgba(0,0,0,0.10)' }),
+            new Rule(':host([elevation="3"])', { boxShadow: '0 6px 18px rgba(0,0,0,0.14)' }),
+            new Rule(':host([interactive])', { cursor: 'pointer', transition: 'transform 0.15s' }),
+            new Rule(':host([interactive]):hover', { transform: 'translateY(-1px)' }),
+            new Rule('.ar-card__header', {
+                borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                fontWeight: '600',
+                padding: '10px 14px',
+            }),
+            new Rule('.ar-card__header:empty', { display: 'none' }),
+            new Rule('.ar-card__body', { padding: '12px 14px' }),
+            new Rule('.ar-card__footer', {
+                borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                padding: '10px 14px',
+            }),
+            new Rule('.ar-card__footer:empty', { display: 'none' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Card', {
-        value: Card, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Card namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Card {
+    export namespace Interfaces {
+        export interface Options extends CardOptions {
+        }
+    }
 }
-
 export default Card;

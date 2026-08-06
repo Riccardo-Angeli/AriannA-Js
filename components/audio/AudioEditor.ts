@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/audio/AudioEditor
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -31,10 +35,9 @@
  *   arianna:editor-play
  *   arianna:editor-stop
  */
-
+import { Css, Reactivity } from '../../core/index.ts';
 import { AudioComponent, type AudioComponentOptions } from './AudioComponent.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -42,65 +45,70 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-const effect = (fn: () => void): (() => void) =>
-{
+const effect = (fn: () => void): (() => void) => {
     const e = Reactivity.CreateEffect(fn);
-
     return () => e.Stop();
 };
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface AudioEditorOptions extends AudioComponentOptions {
-    src?     : string;
-    width?   : number;
-    height?  : number;
+    src?: string;
+    width?: number;
+    height?: number;
     /** Waveform foreground colour (default uses CSS var). */
-    waveColor?    : string;
+    waveColor?: string;
     selectionColor?: string;
 }
-
 export class AudioEditor extends AudioComponent {
     static readonly tag = 'arianna-audio-editor';
-
-    readonly buffer$    : Signal<AudioBuffer | null> = signal<AudioBuffer | null>(null);
-    readonly selection$ : Signal<{ start: number; end: number } | null> = signal<{ start: number; end: number } | null>(null);
+    readonly buffer$: Signal<AudioBuffer | null> = signal<AudioBuffer | null>(null);
+    readonly selection$: Signal<{
+        start: number;
+        end: number;
+    } | null> = signal<{
+        start: number;
+        end: number;
+    } | null>(null);
     readonly samplesPerPx$: Signal<number> = signal(256);
-    readonly playing$   : Signal<boolean> = signal(false);
-
-    #canvas?    : HTMLCanvasElement;
-    #ctx?       : CanvasRenderingContext2D;
-    #scrollX    = 0;
-    #gainOut?   : GainNode;
-    #playSrc?   : AudioBufferSourceNode;
-
+    readonly playing$: Signal<boolean> = signal(false);
+    #canvas?: HTMLCanvasElement;
+    #ctx?: CanvasRenderingContext2D;
+    #scrollX = 0;
+    #gainOut?: GainNode;
+    #playSrc?: AudioBufferSourceNode;
     constructor(opts: AudioEditorOptions = {}) {
         super(opts as never);
-        const self = this as unknown as { render(): HTMLElement };
+        const self = this as unknown as {
+            render(): HTMLElement;
+        };
         const el = self.render();
-        if (opts.src)            el.setAttribute('src',    opts.src);
-        if (opts.width  != null) el.setAttribute('width',  String(opts.width));
-        if (opts.height != null) el.setAttribute('height', String(opts.height));
-        if (opts.waveColor)      el.setAttribute('wave-color', opts.waveColor);
-        if (opts.selectionColor) el.setAttribute('selection-color', opts.selectionColor);
+        if (opts.src)
+            el.setAttribute('src', opts.src);
+        if (opts.width != null)
+            el.setAttribute('width', String(opts.width));
+        if (opts.height != null)
+            el.setAttribute('height', String(opts.height));
+        if (opts.waveColor)
+            el.setAttribute('wave-color', opts.waveColor);
+        if (opts.selectionColor)
+            el.setAttribute('selection-color', opts.selectionColor);
     }
-
-    build(): void {
+    onConnected(): void {
         const self = this as unknown as {
             render(): HTMLElement;
             fire(t: string, init?: CustomEventInit): void;
-            attributeSignal(name: string): Signal<string | null> | undefined;
+            signal(): {
+                attribute(name: string): Signal<string | null>;
+            };
             Sheet: Stylesheet | null;
         };
         const root = self.render();
-        if (root.querySelector('.ae-wrap')) return;
-
+        if (root.querySelector('.ae-wrap'))
+            return;
         const wrap = document.createElement('div');
         wrap.className = 'ae-wrap';
-
         // Toolbar
         const tb = document.createElement('div');
         tb.className = 'ae-toolbar';
@@ -111,92 +119,95 @@ export class AudioEditor extends AudioComponent {
             b.textContent = label;
             return b;
         };
-        const btnPlay  = mkBtn('▶', 'ae-play');
-        const btnStop  = mkBtn('■', 'ae-stop');
-        const btnZIn   = mkBtn('+', 'ae-zoom-in');
-        const btnZOut  = mkBtn('−', 'ae-zoom-out');
+        const btnPlay = mkBtn('▶', 'ae-play');
+        const btnStop = mkBtn('■', 'ae-stop');
+        const btnZIn = mkBtn('+', 'ae-zoom-in');
+        const btnZOut = mkBtn('−', 'ae-zoom-out');
         const btnFadeI = mkBtn('Fade ▶', 'ae-fade-in');
         const btnFadeO = mkBtn('◀ Fade', 'ae-fade-out');
-        const btnCrop  = mkBtn('Crop', 'ae-crop');
+        const btnCrop = mkBtn('Crop', 'ae-crop');
         tb.append(btnPlay, btnStop, btnZIn, btnZOut, btnFadeI, btnFadeO, btnCrop);
-
         // Canvas
         const canvas = document.createElement('canvas');
         canvas.className = 'ae-canvas';
-        const sW = self.attributeSignal('width');
-        const sH = self.attributeSignal('height');
+        const sW = self.signal().attribute('width');
+        const sH = self.signal().attribute('height');
         const w = parseInt(sW?.Peek() ?? '800', 10) || 800;
         const h = parseInt(sH?.Peek() ?? '160', 10) || 160;
         canvas.width = w;
         canvas.height = h;
-        canvas.style.width  = w + 'px';
+        canvas.style.width = w + 'px';
         canvas.style.height = h + 'px';
         this.#canvas = canvas;
         this.#ctx = canvas.getContext('2d') ?? undefined;
-
         // Status line
         const status = document.createElement('div');
         status.className = 'ae-status';
-
         wrap.append(tb, canvas, status);
         root.appendChild(wrap);
-
         effect(() => {
             const sel = this.selection$.Get();
             const buf = this.buffer$.Get();
-            if (!buf) { status.textContent = 'No audio loaded'; return; }
+            if (!buf) {
+                status.textContent = 'No audio loaded';
+                return;
+            }
             const dur = buf.duration;
             if (sel) {
                 const len = sel.end - sel.start;
                 status.textContent = `Selection: ${sel.start.toFixed(2)}s – ${sel.end.toFixed(2)}s (${len.toFixed(2)}s) · Total ${dur.toFixed(2)}s`;
-            } else {
+            }
+            else {
                 status.textContent = `Loaded: ${dur.toFixed(2)}s · ${buf.numberOfChannels}ch @ ${buf.sampleRate}Hz`;
             }
             this.#redraw();
         });
         effect(() => { this.samplesPerPx$.Get(); this.#redraw(); });
-
         // Source attribute reactive
-        const sSrc = self.attributeSignal('src');
+        const sSrc = self.signal().attribute('src');
         effect(() => {
             const v = sSrc?.Get();
-            if (v) void this.setSource(v);
+            if (v)
+                void this.setSource(v);
         });
-
         // Mouse interaction — selection
         let dragStart = -1;
         canvas.addEventListener('pointerdown', (e: PointerEvent) => {
-            if (!this.buffer$.Get()) return;
+            if (!this.buffer$.Get())
+                return;
             canvas.setPointerCapture(e.pointerId);
             const r = canvas.getBoundingClientRect();
             dragStart = this.#pxToTime(e.clientX - r.left);
             this.selection$.Set({ start: dragStart, end: dragStart });
         });
         canvas.addEventListener('pointermove', (e: PointerEvent) => {
-            if (dragStart < 0) return;
+            if (dragStart < 0)
+                return;
             const r = canvas.getBoundingClientRect();
             const t = this.#pxToTime(e.clientX - r.left);
             const start = Math.min(dragStart, t);
-            const end   = Math.max(dragStart, t);
+            const end = Math.max(dragStart, t);
             this.selection$.Set({ start, end });
         });
         canvas.addEventListener('pointerup', (e: PointerEvent) => {
             canvas.releasePointerCapture(e.pointerId);
-            if (dragStart < 0) return;
+            if (dragStart < 0)
+                return;
             const sel = this.selection$.Peek();
             dragStart = -1;
             if (sel && sel.end - sel.start < 0.001) {
                 this.selection$.Set(null);
-            } else if (sel) {
+            }
+            else if (sel) {
                 self.fire('arianna:editor-selection', { detail: { ...sel, source: this }, bubbles: true });
             }
         });
-
         // Wheel zoom (mouse-anchored)
         canvas.addEventListener('wheel', (e: WheelEvent) => {
             e.preventDefault();
             const buf = this.buffer$.Peek();
-            if (!buf) return;
+            if (!buf)
+                return;
             const r = canvas.getBoundingClientRect();
             const mx = e.clientX - r.left;
             const tAnchor = this.#pxToTime(mx);
@@ -209,38 +220,35 @@ export class AudioEditor extends AudioComponent {
             self.fire('arianna:editor-zoom', { detail: { samplesPerPx: next, source: this }, bubbles: true });
             this.#redraw();
         }, { passive: false });
-
         // Toolbar handlers
-        btnPlay .addEventListener('click', () => void this.playSelection());
-        btnStop .addEventListener('click', () => this.stop());
-        btnZIn  .addEventListener('click', () => this.samplesPerPx$.Set(Math.max(1, this.samplesPerPx$.Peek() * 0.7)));
-        btnZOut .addEventListener('click', () => this.samplesPerPx$.Set(this.samplesPerPx$.Peek() * 1.4));
+        btnPlay.addEventListener('click', () => void this.playSelection());
+        btnStop.addEventListener('click', () => this.stop());
+        btnZIn.addEventListener('click', () => this.samplesPerPx$.Set(Math.max(1, this.samplesPerPx$.Peek() * 0.7)));
+        btnZOut.addEventListener('click', () => this.samplesPerPx$.Set(this.samplesPerPx$.Peek() * 1.4));
         btnFadeI.addEventListener('click', () => this.fade('in'));
         btnFadeO.addEventListener('click', () => this.fade('out'));
-        btnCrop .addEventListener('click', () => this.cropSelection());
-
+        btnCrop.addEventListener('click', () => this.cropSelection());
         self.Sheet = AudioEditor.DefaultSheet();
     }
-
     protected _buildAudioGraph(): void {
         this._audioCtx = this._audioCtx ?? AudioComponent.context;
         this.#gainOut = this._audioCtx.createGain();
-        this._input  = this.#gainOut;
+        this._input = this.#gainOut;
         this._output = this.#gainOut;
     }
-
     // ── Public API ────────────────────────────────────────────────────────
-
     async setSource(url: string): Promise<void> {
-        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+        };
         const res = await fetch(url);
         const ab = await res.arrayBuffer();
-        if (!this._audioCtx) this._audioCtx = AudioComponent.context;
+        if (!this._audioCtx)
+            this._audioCtx = AudioComponent.context;
         const buf = await this._audioCtx.decodeAudioData(ab);
         this.setBuffer(buf);
         self.fire('arianna:editor-load', { detail: { duration: buf.duration, source: this }, bubbles: true });
     }
-
     setBuffer(buf: AudioBuffer): void {
         this.buffer$.Set(buf);
         this.selection$.Set(null);
@@ -251,21 +259,23 @@ export class AudioEditor extends AudioComponent {
             this.#scrollX = 0;
         }
     }
-
     getBuffer(): AudioBuffer | null { return this.buffer$.Get(); }
-
     async playSelection(): Promise<void> {
-        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+        };
         const buf = this.buffer$.Peek();
-        if (!buf || !this._audioCtx) return;
+        if (!buf || !this._audioCtx)
+            return;
         await AudioComponent.resume();
         this.stop();
         const src = this._audioCtx.createBufferSource();
         src.buffer = buf;
-        if (this.#gainOut) src.connect(this.#gainOut);
+        if (this.#gainOut)
+            src.connect(this.#gainOut);
         const sel = this.selection$.Peek();
         const start = sel ? sel.start : 0;
-        const dur   = sel ? Math.max(0.001, sel.end - sel.start) : buf.duration;
+        const dur = sel ? Math.max(0.001, sel.end - sel.start) : buf.duration;
         src.start(0, start, dur);
         src.onended = () => {
             this.playing$.Set(false);
@@ -275,43 +285,50 @@ export class AudioEditor extends AudioComponent {
         this.playing$.Set(true);
         self.fire('arianna:editor-play', { detail: { source: this }, bubbles: true });
     }
-
     stop(): void {
         if (this.#playSrc) {
-            try { this.#playSrc.stop(); } catch { /* already stopped */ }
+            try {
+                this.#playSrc.stop();
+            }
+            catch { /* already stopped */ }
             this.#playSrc = undefined;
         }
         this.playing$.Set(false);
     }
-
     cropSelection(): void {
-        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+        };
         const buf = this.buffer$.Peek();
         const sel = this.selection$.Peek();
-        if (!buf || !sel || !this._audioCtx) return;
+        if (!buf || !sel || !this._audioCtx)
+            return;
         const ctx = this._audioCtx;
         const sr = buf.sampleRate;
         const s0 = Math.floor(sel.start * sr);
-        const s1 = Math.floor(sel.end   * sr);
+        const s1 = Math.floor(sel.end * sr);
         const len = Math.max(1, s1 - s0);
         const next = ctx.createBuffer(buf.numberOfChannels, len, sr);
         for (let ch = 0; ch < buf.numberOfChannels; ch++) {
             const src = buf.getChannelData(ch);
             const dst = next.getChannelData(ch);
-            for (let i = 0; i < len; i++) dst[i] = src[s0 + i] ?? 0;
+            for (let i = 0; i < len; i++)
+                dst[i] = src[s0 + i] ?? 0;
         }
         this.setBuffer(next);
         self.fire('arianna:editor-crop', { detail: { ...sel, source: this }, bubbles: true });
     }
-
     fade(kind: 'in' | 'out'): void {
-        const self = this as unknown as { fire(t: string, init?: CustomEventInit): void };
+        const self = this as unknown as {
+            fire(t: string, init?: CustomEventInit): void;
+        };
         const buf = this.buffer$.Peek();
         const sel = this.selection$.Peek();
-        if (!buf || !sel) return;
+        if (!buf || !sel)
+            return;
         const sr = buf.sampleRate;
         const s0 = Math.floor(sel.start * sr);
-        const s1 = Math.floor(sel.end   * sr);
+        const s1 = Math.floor(sel.end * sr);
         const len = Math.max(1, s1 - s0);
         for (let ch = 0; ch < buf.numberOfChannels; ch++) {
             const data = buf.getChannelData(ch);
@@ -321,39 +338,38 @@ export class AudioEditor extends AudioComponent {
                 data[s0 + i] = (data[s0 + i] ?? 0) * g;
             }
         }
-        this.buffer$.Set(buf);    // re-trigger render
+        this.buffer$.Set(buf); // re-trigger render
         self.fire('arianna:editor-fade', { detail: { kind, ...sel, source: this }, bubbles: true });
     }
-
     // ── Render ────────────────────────────────────────────────────────────
-
     #pxToTime(px: number): number {
         const buf = this.buffer$.Peek();
-        if (!buf) return 0;
+        if (!buf)
+            return 0;
         const sample = (px + this.#scrollX) * this.samplesPerPx$.Peek();
         return sample / buf.sampleRate;
     }
-
     #timeToPx(t: number): number {
         const buf = this.buffer$.Peek();
-        if (!buf) return 0;
+        if (!buf)
+            return 0;
         const sample = t * buf.sampleRate;
         return sample / this.samplesPerPx$.Peek() - this.#scrollX;
     }
-
     #redraw(): void {
         const canvas = this.#canvas;
         const ctx = this.#ctx;
-        if (!canvas || !ctx) return;
+        if (!canvas || !ctx)
+            return;
         const W = canvas.width, H = canvas.height;
-        const root = (this as unknown as { render(): HTMLElement }).render();
+        const root = (this as unknown as {
+            render(): HTMLElement;
+        }).render();
         const waveColor = root.getAttribute('wave-color') ?? 'var(--ar-primary, #7eb8f7)';
-        const selColor  = root.getAttribute('selection-color') ?? 'rgba(126,184,247,0.18)';
-
+        const selColor = root.getAttribute('selection-color') ?? 'rgba(126,184,247,0.18)';
         // Background
         ctx.fillStyle = getComputedStyle(root).getPropertyValue('--ar-bg').trim() || '#0d0d0d';
         ctx.fillRect(0, 0, W, H);
-
         // Centerline
         ctx.strokeStyle = 'rgba(255,255,255,0.07)';
         ctx.lineWidth = 1;
@@ -361,31 +377,31 @@ export class AudioEditor extends AudioComponent {
         ctx.moveTo(0, H / 2);
         ctx.lineTo(W, H / 2);
         ctx.stroke();
-
         const buf = this.buffer$.Peek();
-        if (!buf) return;
-
+        if (!buf)
+            return;
         const data = buf.getChannelData(0);
         const spp = this.samplesPerPx$.Peek();
         const midY = H / 2;
-
         // Min/max peaks per pixel column
         ctx.fillStyle = waveColor.startsWith('var(') ? (getComputedStyle(root).getPropertyValue('--ar-primary').trim() || '#7eb8f7') : waveColor;
         for (let x = 0; x < W; x++) {
             const s0 = Math.floor((x + this.#scrollX) * spp);
             const s1 = Math.min(data.length, s0 + Math.ceil(spp));
-            if (s0 >= data.length) break;
+            if (s0 >= data.length)
+                break;
             let min = 0, max = 0;
             for (let i = s0; i < s1; i++) {
                 const v = data[i] ?? 0;
-                if (v < min) min = v;
-                if (v > max) max = v;
+                if (v < min)
+                    min = v;
+                if (v > max)
+                    max = v;
             }
             const y0 = midY - max * (midY - 2);
             const y1 = midY - min * (midY - 2);
             ctx.fillRect(x, y0, 1, Math.max(1, y1 - y0));
         }
-
         // Selection
         const sel = this.selection$.Peek();
         if (sel) {
@@ -396,63 +412,66 @@ export class AudioEditor extends AudioComponent {
             ctx.strokeStyle = waveColor.startsWith('var(') ? (getComputedStyle(root).getPropertyValue('--ar-primary').trim() || '#7eb8f7') : waveColor;
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(x0, 0); ctx.lineTo(x0, H);
-            ctx.moveTo(x1, 0); ctx.lineTo(x1, H);
+            ctx.moveTo(x0, 0);
+            ctx.lineTo(x0, H);
+            ctx.moveTo(x1, 0);
+            ctx.lineTo(x1, H);
             ctx.stroke();
         }
     }
-
     static DefaultSheet(): Stylesheet {
         return new Stylesheet([
             new Rule(':host', {
-                background  : 'var(--ar-bg, #0d0d0d)',
-                border      : '1px solid var(--ar-border, #2a2a2a)',
+                background: 'var(--ar-bg, #0d0d0d)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius, 5px)',
-                color       : 'var(--ar-text, #e0e0e0)',
-                display     : 'inline-block',
-                font        : 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
-                padding     : '8px',
+                color: 'var(--ar-text, #e0e0e0)',
+                display: 'inline-block',
+                font: 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
+                padding: '8px',
             }),
             new Rule(':host .ae-wrap', {
-                display      : 'flex',
+                display: 'flex',
                 flexDirection: 'column',
-                gap          : '6px',
+                gap: '6px',
             }),
             new Rule(':host .ae-toolbar', {
                 display: 'flex',
-                gap    : '4px',
+                gap: '4px',
             }),
             new Rule(':host .ae-btn', {
-                background  : 'var(--ar-bg3, #1e1e1e)',
-                border      : '1px solid var(--ar-border, #2a2a2a)',
+                background: 'var(--ar-bg3, #1e1e1e)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
-                color       : 'var(--ar-text, #e0e0e0)',
-                cursor      : 'pointer',
-                font        : 'inherit',
-                fontSize    : '0.78rem',
-                padding     : '4px 10px',
-                transition  : 'all var(--ar-transition, 0.14s)',
+                color: 'var(--ar-text, #e0e0e0)',
+                cursor: 'pointer',
+                font: 'inherit',
+                fontSize: '0.78rem',
+                padding: '4px 10px',
+                transition: 'all var(--ar-transition, 0.14s)',
             }),
             new Rule(':host .ae-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
             new Rule(':host .ae-canvas', {
-                background  : 'var(--ar-bg, #0d0d0d)',
-                border      : '1px solid var(--ar-border, #2a2a2a)',
+                background: 'var(--ar-bg, #0d0d0d)',
+                border: '1px solid var(--ar-border, #2a2a2a)',
                 borderRadius: 'var(--ar-radius-sm, 3px)',
-                cursor      : 'crosshair',
-                display     : 'block',
+                cursor: 'crosshair',
+                display: 'block',
             }),
             new Rule(':host .ae-status', {
-                color    : 'var(--ar-muted, #888)',
-                fontSize : '0.72rem',
+                color: 'var(--ar-muted, #888)',
+                fontSize: '0.72rem',
             }),
         ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'AudioEditor', {
-        value: AudioEditor, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * AudioEditor namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace AudioEditor {
+    export namespace Interfaces {
+        export interface Options extends AudioEditorOptions {
+        }
+    }
 }
-
 export default AudioEditor;

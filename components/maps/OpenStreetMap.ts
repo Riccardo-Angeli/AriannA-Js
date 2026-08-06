@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/maps/OpenStreetMap
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -14,49 +18,39 @@
  * @example HTML
  *   <arianna-osm-map center-lat="48.8584" center-lng="2.2945" zoom="15" marker></arianna-osm-map>
  *
- * Attrs (inherited): center-lat, center-lng, zoom, marker, aspect-ratio,
+ * Attributes (inherited): center-lat, center-lng, zoom, marker, aspect-ratio,
  *                    layer ('mapnik' | 'cyclemap' | 'transportmap' | 'hot')
  */
-
+import { Component } from '../../core/index.ts';
 import { MapEmbed, type MapProvider } from './MapEmbed.ts';
-import { Component } from '../../core/Components.ts';
-
-export class OpenStreetMap extends (Component('arianna-osm-map', HTMLElement, {}, {
-    attrs : [
+@Component('arianna-osm-map', {}, {
+    Attributes: [
         'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
         'aspect-ratio', 'layer',
     ],
-}) as unknown as typeof MapEmbed)
-{
+})
+export class OpenStreetMap extends MapEmbed {
     getProvider(): MapProvider { return 'osm'; }
-
-    protected getEmbedUrl(): string
-    {
-        const lat  = this.centerLatNum();
-        const lng  = this.centerLngNum();
+    protected getEmbedUrl(): string {
+        const lat = this.centerLatNum();
+        const lng = this.centerLngNum();
         const zoom = this.zoomNum();
         const layer = this.getAttribute('layer') ?? 'mapnik';
-
         // Span heuristic: smaller numbers = tighter bbox = higher visual zoom
         const span = 0.6 / Math.pow(2, zoom - 8);
         const bbox = `${lng - span},${lat - span / 2},${lng + span},${lat + span / 2}`;
         const marker = this.hasMarker() ? `&marker=${lat}%2C${lng}` : '';
-
         return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=${layer}${marker}`;
     }
-
-    protected getOpenUrl(): string
-    {
+    protected getOpenUrl(): string {
         const lat = this.centerLatNum();
         const lng = this.centerLngNum();
         return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=${this.zoomNum()}/${lat}/${lng}`;
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'OpenStreetMap', {
-        value: OpenStreetMap, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * OpenStreetMap namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace OpenStreetMap {
 }
-
 export default OpenStreetMap;

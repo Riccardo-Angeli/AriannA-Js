@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/maps/AzureMap
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -30,97 +34,83 @@
  *                       center-lat="40.7128" center-lng="-74.0060"
  *                       zoom="13"></arianna-azure-map>
  *
- * Attrs (inherited + own):
+ * Attributes (inherited + own):
  *   center-lat, center-lng, zoom, marker, aspect-ratio, label, address,
  *   api-key, style ('road' | 'satellite' | 'satellite_road_labels' | 'night'),
  *   tileset ('microsoft.base.road' | etc.)
  */
-
+import { Component, Components, Css, Templates } from '../../core/index.ts';
 import { MapEmbed, type MapProvider } from './MapEmbed.ts';
-import { Css } from '../../core/Css.ts';
+const html = Templates.Template.Html;
 const { Stylesheet } = Css;
 type Stylesheet = Css.Stylesheet;
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-
-export class AzureMap extends (Component('arianna-azure-map', HTMLElement, {}, {
-    attrs : [
+@Component('arianna-azure-map', {}, {
+    Attributes: [
         'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
         'aspect-ratio', 'api-key', 'style', 'tileset',
     ],
-}) as unknown as typeof MapEmbed)
-{
+})
+export class AzureMap extends MapEmbed {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     getProvider(): MapProvider { return 'azure'; }
-
-    protected getEmbedUrl(): string
-    {
+    protected getEmbedUrl(): string {
         // Returned only as fallback for the standard template path; we override
-        // the template in build() to render via <img> because Azure has no
+        // the template in onConnected() to render via <img> because Azure has no
         // iframe-safe public embed URL.
         return 'about:blank';
     }
-
-    protected getOpenUrl(): string
-    {
+    protected getOpenUrl(): string {
         // Azure Maps has no "open in app" URL; deep-link to the Bing successor
         // (which still has a working map view via search).
         return `https://www.bing.com/maps?cp=${this.centerLatNum()}~${this.centerLngNum()}&lvl=${this.zoomNum()}`;
     }
-
     /** Build the static-render image URL. */
-    #imageSrc(): string
-    {
+    #imageSrc(): string {
         const apiKey = this.getAttribute('api-key');
-        if (!apiKey) return '';
-
+        if (!apiKey)
+            return '';
         const lat = this.centerLatNum();
         const lng = this.centerLngNum();
         const zoom = this.zoomNum();
         const mapStyle = this.getAttribute('style') ?? 'road';
-        const tileset  = this.getAttribute('tileset') ?? `microsoft.base.${mapStyle}`;
-
+        const tileset = this.getAttribute('tileset') ?? `microsoft.base.${mapStyle}`;
         // Size — large enough for a typical 16:9 stage on desktop
         const w = 1024, h = 576;
-
         const params = new URLSearchParams({
-            'api-version'       : '2024-04-01',
-            'tilesetId'         : tileset,
-            'subscription-key'  : apiKey,
-            'zoom'              : String(zoom),
-            'center'            : `${lng},${lat}`,
-            'width'             : String(w),
-            'height'            : String(h),
+            'api-version': '2024-04-01',
+            'tilesetId': tileset,
+            'subscription-key': apiKey,
+            'zoom': String(zoom),
+            'center': `${lng},${lat}`,
+            'width': String(w),
+            'height': String(h),
         });
-
         if (this.hasMarker()) {
             // Pin marker syntax for Azure: `default|sc{scale}|co{hex}||lat,lng`
             params.set('pins', `default|sc1||${lng} ${lat}`);
         }
-
         return `https://atlas.microsoft.com/map/static?${params.toString()}`;
     }
-
     /** Override build to render an <img> rather than an iframe. */
-    build(_opts: object = {}): void
-    {
-        const centerLat   = this.attributeSignal('center-lat');
-        const centerLng   = this.attributeSignal('center-lng');
-        const aspectRatio = this.attributeSignal('aspect-ratio');
-        const apiKey      = this.attributeSignal('api-key');
-
-        this.centerLatNum  = () => parseFloat(centerLat.Get() ?? '51.4779');
-        this.centerLngNum  = () => parseFloat(centerLng.Get() ?? '-0.0015');
-        this.zoomNum       = () => parseInt(this.getAttribute('zoom') ?? '13', 10) || 13;
-        this.hasMarker     = () => this.getAttribute('marker') !== 'false';
-        this.stageStyle    = () => `aspect-ratio: ${aspectRatio.Get() ?? '16/9'}`;
+    onConnected(_opts: object = {}): void {
+        const centerLat = this.signal().attribute('center-lat');
+        const centerLng = this.signal().attribute('center-lng');
+        const aspectRatio = this.signal().attribute('aspect-ratio');
+        const apiKey = this.signal().attribute('api-key');
+        this.centerLatNum = () => parseFloat(centerLat.Get() ?? '51.4779');
+        this.centerLngNum = () => parseFloat(centerLng.Get() ?? '-0.0015');
+        this.zoomNum = () => parseInt(this.getAttribute('zoom') ?? '13', 10) || 13;
+        this.hasMarker = () => this.getAttribute('marker') !== 'false';
+        this.stageStyle = () => `aspect-ratio: ${aspectRatio.Get() ?? '16/9'}`;
         this.providerBadge = () => 'AZURE';
-        this.openHref      = () => this.getOpenUrl();
-
+        this.openHref = () => this.getOpenUrl();
         this.hasApiKey = () => !!apiKey.Get();
         this.notHasApiKey = () => !apiKey.Get();
-        this.imgSrc    = () => this.#imageSrc();
-
-        this.template = html`
+        this.imgSrc = () => this.#imageSrc();
+        this.template = html `
             <div class="ar-map__stage" :style="this.stageStyle()">
                 <img class="ar-map__iframe"
                      a-if="this.hasApiKey()"
@@ -146,20 +136,18 @@ export class AzureMap extends (Component('arianna-azure-map', HTMLElement, {}, {
                    target="_blank" rel="noopener">Open ↗</a>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = MapEmbed.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = MapEmbed.DefaultSheet();
     }
-
     // Template helpers added by AzureMap
-    protected hasApiKey    : () => boolean = () => false;
-    protected notHasApiKey : () => boolean = () => true;
-    protected imgSrc       : () => string = () => '';
+    protected hasApiKey: () => boolean = () => false;
+    protected notHasApiKey: () => boolean = () => true;
+    protected imgSrc: () => string = () => '';
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'AzureMap', {
-        value: AzureMap, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * AzureMap namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace AzureMap {
 }
-
 export default AzureMap;

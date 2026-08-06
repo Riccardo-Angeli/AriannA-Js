@@ -15,7 +15,7 @@
  *   stops$    : ordered list of GradientStop (sorted by t)
  *   selected$ : index of the selected stop
  *
- * Subclasses build on top of this base by adding their own attrs (angle,
+ * Subclasses build on top of this base by adding their own attributes (angle,
  * shape, cx/cy, mesh points) and override `toCSS()`.
  *
  * The stop strip itself is a reusable signal-driven template helper —
@@ -24,12 +24,9 @@
  * @example
  *   // Subclass pattern
  *   export class MyGradientEditor extends GradientEditorBase {
- *     // attrs + template + toCSS()
+ *     // attributes + template + toCSS()
  *   }
  */
-
-import { Reactivity } from '../../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -37,34 +34,35 @@ import { Reactivity } from '../../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { parseHexRgba, rgbToHex } from './ColorPicker.ts';
-
-export interface RGBA { r: number; g: number; b: number; a: number; }
-
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
+import { Reactivity } from '../../../core/index.ts';
+import { parseHexRgba, rgbToHex } from './GraphicsColorPicker.ts';
+import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+export interface RGBA {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+}
 export interface GradientStop {
     /** Position along the gradient axis, 0..1. */
-    t        : number;
+    t: number;
     /** Colour as RGBA. */
-    color    : RGBA;
+    color: RGBA;
     /** Optional midpoint between this and the next stop (0..1 absolute). */
     midpoint?: number;
 }
-
 export interface GradientEditorOptions {
-    stops? : GradientStop[];
-    width? : number;
-    alpha? : boolean;
+    stops?: GradientStop[];
+    width?: number;
+    alpha?: boolean;
 }
-
 /** Default two-stop black→white. */
 export const DEFAULT_STOPS = (): GradientStop[] => [
-    { t: 0, color: { r: 0,   g: 0,   b: 0,   a: 1 } },
+    { t: 0, color: { r: 0, g: 0, b: 0, a: 1 } },
     { t: 1, color: { r: 255, g: 255, b: 255, a: 1 } },
 ];
-
 export const clamp01 = (n: number): number => Math.max(0, Math.min(1, n));
-
 /** Build a CSS colour-stop list e.g. `red 0%, blue 100%`. */
 export function stopsToCss(stops: GradientStop[]): string {
     return stops.map(s => {
@@ -75,12 +73,14 @@ export function stopsToCss(stops: GradientStop[]): string {
         return `${css} ${(s.t * 100).toFixed(2)}%`;
     }).join(', ');
 }
-
 /** Sample the gradient at parameter t — used when adding new stops. */
 export function sampleAt(stops: GradientStop[], t: number): RGBA {
-    if (!stops.length) return { r: 0, g: 0, b: 0, a: 1 };
-    if (t <= stops[0]!.t) return { ...stops[0]!.color };
-    if (t >= stops[stops.length - 1]!.t) return { ...stops[stops.length - 1]!.color };
+    if (!stops.length)
+        return { r: 0, g: 0, b: 0, a: 1 };
+    if (t <= stops[0]!.t)
+        return { ...stops[0]!.color };
+    if (t >= stops[stops.length - 1]!.t)
+        return { ...stops[stops.length - 1]!.color };
     for (let i = 0; i < stops.length - 1; i++) {
         const a = stops[i]!, b = stops[i + 1]!;
         if (t >= a.t && t <= b.t) {
@@ -95,20 +95,17 @@ export function sampleAt(stops: GradientStop[], t: number): RGBA {
     }
     return { ...stops[0]!.color };
 }
-
 /** Sort stops in place by `t`. */
 export function sortStops(stops: GradientStop[]): GradientStop[] {
     return stops.sort((a, b) => a.t - b.t);
 }
-
 /**
- * Shared stop-management state. Each subclass instantiates this in `build()`
+ * Shared stop-management state. Each subclass instantiates this in `onConnected()`
  * and uses the returned signals + ops in its template.
  */
 export function makeStopState() {
-    const stops$    = signal<GradientStop[]>(DEFAULT_STOPS());
+    const stops$ = signal<GradientStop[]>(DEFAULT_STOPS());
     const selected$ = signal<number>(0);
-
     function addStop(t: number, color?: RGBA): GradientStop {
         const cur = stops$.Get().slice();
         const c = color ?? sampleAt(cur, t);
@@ -120,49 +117,52 @@ export function makeStopState() {
         selected$.Set(idx);
         return stop;
     }
-
     function removeStop(idx: number): void {
         const cur = stops$.Get();
-        if (cur.length <= 2) return;
-        if (idx < 0 || idx >= cur.length) return;
+        if (cur.length <= 2)
+            return;
+        if (idx < 0 || idx >= cur.length)
+            return;
         const next = cur.slice();
         next.splice(idx, 1);
         stops$.Set(next);
         const sel = selected$.Get();
-        if (sel >= next.length) selected$.Set(next.length - 1);
+        if (sel >= next.length)
+            selected$.Set(next.length - 1);
     }
-
     function updateStop(idx: number, patch: Partial<GradientStop>): void {
         const cur = stops$.Get();
         const s = cur[idx];
-        if (!s) return;
+        if (!s)
+            return;
         const updated: GradientStop = { ...s };
-        if (patch.t !== undefined)        updated.t = clamp01(patch.t);
-        if (patch.color !== undefined)    updated.color = { ...patch.color };
-        if (patch.midpoint !== undefined) updated.midpoint = clamp01(patch.midpoint);
+        if (patch.t !== undefined)
+            updated.t = clamp01(patch.t);
+        if (patch.color !== undefined)
+            updated.color = { ...patch.color };
+        if (patch.midpoint !== undefined)
+            updated.midpoint = clamp01(patch.midpoint);
         const next = cur.slice();
         next[idx] = updated;
         sortStops(next);
         stops$.Set(next);
     }
-
     function setStops(s: GradientStop[]): void {
         const cleaned = s.map(x => ({ ...x, color: { ...x.color } }));
         sortStops(cleaned);
         stops$.Set(cleaned);
-        if (selected$.Get() >= cleaned.length) selected$.Set(0);
+        if (selected$.Get() >= cleaned.length)
+            selected$.Set(0);
     }
-
     return { stops$, selected$, addStop, removeStop, updateStop, setStops };
 }
-
 /** Inspector field helpers used by subclass templates. */
 export function colorFieldHex(color: RGBA): string {
     return rgbToHex(color.r, color.g, color.b);
 }
-
 export function parseColorString(s: string): RGBA | null {
     const p = parseHexRgba(s);
-    if (!p) return null;
+    if (!p)
+        return null;
     return { r: p.r, g: p.g, b: p.b, a: p.a ?? 1 };
 }

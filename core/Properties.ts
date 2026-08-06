@@ -1,8 +1,10 @@
+import type { Types as SchemaTypes }           from './schema/Types.ts';
+import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 /** @namespace   Properties
  *  @memberof    Core
  *  @description Enhanced property subsystem. A single grammar `Descriptor` (declaration keys all
  *               lowercase; `native` is the ES5 PropertyDescriptor) drives runtime `type`
- *               (`Core.Types.Type`) / `validate` filtering, `transform`/`prefix`/`suffix`, the
+ *               (`SchemaTypes.Type`) / `validate` filtering, `transform`/`prefix`/`suffix`, the
  *               `observable` lifecycle (before/changing/changed/after events), declarative custom
  *               `event`s, inter-object `bindings` (one/two-way), and `functions` (before/after run
  *               hooks). All emission goes through `Core.Events`. Replaces the legacy Grammar/Parse
@@ -34,87 +36,22 @@
  */
 export namespace Properties
 {
-    // ── Runtime context (inlined/local — NOT a public Spec) ──────────────────────
-    /** Per-element detail of changing/changed (PascalCase, as the legacy Property context). */
-    type Change<T = unknown> = { Name: string; Value: { Old: T; New: T }; Override?: T; Descriptor: PropertyDescriptor<T>; Object?: object };
-    /** Per-batch context of before/after. */
-    type Batch<T = unknown>  = { Name: string; Hosts: readonly object[]; Count: number; Descriptor: PropertyDescriptor<T> };
-
-    // ── Reactive IoC (registered by Observables.ts, if imported) ──────────────────
-    /** @interface Signal @memberof Core.Properties @template T @description Minimal reactive cell the IoC provider must satisfy. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
-    export interface Signal<T> { get(): T; set(v: T): void; subscribe(fn: (v: T) => void): () => void; }
-    /** @interface Reactive @memberof Core.Properties @description Reactive backend; Observables.ts registers one via useReactive. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
-    export interface Reactive { signal<T>(initial: T): Signal<T>; effect(fn: () => void): () => void; reactive<T extends object>(o: T): T; }
-
-    /** @name        Primitive
-     *  @public
-     *  @type        {'string' | 'number' | 'boolean' | 'function' | 'object'}
-     *  @memberof    Core.Types
-     *  @namespace   Core
-     *  @description The `typeof`-checkable primitive tags shared by `Is()` and
-     *               `Property` — the true common denominator of the two validators.
-     *               Composed into `Type` and `Native` instead of being repeated.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license)
-     */
-    export type Primitive = 'string' | 'number' | 'boolean' | 'function' | 'object';
-
-    /** @name        Type
-     *  @public
-     *  @type        {Primitive | 'integer' | 'array' | 'any' | ((v: unknown) => boolean)}
-     *  @memberof    Core.Types
-     *  @namespace   Core
-     *  @description Runtime validation marker used by `Property`: the primitive tags
-     *               plus `integer` / `array` / `any`, or a user predicate. Matches
-     *               exactly the cases of `Property._matchesType` (exhaustive switch).
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license)
-     */
-    export type Type = Primitive | 'integer' | 'array' | 'any' | ((v: unknown) => boolean);
-
-    class ReactiveSlot { static #p: Reactive | null = null; static use(p: Reactive): void { ReactiveSlot.#p = p; } static get provider(): Reactive | null { return ReactiveSlot.#p; } }
-    /** @name useReactive @public @memberof Core.Properties @description Register the reactive backend (called by Observables.ts). @param {Reactive} provider The provider. @returns {void} @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
-    export function useReactive(provider: Reactive): void { ReactiveSlot.use(provider); }
-    /** @name hasReactive @public @memberof Core.Properties @description Whether Observables.ts is imported. @returns {boolean} True if a provider is present. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
-    export function hasReactive(): boolean { return ReactiveSlot.provider !== null; }
-
-    // ── The single grammar Descriptor (declaration → lowercase) ──────────────────
-    /** @interface Descriptor @memberof Core.Properties @template T @description Single extended property descriptor. Keys lowercase; `native` is the ES5 descriptor handed to defineProperty. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
-    export interface PropertyDescriptor<T = unknown>
-    {
-        native?     : Descriptor.Native<T>;
-        type?       : Type;                 // ← ricicla Core.Types.Type
-        validate?   : (v: T) => boolean;
-        transform?  : (v: T) => T;
-        prefix?     : string;
-        suffix?     : string;
-        observable? : boolean | Descriptor.Observable;
-        event?      : Descriptor.Event | Descriptor.Event[];
-        bindings?   : Descriptor.Bindings;
-        functions?  : Descriptor.Functions;
-    }
-    export namespace Descriptor
-    {
-        /** ES5 PropertyDescriptor (lowercase) → Object.defineProperty. */
-        export interface Native<T = unknown> { value?: T; get?: () => T; set?: (v: T) => void; enumerable?: boolean; configurable?: boolean; writable?: boolean; }
-        /** Lifecycle event names/flags (defaults derive from the property name). */
-        export interface Observable { target?: EventTarget; cancelable?: boolean; propagation?: boolean; before?: string; changing?: string; changed?: string; after?: string; }
-        /** Declarative custom event; declared `arguments` seal as readonly detail props. */
-        export interface Event { type: string; propagation?: boolean; cancelable?: boolean; arguments?: Record<string, unknown>; targets?: object[]; }
-        /** Binding direction. 1|'One' host→targets, 2|'Two' bidirectional; strings case-insensitive at runtime. */
-        export type Ways = 1 | 2 | 'One' | 'Two' | (string & {});
-        /** Sync this property with attributes/properties on target object(s). */
-        export interface Binding { ways?: Ways; target?: object; targets?: object[]; attribute?: string; attributes?: string[] | Record<string, string>; property?: string; properties?: string[] | Record<string, string>; reactive?: 'Signal' | 'Observable' | 'Proxy'; functions?: Functions; }
-        export type Bindings = Record<string, Binding>;
-        /** A before/after run hook. */
-        export interface Hook { point?: 'before' | 'after'; run: (context: { Name: string; Hosts: readonly object[]; Count: number }) => void | boolean; arguments?: unknown[]; }
-        export type Functions = Record<string, Hook>;
-    }
-
-    /** @typedef Hosts @memberof Core.Properties @description A single host or a list/array of hosts. @author Riccardo Angeli @copyright Riccardo Angeli 2012-2026 All Rights Reserved @license MIT / Commercial (dual license) */
-    export type Hosts = object | readonly object[] | ArrayLike<object>;
+    export type Primitive             = SchemaTypes.Properties.Primitive;
+    export type Type                  = SchemaTypes.Properties.Type;
+    export type Ways                  = SchemaTypes.Properties.Ways;
+    export type Bindings              = SchemaTypes.Properties.Bindings;
+    export type Functions             = SchemaTypes.Properties.Functions;
+    export type Hosts                 = SchemaTypes.Properties.Hosts;
+    export type Change<T = unknown>   = SchemaInterfaces.Properties.Change<T>;
+    export type Batch<T = unknown>    = SchemaInterfaces.Properties.Batch<T>;
+    export type Signal<T>             = SchemaInterfaces.Properties.Signal<T>;
+    export type Reactive              = SchemaInterfaces.Properties.Reactive;
+    export type Native<T = unknown>   = SchemaInterfaces.Properties.Native<T>;
+    export type Observable            = SchemaInterfaces.Properties.Observable;
+    export type EventDescriptor       = SchemaInterfaces.Properties.Event;
+    export type Binding               = SchemaInterfaces.Properties.Binding;
+    export type Hook                  = SchemaInterfaces.Properties.Hook;
+    export type PropertyDescriptor<T = unknown> = SchemaInterfaces.Properties.PropertyDescriptor<T>;
 
     // ── The Property class ───────────────────────────────────────────────────────
     /** @class Property
@@ -128,6 +65,47 @@ export namespace Properties
      *  @license   MIT / Commercial (dual license) */
     export class Property<T = unknown>
     {
+        /** @name        #reactive
+         *  @private
+         *  @static
+         *  @type        {Reactive | null}
+         *  @description Optional reactive backend used by bindings configured with `Signal`, `Observable`, or
+         *               `Proxy`. It remains `null` until an addon explicitly registers a provider.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        static #provider: Reactive | null = null;
+
+        /** @name        UseReactive
+         *  @public
+         *  @static
+         *  @param       {Reactive} provider Reactive backend implementation.
+         *  @returns     {typeof Property} The Property constructor.
+         *  @description Register the optional reactive backend used by every Property instance. The method returns
+         *               the constructor to preserve a fluent static configuration API.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        static UseReactive(provider: Reactive): typeof Property
+        {
+            Property.#provider = provider; // <- QUI
+
+            return Property;
+        }
+
+        /** @name        HasReactive
+         *  @public
+         *  @static
+         *  @returns     {boolean} Whether a reactive backend has been registered.
+         *  @description Report whether reactive Property bindings are currently available.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        static HasReactive(): boolean
+        {
+            return Property.#provider !== null;
+        }
+
         // ── Optional Core dependencies, resolved at RUNTIME (no static import → avoids the
         //    Core↔Properties circular dependency). Each falls back so Properties stays independent:
         //    Core.Events → native DOM events; Core.Scopes.Readonly → a standalone descriptor. ──
@@ -304,7 +282,7 @@ export namespace Properties
         {
             const bindings = this.Descriptor.bindings;
             if (!bindings) return;
-            const provider = ReactiveSlot.provider;
+            const provider = Property.#provider;
             for (const key of Object.keys(bindings)) {
                 const b = bindings[key];
                 if (b.reactive && provider) { this.#reactive(provider, host, value, b); continue; }
@@ -313,7 +291,7 @@ export namespace Properties
         }
 
         /** DEFAULT: direct wrapping — host→targets, and (two-way) target→host with guards. */
-        #direct(host: object, value: T, b: Descriptor.Binding): void
+        #direct(host: object, value: T, b: Binding): void
         {
             const targets = b.targets ?? (b.target ? [b.target] : []);
             const twoWay  = Property.#ways(b.ways) === 2;
@@ -364,14 +342,14 @@ export namespace Properties
             }
         }
 
-        #reactive(provider: Reactive, host: object, value: T, b: Descriptor.Binding): void
+        #reactive(provider: Reactive, host: object, value: T, b: Binding): void
         {
             if (b.reactive === 'Proxy') { provider.reactive(host); return; }
             const s = provider.signal(value);
             for (const t of (b.targets ?? (b.target ? [b.target] : []))) s.subscribe(v => { void [t, v]; });
         }
 
-        static #ways(w: Descriptor.Ways | undefined): 1 | 2 { return w === 2 || String(w).toLowerCase() === 'two' ? 2 : 1; }
+        static #ways(w: Ways | undefined): 1 | 2 { return w === 2 || String(w).toLowerCase() === 'two' ? 2 : 1; }
 
         static #toArray(h: Hosts): object[]
         {
@@ -397,3 +375,5 @@ export namespace Properties
         }
     }
 }
+
+export default Properties;

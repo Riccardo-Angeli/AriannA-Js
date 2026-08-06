@@ -1,3 +1,8 @@
+import { Component } from '../../../core/index.ts';
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/modifiers/3D/Base
  * @author    Riccardo Angeli
@@ -48,75 +53,72 @@
  * `TODO_SECOND_PASS.md` in this directory enumerates everything that needs
  * to be wired up when `arianna-viewport-3d` is built.
  */
-
-import { Component } from '../../../core/Components.ts';
-
 // ── Three.ts-compatible structural type interfaces ──────────────────────────
-
-export interface Vec3Like { x: number; y: number; z: number; }
-
-export interface Geometry3Like {
-    vertices : Vec3Like[];
-    normals  : Vec3Like[];
-    indices  : number[];
-    uvs?     : [number, number][];
-    clone():  Geometry3Like;
+export interface Vec3Like {
+    x: number;
+    y: number;
+    z: number;
 }
-
+export interface Geometry3Like {
+    vertices: Vec3Like[];
+    normals: Vec3Like[];
+    indices: number[];
+    uvs?: [
+        number,
+        number
+    ][];
+    clone(): Geometry3Like;
+}
 export interface MeshLike {
-    geometry      : Geometry3Like;
-    position      : Vec3Like;
-    rotation      : Vec3Like;
-    scale         : Vec3Like;
-    visible       : boolean;
-    userData      : Record<string, unknown>;
+    geometry: Geometry3Like;
+    position: Vec3Like;
+    rotation: Vec3Like;
+    scale: Vec3Like;
+    visible: boolean;
+    userData: Record<string, unknown>;
     updateMatrix?(): void;
 }
-
 export interface SceneLike {
     children: MeshLike[];
     add(obj: MeshLike): void;
     remove(obj: MeshLike): void;
 }
-
 export interface CameraLike {
     position: Vec3Like;
 }
-
 /**
  * Minimal viewport surface a modifier expects. The real `arianna-viewport-3d`
  * implements this and more. See TODO_SECOND_PASS.md for the full contract.
  */
 export interface Viewport3DLike {
-    scene  : SceneLike;
-    camera : CameraLike;
+    scene: SceneLike;
+    camera: CameraLike;
     canvas?: HTMLCanvasElement;
     findMesh(id: string): MeshLike | null;
     onFrame?(cb: (dt: number) => void): () => void;
     invalidate?(): void;
 }
-
 // ── Geometry helpers ──────────────────────────────────────────────────────────
-
 export function _v3(x: number, y: number, z: number): Vec3Like { return { x, y, z }; }
 export function _vAdd(a: Vec3Like, b: Vec3Like): Vec3Like { return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }; }
 export function _vSub(a: Vec3Like, b: Vec3Like): Vec3Like { return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }; }
 export function _vScale(v: Vec3Like, s: number): Vec3Like { return { x: v.x * s, y: v.y * s, z: v.z * s }; }
-export function _vLen(v: Vec3Like): number                 { return Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2); }
-export function _vNorm(v: Vec3Like): Vec3Like              { const l = _vLen(v) || 1; return _vScale(v, 1 / l); }
+export function _vLen(v: Vec3Like): number { return Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2); }
+export function _vNorm(v: Vec3Like): Vec3Like { const l = _vLen(v) || 1; return _vScale(v, 1 / l); }
 export function _vCross(a: Vec3Like, b: Vec3Like): Vec3Like { return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x }; }
 export function _vLerp(a: Vec3Like, b: Vec3Like, t: number): Vec3Like { return _vAdd(a, _vScale(_vSub(b, a), t)); }
-
 export function _cloneGeom(g: Geometry3Like): Geometry3Like {
     return {
         vertices: g.vertices.map(v => ({ ...v })),
-        normals:  g.normals.map(v  => ({ ...v })),
-        indices:  [...g.indices],
-        uvs:      g.uvs ? g.uvs.map(uv => [...uv] as [number, number]) : undefined,
-        clone()   { return _cloneGeom(this); },
+        normals: g.normals.map(v => ({ ...v })),
+        indices: [...g.indices],
+        uvs: g.uvs ? g.uvs.map(uv => [...uv] as [
+            number,
+            number
+        ]) : undefined,
+        clone() { return _cloneGeom(this); },
     };
 }
-
 export function _recomputeNormals(g: Geometry3Like): void {
     const normals: Vec3Like[] = Array.from({ length: g.vertices.length }, () => _v3(0, 0, 0));
     for (let i = 0; i < g.indices.length; i += 3) {
@@ -126,9 +128,7 @@ export function _recomputeNormals(g: Geometry3Like): void {
     }
     g.normals = normals.map(_vNorm);
 }
-
 // ── Programmatic core (plain class — Modifier3D) ─────────────────────────────
-
 /**
  * Programmatic 3D modifier core. Subclasses MUST implement `apply()` which
  * mutates `this.mesh` (typically via geometry clone + recompute normals).
@@ -143,36 +143,33 @@ export abstract class Modifier3D {
         geometry: { vertices: [], normals: [], indices: [], clone() { return { ...this, clone: this.clone }; } },
         position: { x: 0, y: 0, z: 0 },
         rotation: { x: 0, y: 0, z: 0 },
-        scale   : { x: 1, y: 1, z: 1 },
-        visible : true,
+        scale: { x: 1, y: 1, z: 1 },
+        visible: true,
         userData: {},
     };
-
-    protected mesh    : MeshLike;
+    protected mesh: MeshLike;
     protected enabled = true;
     protected cleanups: (() => void)[] = [];
-
     constructor(mesh: MeshLike) { this.mesh = mesh; }
-
     /** Late-bind the target mesh (used by declarative custom-element wrapper). */
     bindMesh(mesh: MeshLike): this { this.mesh = mesh; return this; }
-
-    enable(): this  { this.enabled = true;  return this; }
+    enable(): this { this.enabled = true; return this; }
     disable(): this { this.enabled = false; return this; }
     isEnabled(): boolean { return this.enabled; }
-
     destroy(): void {
         for (const fn of this.cleanups) {
-            try { fn(); } catch (e) { console.warn('[Modifier3D] cleanup error', e); }
+            try {
+                fn();
+            }
+            catch (e) {
+                console.warn('[Modifier3D] cleanup error', e);
+            }
         }
         this.cleanups = [];
     }
-
     abstract apply(): this;
 }
-
 // ── Declarative core (custom element — Modifier3DElement) ───────────────────
-
 /**
  * Custom-element wrapper for a 3D modifier. Subclasses extend this and
  * override `createModifier()` to construct the concrete `Modifier3D` instance
@@ -184,86 +181,77 @@ export abstract class Modifier3D {
  *
  *   onUnmount → modifier.destroy() → cleanup
  */
-export class Modifier3DElement extends Component('arianna-modifier-3d', HTMLElement, {}, {
-    attrs : ['for', 'enabled'],
+@Component('arianna-modifier-3d', {}, {
+    Attributes: ['for', 'enabled'],
 })
-{
+export class Modifier3DElement extends HTMLElement {
     protected viewport: Viewport3DLike | null = null;
-    protected target  : MeshLike | null = null;
+    protected target: MeshLike | null = null;
     protected modifier: Modifier3D | null = null;
-
     /** Frame-loop unsubscribe handle (returned by viewport.onFrame). */
     #frameUnsub: (() => void) | null = null;
-
-    build(_opts: object = {})
-    {
+    onConnected(_opts: object = {}) {
         // Modifiers have no chrome — they're pure behavior wiring.
         // Hide the host so it takes no layout space.
     }
-
     /**
      * Resolve the viewport this modifier lives inside.
      * Default: nearest `arianna-viewport-3d` ancestor.
      */
-    protected resolveViewport(): Viewport3DLike | null
-    {
+    protected resolveViewport(): Viewport3DLike | null {
         const el = this.closest('arianna-viewport-3d');
         return el ? (el as unknown as Viewport3DLike) : null;
     }
-
     /**
      * Resolve the target mesh.
      *   1. If `for` attribute set → viewport.findMesh(id)
      *   2. Else → previous-sibling `arianna-mesh` with a `.mesh` property
      */
-    protected resolveTarget(): MeshLike | null
-    {
+    protected resolveTarget(): MeshLike | null {
         const id = this.getAttribute('for');
-        if (id && this.viewport) return this.viewport.findMesh(id);
-
+        if (id && this.viewport)
+            return this.viewport.findMesh(id);
         // Sibling fallback: walk previous siblings looking for an arianna-mesh
         let sib: Element | null = this.previousElementSibling;
         while (sib) {
             if (sib.tagName.toLowerCase() === 'arianna-mesh') {
-                const m = (sib as unknown as { mesh?: MeshLike }).mesh;
-                if (m) return m;
+                const m = (sib as unknown as {
+                    mesh?: MeshLike;
+                }).mesh;
+                if (m)
+                    return m;
             }
             sib = sib.previousElementSibling;
         }
         return null;
     }
-
     /**
      * Override to construct the concrete modifier. Called once the target
      * mesh is resolved.
      */
-    protected createModifier(_mesh: MeshLike): Modifier3D | null
-    {
-        return null;   // Subclass override
+    protected createModifier(_mesh: MeshLike): Modifier3D | null {
+        return null; // Subclass override
     }
-
     /**
      * Override if the modifier needs per-frame `update(camera)` calls.
      * Return false (default) to skip the frame loop registration.
      */
     protected needsFrameUpdate(): boolean { return false; }
-
     /**
      * Per-frame callback invoked by the viewport's render loop. Default impl
      * calls `modifier.update?.(viewport.camera)` if the method exists.
      */
-    protected onFrame(_dt: number): void
-    {
-        const m = this.modifier as Modifier3D & { update?: (cam: CameraLike) => void };
+    protected onFrame(_dt: number): void {
+        const m = this.modifier as Modifier3D & {
+            update?: (cam: CameraLike) => void;
+        };
         if (m && typeof m.update === 'function' && this.viewport) {
             m.update(this.viewport.camera);
             this.viewport.invalidate?.();
         }
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-
+    onCreated() { }
+    onBeforeMount() { }
     onMount() {
         this.style.display = 'contents';
         queueMicrotask(() => {
@@ -278,32 +266,54 @@ export class Modifier3DElement extends Component('arianna-modifier-3d', HTMLElem
                 return;
             }
             this.modifier = this.createModifier(this.target);
-            if (!this.modifier) return;
-
+            if (!this.modifier)
+                return;
             this.modifier.apply();
             this.viewport.invalidate?.();
-
             if (this.needsFrameUpdate() && this.viewport.onFrame) {
                 this.#frameUnsub = this.viewport.onFrame(dt => this.onFrame(dt));
             }
         });
     }
-
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
     onUnmount() {
-        if (this.#frameUnsub) { this.#frameUnsub(); this.#frameUnsub = null; }
+        if (this.#frameUnsub) {
+            this.#frameUnsub();
+            this.#frameUnsub = null;
+        }
         this.modifier?.destroy();
         this.modifier = null;
-        this.target   = null;
+        this.target = null;
         this.viewport = null;
     }
-
-    get enabled(): boolean  { return !this.hasAttribute('disabled'); }
+    get enabled(): boolean { return !this.hasAttribute('disabled'); }
     set enabled(v: boolean) { v ? this.removeAttribute('disabled') : this.setAttribute('disabled', ''); }
-
     /** Programmatic access to the resolved modifier (after mount). */
     getModifier(): Modifier3D | null { return this.modifier; }
+}
+/* ──────────────────────────────────────────────────────────────────────────
+ * Modifier3D namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Modifier3D {
+}
+/* ──────────────────────────────────────────────────────────────────────────
+ * Modifier3DElement namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Modifier3DElement {
+    export namespace Interfaces {
+        export interface Vec3LikeContract extends Vec3Like {
+        }
+        export interface Geometry3LikeContract extends Geometry3Like {
+        }
+        export interface MeshLikeContract extends MeshLike {
+        }
+        export interface SceneLikeContract extends SceneLike {
+        }
+        export interface CameraLikeContract extends CameraLike {
+        }
+        export interface Viewport3DLikeContract extends Viewport3DLike {
+        }
+    }
 }

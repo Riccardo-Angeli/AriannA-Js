@@ -1,3 +1,10 @@
+import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/payments/PayPal
  * @author    Riccardo Angeli
@@ -23,13 +30,8 @@
  *   arianna:payment-error    detail: { method: 'paypal', message: string }
  *   arianna:payment-cancel   detail: { method: 'paypal' }
  *
- * Attrs: client-id, amount, currency, intent, redirect-url, button-style, button-color, button-shape
+ * Attributes: client-id, amount, currency, intent, redirect-url, button-style, button-color, button-shape
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -37,64 +39,67 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface PayPalOptions {
-    clientId      : string;
-    amount        : number;
-    currency      : string;
-    intent?       : 'capture' | 'authorize';
-    redirectUrl?  : string;
-    buttonStyle?  : 'paypal' | 'checkout' | 'pay';
-    buttonColor?  : 'gold' | 'blue' | 'silver' | 'white' | 'black';
-    buttonShape?  : 'rect' | 'pill';
+    clientId: string;
+    amount: number;
+    currency: string;
+    intent?: 'capture' | 'authorize';
+    redirectUrl?: string;
+    buttonStyle?: 'paypal' | 'checkout' | 'pay';
+    buttonColor?: 'gold' | 'blue' | 'silver' | 'white' | 'black';
+    buttonShape?: 'rect' | 'pill';
 }
-
 const SDK_BASE = 'https://www.paypal.com/sdk/js';
 let sdkLoadPromise: Promise<unknown> | null = null;
-
 function loadPayPalSDK(clientId: string, currency: string, intent: string): Promise<unknown> {
-    if (sdkLoadPromise) return sdkLoadPromise;
+    if (sdkLoadPromise)
+        return sdkLoadPromise;
     const url = `${SDK_BASE}?client-id=${encodeURIComponent(clientId)}&currency=${encodeURIComponent(currency)}&intent=${encodeURIComponent(intent)}`;
     sdkLoadPromise = new Promise((resolve, reject) => {
-        const w = window as unknown as { paypal?: unknown };
-        if (w.paypal) { resolve(w.paypal); return; }
+        const w = window as unknown as {
+            paypal?: unknown;
+        };
+        if (w.paypal) {
+            resolve(w.paypal);
+            return;
+        }
         const s = document.createElement('script');
         s.src = url;
         s.async = true;
-        s.onload = () => resolve((window as unknown as { paypal?: unknown }).paypal);
+        s.onload = () => resolve((window as unknown as {
+            paypal?: unknown;
+        }).paypal);
         s.onerror = () => reject(new Error('PayPal SDK failed to load'));
         document.head.appendChild(s);
     });
     return sdkLoadPromise;
 }
-
-export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
-    attrs : ['client-id', 'amount', 'currency', 'intent', 'redirect-url', 'button-style', 'button-color', 'button-shape'],
+@Component('arianna-paypal', {}, {
+    Attributes: ['client-id', 'amount', 'currency', 'intent', 'redirect-url', 'button-style', 'button-color', 'button-shape'],
 })
-{
+export class PayPal extends HTMLElement {
+    /** Compiler-visible template slot installed by the Component decorator. */
+    declare template: unknown;
     sdkLoaded$: Signal<boolean> = signal<boolean>(false);
-    sdkError$ : Signal<string | null> = signal<string | null>(null);
-    busy$     : Signal<boolean> = signal<boolean>(false);
-
-    build(_opts: PayPalOptions = {} as PayPalOptions)
-    {
+    sdkError$: Signal<string | null> = signal<string | null>(null);
+    busy$: Signal<boolean> = signal<boolean>(false);
+    onConnected(_opts: PayPalOptions = {} as PayPalOptions) {
         this.fallbackVisible = () => !this.sdkLoaded$.Get();
         this.fallbackLabel = () => this.sdkError$.Get()
             ? 'Open PayPal'
             : 'Loading PayPal…';
-
         this.onFallback = () => {
             const url = this.getAttribute('redirect-url');
-            if (url) window.open(url, '_blank', 'noopener');
-            else void this.pay();
+            if (url)
+                window.open(url, '_blank', 'noopener');
+            else
+                void this.pay();
         };
-
-        this.template = html`
+        this.template = html `
             <div class="ar-pp">
                 <div class="ar-pp__mount" data-r="mount"></div>
                 <button type="button" class="ar-pp__fallback"
@@ -105,12 +110,13 @@ export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
                 </button>
             </div>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = PayPal.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = PayPal.DefaultSheet();
     }
-
     async pay(): Promise<void> {
-        if (this.busy$.Get()) return;
+        if (this.busy$.Get())
+            return;
         this.busy$.Set(true);
         try {
             const url = this.getAttribute('redirect-url');
@@ -120,40 +126,54 @@ export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
                 return;
             }
             throw new Error('No PayPal SDK loaded and no redirect-url provided');
-        } catch (err) {
+        }
+        catch (err) {
             this.dispatchEvent(new CustomEvent('arianna:payment-error', {
                 bubbles: true,
                 detail: { method: 'paypal', message: err instanceof Error ? err.message : String(err) },
             }));
-        } finally {
+        }
+        finally {
             this.busy$.Set(false);
         }
     }
-
     async #mountSDKButtons(): Promise<void> {
         const clientId = this.getAttribute('client-id');
-        if (!clientId) return;
+        if (!clientId)
+            return;
         const currency = this.getAttribute('currency') ?? 'EUR';
-        const intent   = (this.getAttribute('intent') ?? 'capture') as 'capture' | 'authorize';
-        const amount   = parseFloat(this.getAttribute('amount') ?? '0') || 0;
-        const style    = this.getAttribute('button-style') ?? 'paypal';
-        const color    = this.getAttribute('button-color') ?? 'gold';
-        const shape    = this.getAttribute('button-shape') ?? 'rect';
-
+        const intent = (this.getAttribute('intent') ?? 'capture') as 'capture' | 'authorize';
+        const amount = parseFloat(this.getAttribute('amount') ?? '0') || 0;
+        const style = this.getAttribute('button-style') ?? 'paypal';
+        const color = this.getAttribute('button-color') ?? 'gold';
+        const shape = this.getAttribute('button-shape') ?? 'rect';
         try {
             const paypal = await loadPayPalSDK(clientId, currency, intent) as {
-                Buttons(cfg: unknown): { render(host: HTMLElement): Promise<void> };
+                Buttons(cfg: unknown): {
+                    render(host: HTMLElement): Promise<void>;
+                };
             };
             const host = this.querySelector<HTMLElement>('[data-r="mount"]');
-            if (!host) return;
+            if (!host)
+                return;
             const buttons = paypal.Buttons({
                 style: { layout: 'vertical', color, shape, label: style },
-                createOrder: (_data: unknown, actions: { order: { create(o: unknown): unknown } }) =>
-                    actions.order.create({
-                        intent: intent.toUpperCase(),
-                        purchase_units: [{ amount: { currency_code: currency, value: amount.toFixed(2) } }],
-                    }),
-                onApprove: async (data: { orderID: string; payerID?: string }, actions: { order: { capture(): Promise<unknown> } }) => {
+                createOrder: (_data: unknown, actions: {
+                    order: {
+                        create(o: unknown): unknown;
+                    };
+                }) => actions.order.create({
+                    intent: intent.toUpperCase(),
+                    purchase_units: [{ amount: { currency_code: currency, value: amount.toFixed(2) } }],
+                }),
+                onApprove: async (data: {
+                    orderID: string;
+                    payerID?: string;
+                }, actions: {
+                    order: {
+                        capture(): Promise<unknown>;
+                    };
+                }) => {
                     try {
                         const captureData = await actions.order.capture();
                         this.dispatchEvent(new CustomEvent('arianna:payment-success', {
@@ -165,7 +185,8 @@ export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
                                 capture: captureData,
                             },
                         }));
-                    } catch (err) {
+                    }
+                    catch (err) {
                         this.dispatchEvent(new CustomEvent('arianna:payment-error', {
                             bubbles: true,
                             detail: { method: 'paypal', message: err instanceof Error ? err.message : String(err) },
@@ -186,57 +207,55 @@ export class PayPal extends Component('arianna-paypal', HTMLElement, {}, {
             });
             await buttons.render(host);
             this.sdkLoaded$.Set(true);
-        } catch (err) {
+        }
+        catch (err) {
             this.sdkError$.Set(err instanceof Error ? err.message : String(err));
         }
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
+    onCreated() { }
+    onBeforeMount() { }
     async onMount() {
         await this.#mountSDKButtons();
     }
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     private fallbackVisible: () => boolean = () => true;
-    private fallbackLabel  : () => string = () => 'Loading PayPal…';
-    private onFallback     : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', { display: 'inline-block', minWidth: '200px' }),
-                new Rule('.ar-pp__mount', { display: 'block' }),
-                new Rule('.ar-pp__fallback', {
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    minWidth: '200px',
-                    minHeight: '44px',
-                    padding: '0 18px',
-                    background: '#ffc439',
-                    color: '#003087',
-                    border: 'none',
-                    borderRadius: '24px',
-                    cursor: 'pointer',
-                    font: 'italic 700 16px "Helvetica Neue", Arial, sans-serif',
-                }),
-                new Rule('.ar-pp__fallback:hover', { background: '#f5b730' }),
-                new Rule('.ar-pp__logo', { fontStyle: 'italic', fontWeight: '900' }),
-            ]
-        );
+    private fallbackLabel: () => string = () => 'Loading PayPal…';
+    private onFallback: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', { display: 'inline-block', minWidth: '200px' }),
+            new Rule('.ar-pp__mount', { display: 'block' }),
+            new Rule('.ar-pp__fallback', {
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                minWidth: '200px',
+                minHeight: '44px',
+                padding: '0 18px',
+                background: '#ffc439',
+                color: '#003087',
+                border: 'none',
+                borderRadius: '24px',
+                cursor: 'pointer',
+                font: 'italic 700 16px "Helvetica Neue", Arial, sans-serif',
+            }),
+            new Rule('.ar-pp__fallback:hover', { background: '#f5b730' }),
+            new Rule('.ar-pp__logo', { fontStyle: 'italic', fontWeight: '900' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'PayPal', {
-        value: PayPal, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * PayPal namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace PayPal {
+    export namespace Interfaces {
+        export interface Options extends PayPalOptions {
+        }
+    }
+    export const LoadPayPalSDK = loadPayPalSDK;
 }
-
 export default PayPal;

@@ -1,3 +1,9 @@
+import { Component, Components, Css, Templates } from '../../core/index.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/display/Badge
  * @author    Riccardo Angeli
@@ -17,102 +23,91 @@
  *
  * Events: (none)
  * Slots:  default — badge content (text/number); ignored when `dot` is set
- * Attrs:  variant, dot, label
+ * Attributes:  variant, dot, label
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface BadgeOptions {
-    variant? : 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
-    dot?     : boolean;
-    label?   : string;
+    variant?: 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
+    dot?: boolean;
+    label?: string;
 }
-
-export class Badge extends Component('arianna-badge', HTMLElement, {}, {
-    attrs : ['variant', 'dot', 'label'],
+@Component('arianna-badge', {}, {
+    Attributes: ['variant', 'dot', 'label'],
 })
-{
-    build(_opts: BadgeOptions = {})
-    {
-        const label = this.attributeSignal('label');
-        const dot   = this.attributeSignal('dot');
-
-        this.isDot      = () => dot.Get() !== null && dot.Get() !== undefined;
-        this.labelText  = () => label.Get() ?? '';
-        this.hasLabel   = () => !this.isDot() && !!label.Get();
+export class Badge extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
+    onConnected(_opts: BadgeOptions = {}) {
+        const label = this.signal().attribute('label');
+        const dot = this.signal().attribute('dot');
+        this.isDot = () => dot.Get() !== null && dot.Get() !== undefined;
+        this.labelText = () => label.Get() ?? '';
+        this.hasLabel = () => !this.isDot() && !!label.Get();
         this.hasSlotted = () => !this.isDot() && !label.Get();
-
-        this.template = html`
+        this.template = html `
             <span a-if="this.hasLabel()">{{ this.labelText() }}</span>
             <slot a-if="this.hasSlotted()"></slot>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Badge.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Badge.DefaultSheet();
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
-    get variant(): string  { return this.getAttribute('variant') ?? 'default'; }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
+    get variant(): string { return this.getAttribute('variant') ?? 'default'; }
     set variant(v: string) { this.setAttribute('variant', v); }
-
-    get label(): string  { return this.getAttribute('label') ?? ''; }
+    get label(): string { return this.getAttribute('label') ?? ''; }
     set label(v: string) { v ? this.setAttribute('label', v) : this.removeAttribute('label'); }
-
-    get dot(): boolean  { return this.hasAttribute('dot'); }
+    get dot(): boolean { return this.hasAttribute('dot'); }
     set dot(v: boolean) { v ? this.setAttribute('dot', '') : this.removeAttribute('dot'); }
-
-    private isDot     : () => boolean = () => false;
-    private labelText : () => string  = () => '';
-    private hasLabel  : () => boolean = () => false;
+    private isDot: () => boolean = () => false;
+    private labelText: () => string = () => '';
+    private hasLabel: () => boolean = () => false;
     private hasSlotted: () => boolean = () => false;
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    alignItems  : 'center',
-                    borderRadius: '10px',
-                    display     : 'inline-flex',
-                    fontSize    : '0.72rem',
-                    fontWeight  : '600',
-                    padding     : '2px 8px',
-                    whiteSpace  : 'nowrap',
-                    background  : 'var(--arianna-bg-3, #f3f3f3)',
-                    color       : 'var(--arianna-text, #1f2328)',
-                }),
-                new Rule(':host([variant="primary"])', { background: 'var(--arianna-primary, #1f6feb)',           color: '#fff' }),
-                new Rule(':host([variant="success"])', { background: 'var(--arianna-success, #2ea043)',           color: '#fff' }),
-                new Rule(':host([variant="warning"])', { background: 'var(--arianna-warning, #d29922)',           color: '#000' }),
-                new Rule(':host([variant="danger"])',  { background: 'var(--arianna-danger, #cf222e)',            color: '#fff' }),
-                new Rule(':host([variant="info"])',    { background: 'var(--arianna-info, #4dd0e1)',              color: '#000' }),
-                new Rule(':host([dot])', {
-                    borderRadius: '50%',
-                    height      : '8px',
-                    minWidth    : '8px',
-                    padding     : '0',
-                    width       : '8px',
-                }),
-            ]
-        );
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                alignItems: 'center',
+                borderRadius: '10px',
+                display: 'inline-flex',
+                fontSize: '0.72rem',
+                fontWeight: '600',
+                padding: '2px 8px',
+                whiteSpace: 'nowrap',
+                background: 'var(--arianna-bg-3, #f3f3f3)',
+                color: 'var(--arianna-text, #1f2328)',
+            }),
+            new Rule(':host([variant="primary"])', { background: 'var(--arianna-primary, #1f6feb)', color: '#fff' }),
+            new Rule(':host([variant="success"])', { background: 'var(--arianna-success, #2ea043)', color: '#fff' }),
+            new Rule(':host([variant="warning"])', { background: 'var(--arianna-warning, #d29922)', color: '#000' }),
+            new Rule(':host([variant="danger"])', { background: 'var(--arianna-danger, #cf222e)', color: '#fff' }),
+            new Rule(':host([variant="info"])', { background: 'var(--arianna-info, #4dd0e1)', color: '#000' }),
+            new Rule(':host([dot])', {
+                borderRadius: '50%',
+                height: '8px',
+                minWidth: '8px',
+                padding: '0',
+                width: '8px',
+            }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Badge', {
-        value: Badge, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Badge namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Badge {
+    export namespace Interfaces {
+        export interface Options extends BadgeOptions {
+        }
+    }
 }
-
 export default Badge;

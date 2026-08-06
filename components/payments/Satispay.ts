@@ -1,3 +1,9 @@
+import { Component, Components, Css, Templates } from '../../core/index.ts';
+const html = Templates.Template.Html;
+/**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
 /**
  * @module    components/payments/Satispay
  * @author    Riccardo Angeli
@@ -21,52 +27,45 @@
  *   arianna:payment-redirect  detail: { method: 'satispay', url: string }
  *   arianna:payment-error     detail: { method: 'satispay', message: string }
  *
- * Attrs: redirect-url, amount, currency, target (_blank | _self)
+ * Attributes: redirect-url, amount, currency, target (_blank | _self)
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Css } from '../../core/Css.ts';
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
-
 export interface SatispayOptions {
-    redirectUrl : string;
-    amount      : number;
-    currency    : string;
-    target?     : '_blank' | '_self';
+    redirectUrl: string;
+    amount: number;
+    currency: string;
+    target?: '_blank' | '_self';
 }
-
 const SATISPAY_LOGO = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="11" fill="#ff3a44"/><circle cx="12" cy="12" r="4.5" fill="#fff"/></svg>`;
-
-export class Satispay extends Component('arianna-satispay', HTMLElement, {}, {
-    attrs : ['redirect-url', 'amount', 'currency', 'target'],
+@Component('arianna-satispay', {}, {
+    Attributes: ['redirect-url', 'amount', 'currency', 'target'],
 })
-{
-    build(_opts: SatispayOptions = {} as SatispayOptions)
-    {
-        const amountAttr = this.attributeSignal('amount');
-        const currencyAttr = this.attributeSignal('currency');
-
+export class Satispay extends HTMLElement {
+    /** Compiler-visible binding factory installed by the Component decorator. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible template slot installed by the Component decorator. */
+    declare template: unknown;
+    onConnected(_opts: SatispayOptions = {} as SatispayOptions) {
+        const amountAttr = this.signal().attribute('amount');
+        const currencyAttr = this.signal().attribute('currency');
         this.btnLabel = () => {
             const a = parseFloat(amountAttr.Get() ?? '0') || 0;
             const c = currencyAttr.Get() ?? 'EUR';
             return `Pay ${c} ${a.toFixed(2)} with Satispay`;
         };
-
         this.onClick = () => { void this.pay(); };
-
-        this.template = html`
+        this.template = html `
             <button type="button" class="ar-satispay__btn" @click="this.onClick">
                 <span class="ar-satispay__logo">${SATISPAY_LOGO}</span>
                 <span>{{ this.btnLabel() }}</span>
             </button>
         `;
-
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = Satispay.DefaultSheet();
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = Satispay.DefaultSheet();
     }
-
     async pay(): Promise<void> {
         const url = this.getAttribute('redirect-url');
         if (!url) {
@@ -79,57 +78,55 @@ export class Satispay extends Component('arianna-satispay', HTMLElement, {}, {
             bubbles: true, detail: { method: 'satispay', url },
         }));
         const target = (this.getAttribute('target') ?? '_blank') as '_blank' | '_self';
-        if (target === '_self') window.location.href = url;
-        else window.open(url, '_blank', 'noopener');
+        if (target === '_self')
+            window.location.href = url;
+        else
+            window.open(url, '_blank', 'noopener');
     }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     private btnLabel: () => string = () => 'Pay with Satispay';
-    private onClick : (e: Event) => void = () => {};
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', { display: 'inline-block' }),
-                new Rule('.ar-satispay__btn', {
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    minWidth: '200px',
-                    minHeight: '44px',
-                    padding: '0 18px',
-                    background: '#ff3a44',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    font: '600 14px -apple-system, system-ui, sans-serif',
-                    transition: 'background 0.15s',
-                }),
-                new Rule('.ar-satispay__btn:hover', { background: '#e0333c' }),
-                new Rule('.ar-satispay__logo', {
-                    display: 'inline-flex',
-                    width: '22px', height: '22px',
-                }),
-                new Rule('.ar-satispay__logo svg', { width: '100%', height: '100%' }),
-            ]
-        );
+    private onClick: (e: Event) => void = () => { };
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', { display: 'inline-block' }),
+            new Rule('.ar-satispay__btn', {
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                minWidth: '200px',
+                minHeight: '44px',
+                padding: '0 18px',
+                background: '#ff3a44',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                font: '600 14px -apple-system, system-ui, sans-serif',
+                transition: 'background 0.15s',
+            }),
+            new Rule('.ar-satispay__btn:hover', { background: '#e0333c' }),
+            new Rule('.ar-satispay__logo', {
+                display: 'inline-flex',
+                width: '22px', height: '22px',
+            }),
+            new Rule('.ar-satispay__logo svg', { width: '100%', height: '100%' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'Satispay', {
-        value: Satispay, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * Satispay namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace Satispay {
+    export namespace Interfaces {
+        export interface Options extends SatispayOptions {
+        }
+    }
 }
-
 export default Satispay;

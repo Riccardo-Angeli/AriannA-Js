@@ -1,4 +1,8 @@
 /**
+ * @convention AriannA component namespace merge
+ * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
+ */
+/**
  * @module    components/finance/PnLChart
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
@@ -20,13 +24,8 @@
  * @example HTML
  *   <arianna-pnl-chart width="500" height="240"></arianna-pnl-chart>
  *
- * Attrs: width, height
+ * Attributes: width, height
  */
-
-import { Component } from '../../core/Components.ts';
-import { html }      from '../../core/Template.ts';
-import { Reactivity } from '../../core/Reactive.ts';
-
 /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
    members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
    `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
@@ -34,52 +33,51 @@ import { Reactivity } from '../../core/Reactive.ts';
    returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
    Map, Effect" with the same name printed twice. */
 const signal = Reactivity.CreateSignal;
-type Signal<T> = Reactivity.Types.SignalContract<T>;
-import { Css } from '../../core/Css.ts';
+type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
 const { Rule, Stylesheet } = Css;
 type Rule = Css.Rule;
 type Stylesheet = Css.Stylesheet;
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _svg, _fmtK, _esc } from './helpers.ts';
-
-export interface PnLBar { label: string; pnl: number; }
-
-export interface PnLChartOptions {
-    data?   : PnLBar[];
-    width?  : number;
-    height? : number;
+import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+const html = Templates.Template.Html;
+export interface PnLBar {
+    label: string;
+    pnl: number;
 }
-
-export class PnLChart extends Component('arianna-pnl-chart', HTMLElement, {}, {
-    attrs : ['width', 'height'],
+export interface PnLChartOptions {
+    data?: PnLBar[];
+    width?: number;
+    height?: number;
+}
+@Component('arianna-pnl-chart', {}, {
+    Attributes: ['width', 'height'],
 })
-{
+export class PnLChart extends HTMLElement {
+    /** Compiler-visible AriannA binding factory installed by @Component. */
+    declare signal: <T>(initial?: T) => Components.Binding<T>;
+    /** Compiler-visible AriannA template slot installed by @Component. */
+    declare template: unknown;
     data$: Signal<PnLBar[]> = signal<PnLBar[]>([]);
-
-    build(_opts: PnLChartOptions = {})
-    {
-        const wAttr = this.attributeSignal('width');
-        const hAttr = this.attributeSignal('height');
-
+    onConnected(_opts: PnLChartOptions = {}) {
+        const wAttr = this.signal().attribute('width');
+        const hAttr = this.signal().attribute('height');
         this.svgHtml = (): string => {
             const data = this.data$.Get();
-            if (!data.length) return '';
-
+            if (!data.length)
+                return '';
             const w = parseInt(wAttr.Get() ?? '500', 10) || 500;
             const h = parseInt(hAttr.Get() ?? '250', 10) || 250;
-
             const pad = { l: 70, r: 20, t: 20, b: 40 };
             const W = w - pad.l - pad.r;
             const H = h - pad.t - pad.b;
-
             const maxAbs = Math.max(...data.map(d => Math.abs(d.pnl))) || 1;
             const bw = Math.max(1, W / data.length - 4);
             const yZ = pad.t + H / 2;
             const yS = (v: number) => v >= 0 ? yZ - (v / maxAbs) * (H / 2) : yZ;
             const bH = (v: number) => Math.max(1, (Math.abs(v) / maxAbs) * (H / 2));
-
             const bull = 'var(--arianna-bull, #26a69a)';
             const bear = 'var(--arianna-bear, #ef5350)';
-
             let bars = '', labels = '';
             data.forEach((d, i) => {
                 const x = pad.l + i * (W / data.length) + 2;
@@ -99,7 +97,6 @@ export class PnLChart extends Component('arianna-pnl-chart', HTMLElement, {}, {
                     'text-anchor': 'middle',
                 }, _esc(d.label));
             });
-
             let axes = _svg('line', {
                 x1: pad.l, y1: yZ, x2: pad.l + W, y2: yZ,
                 stroke: 'var(--arianna-border, #e0e0e0)',
@@ -115,50 +112,47 @@ export class PnLChart extends Component('arianna-pnl-chart', HTMLElement, {}, {
                     'text-anchor': 'end',
                 }, _fmtK(v));
             }
-
             return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
-                 + axes + bars + labels
-                 + `</svg>`;
+                + axes + bars + labels
+                + `</svg>`;
         };
-
-        this.template = html`<div class="ar-pnl" a-html="this.svgHtml()"></div>`;
-        (this as unknown as { Sheet: Stylesheet | null }).Sheet = PnLChart.DefaultSheet();
+        this.template = html `<div class="ar-pnl" a-html="this.svgHtml()"></div>`;
+        (this as unknown as {
+            Sheet: Stylesheet | null;
+        }).Sheet = PnLChart.DefaultSheet();
     }
-
     set data(v: PnLBar[]) { this.data$.Set(v ?? []); }
-    get data(): PnLBar[]  { return this.data$.Get(); }
-
-    onCreated()       {}
-    onBeforeMount()   {}
-    onMount()         {}
-    onBeforeUpdate()  {}
-    onUpdate()        {}
-    onBeforeUnmount() {}
-    onUnmount()       {}
-
+    get data(): PnLBar[] { return this.data$.Get(); }
+    onCreated() { }
+    onBeforeMount() { }
+    onMount() { }
+    onBeforeUpdate() { }
+    onUpdate() { }
+    onBeforeUnmount() { }
+    onUnmount() { }
     private svgHtml: () => string = () => '';
-
-    static DefaultSheet(): Stylesheet
-    {
-        return new Stylesheet(
-[
-                new Rule(':host', {
-                    background  : 'var(--arianna-bg, #fff)',
-                    border      : '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    display     : 'inline-block',
-                    padding     : '4px',
-                }),
-                new Rule(':host svg', { display: 'block' }),
-            ]
-        );
+    static DefaultSheet(): Stylesheet {
+        return new Stylesheet([
+            new Rule(':host', {
+                background: 'var(--arianna-bg, #fff)',
+                border: '1px solid var(--arianna-border, #d8d8d8)',
+                borderRadius: 'var(--arianna-radius, 6px)',
+                display: 'inline-block',
+                padding: '4px',
+            }),
+            new Rule(':host svg', { display: 'block' }),
+        ]);
     }
 }
-
-if (typeof window !== 'undefined') {
-    Object.defineProperty(window, 'PnLChart', {
-        value: PnLChart, writable: false, enumerable: false, configurable: false,
-    });
+/* ──────────────────────────────────────────────────────────────────────────
+ * PnLChart namespace — public component contracts and module helpers.
+ * ────────────────────────────────────────────────────────────────────────── */
+export namespace PnLChart {
+    export namespace Interfaces {
+        export interface PnLBarContract extends PnLBar {
+        }
+        export interface Options extends PnLChartOptions {
+        }
+    }
 }
-
 export default PnLChart;
