@@ -17,15 +17,78 @@ import { States }   from './State.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        SSR
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the SSR contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace SSR
 {
+    /** @name        IslandMode
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for IslandMode.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type IslandMode       = SchemaTypes.SSR.IslandMode;
+    /** @name        RenderOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for RenderOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type RenderOptions    = SchemaInterfaces.SSR.RenderOptions;
+    /** @name        HydrateOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for HydrateOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type HydrateOptions   = SchemaInterfaces.SSR.HydrateOptions;
+    /** @name        NodeContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for NodeContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type NodeContract     = SchemaInterfaces.SSR.Node;
+    /** @name        WorkerBridge
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for WorkerBridge.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type WorkerBridge     = SchemaInterfaces.SSR.WorkerBridge;
+    /** @name        Application
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Application.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Application      = SchemaInterfaces.SSR.Application;
+    /** @name        RenderResult
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for RenderResult.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type RenderResult     = SchemaInterfaces.SSR.RenderResult;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract  = SchemaInterfaces.SSR.Service;
 
     /** @class       Island

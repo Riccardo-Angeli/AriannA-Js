@@ -13,16 +13,86 @@ import { Services }   from './Service.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Directives
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Directives contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Directives
 {
+    /** @name        Condition
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Condition.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Condition       = SchemaTypes.Directives.Condition;
+    /** @name        Content
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Content.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Content         = SchemaTypes.Directives.Content;
+    /** @name        Render
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Render.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Render<T>       = SchemaTypes.Directives.Render<T>;
+    /** @name        ObjectRender
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ObjectRender.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ObjectRender    = SchemaTypes.Directives.ObjectRender;
+    /** @name        Update
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Update.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Update          = SchemaTypes.Directives.Update;
+    /** @name        Kind
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Kind.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Kind            = SchemaTypes.Directive.Kind;
+    /** @name        ComponentMeta
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ComponentMeta.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ComponentMeta   = SchemaInterfaces.Directives.ComponentMeta;
+    /** @name        CustomDirectiveHooks
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for CustomDirectiveHooks.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type CustomDirectiveHooks = SchemaInterfaces.Directives.CustomDirectiveHooks;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract = SchemaInterfaces.Directive.Service;
 
     /** @class       Decorators
@@ -212,6 +282,13 @@ export namespace Directives
         }
     }
 
+    /** @name        Directive
+     *  @public
+     *  @type        {typeof Directive}
+     *  @description Runtime class responsible for the Directive capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Directive
     {
         /** @name        Decorators

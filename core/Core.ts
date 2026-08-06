@@ -924,6 +924,13 @@ export namespace Core
             .apply(container, args);
         }
 
+        /** @name        Service
+         *  @public
+         *  @type        {typeof Service}
+         *  @description Runtime class responsible for the Service capability.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
         export class Service<T extends object = object>
         {
             static
@@ -1690,6 +1697,13 @@ export namespace Core
         }
     }
 
+    /** @name        Text
+     *  @public
+     *  @type        {namespace}
+     *  @description Groups the Text contracts and runtime surface.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export namespace Text
     {
         /** @name        toKebab
@@ -1858,6 +1872,13 @@ export namespace Core
         }
     }
 
+    /** @name        Debug
+     *  @public
+     *  @type        {namespace}
+     *  @description Groups the Debug contracts and runtime surface.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export namespace Debug
     {
         /** @name        warn

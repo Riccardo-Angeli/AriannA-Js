@@ -31,11 +31,53 @@ import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
  *  @license     MIT / Commercial (dual license) */
 export namespace Css
 {
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     type ServiceContract           = SchemaInterfaces.Css.Service;
+    /** @name        RuleInterface
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for RuleInterface.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     type RuleInterface             = SchemaInterfaces.Css.RuleInterface;
+    /** @name        SelectorInterface
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for SelectorInterface.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     type SelectorInterface         = SchemaInterfaces.Css.SelectorInterface;
+    /** @name        StylesheetObjectInterface
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for StylesheetObjectInterface.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     type StylesheetObjectInterface = SchemaInterfaces.Css.SelectorInterface;
+    /** @name        StylesheetArguments
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for StylesheetArguments.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     type StylesheetArguments       = SchemaTypes.Css.StylesheetArguments | Rule[];
+    /** @name        RuleArguments
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for RuleArguments.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     type RuleArguments             = SchemaTypes.Css.RuleArguments | Rule;
 
     /** @name        Rule

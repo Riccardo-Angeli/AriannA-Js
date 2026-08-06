@@ -17,27 +17,167 @@ import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 import { Core }       from './Core.ts';
 import { Reactivity } from './Reactive.ts';
 
+/** @name        Workers
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Workers contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Workers
 {
+    /** @name        WorkerState
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for WorkerState.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type WorkerState      = SchemaTypes.Workers.WorkerState;
+    /** @name        PoolState
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for PoolState.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type PoolState        = SchemaTypes.Workers.PoolState;
+    /** @name        WorkerType
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for WorkerType.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type WorkerType       = SchemaTypes.Workers.WorkerType;
 
+    /** @name        WorkerOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for WorkerOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type WorkerOptions    = SchemaInterfaces.Workers.WorkerOptions;
+    /** @name        PoolOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for PoolOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type PoolOptions      = SchemaInterfaces.Workers.PoolOptions;
+    /** @name        TaskExecutor
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for TaskExecutor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type TaskExecutor     = SchemaInterfaces.Workers.TaskExecutor;
+    /** @name        MessageSender
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for MessageSender.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type MessageSender    = SchemaInterfaces.Workers.MessageSender;
+    /** @name        PendingTask
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for PendingTask.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type PendingTask      = SchemaInterfaces.Workers.PendingTask;
+    /** @name        Handlers
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Handlers.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Handlers         = SchemaInterfaces.Workers.Handlers;
+    /** @name        ReadyMessage
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ReadyMessage.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ReadyMessage     = SchemaInterfaces.Workers.ReadyMessage;
+    /** @name        TaskRequest
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for TaskRequest.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type TaskRequest      = SchemaInterfaces.Workers.TaskRequest;
+    /** @name        MessageRequest
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for MessageRequest.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type MessageRequest   = SchemaInterfaces.Workers.MessageRequest;
+    /** @name        ProtocolMessage
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ProtocolMessage.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ProtocolMessage  = SchemaInterfaces.Workers.ProtocolMessage;
+    /** @name        ResultMessage
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ResultMessage.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ResultMessage    = SchemaInterfaces.Workers.ResultMessage;
+    /** @name        ErrorMessage
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ErrorMessage.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ErrorMessage     = SchemaInterfaces.Workers.ErrorMessage;
+    /** @name        SignalMessage
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for SignalMessage.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type SignalMessage    = SchemaInterfaces.Workers.SignalMessage;
+    /** @name        EventMessage
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for EventMessage.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type EventMessage     = SchemaInterfaces.Workers.EventMessage;
+    /** @name        QueuedTask
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for QueuedTask.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type QueuedTask       = SchemaInterfaces.Workers.QueuedTask;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract  = SchemaInterfaces.Workers.Service;
 
     /** @class       Worker

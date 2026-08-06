@@ -3,14 +3,70 @@ import { Core } from "./Core.ts";
 import type { Types as SchemaTypes } from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Namespaces
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Namespaces contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Namespaces
 {
+    /** @name        SchemaType
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for SchemaType.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type SchemaType     = SchemaInterfaces.Namespaces.Type;
+    /** @name        Descriptor
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Descriptor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Descriptor     = SchemaInterfaces.Namespaces.Namespace;
+    /** @name        RegistryBucket
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for RegistryBucket.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type RegistryBucket = SchemaInterfaces.Namespaces.RegistryBucket;
+    /** @name        Base
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Base.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Base           = SchemaTypes.Base;
+    /** @name        Constructor
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Constructor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Constructor    = SchemaTypes.Constructor;
+    /** @name        IDL
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for IDL.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type IDL            = SchemaTypes.IDL;
+    /** @name        TypeOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for TypeOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type TypeOptions    = SchemaTypes.TypeOptions;
 
     /** @class       Namespace
@@ -1289,11 +1345,53 @@ export namespace Namespaces
                                                     ? o.Bus
                                                     : [o.Bus];
 
+                                        /** @name        sht
+                                         *  @public
+                                         *  @type        {type alias}
+                                         *  @description Canonical type alias for sht.
+                                         *  @author      Riccardo Angeli
+                                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                                         *  @license     MIT / Commercial (dual license) */
                                         type sht = SchemaType['Shadow'];
+                                        /** @name        tpt
+                                         *  @public
+                                         *  @type        {type alias}
+                                         *  @description Canonical type alias for tpt.
+                                         *  @author      Riccardo Angeli
+                                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                                         *  @license     MIT / Commercial (dual license) */
                                         type tpt = SchemaType['Template'];
+                                        /** @name        slt
+                                         *  @public
+                                         *  @type        {type alias}
+                                         *  @description Canonical type alias for slt.
+                                         *  @author      Riccardo Angeli
+                                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                                         *  @license     MIT / Commercial (dual license) */
                                         type slt = SchemaType['Slot'];
+                                        /** @name        att
+                                         *  @public
+                                         *  @type        {type alias}
+                                         *  @description Canonical type alias for att.
+                                         *  @author      Riccardo Angeli
+                                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                                         *  @license     MIT / Commercial (dual license) */
                                         type att = SchemaType['Attributes'];
+                                        /** @name        rdt
+                                         *  @public
+                                         *  @type        {type alias}
+                                         *  @description Canonical type alias for rdt.
+                                         *  @author      Riccardo Angeli
+                                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                                         *  @license     MIT / Commercial (dual license) */
                                         type rdt = SchemaType['Render'];
+                                        /** @name        brt
+                                         *  @public
+                                         *  @type        {type alias}
+                                         *  @description Canonical type alias for brt.
+                                         *  @author      Riccardo Angeli
+                                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                                         *  @license     MIT / Commercial (dual license) */
                                         type brt = SchemaType['Brokers'];
 
                                         const descriptor: SchemaType =

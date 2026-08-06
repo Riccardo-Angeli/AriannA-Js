@@ -28,16 +28,86 @@ import Virtual        from './Virtual.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Reals
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Reals contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Reals
 {
+    /** @name        Target
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Target.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Target            = SchemaTypes.Reals.Target;
+    /** @name        Child
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Child.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Child             = SchemaTypes.Reals.Child;
+    /** @name        Definition
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Definition.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Definition        = SchemaInterfaces.Reals.Definition;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract   = SchemaInterfaces.Reals.Service;
+    /** @name        Signal
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Signal.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Signal<T>         = Reactivity.Signal<T>;
+    /** @name        SignalMono
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for SignalMono.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type SignalMono<T>     = Reactivity.Mono<T>;
+    /** @name        ReadonlySignal
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ReadonlySignal.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ReadonlySignal<T> = Reactivity.ReadonlySignal<T>;
+    /** @name        Rule
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Rule.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Rule              = Css.Rule;
+    /** @name        Stylesheet
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Stylesheet.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Stylesheet        = Css.Stylesheet;
 
     /** @class       Real

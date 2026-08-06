@@ -298,16 +298,93 @@ export namespace Services
             {  };
     }
 
+    /** @name        ObserverService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ObserverService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ObserverService   = Types.ObserverService;
+    /** @name        EventService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for EventService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type EventService      = Types.EventService;
+    /** @name        ReactivityService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ReactivityService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ReactivityService = Types.ReactivityService;
+    /** @name        CssService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for CssService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type CssService        = Types.CssService;
+    /** @name        RealService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for RealService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type RealService       = Types.RealService;
+    /** @name        ShadowService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ShadowService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ShadowService     = Types.ShadowService;
+    /** @name        StateService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for StateService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type StateService      = Types.StateService;
+    /** @name        VirtualService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for VirtualService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type VirtualService    = Types.VirtualService;
+    /** @name        TemplatesService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for TemplatesService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type TemplatesService  = Types.TemplatesService;
+    /** @name        ContextService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ContextService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ContextService    = Types.ContextService;
+    /** @name        DirectivesService
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for DirectivesService.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type DirectivesService = Types.DirectivesService;
 
     /* Services Static Services Properties */
@@ -747,6 +824,13 @@ export namespace Services
         return typeof fn === 'function' ? (fn as (...a: unknown[]) => R)(...args) : undefined;
     }
 
+    /** @name        Service
+     *  @public
+     *  @type        {typeof Service}
+     *  @description Runtime class responsible for the Service capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Service<T extends object = object>
     {
         static

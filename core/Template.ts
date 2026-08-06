@@ -16,14 +16,63 @@ import { Reactivity } from './Reactive.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Templates
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Templates contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Templates
 {
+    /** @name        Binding
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Binding.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Binding          = SchemaInterfaces.Template.Binding;
+    /** @name        Options
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Options.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Options          = SchemaInterfaces.Template.Options;
+    /** @name        Scope
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Scope.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Scope            = SchemaInterfaces.Template.Scope;
+    /** @name        Mount
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Mount.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Mount            = SchemaInterfaces.Template.Mount;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract  = SchemaInterfaces.Template.Service;
 
+    /** @name        Template
+     *  @public
+     *  @type        {typeof Template}
+     *  @description Runtime class responsible for the Template capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Template
     {
         static readonly #Cache = new Map<string, Template>();
@@ -87,34 +136,27 @@ export namespace Templates
 
             for(const binding of this.#bindings)
             {
-                const node =
-                    Template.#At(fragment, binding.Path);
+                const node = Template.#At(fragment, binding.Path);
+                if(!node) continue;
 
-                if(!node)
+                if(binding.Kind === 'event' && node instanceof Element && binding.Name)
                 {
+                    const evaluated = Template.#Evaluate(binding.Expression, scope);
+                    const candidate = typeof evaluated === 'function' ? evaluated : scope[binding.Expression];
+                    if(typeof candidate === 'function')
+                    {
+                        const listener = candidate.bind(options.Owner ?? scope) as EventListener;
+                        node.addEventListener(binding.Name, listener);
+                        disposers.push(() => node.removeEventListener(binding.Name!, listener));
+                    }
                     continue;
                 }
 
-                const effect =
-                    new Reactivity.Effect
-                    (
-                        () =>
-                        {
-                            Template.#Apply
-                            (
-                                node,
-                                binding,
-                                scope,
-                                options
-                            );
-                        }
-                    );
-
-                disposers.push
+                const effect = new Reactivity.Effect
                 (
-                    () =>
-                        effect.Dispose()
+                    () => Template.#Apply(node, binding, scope, options)
                 );
+                disposers.push(() => effect.Dispose());
             }
 
             const nodes =
@@ -282,31 +324,12 @@ export namespace Templates
 
                     break;
                 }
-
                 case 'event':
                 {
-                    if(!(node instanceof Element) || !binding.Name)
-                    {
-                        break;
-                    }
-
-                    const handler =
-                        typeof evaluate === 'function'
-                            ? evaluate
-                            : scope[binding.Expression];
-
-                    if(typeof handler === 'function')
-                    {
-                        node.addEventListener
-                        (
-                            binding.Name,
-                            handler.bind(options.Owner ?? scope) as EventListener,
-                            { once: true }
-                        );
-                    }
-
+                    /* Event bindings are installed once by Mount() and removed by its disposer. */
                     break;
                 }
+
 
                 case 'if':
                 {

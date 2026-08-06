@@ -17,16 +17,86 @@ import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 import { Core }       from './Core.ts';
 import { Reactivity } from './Reactive.ts';
 
+/** @name        States
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the States contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace States
 {
+    /** @name        Format
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Format.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Format          = SchemaTypes.State.Format;
+    /** @name        HistoryKind
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for HistoryKind.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type HistoryKind     = SchemaTypes.State.HistoryKind;
+    /** @name        Options
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Options.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Options         = SchemaInterfaces.State.Options;
+    /** @name        HistoryEntry
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for HistoryEntry.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type HistoryEntry<T> = SchemaInterfaces.State.HistoryEntry<T>;
+    /** @name        Snapshot
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Snapshot.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Snapshot<T>     = SchemaInterfaces.State.Snapshot<T>;
+    /** @name        Serializer
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Serializer.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Serializer      = SchemaInterfaces.State.Serializer;
+    /** @name        WorkerBridge
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for WorkerBridge.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type WorkerBridge    = SchemaInterfaces.State.WorkerBridge;
+    /** @name        ChangeEvent
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ChangeEvent.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ChangeEvent<T>  = SchemaInterfaces.State.ChangeEvent<T>;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract = SchemaInterfaces.State.Service;
 
     /** @class       JsonSerializer
@@ -1045,16 +1115,15 @@ export namespace States
             /** @name        RegisterSerializer
              *  @public
              *  @param       {Serializer} serializer Serializer implementation.
-             *  @returns     {Service} This service.
+             *  @returns     {Serializer} The registered serializer instance.
              *  @description Register a custom State serializer.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            RegisterSerializer(serializer: Serializer): ServiceContract
+            RegisterSerializer(serializer: Serializer): Serializer
             {
                 State.RegisterSerializer(serializer);
-
-                return this;
+                return serializer;
             }
         }
     );

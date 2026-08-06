@@ -15,18 +15,95 @@ import { Templates } from './Template.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Shadows
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Shadows contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Shadows
 {
+    /** @name        Mode
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Mode.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Mode             = SchemaTypes.Shadow.Mode;
+    /** @name        Backend
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Backend.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Backend          = SchemaTypes.Shadow.Backend;
+    /** @name        Projection
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Projection.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Projection       = SchemaTypes.Shadow.Projection;
+    /** @name        Options
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Options.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Options          = SchemaInterfaces.Shadow.Options;
+    /** @name        RootContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for RootContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type RootContract     = SchemaInterfaces.Shadow.Root;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract  = SchemaInterfaces.Shadow.Service;
+    /** @name        ShadowMode
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ShadowMode.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ShadowMode = Mode;
+    /** @name        AriannaShadowOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for AriannaShadowOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type AriannaShadowOptions = Options;
+    /** @name        AriannaShadow
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for AriannaShadow.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type AriannaShadow = Shadow;
 
+    /** @name        Shadow
+     *  @public
+     *  @type        {typeof Shadow}
+     *  @description Runtime class responsible for the Shadow capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Shadow
     {
         readonly #host: Element;

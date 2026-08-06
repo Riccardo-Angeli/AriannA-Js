@@ -36,15 +36,31 @@
  * operate in pure "link" mode — only the public tracking URL is exposed via
  * the "Track on <carrier> →" button.
  */
-export { Tracker } from './Tracker.ts';
-export type { TrackingEventKind, TrackingEvent, CarrierConfig, TrackerOptions, } from './Tracker.ts';
-export { DHLTracker } from './DHLTracker.ts';
-export type { DHLTrackerOptions } from './DHLTracker.ts';
-export { UPSTracker } from './UPSTracker.ts';
-export type { UPSTrackerOptions } from './UPSTracker.ts';
-export { FedExTracker } from './FedExTracker.ts';
-export type { FedExTrackerOptions } from './FedExTracker.ts';
-export { BRTTracker } from './BRTTracker.ts';
-export type { BRTTrackerOptions } from './BRTTracker.ts';
-export { TrackingMulti } from './TrackingMulti.ts';
-export type { CarrierId, TrackingMultiOptions } from './TrackingMulti.ts';
+import { Tracker as TrackerModule } from './Tracker.ts';
+import { DHLTracker as DHLTrackerModule } from './DHLTracker.ts';
+import { UPSTracker as UPSTrackerModule } from './UPSTracker.ts';
+import { FedExTracker as FedExTrackerModule } from './FedExTracker.ts';
+import { BRTTracker as BRTTrackerModule } from './BRTTracker.ts';
+import { TrackingMulti as TrackingMultiModule } from './TrackingMulti.ts';
+
+export const Tracker = TrackerModule.Tracker;
+export type TrackingEventKind = TrackerModule.TrackingEventKind;
+export type TrackingEvent = TrackerModule.TrackingEvent;
+export type CarrierConfig = TrackerModule.CarrierConfig;
+export type TrackerOptions = TrackerModule.TrackerOptions;
+
+export const DHLTracker = DHLTrackerModule.DHLTracker;
+export type DHLTrackerOptions = DHLTrackerModule.Interfaces.DHLTrackerOptions;
+
+export const UPSTracker = UPSTrackerModule.UPSTracker;
+export type UPSTrackerOptions = UPSTrackerModule.Interfaces.UPSTrackerOptions;
+
+export const FedExTracker = FedExTrackerModule.FedExTracker;
+export type FedExTrackerOptions = FedExTrackerModule.Interfaces.FedExTrackerOptions;
+
+export const BRTTracker = BRTTrackerModule.BRTTracker;
+export type BRTTrackerOptions = BRTTrackerModule.Interfaces.BRTTrackerOptions;
+
+export const TrackingMulti = TrackingMultiModule.TrackingMulti;
+export type CarrierId = TrackingMultiModule.Types.CarrierId;
+export type TrackingMultiOptions = TrackingMultiModule.Interfaces.TrackingMultiOptions;

@@ -16,18 +16,102 @@ import { States }   from './State.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Routers
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Routers contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Routers
 {
+    /** @name        Method
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Method.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Method          = SchemaTypes.Router.Method;
+    /** @name        Status
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Status.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Status          = SchemaTypes.Router.Status;
+    /** @name        Mode
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Mode.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Mode            = SchemaTypes.Router.Mode;
+    /** @name        Route
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Route.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Route           = SchemaInterfaces.Router.Route;
+    /** @name        Match
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Match.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Match           = SchemaInterfaces.Router.Match;
+    /** @name        Navigation
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Navigation.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Navigation      = SchemaInterfaces.Router.Navigation;
+    /** @name        Guard
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Guard.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Guard           = SchemaInterfaces.Router.Guard;
+    /** @name        Loader
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Loader.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Loader          = SchemaInterfaces.Router.Loader;
+    /** @name        WorkerBridge
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for WorkerBridge.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type WorkerBridge    = SchemaInterfaces.Router.WorkerBridge;
+    /** @name        Options
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Options.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Options         = SchemaInterfaces.Router.Options;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract = SchemaInterfaces.Router.Service;
 
     /** @class       Router

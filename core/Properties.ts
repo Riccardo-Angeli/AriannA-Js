@@ -36,21 +36,133 @@ import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
  */
 export namespace Properties
 {
+    /** @name        Primitive
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Primitive.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Primitive             = SchemaTypes.Properties.Primitive;
+    /** @name        Type
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Type.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Type                  = SchemaTypes.Properties.Type;
+    /** @name        Ways
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Ways.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Ways                  = SchemaTypes.Properties.Ways;
+    /** @name        Bindings
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Bindings.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Bindings              = SchemaTypes.Properties.Bindings;
+    /** @name        Functions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Functions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Functions             = SchemaTypes.Properties.Functions;
+    /** @name        Hosts
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Hosts.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Hosts                 = SchemaTypes.Properties.Hosts;
+    /** @name        Change
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Change.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Change<T = unknown>   = SchemaInterfaces.Properties.Change<T>;
+    /** @name        Batch
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Batch.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Batch<T = unknown>    = SchemaInterfaces.Properties.Batch<T>;
+    /** @name        Signal
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Signal.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Signal<T>             = SchemaInterfaces.Properties.Signal<T>;
+    /** @name        Reactive
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Reactive.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Reactive              = SchemaInterfaces.Properties.Reactive;
+    /** @name        Native
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Native.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Native<T = unknown>   = SchemaInterfaces.Properties.Native<T>;
+    /** @name        Observable
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Observable.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Observable            = SchemaInterfaces.Properties.Observable;
+    /** @name        EventDescriptor
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for EventDescriptor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type EventDescriptor       = SchemaInterfaces.Properties.Event;
+    /** @name        Binding
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Binding.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Binding               = SchemaInterfaces.Properties.Binding;
+    /** @name        Hook
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Hook.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Hook                  = SchemaInterfaces.Properties.Hook;
+    /** @name        PropertyDescriptor
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for PropertyDescriptor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type PropertyDescriptor<T = unknown> = SchemaInterfaces.Properties.PropertyDescriptor<T>;
 
     // ── The Property class ───────────────────────────────────────────────────────

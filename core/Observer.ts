@@ -2,8 +2,22 @@ import type { Types as SchemaTypes } from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 import { Core } from './Core.ts';
 
+/** @name        Observers
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Observers contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Observers
 {
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract = SchemaInterfaces.Observers.Service;
 
     /** @class       Observer

@@ -4,82 +4,113 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * AriannA 3D Modifiers — barrel.
- *
- * Importing this barrel:
- *   • Registers all 15 declarative custom elements
- *     (arianna-bend, arianna-twist, arianna-bevel, arianna-decimate,
- *      arianna-inflate, arianna-mirror, arianna-smooth, arianna-snap,
- *      arianna-subdivision, arianna-wave, arianna-billboard, arianna-fade,
- *      arianna-lod, arianna-drag, arianna-array)
- *   • Re-exports the 15 programmatic modifier classes
- *
- * Two equivalent usage shapes — see Base.ts header for the design rationale.
- *
- * # Declarative
- *
- *   <arianna-viewport-3d>
- *     <arianna-mesh id="m1" geometry="cylinder"></arianna-mesh>
- *     <arianna-twist for="m1" angle="3.14"></arianna-twist>
- *     <arianna-bend  for="m1" angle="0.5" axis="z"></arianna-bend>
- *   </arianna-viewport-3d>
- *
- * # Programmatic
- *
- *   import { TwistModifier, BendModifier } from '.../modifiers/3D';
- *   new TwistModifier(mesh, Math.PI).apply();
- *   new BendModifier(mesh, 0.5, 'z').apply();
- *
- * See TODO_SECOND_PASS.md for the viewport integration checklist.
+ * AriannA 3D Modifiers — canonical barrel.
  */
-// Base + types
-export { Modifier3D, Modifier3DElement } from './Base.ts';
-export type { Vec3Like, Geometry3Like, MeshLike, SceneLike, CameraLike, Viewport3DLike, } from './Base.ts';
-export { _v3, _vAdd, _vSub, _vScale, _vLen, _vNorm, _vCross, _vLerp, _cloneGeom, _recomputeNormals, } from './Base.ts';
-// Geometry-mutating modifiers
-export { BendModifier, BendModifierElement } from './BendModifier.ts';
-export { TwistModifier, TwistModifierElement } from './TwistModifier.ts';
-export { BevelModifier, BevelModifierElement } from './BevelModifier.ts';
-export { InflateModifier, InflateModifierElement } from './InflateModifier.ts';
-export { DecimateModifier, DecimateModifierElement } from './DecimateModifier.ts';
-export { SubdivisionModifier, SubdivisionModifierElement } from './SubdivisionModifier.ts';
-export { SmoothModifier, SmoothModifierElement } from './SmoothModifier.ts';
-export { MirrorModifier, MirrorModifierElement } from './MirrorModifier.ts';
-export type { MirrorAxis } from './MirrorModifier.ts';
-// Position / animation modifiers
-export { SnapModifier, SnapModifierElement } from './SnapModifier.ts';
-export { WaveModifier, WaveModifierElement } from './WaveModifier.ts';
-export type { WaveModifierOptions } from './WaveModifier.ts';
-// Per-frame camera-driven modifiers
-export { BillboardModifier, BillboardModifierElement } from './BillboardModifier.ts';
-export { FadeModifier, FadeModifierElement } from './FadeModifier.ts';
-export { LODModifier, LODModifierElement } from './LODModifier.ts';
-export type { LODLevel } from './LODModifier.ts';
-// Pointer-driven modifier
-export { DragModifier, DragModifierElement } from './DragModifier.ts';
-export type { DragCallback3D } from './DragModifier.ts';
-// Scene-mutating modifier
-export { ArrayModifier, ArrayModifierElement } from './ArrayModifier.ts';
-export type { ArrayModifierOptions } from './ArrayModifier.ts';
-// Convenience bundle
-import { BendModifier } from './BendModifier.ts';
-import { TwistModifier } from './TwistModifier.ts';
-import { BevelModifier } from './BevelModifier.ts';
-import { InflateModifier } from './InflateModifier.ts';
-import { DecimateModifier } from './DecimateModifier.ts';
-import { SubdivisionModifier } from './SubdivisionModifier.ts';
-import { SmoothModifier } from './SmoothModifier.ts';
-import { MirrorModifier } from './MirrorModifier.ts';
-import { SnapModifier } from './SnapModifier.ts';
-import { WaveModifier } from './WaveModifier.ts';
-import { BillboardModifier } from './BillboardModifier.ts';
-import { FadeModifier } from './FadeModifier.ts';
-import { LODModifier } from './LODModifier.ts';
-import { DragModifier } from './DragModifier.ts';
-import { ArrayModifier } from './ArrayModifier.ts';
-export const Modifiers3D = {
-    BendModifier, TwistModifier, BevelModifier, InflateModifier, DecimateModifier,
-    SubdivisionModifier, SmoothModifier, MirrorModifier, SnapModifier, WaveModifier,
-    BillboardModifier, FadeModifier, LODModifier, DragModifier, ArrayModifier,
+
+import { Modifier3D as BaseNamespace } from './Base.ts';
+import { BendModifier as BendModifierNamespace } from './BendModifier.ts';
+import { TwistModifier as TwistModifierNamespace } from './TwistModifier.ts';
+import { BevelModifier as BevelModifierNamespace } from './BevelModifier.ts';
+import { InflateModifier as InflateModifierNamespace } from './InflateModifier.ts';
+import { DecimateModifier as DecimateModifierNamespace } from './DecimateModifier.ts';
+import { SubdivisionModifier as SubdivisionModifierNamespace } from './SubdivisionModifier.ts';
+import { SmoothModifier as SmoothModifierNamespace } from './SmoothModifier.ts';
+import { MirrorModifier as MirrorModifierNamespace } from './MirrorModifier.ts';
+import { SnapModifier as SnapModifierNamespace } from './SnapModifier.ts';
+import { WaveModifier as WaveModifierNamespace } from './WaveModifier.ts';
+import { BillboardModifier as BillboardModifierNamespace } from './BillboardModifier.ts';
+import { FadeModifier as FadeModifierNamespace } from './FadeModifier.ts';
+import { LODModifier as LODModifierNamespace } from './LODModifier.ts';
+import { DragModifier as DragModifierNamespace } from './DragModifier.ts';
+import { ArrayModifier as ArrayModifierNamespace } from './ArrayModifier.ts';
+
+export const Modifier3D = BaseNamespace.Modifier3D;
+export const Modifier3DElement = BaseNamespace.Modifier3DElement;
+export const _v3 = BaseNamespace._v3;
+export const _vAdd = BaseNamespace._vAdd;
+export const _vSub = BaseNamespace._vSub;
+export const _vScale = BaseNamespace._vScale;
+export const _vLen = BaseNamespace._vLen;
+export const _vNorm = BaseNamespace._vNorm;
+export const _vCross = BaseNamespace._vCross;
+export const _vLerp = BaseNamespace._vLerp;
+export const _cloneGeom = BaseNamespace._cloneGeom;
+export const _recomputeNormals = BaseNamespace._recomputeNormals;
+
+export type Vec3Like = BaseNamespace.Interfaces.Vec3Like;
+export type Geometry3Like = BaseNamespace.Interfaces.Geometry3Like;
+export type MeshLike = BaseNamespace.Interfaces.MeshLike;
+export type SceneLike = BaseNamespace.Interfaces.SceneLike;
+export type CameraLike = BaseNamespace.Interfaces.CameraLike;
+export type Viewport3DLike = BaseNamespace.Interfaces.Viewport3DLike;
+
+export const BendModifier = BendModifierNamespace.BendModifier;
+export const BendModifierElement = BendModifierNamespace.BendModifierElement;
+
+export const TwistModifier = TwistModifierNamespace.TwistModifier;
+export const TwistModifierElement = TwistModifierNamespace.TwistModifierElement;
+
+export const BevelModifier = BevelModifierNamespace.BevelModifier;
+export const BevelModifierElement = BevelModifierNamespace.BevelModifierElement;
+
+export const InflateModifier = InflateModifierNamespace.InflateModifier;
+export const InflateModifierElement = InflateModifierNamespace.InflateModifierElement;
+
+export const DecimateModifier = DecimateModifierNamespace.DecimateModifier;
+export const DecimateModifierElement = DecimateModifierNamespace.DecimateModifierElement;
+
+export const SubdivisionModifier = SubdivisionModifierNamespace.SubdivisionModifier;
+export const SubdivisionModifierElement = SubdivisionModifierNamespace.SubdivisionModifierElement;
+
+export const SmoothModifier = SmoothModifierNamespace.SmoothModifier;
+export const SmoothModifierElement = SmoothModifierNamespace.SmoothModifierElement;
+
+export const MirrorModifier = MirrorModifierNamespace.MirrorModifier;
+export const MirrorModifierElement = MirrorModifierNamespace.MirrorModifierElement;
+export type MirrorAxis = MirrorModifierNamespace.Types.MirrorAxis;
+
+export const SnapModifier = SnapModifierNamespace.SnapModifier;
+export const SnapModifierElement = SnapModifierNamespace.SnapModifierElement;
+
+export const WaveModifier = WaveModifierNamespace.WaveModifier;
+export const WaveModifierElement = WaveModifierNamespace.WaveModifierElement;
+export type WaveModifierOptions = WaveModifierNamespace.Interfaces.WaveModifierOptions;
+
+export const BillboardModifier = BillboardModifierNamespace.BillboardModifier;
+export const BillboardModifierElement = BillboardModifierNamespace.BillboardModifierElement;
+
+export const FadeModifier = FadeModifierNamespace.FadeModifier;
+export const FadeModifierElement = FadeModifierNamespace.FadeModifierElement;
+
+export const LODModifier = LODModifierNamespace.LODModifier;
+export const LODModifierElement = LODModifierNamespace.LODModifierElement;
+export type LODLevel = LODModifierNamespace.Interfaces.LODLevel;
+
+export const DragModifier = DragModifierNamespace.DragModifier;
+export const DragModifierElement = DragModifierNamespace.DragModifierElement;
+export type DragCallback3D = DragModifierNamespace.Types.DragCallback3D;
+
+export const ArrayModifier = ArrayModifierNamespace.ArrayModifier;
+export const ArrayModifierElement = ArrayModifierNamespace.ArrayModifierElement;
+export type ArrayModifierOptions = ArrayModifierNamespace.Interfaces.ArrayModifierOptions;
+
+export const Modifiers3D =
+{
+    BendModifier,
+    TwistModifier,
+    BevelModifier,
+    InflateModifier,
+    DecimateModifier,
+    SubdivisionModifier,
+    SmoothModifier,
+    MirrorModifier,
+    SnapModifier,
+    WaveModifier,
+    BillboardModifier,
+    FadeModifier,
+    LODModifier,
+    DragModifier,
+    ArrayModifier,
 };
+
 export default Modifiers3D;

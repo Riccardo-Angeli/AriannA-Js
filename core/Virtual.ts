@@ -63,19 +63,110 @@ import { Reals }       from './Real.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Virtuals
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Virtuals contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Virtuals
 {
+    /** @name        NodeType
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for NodeType.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type NodeType          = SchemaTypes.Virtuals.NodeType;
+    /** @name        Target
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Target.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Target            = SchemaTypes.Virtuals.Target;
+    /** @name        Child
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Child.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Child             = SchemaTypes.Virtuals.Child;
+    /** @name        Attributes
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Attributes.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Attributes        = SchemaTypes.DOM.Attributes;
+    /** @name        Definition
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Definition.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Definition        = SchemaInterfaces.Virtuals.Definition;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract   = SchemaInterfaces.Virtuals.Service;
+    /** @name        Signal
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Signal.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Signal<T>         = Reactivity.Signal<T>;
+    /** @name        SignalMono
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for SignalMono.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type SignalMono<T>     = Reactivity.Mono<T>;
+    /** @name        ReadonlySignal
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ReadonlySignal.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ReadonlySignal<T> = Reactivity.ReadonlySignal<T>;
+    /** @name        Rule
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Rule.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Rule              = Css.Rule;
+    /** @name        Stylesheet
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Stylesheet.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Stylesheet        = Css.Stylesheet;
+    /** @name        SchemaType
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for SchemaType.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type SchemaType        = SchemaInterfaces.Namespaces.Type;
 
     /**

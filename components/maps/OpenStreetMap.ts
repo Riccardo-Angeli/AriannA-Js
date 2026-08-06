@@ -23,34 +23,143 @@
  */
 import { Component } from '../../core/index.ts';
 import { MapEmbed, type MapProvider } from './MapEmbed.ts';
-@Component('arianna-osm-map', {}, {
-    Attributes: [
-        'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
-        'aspect-ratio', 'layer',
-    ],
-})
-export class OpenStreetMap extends MapEmbed {
-    getProvider(): MapProvider { return 'osm'; }
-    protected getEmbedUrl(): string {
-        const lat = this.centerLatNum();
-        const lng = this.centerLngNum();
-        const zoom = this.zoomNum();
-        const layer = this.getAttribute('layer') ?? 'mapnik';
-        // Span heuristic: smaller numbers = tighter bbox = higher visual zoom
-        const span = 0.6 / Math.pow(2, zoom - 8);
-        const bbox = `${lng - span},${lat - span / 2},${lng + span},${lat + span / 2}`;
-        const marker = this.hasMarker() ? `&marker=${lat}%2C${lng}` : '';
-        return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=${layer}${marker}`;
+
+/** @namespace   OpenStreetMap
+ *  @public
+ *  @description Namespace containing OpenStreetMap contracts and implementation.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
+export namespace OpenStreetMap
+{
+    /** @class       OpenStreetMap
+     *  @public
+     *  @description AriannA OpenStreetMap component implementation.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    @Component('arianna-osm-map', {}, {
+        Attributes: [
+            'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
+            'aspect-ratio', 'layer',
+        ],
+    })
+    export class OpenStreetMap extends MapEmbed.MapEmbed
+    {
+        /** @name        getProvider
+         *  @public
+         *  @type        {MapProvider}
+         *  @description Component member for get Provider.
+         *  @returns     {MapProvider} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        getProvider(): MapProvider { return 'osm'; }
+
+        /** @name        getEmbedUrl
+         *  @protected
+         *  @type        {string}
+         *  @description Component member for get Embed Url.
+         *  @returns     {string} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        protected getEmbedUrl(): string
+        {
+            /** @name        lat
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned lat value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const lat = this.centerLatNum();
+
+            /** @name        lng
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned lng value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const lng = this.centerLngNum();
+
+            /** @name        zoom
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned zoom value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const zoom = this.zoomNum();
+
+            /** @name        layer
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned layer value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const layer = this.getAttribute('layer') ?? 'mapnik';
+            // Span heuristic: smaller numbers = tighter bbox = higher visual zoom
+            /** @name        span
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned span value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const span = 0.6 / Math.pow(2, zoom - 8);
+
+            /** @name        bbox
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned bbox value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const bbox = `${lng - span},${lat - span / 2},${lng + span},${lat + span / 2}`;
+
+            /** @name        marker
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned marker value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const marker = this.hasMarker() ? `&marker=${lat}%2C${lng}` : '';
+            return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=${layer}${marker}`;
+        }
+
+        /** @name        getOpenUrl
+         *  @protected
+         *  @type        {string}
+         *  @description Component member for get Open Url.
+         *  @returns     {string} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        protected getOpenUrl(): string
+        {
+            /** @name        lat
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned lat value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const lat = this.centerLatNum();
+
+            /** @name        lng
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned lng value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const lng = this.centerLngNum();
+            return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=${this.zoomNum()}/${lat}/${lng}`;
+        }
     }
-    protected getOpenUrl(): string {
-        const lat = this.centerLatNum();
-        const lng = this.centerLngNum();
-        return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=${this.zoomNum()}/${lat}/${lng}`;
-    }
-}
-/* ──────────────────────────────────────────────────────────────────────────
- * OpenStreetMap namespace — public component contracts and module helpers.
- * ────────────────────────────────────────────────────────────────────────── */
-export namespace OpenStreetMap {
 }
 export default OpenStreetMap;

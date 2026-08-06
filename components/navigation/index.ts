@@ -4,18 +4,9 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Barrel — navigation components (Batch 3 of the Component 2.0 migration).
- * Importing this module side-effect-registers all 7 custom elements so the
- * tags become available in HTML markup, plus re-exports the classes for JS
- * usage.
- *
- * Tags registered:
- *   arianna-breadcrumb, arianna-header, arianna-menu, arianna-nav-rail,
- *   arianna-pagination, arianna-stepper, arianna-sidebar
- *
- * Sidebar uses `<arianna-resizer>` internally for resize, so make sure the
- * modifiers/2D barrel is imported before mounting a resizable sidebar.
+ * Barrel — navigation components.
  */
+
 export { Breadcrumb } from './Breadcrumb.ts';
 export { Header } from './Header.ts';
 export { Menu } from './Menu.ts';
@@ -23,10 +14,24 @@ export { NavRail } from './NavRail.ts';
 export { Pagination } from './Pagination.ts';
 export { Stepper } from './Stepper.ts';
 export { Sidebar } from './Sidebar.ts';
-export type { BreadcrumbItem, BreadcrumbOptions } from './Breadcrumb.ts';
-export type { HeaderOptions } from './Header.ts';
-export type { MenuItem, MenuOptions } from './Menu.ts';
-export type { NavRailItem, NavRailOptions } from './NavRail.ts';
-export type { PaginationOptions } from './Pagination.ts';
-export type { StepperOptions } from './Stepper.ts';
-export type { SidebarItem, SidebarSection, SidebarOptions, } from './Sidebar.ts';
+
+import { Breadcrumb as BreadcrumbNamespace } from './Breadcrumb.ts';
+import { Header as HeaderNamespace } from './Header.ts';
+import { Menu as MenuNamespace } from './Menu.ts';
+import { NavRail as NavRailNamespace } from './NavRail.ts';
+import { Pagination as PaginationNamespace } from './Pagination.ts';
+import { Stepper as StepperNamespace } from './Stepper.ts';
+import { Sidebar as SidebarNamespace } from './Sidebar.ts';
+
+export type BreadcrumbItem = BreadcrumbNamespace.Interfaces.BreadcrumbItem;
+export type BreadcrumbOptions = BreadcrumbNamespace.Interfaces.BreadcrumbOptions;
+export type HeaderOptions = HeaderNamespace.Interfaces.HeaderOptions;
+export type MenuItem = MenuNamespace.Interfaces.MenuItem;
+export type MenuOptions = MenuNamespace.Interfaces.MenuOptions;
+export type NavRailItem = NavRailNamespace.Interfaces.NavRailItem;
+export type NavRailOptions = NavRailNamespace.Interfaces.NavRailOptions;
+export type PaginationOptions = PaginationNamespace.Interfaces.PaginationOptions;
+export type StepperOptions = StepperNamespace.Interfaces.StepperOptions;
+export type SidebarItem = SidebarNamespace.Interfaces.SidebarItem;
+export type SidebarSection = SidebarNamespace.Interfaces.SidebarSection;
+export type SidebarOptions = SidebarNamespace.Interfaces.SidebarOptions;

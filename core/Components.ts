@@ -34,13 +34,48 @@ import Virtual        from './Virtual.ts';
 
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
-import {Shadow} from "./index.ts";
+import { Shadows } from './Shadow.ts';
 
+/** @name        Components
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Components contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Components
 {
+    /** @name        Callable
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Callable.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Callable       = SchemaInterfaces.Components.ComponentInterface;
+    /** @name        Constructor
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Constructor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Constructor    = SchemaTypes.Constructor;
+    /** @name        TypeDescriptor
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for TypeDescriptor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type TypeDescriptor = SchemaInterfaces.Namespaces.Type;
+    /** @name        Template
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Template.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Template       = SchemaInterfaces.Template.Binding;
 
     /** @name        Binding
@@ -199,6 +234,13 @@ export namespace Components
         }
     }
 
+    /** @name        Component
+     *  @public
+     *  @type        {typeof Component}
+     *  @description Runtime class responsible for the Component capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Component
     {
         static readonly #realFacets  = new WeakMap<Element, Real>();

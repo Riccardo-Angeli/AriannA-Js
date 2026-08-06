@@ -1,33 +1,30 @@
 /**
  * @module    components/video
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026
+ * @version   2.0.0
+ * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * Barrel — video widgets. Importing this module side-effect-registers 2
- * custom-element tags + re-exports their classes, types, and helpers.
- *
- * # Tags registered
- *
- *   arianna-video-player        VideoPlayer       (multi-provider playback)
- *   arianna-video-track-editor  VideoTrackEditor  (timeline editor)
- *
- * # Events (VideoPlayer)
- *   arianna:video-play, arianna:video-pause, arianna:video-timeupdate,
- *   arianna:video-ended, arianna:video-source
- *
- * # Events (VideoTrackEditor)
- *   arianna:editor-change, arianna:editor-select, arianna:editor-time
- *
- * # Web Audio routing
- *
- * VideoPlayer's audio track is only routable via Web Audio when (a) the
- * source is local/direct and (b) the widget is composed with the
- * `AudioComponent` base (audio/ batch). For remote provider iframes
- * (YouTube/Vimeo/Twitch) the audio is sandboxed by the provider's origin
- * and cannot be tapped from the page.
+ * @description Barrel for AriannA video components, contracts and provider detection.
  */
-export { VideoPlayer, detectVideoProvider } from './VideoPlayer.ts';
-export type { VideoProvider, VideoPlayerOptions } from './VideoPlayer.ts';
+
+import { VideoPlayer as VideoPlayerModule }           from './VideoPlayer.ts';
+import { VideoTrackEditor as VideoTrackEditorModule } from './VideoTrackEditor.ts';
+
+/** VideoPlayer namespace and implementation. */
+export { VideoPlayer } from './VideoPlayer.ts';
+
+/** VideoTrackEditor namespace and implementation. */
 export { VideoTrackEditor } from './VideoTrackEditor.ts';
-export type { VideoClip } from './VideoTrackEditor.ts';
+
+/** Detect the provider represented by a video URL. */
+export const detectVideoProvider = VideoPlayerModule.detectVideoProvider;
+
+/** Supported video-provider identifier. */
+export type VideoProvider = VideoPlayerModule.Types.VideoProvider;
+
+/** VideoPlayer construction options. */
+export type VideoPlayerOptions = VideoPlayerModule.Interfaces.VideoPlayerOptions;
+
+/** VideoTrackEditor clip contract. */
+export type VideoClip = VideoTrackEditorModule.VideoClip;

@@ -11,16 +11,86 @@ import { Services } from './Service.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Plugins
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Plugins contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Plugins
 {
+    /** @name        Name
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Name.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Name            = SchemaTypes.Plugins.Name;
+    /** @name        State
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for State.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type State           = SchemaTypes.Plugins.State;
+    /** @name        Options
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Options.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Options         = SchemaTypes.Plugins.Options;
+    /** @name        Cleanup
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Cleanup.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Cleanup         = SchemaTypes.Plugins.Cleanup;
+    /** @name        Installer
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Installer.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Installer       = SchemaTypes.Plugins.Installer;
+    /** @name        Definition
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Definition.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Definition      = SchemaInterfaces.Plugins.Definition;
+    /** @name        RecordContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for RecordContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type RecordContract  = SchemaInterfaces.Plugins.Record;
+    /** @name        APIContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for APIContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type APIContract     = SchemaInterfaces.Plugins.AriannAAPI;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract = SchemaInterfaces.Plugins.Service;
 
     /** @class       AriannAAPI

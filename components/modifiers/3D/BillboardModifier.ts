@@ -1,69 +1,184 @@
 /**
- * @convention AriannA component namespace merge
- * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
- */
-/**
  * @module    components/modifiers/3D/BillboardModifier
  * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026
+ * @version   2.0.0
+ * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * Always face the camera — optional per-axis lock. Runs per-frame.
- *
- * @example HTML
- *   <arianna-billboard for="m1" lock-y="true"></arianna-billboard>
- *
- * Attributes (declarative): for, lock-x, lock-y, lock-z, enabled
+ * @description AriannA BillboardModifier component module.
  */
+
 import { Component } from '../../../core/index.ts';
-import { Modifier3D, Modifier3DElement, _vNorm, _vSub, type MeshLike, type CameraLike, } from './Base.ts';
-export class BillboardModifier extends Modifier3D {
-    #lockX: boolean;
-    #lockY: boolean;
-    #lockZ: boolean;
-    constructor(mesh: MeshLike, opts: {
-        lockX?: boolean;
-        lockY?: boolean;
-        lockZ?: boolean;
-    } = {}) {
-        super(mesh);
-        this.#lockX = opts.lockX ?? false;
-        this.#lockY = opts.lockY ?? false;
-        this.#lockZ = opts.lockZ ?? false;
+import { Modifier3D as Modifier3DNamespace } from './Base.ts';
+
+/** @namespace   BillboardModifier
+ *  @public
+ *  @description Namespace containing BillboardModifier contracts and implementation.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
+export namespace BillboardModifier
+{
+    /** @class       BillboardModifierElement
+     *  @public
+     *  @description AriannA BillboardModifierElement component implementation.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+        @Component('arianna-billboard', {}, {
+        Attributes: ['for', 'lock-x', 'lock-y', 'lock-z', 'enabled'],
+    })
+    export class BillboardModifierElement extends Modifier3DNamespace.Modifier3DElement
+    {
+        /** @name        createModifier
+         *  @protected
+         *  @type        {Modifier3DNamespace.Modifier3D}
+         *  @description Component member for create Modifier.
+         *  @param       {Modifier3DNamespace.Interfaces.MeshLike} mesh Parameter.
+         *  @returns     {Modifier3DNamespace.Modifier3D} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        protected createModifier(mesh: Modifier3DNamespace.Interfaces.MeshLike): Modifier3DNamespace.Modifier3D
+        {
+            return new BillboardModifier(mesh, {
+                lockX: this.getAttribute('lock-x') === 'true',
+                lockY: this.getAttribute('lock-y') === 'true',
+                lockZ: this.getAttribute('lock-z') === 'true',
+            });
+        }
+
+        /** @name        needsFrameUpdate
+         *  @protected
+         *  @type        {boolean}
+         *  @description Component member for needs Frame Update.
+         *  @returns     {boolean} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        protected needsFrameUpdate(): boolean { return true; }
     }
-    apply(): this { return this; }
-    update(camera: CameraLike): this {
-        if (!this.enabled)
+
+    /** @class       BillboardModifier
+     *  @public
+     *  @description AriannA BillboardModifier component implementation.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export class BillboardModifier extends Modifier3DNamespace.Modifier3D
+    {
+        /** @name        #lockX
+         *  @public
+         *  @type        {boolean}
+         *  @description Component member for lock X.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        #lockX: boolean;
+
+        /** @name        #lockY
+         *  @public
+         *  @type        {boolean}
+         *  @description Component member for lock Y.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        #lockY: boolean;
+
+        /** @name        #lockZ
+         *  @public
+         *  @type        {boolean}
+         *  @description Component member for lock Z.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        #lockZ: boolean;
+
+        /** @name        constructor
+         *  @public
+         *  @type        {constructor}
+         *  @description Constructs the component for constructor.
+         *  @param       {Modifier3DNamespace.Interfaces.MeshLike} mesh Parameter.
+         *  @param       {{
+            lockX?: boolean;
+            lockY?: boolean;
+            lockZ?: boolean;
+        }} opts Parameter.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, opts: {
+            /** @name        lockX
+             *  @public
+             *  @type        {boolean}
+             *  @description Component member for lock X.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            lockX?: boolean;
+
+            /** @name        lockY
+             *  @public
+             *  @type        {boolean}
+             *  @description Component member for lock Y.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            lockY?: boolean;
+
+            /** @name        lockZ
+             *  @public
+             *  @type        {boolean}
+             *  @description Component member for lock Z.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            lockZ?: boolean;
+        } = {}) {
+            super(mesh);
+            this.#lockX = opts.lockX ?? false;
+            this.#lockY = opts.lockY ?? false;
+            this.#lockZ = opts.lockZ ?? false;
+        }
+
+        /** @name        apply
+         *  @public
+         *  @type        {this}
+         *  @description Component member for apply.
+         *  @returns     {this} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        apply(): this { return this; }
+
+        /** @name        update
+         *  @public
+         *  @type        {this}
+         *  @description Component member for update.
+         *  @param       {Modifier3DNamespace.Interfaces.CameraLike} camera Parameter.
+         *  @returns     {this} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        update(camera: Modifier3DNamespace.Interfaces.CameraLike): this
+        {
+            if (!this.enabled)
+                return this;
+
+            /** @name        dir
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned dir value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const dir = Modifier3DNamespace._vNorm(Modifier3DNamespace._vSub(camera.position, this.mesh.position));
+            if (!this.#lockY)
+                this.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+            if (!this.#lockX)
+                this.mesh.rotation.x = -Math.asin(dir.y);
             return this;
-        const dir = _vNorm(_vSub(camera.position, this.mesh.position));
-        if (!this.#lockY)
-            this.mesh.rotation.y = Math.atan2(dir.x, dir.z);
-        if (!this.#lockX)
-            this.mesh.rotation.x = -Math.asin(dir.y);
-        return this;
+        }
     }
-}
-@Component('arianna-billboard', {}, {
-    Attributes: ['for', 'lock-x', 'lock-y', 'lock-z', 'enabled'],
-})
-export class BillboardModifierElement extends Modifier3DElement {
-    protected createModifier(mesh: MeshLike): Modifier3D {
-        return new BillboardModifier(mesh, {
-            lockX: this.getAttribute('lock-x') === 'true',
-            lockY: this.getAttribute('lock-y') === 'true',
-            lockZ: this.getAttribute('lock-z') === 'true',
-        });
-    }
-    protected needsFrameUpdate(): boolean { return true; }
-}
-/* ──────────────────────────────────────────────────────────────────────────
- * BillboardModifier namespace — public component contracts and module helpers.
- * ────────────────────────────────────────────────────────────────────────── */
-export namespace BillboardModifier {
-}
-/* ──────────────────────────────────────────────────────────────────────────
- * BillboardModifierElement namespace — public component contracts and module helpers.
- * ────────────────────────────────────────────────────────────────────────── */
-export namespace BillboardModifierElement {
 }
 export default BillboardModifier;

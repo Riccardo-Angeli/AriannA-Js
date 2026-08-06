@@ -28,40 +28,260 @@ import { Core } from './Core.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Reactivity
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Reactivity contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Reactivity
 {
+    /** @name        Key
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Key.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Key                            = SchemaTypes.Reactivity.Key;
+    /** @name        Path
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Path.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Path                           = SchemaTypes.Reactivity.Path;
+    /** @name        ChangeKind
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ChangeKind.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ChangeKind                     = SchemaTypes.Reactivity.ChangeKind;
+    /** @name        Schedule
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Schedule.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Schedule                       = SchemaTypes.Reactivity.Schedule;
+    /** @name        Equality
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Equality.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Equality<T>                    = SchemaTypes.Reactivity.Equality<T>;
+    /** @name        Cleanup
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Cleanup.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Cleanup                        = SchemaTypes.Reactivity.Cleanup;
+    /** @name        Stop
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Stop.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Stop                           = SchemaTypes.Reactivity.Stop;
+    /** @name        WatchHandler
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for WatchHandler.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type WatchHandler<T>                = SchemaTypes.Reactivity.WatchHandler<T>;
+    /** @name        ResourceState
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ResourceState.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ResourceState                  = SchemaTypes.Reactivity.ResourceState;
+    /** @name        ResourceFetcher
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ResourceFetcher.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ResourceFetcher<T, S = unknown> = SchemaTypes.Reactivity.ResourceFetcher<T, S>;
+    /** @name        ChangeEvent
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ChangeEvent.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ChangeEvent                    = SchemaInterfaces.Reactivity.ChangeEvent;
+    /** @name        SignalOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for SignalOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type SignalOptions<T>               = SchemaInterfaces.Reactivity.SignalOptions<T>;
+    /** @name        EffectOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for EffectOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type EffectOptions                  = SchemaInterfaces.Reactivity.EffectOptions;
+    /** @name        WatchOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for WatchOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type WatchOptions<T>                = SchemaInterfaces.Reactivity.WatchOptions<T>;
+    /** @name        ReactiveOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ReactiveOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ReactiveOptions                = SchemaInterfaces.Reactivity.ReactiveOptions;
+    /** @name        ResourceOptions
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ResourceOptions.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ResourceOptions<T>             = SchemaInterfaces.Reactivity.ResourceOptions<T>;
+    /** @name        SignalContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for SignalContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type SignalContract<T>              = SchemaInterfaces.Reactivity.Signal<T>;
+    /** @name        ReadonlySignalContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ReadonlySignalContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ReadonlySignalContract<T>      = SchemaInterfaces.Reactivity.ReadonlySignal<T>;
+    /** @name        MemoContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for MemoContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type MemoContract<T>                = SchemaInterfaces.Reactivity.Memo<T>;
+    /** @name        ResourceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ResourceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ResourceContract<T, S = unknown> = SchemaInterfaces.Reactivity.Resource<T, S>;
+    /** @name        SelectorContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for SelectorContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type SelectorContract<T, K = T>     = SchemaInterfaces.Reactivity.Selector<T, K>;
+    /** @name        ReactionContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ReactionContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ReactionContract               = SchemaInterfaces.Reactivity.Reaction;
+    /** @name        Snapshot
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Snapshot.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Snapshot                       = SchemaInterfaces.Reactivity.Snapshot;
+    /** @name        Subscriber
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Subscriber.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Subscriber                     = SchemaInterfaces.Reactivity.Computation;
+    /** @name        Dependency
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Dependency.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Dependency                     = SchemaTypes.Reactivity.Dependency;
+    /** @name        Owner
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Owner.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Owner                          = SchemaInterfaces.Reactivity.Owner;
+    /** @name        Computation
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Computation.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Computation                    = SchemaInterfaces.Reactivity.Computation;
+    /** @name        ProxyMeta
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ProxyMeta.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ProxyMeta                      = SchemaInterfaces.Reactivity.ProxyMeta;
+    /** @name        TransactionEntry
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for TransactionEntry.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type TransactionEntry               = SchemaInterfaces.Reactivity.TransactionEntry;
 
     const Graph = new WeakMap<object, Map<Key, Dependency>>();
-    const RawToProxy = new WeakMap<object, object>();
+    /** @name        RawToProxy
+     *  @private
+     *  @type        {WeakMap<object, Map<string, object>>}
+     *  @description Mode-aware proxy cache. A raw value may legitimately have distinct deep, shallow,
+     *               readonly and shallow-readonly facades; sharing one proxy across those modes breaks
+     *               readonly guarantees and nested wrapping semantics.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license)
+     */
+    const RawToProxy = new WeakMap<object, Map<string, object>>();
     const ProxyToRaw = new WeakMap<object, object>();
     const ProxyMetadata = new WeakMap<object, ProxyMeta>();
     const MarkedRaw = new WeakSet<object>();
@@ -545,7 +765,9 @@ export namespace Reactivity
     function ReactiveProxy(raw: object, meta: ProxyMeta): object
     {
         if(IsProxy(raw)) return raw;
-        const cached = RawToProxy.get(raw);
+        const mode = `${meta.Readonly ? 'readonly' : 'mutable'}:${meta.Shallow ? 'shallow' : 'deep'}`;
+        const cache = RawToProxy.get(raw);
+        const cached = cache?.get(mode);
         if(cached)
         {
             const existing = ProxyMetadata.get(cached);
@@ -565,8 +787,19 @@ export namespace Reactivity
 
                     if(Array.isArray(target) && typeof key === 'string' && ArrayMutators.has(key))
                     {
-                        const method = Reflect.get(target, key, receiver);
-                        return (...args: unknown[]) => RunBatch(() => Reflect.apply(method, receiver, args.map(ToRaw)));
+                        const method = Reflect.get(target, key, target);
+                        return (...args: unknown[]) =>
+                        {
+                            if(meta.Readonly) throw new TypeError(`Readonly reactive array method: ${key}.`);
+                            return RunBatch(() => Reflect.apply(method, receiver, args.map(ToRaw)));
+                        };
+                    }
+
+                    const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+                    if(descriptor && descriptor.configurable === false)
+                    {
+                        if('value' in descriptor && descriptor.writable === false) return descriptor.value;
+                        if(!('value' in descriptor) && descriptor.get === undefined) return undefined;
                     }
 
                     const result = Reflect.get(target, key, receiver);
@@ -642,7 +875,9 @@ export namespace Reactivity
                 },
             });
 
-        RawToProxy.set(raw, proxy);
+        const proxies = RawToProxy.get(raw) ?? new Map<string, object>();
+        proxies.set(mode, proxy);
+        RawToProxy.set(raw, proxies);
         ProxyToRaw.set(proxy, raw);
         ProxyMetadata.set(proxy, meta);
         return proxy;
@@ -650,7 +885,8 @@ export namespace Reactivity
 
     function ProxyFor(raw: object): object
     {
-        return RawToProxy.get(raw) ?? raw;
+        const proxies = RawToProxy.get(raw);
+        return proxies?.get('mutable:deep') ?? proxies?.values().next().value ?? raw;
     }
 
     export function ReactiveObject<T extends object>(source: T, options: ReactiveOptions = {}): T
@@ -1230,6 +1466,13 @@ export namespace Reactivity
     //  NOMINAL FLUENT PUBLIC SURFACE
     // ═════════════════════════════════════════════════════════════════════════
 
+    /** @name        ReadonlySignal
+     *  @public
+     *  @type        {typeof ReadonlySignal}
+     *  @description Runtime class responsible for the ReadonlySignal capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class ReadonlySignal<T>
     {
         protected readonly Source: ReadonlySignalContract<T>;
@@ -1293,6 +1536,13 @@ export namespace Reactivity
         }
     }
 
+    /** @name        Signal
+     *  @public
+     *  @type        {typeof Signal}
+     *  @description Runtime class responsible for the Signal capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Signal<T> extends ReadonlySignal<T>
     {
         protected declare readonly Source: SignalContract<T>;
@@ -1339,6 +1589,13 @@ export namespace Reactivity
         }
     }
 
+    /** @name        Mono
+     *  @public
+     *  @type        {typeof Mono}
+     *  @description Runtime class responsible for the Mono capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Mono<T>
     {
         #value: T;
@@ -1424,6 +1681,13 @@ export namespace Reactivity
         }
     }
 
+    /** @name        Memo
+     *  @public
+     *  @type        {typeof Memo}
+     *  @description Runtime class responsible for the Memo capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Memo<T> extends ReadonlySignal<T>
     {
         protected declare readonly Source: MemoContract<T>;
@@ -1442,6 +1706,13 @@ export namespace Reactivity
         }
     }
 
+    /** @name        Effect
+     *  @public
+     *  @type        {typeof Effect}
+     *  @description Runtime class responsible for the Effect capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Effect
     {
         readonly #stop: Stop;
@@ -1459,6 +1730,13 @@ export namespace Reactivity
         Stop(): void { this.Dispose(); }
     }
 
+    /** @name        Watch
+     *  @public
+     *  @type        {typeof Watch}
+     *  @description Runtime class responsible for the Watch capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Watch<T>
     {
         readonly #stop: Stop;
@@ -1476,6 +1754,13 @@ export namespace Reactivity
         Stop(): void { this.Dispose(); }
     }
 
+    /** @name        Reaction
+     *  @public
+     *  @type        {typeof Reaction}
+     *  @description Runtime class responsible for the Reaction capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Reaction
     {
         readonly #reaction: ReactionContract;
@@ -1490,6 +1775,13 @@ export namespace Reactivity
         Dispose(): void { this.#reaction.Dispose(); }
     }
 
+    /** @name        Resource
+     *  @public
+     *  @type        {typeof Resource}
+     *  @description Runtime class responsible for the Resource capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Resource<T, S = unknown>
     {
         readonly #resource: ResourceContract<T, S>;
@@ -1518,6 +1810,13 @@ export namespace Reactivity
         Dispose(): void { this.#resource.Dispose(); }
     }
 
+    /** @name        Batch
+     *  @public
+     *  @type        {typeof Batch}
+     *  @description Runtime class responsible for the Batch capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Batch
     {
         readonly #operations: Array<() => unknown> = [];
@@ -1532,6 +1831,13 @@ export namespace Reactivity
         static Run<T>(operation: () => T): T { return RunBatch(operation); }
     }
 
+    /** @name        Transaction
+     *  @public
+     *  @type        {typeof Transaction}
+     *  @description Runtime class responsible for the Transaction capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Transaction
     {
         readonly #operations: Array<() => unknown> = [];
@@ -1559,6 +1865,13 @@ export namespace Reactivity
         static Run<T>(operation: () => T): T { return RunTransaction(operation); }
     }
 
+    /** @name        Root
+     *  @public
+     *  @type        {typeof Root}
+     *  @description Runtime class responsible for the Root capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Root<T = unknown>
     {
         readonly Value: T;
@@ -1573,6 +1886,13 @@ export namespace Reactivity
         static Run<T>(run: (Dispose: Cleanup) => T, name = 'Root'): T { return CreateRootPrimitive(run, name); }
     }
 
+    /** @name        Scope
+     *  @public
+     *  @type        {typeof Scope}
+     *  @description Runtime class responsible for the Scope capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Scope<T = unknown>
     {
         readonly Value: T;
@@ -1584,6 +1904,13 @@ export namespace Reactivity
         { return RunScopePrimitive(run, owner as Owner | null); }
     }
 
+    /** @name        Selector
+     *  @public
+     *  @type        {typeof Selector}
+     *  @description Runtime class responsible for the Selector capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Selector<T, K = T>
     {
         readonly #selector: SelectorContract<T, K>;
@@ -1593,12 +1920,26 @@ export namespace Reactivity
         Is(key: K): boolean { return this.#selector(key); }
     }
 
+    /** @name        Deferred
+     *  @public
+     *  @type        {typeof Deferred}
+     *  @description Runtime class responsible for the Deferred capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Deferred<T> extends ReadonlySignal<T>
     {
         constructor(source: () => T, timeout = 0)
         { super(CreateDeferredPrimitive(source, timeout)); }
     }
 
+    /** @name        LinkedSignal
+     *  @public
+     *  @type        {typeof LinkedSignal}
+     *  @description Runtime class responsible for the LinkedSignal capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class LinkedSignal<T> extends ReadonlySignal<T>
     {
         protected declare readonly Source: SignalContract<T>;
@@ -1643,6 +1984,13 @@ export namespace Reactivity
     //  EVENTED REACTIVE FACADE
     // ═════════════════════════════════════════════════════════════════════════
 
+    /** @name        Reactive
+     *  @public
+     *  @type        {typeof Reactive}
+     *  @description Runtime class responsible for the Reactive capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export class Reactive<T extends object = object> extends EventTarget
     {
         readonly #raw: T;

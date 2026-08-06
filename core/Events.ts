@@ -17,18 +17,102 @@ import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
  */
 export namespace Events
 {
+    /** @name        NativeEvent
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for NativeEvent.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type NativeEvent           = SchemaTypes.Events.NativeEvent;
+    /** @name        Target
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Target.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Target                = SchemaTypes.Events.Target;
+    /** @name        Phase
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Phase.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Phase                 = SchemaTypes.Events.Phase;
+    /** @name        EventType
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for EventType.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type EventType             = SchemaInterfaces.Events.EventType;
+    /** @name        Broker
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Broker.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Broker                = SchemaInterfaces.Events.Broker;
+    /** @name        EventDescriptor
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for EventDescriptor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type EventDescriptor       = SchemaInterfaces.Events.EventDescriptor;
+    /** @name        EventTargetDescriptor
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for EventTargetDescriptor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type EventTargetDescriptor = SchemaInterfaces.Events.EventTargetDescriptor;
+    /** @name        ListenerDescriptor
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ListenerDescriptor.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ListenerDescriptor    = SchemaInterfaces.Events.ListenerDescriptor;
+    /** @name        ListenerJson
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ListenerJson.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ListenerJson          = SchemaInterfaces.Events.Json;
+    /** @name        ListenerXML
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ListenerXML.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ListenerXML           = SchemaInterfaces.Events.XML;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract       = SchemaInterfaces.Events.Service;
 
+    /** @name        Registry
+     *  @private
+     *  @type        {typeof Registry}
+     *  @description Runtime class responsible for the Registry capability.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     class Registry
     {
         static readonly DOM: Readonly<Record<string, EventType>> = Object.freeze

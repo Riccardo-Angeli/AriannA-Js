@@ -42,4 +42,7 @@ export { OpenStreetMap } from './OpenStreetMap.ts';
 export { AppleMap } from './AppleMap.ts';
 export { AzureMap } from './AzureMap.ts';
 export { MapLibreMap } from './MapLibreMap.ts';
-export type { LatLng, MapProvider, MapEmbedOptions, } from './MapEmbed.ts';
+import { MapEmbed as MapEmbedNamespace } from './MapEmbed.ts';
+export type LatLng = MapEmbedNamespace.Interfaces.LatLng;
+export type MapProvider = MapEmbedNamespace.Types.MapProvider;
+export type MapEmbedOptions = MapEmbedNamespace.Interfaces.MapEmbedOptions;

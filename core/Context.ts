@@ -17,16 +17,86 @@ import { States }     from './State.ts';
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
+/** @name        Contexts
+ *  @public
+ *  @type        {namespace}
+ *  @description Groups the Contexts contracts and runtime surface.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
 export namespace Contexts
 {
+    /** @name        Scope
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Scope.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Scope                = SchemaTypes.Context.Scope;
+    /** @name        SourceKind
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for SourceKind.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type SourceKind           = SchemaTypes.Context.SourceKind;
+    /** @name        Options
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Options.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Options              = SchemaInterfaces.Context.Options;
+    /** @name        ChangeEvent
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ChangeEvent.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ChangeEvent<T>       = SchemaInterfaces.Context.ChangeEvent<T>;
+    /** @name        Consumer
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for Consumer.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type Consumer<T>          = SchemaInterfaces.Context.Consumer<T>;
+    /** @name        WorkerBridge
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for WorkerBridge.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type WorkerBridge         = SchemaInterfaces.Context.WorkerBridge;
+    /** @name        StateBridge
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for StateBridge.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type StateBridge<T>       = SchemaInterfaces.Context.StateBridge<T>;
+    /** @name        RecordContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for RecordContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type RecordContract<T>    = SchemaInterfaces.Context.Record<T>;
+    /** @name        ServiceContract
+     *  @public
+     *  @type        {type alias}
+     *  @description Canonical type alias for ServiceContract.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
     export type ServiceContract      = SchemaInterfaces.Context.Service;
 
     /** @class       Context
