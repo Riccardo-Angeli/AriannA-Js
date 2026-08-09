@@ -138,3 +138,13 @@ coverage/
 /documentation/COMPONENT_CONVENTIONS.md
 /documentation/private documentation/AriannA-2.0-Shadow-Migration-Handoff.md
 /documentation/private documentation/ROADMAP_v2.0.0.md
+/scripts/AUDIT.json
+/scripts/check-barrel.cjs
+/benchmark/keyed/index.html
+/benchmark/non-keyed/index.html
+/benchmark/keyed/src/Main.js
+/benchmark/non-keyed/src/Main.js
+/documentation/private documentation/Notes.txt
+/benchmark/keyed/package.json
+/benchmark/non-keyed/package.json
+/schema/Atlas-Logos-IR-Renderers-Blueprint-Draft.md
