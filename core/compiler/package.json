@@ -1,0 +1,1 @@
+{"name":"@arianna/compiler","version":"0.2.0-beta","type":"module","bin":{"arianna-compile":"./bin/arianna-compile.mjs"},"description":"AriannA compile-time DOM optimizer with automatic template promotion"}
