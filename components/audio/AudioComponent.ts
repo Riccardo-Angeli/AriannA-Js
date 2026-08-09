@@ -1,4 +1,13 @@
-import { Component } from '../../core/index.ts';
+import { Component, Templates } from '../../core/index.ts';
+
+/** @name        html
+ *  @public
+ *  @type        {inferred}
+ *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
+const html = Templates.Template.Html;
 
 /** @namespace   AudioComponent
  *  @public
@@ -150,6 +159,16 @@ export namespace AudioComponent
     })
     export abstract class AudioComponent extends HTMLElement
     {
+        /** @name        template
+         *  @public
+         *  @type        {unknown}
+         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
+         *               or behavior-only rendering logic while participating in the compiled Template fast path.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        template = html``;
+
         /** @name        constructor
          *  @public
          *  @type        {constructor}

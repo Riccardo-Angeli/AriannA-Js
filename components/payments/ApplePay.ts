@@ -354,7 +354,7 @@ export namespace ApplePay
                     :class="this.btnCls()"
                     a-if="this.visible()"
                     @click="this.onClick">
-                <span class="ar-applepay__logo">${APPLE_LOGO_SVG}</span>
+                <span class="ar-applepay__logo" a-html="APPLE_LOGO_SVG"></span>
                 <span class="ar-applepay__label">{{ this.btnLabel() }} Pay</span>
             </button>
             <div class="ar-applepay__fallback" a-if="!this.visible()">

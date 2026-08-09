@@ -285,8 +285,14 @@ export namespace Reactivity
     const ProxyToRaw = new WeakMap<object, object>();
     const ProxyMetadata = new WeakMap<object, ProxyMeta>();
     const MarkedRaw = new WeakSet<object>();
-    const SignalNodes = new Set<object>();
+    /*
+     * Signal dependency nodes must never be strongly retained by diagnostics.
+     * Graph is already a WeakMap; keeping the same nodes in a Set defeated that
+     * design and made every signal created by an application immortal.
+     */
+    const SignalNodes = new WeakSet<object>();
     const Computations = new Set<Computation>();
+    let SignalSequence = 0;
 
     const IterateKey = Symbol('AriannA.Reactivity.Iterate');
     const MapKeyIterateKey = Symbol('AriannA.Reactivity.MapKeys');
@@ -947,8 +953,9 @@ export namespace Reactivity
     {
         const node = {};
         SignalNodes.add(node);
+        const sequence = ++SignalSequence;
         let value = initial;
-        const name = options.Name ?? `Signal${SignalNodes.size}`;
+        const name = options.Name ?? `Signal${sequence}`;
 
         const signal: SignalContract<T> =
             {
@@ -1006,6 +1013,7 @@ export namespace Reactivity
     {
         const node = {};
         SignalNodes.add(node);
+        SignalSequence++;
         let value!: T;
         let dirty = true;
         let initialized = false;
@@ -2152,7 +2160,7 @@ export namespace Reactivity
     {
         return {
             Effects: Computations.size,
-            Signals: SignalNodes.size,
+            Signals: SignalSequence,
             Proxies: 0, // WeakMaps are intentionally non-enumerable.
             Scheduled: Pending.size + Microtasks.size + Frames.size + Idles.size,
             BatchDepth,

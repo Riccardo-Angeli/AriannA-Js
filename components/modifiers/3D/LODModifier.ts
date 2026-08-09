@@ -8,8 +8,17 @@
  * @description AriannA LODModifier component module.
  */
 
-import { Component } from '../../../core/index.ts';
+import { Component, Templates } from '../../../core/index.ts';
 import { Modifier3D as Modifier3DNamespace } from './Base.ts';
+
+/** @name        html
+ *  @public
+ *  @type        {inferred}
+ *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
+const html = Templates.Template.Html;
 
 /** @namespace   LODModifier
  *  @public
@@ -66,6 +75,16 @@ export namespace LODModifier
     })
     export class LODModifierElement extends Modifier3DNamespace.Modifier3DElement
     {
+        /** @name        template
+         *  @public
+         *  @type        {unknown}
+         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
+         *               or behavior-only rendering logic while participating in the compiled Template fast path.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        template = html``;
+
         /** @name        createModifier
          *  @protected
          *  @type        {Modifier3DNamespace.Modifier3D}

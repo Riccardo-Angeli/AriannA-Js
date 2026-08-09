@@ -194,7 +194,7 @@ export namespace Satispay
             this.onClick = () => { void this.pay(); };
             this.template = html `
             <button type="button" class="ar-satispay__btn" @click="this.onClick">
-                <span class="ar-satispay__logo">${SATISPAY_LOGO}</span>
+                <span class="ar-satispay__logo" a-html="SATISPAY_LOGO"></span>
                 <span>{{ this.btnLabel() }}</span>
             </button>
         `;

@@ -257,7 +257,7 @@ export namespace AliPay
             this.template = html `
             <div class="ar-alipay" a-if="!this.isQrMode()">
                 <button type="button" class="ar-alipay__btn" @click="this.onClick">
-                    <span class="ar-alipay__logo">${ALIPAY_LOGO}</span>
+                    <span class="ar-alipay__logo" a-html="ALIPAY_LOGO"></span>
                     <span>{{ this.btnLabel() }}</span>
                 </button>
             </div>

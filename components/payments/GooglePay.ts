@@ -365,7 +365,7 @@ export namespace GooglePay
                     a-if="this.available$.Get()"
                     @click="this.onClick">
                 <span class="ar-gpay__label">{{ this.btnLabel() }}</span>
-                <span class="ar-gpay__logo">${GPAY_LOGO}</span>
+                <span class="ar-gpay__logo" a-html="GPAY_LOGO"></span>
             </button>
             <div class="ar-gpay__fallback" a-if="!this.available$.Get()">
                 Google Pay isn't available on this device.

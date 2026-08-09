@@ -8,8 +8,17 @@
  * @description AriannA Rotator component module.
  */
 
-import { Component } from '../../../core/index.ts';
+import { Component, Templates } from '../../../core/index.ts';
 import { Modifier2D } from './Base.ts';
+
+/** @name        html
+ *  @public
+ *  @type        {inferred}
+ *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
+ *  @author      Riccardo Angeli
+ *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ *  @license     MIT / Commercial (dual license) */
+const html = Templates.Template.Html;
 
 /** @namespace   Rotator
  *  @public
@@ -84,6 +93,16 @@ export namespace Rotator
     })
     export class Rotator extends Modifier2D.Modifier2D
     {
+        /** @name        template
+         *  @public
+         *  @type        {unknown}
+         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
+         *               or behavior-only rendering logic while participating in the compiled Template fast path.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        template = html``;
+
         /** @name        #angle
          *  @public
          *  @type        {unknown}
