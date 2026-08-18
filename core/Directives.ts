@@ -798,13 +798,230 @@ export namespace Directives
 
             function evalExpr(expr: string): unknown
             {
+                /*
+                 * CSP-safe directive expressions. Runtime code generation (`eval` / `new Function`)
+                 * would require `script-src 'unsafe-eval'`, so Bootstrap intentionally evaluates the
+                 * declarative subset directly. The grammar covers the expressions directives need:
+                 * literals, identifiers, dot/bracket access, calls, unary/binary/logical operators
+                 * and the conditional operator. Assignment and arbitrary statements are not accepted.
+                 */
+                type Token = { Kind: 'id' | 'number' | 'string' | 'op' | 'eof'; Value: string };
+
+                const tokens: Token[] = [];
+                let cursor = 0;
+
+                while(cursor < expr.length)
+                {
+                    const ch = expr[cursor];
+                    if(/\s/.test(ch)) { cursor++; continue; }
+
+                    if(/[A-Za-z_$]/.test(ch))
+                    {
+                        const start = cursor++;
+                        while(cursor < expr.length && /[A-Za-z0-9_$]/.test(expr[cursor])) cursor++;
+                        tokens.push({ Kind: 'id', Value: expr.slice(start, cursor) });
+                        continue;
+                    }
+
+                    if(/[0-9]/.test(ch) || (ch === '.' && /[0-9]/.test(expr[cursor + 1] ?? '')))
+                    {
+                        const start = cursor++;
+                        while(cursor < expr.length && /[0-9A-Fa-f_xXbBoO.eE+-]/.test(expr[cursor]))
+                        {
+                            const c = expr[cursor];
+                            if((c === '+' || c === '-') && !/[eE]/.test(expr[cursor - 1])) break;
+                            cursor++;
+                        }
+                        tokens.push({ Kind: 'number', Value: expr.slice(start, cursor) });
+                        continue;
+                    }
+
+                    if(ch === "'" || ch === '"' || ch === '`')
+                    {
+                        const quote = ch;
+                        cursor++;
+                        let value = '';
+                        while(cursor < expr.length)
+                        {
+                            const c = expr[cursor++];
+                            if(c === quote) break;
+                            if(c === '\\' && cursor < expr.length)
+                            {
+                                const escaped = expr[cursor++];
+                                value += escaped === 'n' ? '\n' : escaped === 'r' ? '\r' : escaped === 't' ? '\t' : escaped;
+                            }
+                            else value += c;
+                        }
+                        tokens.push({ Kind: 'string', Value: value });
+                        continue;
+                    }
+
+                    const three = expr.slice(cursor, cursor + 3);
+                    const two = expr.slice(cursor, cursor + 2);
+                    if(['===', '!==', '>>>', '**='].includes(three))
+                    {
+                        tokens.push({ Kind: 'op', Value: three }); cursor += 3; continue;
+                    }
+                    if(['==', '!=', '<=', '>=', '&&', '||', '??', '**', '<<', '>>', '?.'].includes(two))
+                    {
+                        tokens.push({ Kind: 'op', Value: two }); cursor += 2; continue;
+                    }
+                    if('()[] .,+-*/%<>&|^!~?:'.includes(ch))
+                    {
+                        if(ch !== ' ') tokens.push({ Kind: 'op', Value: ch });
+                        cursor++;
+                        continue;
+                    }
+
+                    throw new SyntaxError(`Unsupported directive expression token: ${ch}`);
+                }
+                tokens.push({ Kind: 'eof', Value: '' });
+
+                let position = 0;
+                const peek = () => tokens[position];
+                const take = (value?: string): Token =>
+                {
+                    const token = tokens[position];
+                    if(value !== undefined && token.Value !== value) throw new SyntaxError(`Expected ${value}`);
+                    position++;
+                    return token;
+                };
+
+                const lookup = (name: string): unknown =>
+                {
+                    if(name === 'true') return true;
+                    if(name === 'false') return false;
+                    if(name === 'null') return null;
+                    if(name === 'undefined') return undefined;
+                    if(name === 'NaN') return NaN;
+                    if(name === 'Infinity') return Infinity;
+                    return ctx[name];
+                };
+
+                const member = (base: unknown, key: unknown): unknown =>
+                    base == null ? undefined : (base as Record<PropertyKey, unknown>)[key as PropertyKey];
+
+                const primary = (): unknown =>
+                {
+                    const token = peek();
+                    let value: unknown;
+
+                    if(token.Kind === 'number') { take(); value = Number(token.Value); }
+                    else if(token.Kind === 'string') { take(); value = token.Value; }
+                    else if(token.Kind === 'id') { take(); value = lookup(token.Value); }
+                    else if(token.Value === '(') { take('('); value = conditional(); take(')'); }
+                    else throw new SyntaxError(`Unexpected token ${token.Value}`);
+
+                    while(true)
+                    {
+                        if(peek().Value === '.' || peek().Value === '?.')
+                        {
+                            const optional = take().Value === '?.';
+                            const key = take();
+                            if(key.Kind !== 'id') throw new SyntaxError('Expected property name');
+                            value = optional && value == null ? undefined : member(value, key.Value);
+                            continue;
+                        }
+                        if(peek().Value === '[')
+                        {
+                            take('['); const key = conditional(); take(']'); value = member(value, key); continue;
+                        }
+                        if(peek().Value === '(')
+                        {
+                            if(typeof value !== 'function') return undefined;
+                            take('(');
+                            const args: unknown[] = [];
+                            if(peek().Value !== ')')
+                            {
+                                do { args.push(conditional()); if(peek().Value !== ',') break; take(','); } while(true);
+                            }
+                            take(')');
+                            value = (value as (...args: unknown[]) => unknown)(...args);
+                            continue;
+                        }
+                        break;
+                    }
+                    return value;
+                };
+
+                const unary = (): unknown =>
+                {
+                    const op = peek().Value;
+                    if(op === '!' || op === '~' || op === '+' || op === '-')
+                    {
+                        take(); const value = unary();
+                        if(op === '!') return !value;
+                        if(op === '~') return ~Number(value);
+                        if(op === '+') return +Number(value);
+                        return -Number(value);
+                    }
+                    return primary();
+                };
+
+                const binary = (next: () => unknown, operators: readonly string[]): unknown =>
+                {
+                    let left = next();
+                    while(operators.includes(peek().Value))
+                    {
+                        const op = take().Value;
+                        const right = next();
+                        switch(op)
+                        {
+                            case '**': left = Number(left) ** Number(right); break;
+                            case '*': left = Number(left) * Number(right); break;
+                            case '/': left = Number(left) / Number(right); break;
+                            case '%': left = Number(left) % Number(right); break;
+                            case '+': left = (typeof left === 'string' || typeof right === 'string') ? String(left) + String(right) : Number(left) + Number(right); break;
+                            case '-': left = Number(left) - Number(right); break;
+                            case '<<': left = Number(left) << Number(right); break;
+                            case '>>': left = Number(left) >> Number(right); break;
+                            case '>>>': left = Number(left) >>> Number(right); break;
+                            case '<': left = (left as never) < (right as never); break;
+                            case '<=': left = (left as never) <= (right as never); break;
+                            case '>': left = (left as never) > (right as never); break;
+                            case '>=': left = (left as never) >= (right as never); break;
+                            case '==': left = left == right; break;
+                            case '!=': left = left != right; break;
+                            case '===': left = left === right; break;
+                            case '!==': left = left !== right; break;
+                            case '&': left = Number(left) & Number(right); break;
+                            case '^': left = Number(left) ^ Number(right); break;
+                            case '|': left = Number(left) | Number(right); break;
+                        }
+                    }
+                    return left;
+                };
+
+                const exponent = () => binary(unary, ['**']);
+                const multiply = () => binary(exponent, ['*', '/', '%']);
+                const add = () => binary(multiply, ['+', '-']);
+                const shift = () => binary(add, ['<<', '>>', '>>>']);
+                const compare = () => binary(shift, ['<', '<=', '>', '>=']);
+                const equality = () => binary(compare, ['==', '!=', '===', '!==']);
+                const bitAnd = () => binary(equality, ['&']);
+                const bitXor = () => binary(bitAnd, ['^']);
+                const bitOr = () => binary(bitXor, ['|']);
+                const logicalAnd = (): unknown => { let v = bitOr(); while(peek().Value === '&&') { take(); const r = bitOr(); v = v && r; } return v; };
+                const logicalOr = (): unknown => { let v = logicalAnd(); while(peek().Value === '||') { take(); const r = logicalAnd(); v = v || r; } return v; };
+                const nullish = (): unknown => { let v = logicalOr(); while(peek().Value === '??') { take(); const r = logicalOr(); v = v ?? r; } return v; };
+                const conditional = (): unknown =>
+                {
+                    const test = nullish();
+                    if(peek().Value !== '?') return test;
+                    take('?'); const yes = conditional(); take(':'); const no = conditional();
+                    return test ? yes : no;
+                };
+
                 try
                 {
-                    // Safe-ish expression eval using Function with explicit context keys
-                    const keys = Object.keys(ctx);
-                    const vals = Object.values(ctx);
-                    return new Function(...keys, `return (${expr})`)(...vals);
-                } catch { return undefined; }
+                    const result = conditional();
+                    if(peek().Kind !== 'eof') throw new SyntaxError(`Unexpected token ${peek().Value}`);
+                    return result;
+                }
+                catch
+                {
+                    return undefined;
+                }
             }
 
             // Process {{ }} template literals on all text nodes

@@ -4582,6 +4582,24 @@ export namespace Interfaces
             Name     : string;
         }
 
+        /** @name        SignalSource
+         *  @public
+         *  @type        {interface}
+         *  @description Shared dependency-source contract implemented by scalar Signal storage and Proxy property/index slots.
+         *               The source owns subscription and propagation only; scheduling, ownership, cleanup, transactions
+         *               and event semantics remain responsibilities of higher layers.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        export interface SignalSource
+        {
+            Subscribe(subscriber: Computation): void;
+            Unsubscribe(subscriber: Computation): void;
+            Has(subscriber: Computation): boolean;
+            readonly Size: number;
+            Notify(): void;
+        }
+
         /** @name        Computation
          *  @public
          *  @type        {interface}
@@ -4614,7 +4632,7 @@ export namespace Interfaces
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            Dependencies : Set<Types.Reactivity.Dependency>;
+            Dependencies : Types.Reactivity.Dependency[];
             /** @name        Active
              *  @private
              *  @type        {unknown}

@@ -2360,7 +2360,44 @@ export namespace Core
                 base.call(this, mutations, observer);
             };
 
-            observer.sweep(stage);
+            /*
+             * FIRST-PAINT PATH
+             * ----------------
+             * The observer is already connected, so no mutation occurring from
+             * this point onward can be lost. The expensive initial full-tree
+             * sweep is therefore not part of synchronous framework boot.
+             *
+             * Existing DOM is reconciled when the browser has had an
+             * opportunity to paint. New DOM created meanwhile is handled by the
+             * live MutationObserver above.
+             *
+             * requestIdleCallback is preferred because it is explicitly outside
+             * the rendering critical path. setTimeout is the portable fallback.
+             */
+            const sweep = (): void =>
+            {
+                if (!stage.isConnected) return;
+
+                observer.sweep(stage);
+            };
+
+            if
+            (
+                typeof globalThis !== 'undefined' &&
+                'requestIdleCallback' in globalThis &&
+                typeof (globalThis as typeof globalThis & {
+                    requestIdleCallback?: (callback: IdleRequestCallback) => number
+                }).requestIdleCallback === 'function'
+            )
+            {
+                (globalThis as typeof globalThis & {
+                    requestIdleCallback: (callback: IdleRequestCallback) => number
+                }).requestIdleCallback(() => sweep());
+            }
+            else
+            {
+                globalThis.setTimeout(sweep, 0);
+            }
 
             AriannA.#observer    = observer as Observers.Observer;
             AriannA.#initialized = true;

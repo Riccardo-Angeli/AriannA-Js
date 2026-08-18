@@ -433,6 +433,17 @@ export namespace Types
      *  @license     MIT / Commercial (dual license) */
     export namespace Reactivity
     {
+        export type Proxy =
+        {
+            Create<T extends object>(source: T, options?: Interfaces.Reactivity.ReactiveOptions): T;
+            Shallow<T extends object>(source: T): T;
+            Readonly<T extends object>(source: T): T;
+            MarkRaw<T extends object>(source: T): T;
+            IsProxy(value: unknown): boolean;
+            IsReactive(value: unknown): boolean;
+            IsReadonly(value: unknown): boolean;
+            ToRaw<T>(value: T): T;
+        };
         /** @name        Key
          *  @public
          *  @type        {type alias}
@@ -599,7 +610,7 @@ export namespace Types
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        export type Dependency = Set<Interfaces.Reactivity.Computation>;
+        export type Dependency = Interfaces.Reactivity.SignalSource;
 
     }
 

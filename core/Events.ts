@@ -106,6 +106,18 @@ export namespace Events
      *  @license     MIT / Commercial (dual license) */
     export type ServiceContract       = SchemaInterfaces.Events.Service;
 
+    /** @name        CollectionTarget
+     *  @public
+     *  @constant
+     *  @description Canonical synthetic Events target used by reactive collection notifications.
+     *               The target is synthetic rather than DOM-backed, so Real, Virtual and Template
+     *               can consume the same collection event stream without coupling to one renderer.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export const CollectionTarget = 'arianna-collection';
+
+
     /** @name        Registry
      *  @private
      *  @type        {typeof Registry}
@@ -484,6 +496,8 @@ export namespace Events
                 Loading:                         { Name: 'Loading',                         Interface: 'CustomEvent',                  Domain: 'AriannA', Category: '',                    State: 'Active',     Lifecycle: false, CE: false                      },
                 Loaded:                          { Name: 'Loaded',                          Interface: 'CustomEvent',                  Domain: 'AriannA', Category: '',                    State: 'Active',     Lifecycle: false, CE: false                      },
                 Ready:                           { Name: 'Ready',                           Interface: 'CustomEvent',                  Domain: 'AriannA', Category: '',                    State: 'Active',     Lifecycle: false, CE: false                      },
+                CollectionChanging:              { Name: 'CollectionChanging',              Interface: 'CustomEvent',                  Domain: 'AriannA', Category: 'Reactivity',          State: 'Active',     Lifecycle: false, CE: false                      },
+                CollectionChanged:               { Name: 'CollectionChanged',               Interface: 'CustomEvent',                  Domain: 'AriannA', Category: 'Reactivity',          State: 'Active',     Lifecycle: false, CE: false                      },
                 CssChanging:                     { Name: 'CssChanging',                     Interface: 'CustomEvent',                  Domain: 'AriannA', Category: 'CSS',                 State: 'Active',     Lifecycle: false, CE: false                      },
                 CssChanged:                      { Name: 'CssChanged',                      Interface: 'CustomEvent',                  Domain: 'AriannA', Category: 'CSS',                 State: 'Active',     Lifecycle: false, CE: false                      },
                 CssRuleChanging:                 { Name: 'CssRuleChanging',                 Interface: 'CustomEvent',                  Domain: 'AriannA', Category: 'CSS',                 State: 'Active',     Lifecycle: false, CE: false                      },
@@ -610,7 +624,24 @@ export namespace Events
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        static readonly Listeners = new Map<string, ListenerDescriptor>();
+        static readonly Listeners = new Map<string, WeakRef<ListenerDescriptor>>();
+
+        static readonly #ListenerFinalizer =
+            typeof FinalizationRegistry !== 'undefined'
+                ? new FinalizationRegistry<string>
+                (
+                    uuid => { Event.Listeners.delete(uuid); }
+                )
+                : null;
+
+        /** Number of AriannA listeners per event type. Lets producers avoid constructing and
+         *  dispatching framework-only lifecycle events when nobody consumes them. */
+        static readonly #TypeCounts = new Map<string, number>();
+
+        static Has(type: string): boolean
+        {
+            return (Event.#TypeCounts.get(type) ?? 0) > 0;
+        }
 
         static readonly #TypeLists =
             new Map<string, readonly string[]>();
@@ -715,7 +746,9 @@ export namespace Events
                         };
 
                     descriptor.Listeners.push(listener);
-                    Event.Listeners.set(listener.UUID, listener);
+                    Event.Listeners.set(listener.UUID, new WeakRef(listener));
+                    Event.#ListenerFinalizer?.register(listener, listener.UUID, listener);
+                    Event.#TypeCounts.set(type, (Event.#TypeCounts.get(type) ?? 0) + 1);
 
                     if(descriptor.Node)
                     {
@@ -775,6 +808,11 @@ export namespace Events
                         {
                             descriptor.Listeners.splice(index, 1);
                             Event.Listeners.delete(listener.UUID);
+                            Event.#ListenerFinalizer?.unregister(listener);
+
+                            const count = Event.#TypeCounts.get(type) ?? 0;
+                            if(count <= 1) Event.#TypeCounts.delete(type);
+                            else           Event.#TypeCounts.set(type, count - 1);
                         }
                         else
                         {
@@ -806,6 +844,8 @@ export namespace Events
         static Fire(target: Target, event: string | EventDescriptor): boolean
         {
             const ed: EventDescriptor = typeof event === 'string' ? { Type: event } : event;
+            if(!Event.Has(ed.Type)) return true;
+
             let ok = true;
             for (const desc of Event.#targets(target)) if (Event.#dispatch(desc, ed)) ok = false;
             return ok;
@@ -821,7 +861,18 @@ export namespace Events
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        static GetListener(uuid: string): ListenerDescriptor | undefined { return Event.Listeners.get(uuid); }
+        static GetListener(uuid: string): ListenerDescriptor | undefined
+        {
+            const ref = Event.Listeners.get(uuid);
+            const listener = ref?.deref();
+
+            if(!listener && ref)
+            {
+                Event.Listeners.delete(uuid);
+            }
+
+            return listener;
+        }
 
         /** @name        #intercept
          *  @private

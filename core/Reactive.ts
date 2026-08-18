@@ -23,7 +23,8 @@
  * phases and DOM mirroring belong to Core.Events through the `events` service.
  */
 
-import { Core } from './Core.ts';
+import { Core }   from './Core.ts';
+import { Events } from './Events.ts';
 
 import type { Types as SchemaTypes }           from './schema/Types.ts';
 import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
@@ -61,6 +62,48 @@ export namespace Reactivity
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     export type ChangeKind                     = SchemaTypes.Reactivity.ChangeKind;
+
+    /** @name        CollectionOperation
+     *  @public
+     *  @type        {type alias}
+     *  @description Semantic collection operations emitted through Core.Events. Low-level Proxy traps remain
+     *               responsible for dependency tracking; this vocabulary describes the author-visible mutation.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export type CollectionOperation =
+        'set' | 'add' | 'delete' | 'clear' | 'update' |
+        'push' | 'pop' | 'shift' | 'unshift' | 'splice' |
+        'sort' | 'reverse' | 'fill' | 'copyWithin' | 'truncate';
+
+    /** @name        CollectionChangeEvent
+     *  @public
+     *  @type        {interface}
+     *  @description Canonical semantic collection mutation transported by the registered AriannA
+     *               CollectionChanging / CollectionChanged events.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    export interface CollectionChangeEvent
+    {
+        Type         : 'CollectionChanging' | 'CollectionChanged';
+        Target       : object;
+        Root         : object;
+        Path         : Path;
+        Collection   : 'Array' | 'Map' | 'Set';
+        Operation    : CollectionOperation;
+        Key?         : Key;
+        Index?       : number;
+        DeleteCount? : number;
+        Added        : unknown[];
+        Removed      : unknown[];
+        Args         : unknown[];
+        LengthBefore?: number;
+        LengthAfter? : number;
+        Version      : number;
+        Timestamp    : number;
+    }
+
     /** @name        Schedule
      *  @public
      *  @type        {type alias}
@@ -270,7 +313,89 @@ export namespace Reactivity
      *  @license     MIT / Commercial (dual license) */
     export type TransactionEntry               = SchemaInterfaces.Reactivity.TransactionEntry;
 
-    const Graph = new WeakMap<object, Map<Key, Dependency>>();
+    /** Shared dependency primitive used identically by scalar Signals and Proxy slots.
+     *  The overwhelmingly common case is one subscriber, so storage is a compact array:
+     *  no Set allocation, no Set iterator and no `.values().next()` in the hot path. */
+    class Source implements SchemaInterfaces.Reactivity.SignalSource
+    {
+        private readonly Subscribers: Computation[] = [];
+
+        Subscribe(subscriber: Computation): void
+        {
+            const subscribers = this.Subscribers;
+            if(subscribers.length === 0)
+            {
+                subscribers.push(subscriber);
+                return;
+            }
+
+            if(subscribers.length === 1)
+            {
+                if(subscribers[0] !== subscriber) subscribers.push(subscriber);
+                return;
+            }
+
+            if(subscribers.indexOf(subscriber) < 0) subscribers.push(subscriber);
+        }
+
+        Unsubscribe(subscriber: Computation): void
+        {
+            const subscribers = this.Subscribers;
+            if(subscribers.length === 0) return;
+
+            if(subscribers.length === 1)
+            {
+                if(subscribers[0] === subscriber) subscribers.length = 0;
+                return;
+            }
+
+            const index = subscribers.indexOf(subscriber);
+            if(index >= 0)
+            {
+                const last = subscribers.length - 1;
+                if(index !== last) subscribers[index] = subscribers[last];
+                subscribers.pop();
+            }
+        }
+
+        Has(subscriber: Computation): boolean
+        {
+            const subscribers = this.Subscribers;
+            return subscribers.length === 1
+                ? subscribers[0] === subscriber
+                : subscribers.indexOf(subscriber) >= 0;
+        }
+
+        get Size(): number { return this.Subscribers.length; }
+
+        Each(callback: (subscriber: Computation) => void): void
+        {
+            const subscribers = this.Subscribers;
+            for(let index = 0; index < subscribers.length; index++)
+                callback(subscribers[index]);
+        }
+
+        Notify(): void
+        {
+            const subscribers = this.Subscribers;
+            const length = subscribers.length;
+
+            if(length === 0) return;
+            if(length === 1)
+            {
+                subscribers[0].Notify();
+                return;
+            }
+
+            // A synchronous computation may detach/re-subscribe while it runs.
+            // Snapshot only for real fan-out; the normal one-subscriber path allocates nothing.
+            const snapshot = subscribers.slice();
+            for(let index = 0; index < snapshot.length; index++)
+                snapshot[index].Notify();
+        }
+    }
+
+    const Graph = new WeakMap<object, Map<Key, Source>>();
     /** @name        RawToProxy
      *  @private
      *  @type        {WeakMap<object, Map<string, object>>}
@@ -341,12 +466,71 @@ export namespace Reactivity
         return true;
     };
 
+    const ProxyMode = (meta: ProxyMeta): string =>
+        meta.Readonly
+            ? (meta.Shallow ? 'readonly:shallow' : 'readonly:deep')
+            : (meta.Shallow ? 'mutable:shallow' : 'mutable:deep');
+
     const GetEvents = () => Core.Services.Resolve<
         {
-            Fire(target: EventTarget, event: { Type: string; Detail?: unknown; Cancelable?: boolean }): boolean;
-            On(target: EventTarget, types: string, handler: EventListener, options?: AddEventListenerOptions): unknown[];
-            Off(target: EventTarget, types: string, handler: EventListener): void;
+            Fire(target: unknown, event: { Type: string; Detail?: unknown; Cancelable?: boolean }): boolean;
+            On(target: unknown, types: string, handler: EventListener, options?: AddEventListenerOptions): unknown[];
+            Off(target: unknown, types: string, handler: EventListener): void;
         }>('events');
+
+    const CollectionTarget = 'arianna-collection';
+
+    let CollectionMutationDepth = 0;
+
+    /** Shared empty collection payload. Consumers must treat collection event arrays as readonly. */
+    const EmptyCollectionValues: readonly unknown[] = Object.freeze([] as unknown[]);
+
+    function EmitCollection
+    (
+        meta      : ProxyMeta,
+        target    : object,
+        phase     : 'CollectionChanging' | 'CollectionChanged',
+        collection: 'Array' | 'Map' | 'Set',
+        operation : CollectionOperation,
+        fields    : Partial<CollectionChangeEvent> = {}
+    ): void
+    {
+        // Do not build collection event payloads for an unobserved phase. Template listens
+        // to CollectionChanged, while CollectionChanging remains available to applications
+        // that explicitly register for it. This preserves semantics and removes the normal
+        // pre-mutation event allocation/dispatch cost completely when unused.
+        if(!Events.Event.Has(phase)) return;
+
+        const detail: CollectionChangeEvent =
+        {
+            Type         : phase,
+            Target       : target,
+            Root         : meta.Root,
+            Path         : fields.Path ?? meta.Path,
+            Collection   : collection,
+            Operation    : operation,
+            Added        : (fields.Added ?? EmptyCollectionValues) as unknown[],
+            Removed      : (fields.Removed ?? EmptyCollectionValues) as unknown[],
+            Args         : (fields.Args ?? EmptyCollectionValues) as unknown[],
+            Version,
+            Timestamp    : Date.now(),
+            Key          : fields.Key,
+            Index        : fields.Index,
+            DeleteCount  : fields.DeleteCount,
+            LengthBefore : fields.LengthBefore,
+            LengthAfter  : fields.LengthAfter,
+        };
+
+        Events.Event.Fire
+        (
+            Events.CollectionTarget,
+            {
+                Type       : phase,
+                Detail     : detail as unknown as Record<string, unknown>,
+                Cancelable : false
+            }
+        );
+    }
 
     function Warn(code: string, error: unknown): void
     {
@@ -357,9 +541,13 @@ export namespace Reactivity
 
     function CleanupOwner(owner: Owner): void
     {
-        for(const cleanup of owner.Cleanups.splice(0))
+        const count = owner.Cleanups.length;
+        if(count === 0) return;
+
+        const cleanups = owner.Cleanups.splice(0, count);
+        for(let index = 0; index < cleanups.length; index++)
         {
-            try { cleanup(); }
+            try { cleanups[index](); }
             catch(error) { Warn('reactivity-cleanup', error); }
         }
     }
@@ -375,41 +563,74 @@ export namespace Reactivity
 
     function Detach(computation: Computation): void
     {
-        for(const dependency of computation.Dependencies) dependency.delete(computation);
-        computation.Dependencies.clear();
+        const dependencies = computation.Dependencies;
+        for(let index = 0; index < dependencies.length; index++)
+            dependencies[index].Unsubscribe(computation);
+        dependencies.length = 0;
+    }
+
+    function SourceFor(target: object, key: Key, create = false): Source | undefined
+    {
+        let targetMap = Graph.get(target);
+        if(!targetMap)
+        {
+            if(!create) return undefined;
+            Graph.set(target, targetMap = new Map());
+        }
+
+        let source = targetMap.get(key);
+        if(!source && create) targetMap.set(key, source = new Source());
+        return source;
+    }
+
+    function TrackSource(source: Source): void
+    {
+        if(!Tracking || !Active || !Active.Active || Active.Paused) return;
+        if(source.Has(Active)) return;
+        source.Subscribe(Active);
+        Active.Dependencies.push(source);
     }
 
     function Track(target: object, key: Key): void
     {
         if(!Tracking || !Active || !Active.Active || Active.Paused) return;
-
-        let targetMap = Graph.get(target);
-        if(!targetMap) Graph.set(target, targetMap = new Map());
-
-        let dependency = targetMap.get(key);
-        if(!dependency) targetMap.set(key, dependency = new Set());
-
-        if(!dependency.has(Active))
-        {
-            dependency.add(Active);
-            Active.Dependencies.add(dependency);
-        }
+        TrackSource(SourceFor(target, key, true)!);
     }
 
-    function Collect(target: object, keys: readonly Key[]): Set<Computation>
+    function Notify(target: object, key: Key): void
     {
-        const result = new Set<Computation>();
-        const targetMap = Graph.get(target);
-        if(!targetMap) return result;
+        Version++;
+        SourceFor(target, key)?.Notify();
+    }
 
-        for(const key of keys)
+    function NotifyKeys(target: object, keys: readonly Key[]): void
+    {
+        Version++;
+        const map = Graph.get(target);
+        if(!map) return;
+
+        // Direct O(1) slot lookup. No graph scan, no sorting, no temporary Set.
+        // The tiny duplicate guard only matters when one Computation subscribes to
+        // more than one structural slot changed by the same atomic mutation.
+        if(keys.length === 1)
         {
-            const dependency = targetMap.get(key);
-            if(!dependency) continue;
-            for(const computation of dependency) result.add(computation);
+            map.get(keys[0])?.Notify();
+            return;
         }
 
-        return result;
+        const notified = new Set<Computation>();
+        for(let keyIndex = 0; keyIndex < keys.length; keyIndex++)
+        {
+            const source = map.get(keys[keyIndex]);
+            if(!source) continue;
+
+            source.Each((subscriber) =>
+            {
+                if(notified.has(subscriber)) return;
+                notified.add(subscriber);
+                subscriber.Notify();
+            });
+        }
     }
 
     function ScheduleComputation(computation: Computation): void
@@ -445,10 +666,8 @@ export namespace Reactivity
 
     function Trigger(target: object, keys: readonly Key[]): void
     {
-        Version++;
-        const computations = Collect(target, keys);
-        const ordered = [...computations].sort((a, b) => b.Priority - a.Priority || a.Id - b.Id);
-        for(const computation of ordered) computation.Notify();
+        if(keys.length === 1) Notify(target, keys[0]);
+        else NotifyKeys(target, keys);
     }
 
     function FlushQueue(queue: Set<Computation>): void
@@ -531,7 +750,7 @@ export namespace Reactivity
             {
                 Id: ++Sequence,
                 Fn: fn,
-                Dependencies: new Set<Dependency>(),
+                Dependencies: [] as Dependency[],
                 Active: true,
                 Running: false,
                 Pending: false,
@@ -655,6 +874,15 @@ export namespace Reactivity
 
     const ArrayMutators = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin']);
 
+
+    /**
+     * Identity search on reactive Arrays must compare raw identities.
+     * Indexed reads expose cached Proxy wrappers, while the backing Array
+     * intentionally stores raw values.
+     */
+    const ArrayIdentityMethods =
+        new Set(['includes', 'indexOf', 'lastIndexOf']);
+
     function Wrap<T>(value: T, meta: ProxyMeta): T
     {
         if(!IsWrappable(value)) return value;
@@ -702,9 +930,13 @@ export namespace Reactivity
                 const old = target.get(rawKey);
                 if(had && Object.is(old, rawValue)) return ProxyFor(target);
                 RecordTransaction(target, rawKey as Key, had, old);
+                EmitCollection(meta, target, 'CollectionChanging', 'Map', had ? 'set' : 'add',
+                    { Key: rawKey as Key, Added: [rawValue], Removed: had ? [old] : [], Args: [rawKey, rawValue] });
                 target.set(rawKey, rawValue);
                 Trigger(target, [rawKey as Key, IterateKey, MapKeyIterateKey]);
                 Emit(meta, target, rawKey as Key, old, rawValue, had ? 'set' : 'add');
+                EmitCollection(meta, target, 'CollectionChanged', 'Map', had ? 'set' : 'add',
+                    { Key: rawKey as Key, Added: [rawValue], Removed: had ? [old] : [], Args: [rawKey, rawValue] });
                 return ProxyFor(target);
             };
         }
@@ -716,9 +948,13 @@ export namespace Reactivity
                 if(meta.Readonly) throw new TypeError('Readonly reactive Set.');
                 const rawValue = ToRaw(value);
                 if(target.has(rawValue)) return ProxyFor(target);
+                EmitCollection(meta, target, 'CollectionChanging', 'Set', 'add',
+                    { Key: rawValue as Key, Added: [rawValue], Args: [rawValue] });
                 target.add(rawValue);
                 Trigger(target, [rawValue as Key, IterateKey]);
                 Emit(meta, target, rawValue as Key, undefined, rawValue, 'add');
+                EmitCollection(meta, target, 'CollectionChanged', 'Set', 'add',
+                    { Key: rawValue as Key, Added: [rawValue], Args: [rawValue] });
                 return ProxyFor(target);
             };
         }
@@ -733,9 +969,13 @@ export namespace Reactivity
                 const old = isMap ? target.get(rawValue) : rawValue;
                 if(!had) return false;
                 RecordTransaction(target, rawValue as Key, true, old);
+                EmitCollection(meta, target, 'CollectionChanging', isMap ? 'Map' : 'Set', 'delete',
+                    { Key: rawValue as Key, Removed: [old], Args: [rawValue] });
                 const result = target.delete(rawValue);
                 Trigger(target, [rawValue as Key, IterateKey, MapKeyIterateKey]);
                 Emit(meta, target, rawValue as Key, old, undefined, 'delete');
+                EmitCollection(meta, target, 'CollectionChanged', isMap ? 'Map' : 'Set', 'delete',
+                    { Key: rawValue as Key, Removed: [old], Args: [rawValue] });
                 return result;
             };
         }
@@ -747,9 +987,16 @@ export namespace Reactivity
                 if(meta.Readonly) throw new TypeError('Readonly reactive collection.');
                 if(target.size === 0) return;
                 const old = isMap ? new Map(target) : new Set(target);
+                const removed = isMap
+                    ? Array.from((target as Map<unknown, unknown>).entries())
+                    : Array.from(target.values());
+                EmitCollection(meta, target, 'CollectionChanging', isMap ? 'Map' : 'Set', 'clear',
+                    { Removed: removed, Args: [] });
                 target.clear();
                 Trigger(target, [IterateKey, MapKeyIterateKey]);
                 Emit(meta, target, IterateKey, old, target, 'clear');
+                EmitCollection(meta, target, 'CollectionChanged', isMap ? 'Map' : 'Set', 'clear',
+                    { Removed: removed, Args: [] });
             };
         }
 
@@ -771,7 +1018,7 @@ export namespace Reactivity
     function ReactiveProxy(raw: object, meta: ProxyMeta): object
     {
         if(IsProxy(raw)) return raw;
-        const mode = `${meta.Readonly ? 'readonly' : 'mutable'}:${meta.Shallow ? 'shallow' : 'deep'}`;
+        const mode = ProxyMode(meta);
         const cache = RawToProxy.get(raw);
         const cached = cache?.get(mode);
         if(cached)
@@ -791,13 +1038,152 @@ export namespace Reactivity
                     if(target instanceof Map || target instanceof Set)
                         return CollectionMethod(target, key, meta);
 
+                    if
+                    (
+                        Array.isArray(target) &&
+                        typeof key === 'string' &&
+                        ArrayIdentityMethods.has(key)
+                    )
+                    {
+                        const method =
+                            Reflect.get(target, key, target) as (...args: unknown[]) => unknown;
+
+                        return (...input: unknown[]) =>
+                        {
+                            Track(target, IterateKey);
+
+                            const args = input.slice();
+
+                            if(args.length)
+                            {
+                                args[0] = ToRaw(args[0]);
+                            }
+
+                            return Reflect.apply(method, target, args);
+                        };
+                    }
+
                     if(Array.isArray(target) && typeof key === 'string' && ArrayMutators.has(key))
                     {
-                        const method = Reflect.get(target, key, target);
-                        return (...args: unknown[]) =>
+                        const method = Reflect.get(target, key, target) as (...args: unknown[]) => unknown;
+
+                        return (...input: unknown[]) =>
                         {
                             if(meta.Readonly) throw new TypeError(`Readonly reactive array method: ${key}.`);
-                            return RunBatch(() => Reflect.apply(method, receiver, args.map(ToRaw)));
+
+                            const args = input.map(ToRaw);
+                            const lengthBefore = target.length;
+                            let index: number | undefined;
+                            let deleteCount: number | undefined;
+                            let added: unknown[] = [];
+                            let removed: unknown[] = [];
+
+                            if(key === 'push')
+                            {
+                                index = lengthBefore;
+                                added = args;
+                                deleteCount = 0;
+                            }
+                            else if(key === 'pop')
+                            {
+                                index = Math.max(0, lengthBefore - 1);
+                                deleteCount = lengthBefore ? 1 : 0;
+                                if(lengthBefore) removed = [target[lengthBefore - 1]];
+                            }
+                            else if(key === 'shift')
+                            {
+                                index = 0;
+                                deleteCount = lengthBefore ? 1 : 0;
+                                if(lengthBefore) removed = [target[0]];
+                            }
+                            else if(key === 'unshift')
+                            {
+                                index = 0;
+                                deleteCount = 0;
+                                added = args;
+                            }
+                            else if(key === 'splice')
+                            {
+                                const requested = Number(args[0] ?? 0);
+                                index = requested < 0 ? Math.max(lengthBefore + requested, 0) : Math.min(requested, lengthBefore);
+                                deleteCount = args.length === 0
+                                    ? 0
+                                    : args.length === 1
+                                        ? lengthBefore - index
+                                        : Math.max(0, Math.min(Number(args[1]) || 0, lengthBefore - index));
+                                added = args.slice(2);
+                                removed = target.slice(index, index + deleteCount);
+                            }
+                            else if(key === 'fill')
+                            {
+                                const requested = Number(args[1] ?? 0);
+                                index = requested < 0 ? Math.max(lengthBefore + requested, 0) : Math.min(requested, lengthBefore);
+                                const requestedEnd = Number(args[2] ?? lengthBefore);
+                                const end = requestedEnd < 0 ? Math.max(lengthBefore + requestedEnd, 0) : Math.min(requestedEnd, lengthBefore);
+                                deleteCount = Math.max(0, end - index);
+                                removed = target.slice(index, end);
+                            }
+                            else if(key === 'copyWithin')
+                            {
+                                const requested = Number(args[0] ?? 0);
+                                index = requested < 0 ? Math.max(lengthBefore + requested, 0) : Math.min(requested, lengthBefore);
+                                const requestedStart = Number(args[1] ?? 0);
+                                const from = requestedStart < 0 ? Math.max(lengthBefore + requestedStart, 0) : Math.min(requestedStart, lengthBefore);
+                                const requestedEnd = Number(args[2] ?? lengthBefore);
+                                const to = requestedEnd < 0 ? Math.max(lengthBefore + requestedEnd, 0) : Math.min(requestedEnd, lengthBefore);
+                                deleteCount = Math.max(0, Math.min(to - from, lengthBefore - index));
+                                removed = target.slice(index, index + deleteCount);
+                            }
+                            else
+                            {
+                                index = 0;
+                                deleteCount = lengthBefore;
+                                removed = target.slice();
+                            }
+
+                            EmitCollection(meta, target, 'CollectionChanging', 'Array', key as CollectionOperation,
+                            {
+                                Index: index, DeleteCount: deleteCount, Added: added, Removed: removed, Args: args,
+                                LengthBefore: lengthBefore, LengthAfter: lengthBefore
+                            });
+
+                            // Transactions remain a higher-level concern. Only an active transaction pays
+                            // for rollback bookkeeping; the ordinary Proxy mutation path pays nothing.
+                            if(TransactionDepth > 0 && !RollingBack)
+                            {
+                                RecordTransaction(target, 'length', true, lengthBefore);
+                                const first = index ?? 0;
+                                for(let cursor = first; cursor < lengthBefore; cursor++)
+                                {
+                                    const property = String(cursor);
+                                    RecordTransaction(target, property, Object.prototype.hasOwnProperty.call(target, property), target[cursor]);
+                                }
+                            }
+
+                            // Atomic raw mutation: native Array internals never re-enter Proxy set/delete traps.
+                            const result = Reflect.apply(method, target, args);
+                            const lengthAfter = target.length;
+
+                            if(key === 'sort' || key === 'reverse') added = target.slice();
+                            else if(key === 'fill' || key === 'copyWithin')
+                            {
+                                const count = deleteCount ?? 0;
+                                added = typeof index === 'number' ? target.slice(index, index + count) : [];
+                            }
+
+                            // Structural dependency is a single pre-registered slot. Array index reads also
+                            // subscribe to it, so shifts/splices remain correct without scanning Graph.
+                            Trigger(target, [IterateKey]);
+
+                            EmitCollection(meta, target, 'CollectionChanged', 'Array', key as CollectionOperation,
+                            {
+                                Index: index, DeleteCount: deleteCount, Added: added, Removed: removed, Args: args,
+                                LengthBefore: lengthBefore, LengthAfter: lengthAfter
+                            });
+
+                            // Methods returning the mutated array preserve Proxy identity.
+                            if(result === target) return receiver;
+                            return meta.Shallow ? result : Wrap(result, meta);
                         };
                     }
 
@@ -810,7 +1196,13 @@ export namespace Reactivity
 
                     const result = Reflect.get(target, key, receiver);
                     Track(target, key);
-                    return meta.Shallow ? result : Wrap(result, { ...meta, Path: [...meta.Path, key] });
+                    if(Array.isArray(target) && (IsIntegerKey(key) || key === 'length')) Track(target, IterateKey);
+                    if(meta.Shallow || !IsWrappable(result)) return result;
+
+                    const cachedChild = RawToProxy.get(result)?.get(ProxyMode(meta));
+                    if(cachedChild) return cachedChild;
+
+                    return ReactiveProxy(result, { ...meta, Path: [...meta.Path, key] });
                 },
 
                 set(target, key, value, receiver)
@@ -820,20 +1212,164 @@ export namespace Reactivity
                     const rawValue = ToRaw(value);
                     if(Object.is(old, rawValue)) return true;
 
-                    const had = Array.isArray(target)
-                        ? IsIntegerKey(key) && Number(key) < target.length
-                        : Object.prototype.hasOwnProperty.call(target, key);
+                    const had = Object.prototype.hasOwnProperty.call(target, key);
 
-                    RecordTransaction(target, key, had, old);
+                    if(TransactionDepth > 0) RecordTransaction(target, key, had, old);
                     const oldLength = Array.isArray(target) ? target.length : 0;
-                    const result = Reflect.set(target, key, rawValue, receiver);
+                    const arrayIndex =
+                        Array.isArray(target) && IsIntegerKey(key)
+                            ? Number(key)
+                            : undefined;
+                    const semanticArraySet =
+                        Array.isArray(target) &&
+                        CollectionMutationDepth === 0 &&
+                        (
+                            typeof arrayIndex === 'number' ||
+                            key === 'length'
+                        );
+                    const truncated =
+                        semanticArraySet &&
+                        key === 'length' &&
+                        Number(rawValue) < oldLength
+                            ? target.slice(Number(rawValue))
+                            : [];
+
+                    if(semanticArraySet)
+                    {
+                        EmitCollection
+                        (
+                            meta,
+                            target,
+                            'CollectionChanging',
+                            'Array',
+                            key === 'length' && Number(rawValue) === 0
+                                ? 'clear'
+                                : (key === 'length' ? 'truncate' : (had ? 'set' : 'add')),
+                            {
+                                Key          : key,
+                                Index        : arrayIndex,
+                                DeleteCount  :
+                                    key === 'length' && Number(rawValue) < oldLength
+                                        ? oldLength - Number(rawValue)
+                                        : (had ? 1 : 0),
+                                Added        : key === 'length' ? [] : [rawValue],
+                                Removed      : key === 'length' ? truncated : (had ? [old] : []),
+                                Args         : [rawValue],
+                                LengthBefore : oldLength,
+                                LengthAfter  :
+                                    key === 'length'
+                                        ? Number(rawValue)
+                                        : Math.max(oldLength, (arrayIndex ?? -1) + 1)
+                            }
+                        );
+                    }
+
+
+                    const own = Reflect.getOwnPropertyDescriptor(target, key);
+                    const result =
+                        own && 'value' in own && own.writable
+                            ? Reflect.set(target, key, rawValue, target)
+                            : Reflect.set(target, key, rawValue, receiver);
                     if(!result) return false;
 
                     const keys: Key[] = [key];
                     if(!had) keys.push(IterateKey);
                     if(Array.isArray(target) && IsIntegerKey(key) && target.length !== oldLength) keys.push('length');
+
+                    const semanticClear =
+                        semanticArraySet && key === 'length' && Number(rawValue) === 0;
+
+                    if(semanticClear)
+                    {
+                        EmitCollection
+                        (
+                            meta, target, 'CollectionChanged', 'Array', 'clear',
+                            {
+                                Key: key, Index: arrayIndex, DeleteCount: truncated.length,
+                                Added: [], Removed: truncated, Args: [rawValue],
+                                LengthBefore: oldLength, LengthAfter: target.length
+                            }
+                        );
+                    }
+
                     Trigger(target, keys);
                     Emit(meta, target, key, old, rawValue, had ? 'set' : 'add');
+
+                    /*
+                     * Nested object mutation inside a reactive Array.
+                     *
+                     * Simple compiled list records intentionally own no Effect;
+                     * route only the owning row index through the semantic
+                     * collection channel. This restores fine-grained DOM
+                     * correctness without reconciling the full list.
+                     */
+                    if
+                    (
+                        target !== meta.Root &&
+                        Array.isArray(meta.Root) &&
+                        meta.Path.length > 0 &&
+                        Events.Event.Has('CollectionChanged')
+                    )
+                    {
+                        const root =
+                            meta.Root as unknown[];
+
+                        const candidate =
+                            typeof meta.Path[0] === 'number'
+                                ? meta.Path[0] as number
+                                : Number(meta.Path[0]);
+
+                        const index =
+                            Number.isInteger(candidate) &&
+                            candidate >= 0 &&
+                            candidate < root.length &&
+                            root[candidate] === target
+                                ? candidate
+                                : root.indexOf(target);
+
+                        if(index >= 0)
+                        {
+                            EmitCollection
+                            (
+                                meta,
+                                meta.Root,
+                                'CollectionChanged',
+                                'Array',
+                                'update',
+                                {
+                                    Index   : index,
+                                    Key     : key,
+                                    Added   : [target],
+                                    Removed : [target],
+                                    Args    : [rawValue],
+                                    Path    : [index, ...meta.Path.slice(1), key]
+                                }
+                            );
+                        }
+                    }
+
+                    if(semanticArraySet && !semanticClear)
+                    {
+                        EmitCollection
+                        (
+                            meta, target, 'CollectionChanged', 'Array',
+                            key === 'length' ? 'truncate' : (had ? 'set' : 'add'),
+                            {
+                                Key          : key,
+                                Index        : arrayIndex,
+                                DeleteCount  :
+                                    key === 'length' && Number(rawValue) < oldLength
+                                        ? oldLength - Number(rawValue)
+                                        : (had ? 1 : 0),
+                                Added        : key === 'length' ? [] : [rawValue],
+                                Removed      : key === 'length' ? truncated : (had ? [old] : []),
+                                Args         : [rawValue],
+                                LengthBefore : oldLength,
+                                LengthAfter  : target.length
+                            }
+                        );
+                    }
+
                     return true;
                 },
 
@@ -843,7 +1379,7 @@ export namespace Reactivity
                     const had = Object.prototype.hasOwnProperty.call(target, key);
                     if(!had) return true;
                     const old = Reflect.get(target, key);
-                    RecordTransaction(target, key, true, old);
+                    if(TransactionDepth > 0) RecordTransaction(target, key, true, old);
                     const result = Reflect.deleteProperty(target, key);
                     if(result)
                     {
@@ -870,7 +1406,7 @@ export namespace Reactivity
                     if(meta.Readonly) throw new TypeError(`Readonly reactive property: ${String(key)}.`);
                     const had = Object.prototype.hasOwnProperty.call(target, key);
                     const old = Reflect.get(target, key);
-                    RecordTransaction(target, key, had, old);
+                    if(TransactionDepth > 0) RecordTransaction(target, key, had, old);
                     const result = Reflect.defineProperty(target, key, descriptor);
                     if(result)
                     {
@@ -951,7 +1487,7 @@ export namespace Reactivity
 
     export function CreateSignal<T>(initial: T, options: SignalOptions<T> = {}): SignalContract<T>
     {
-        const node = {};
+        const node = new Source();
         SignalNodes.add(node);
         const sequence = ++SignalSequence;
         let value = initial;
@@ -964,7 +1500,7 @@ export namespace Reactivity
                 set Value(next: T) { signal.Set(next); },
                 Get(): T
                 {
-                    Track(node, 'value');
+                    TrackSource(node);
                     return value;
                 },
                 Peek(): T { return value; },
@@ -975,11 +1511,11 @@ export namespace Reactivity
                         : next;
                     if(Equal(options.Equals, value, resolved)) return value;
                     value = resolved;
-                    Trigger(node, ['value']);
+                    Version++; node.Notify();
                     return value;
                 },
                 Update(updater: (previous: T) => T): T { return signal.Set(updater); },
-                Touch(): void { Trigger(node, ['value']); },
+                Touch(): void { Version++; node.Notify(); },
                 Readonly(): ReadonlySignalContract<T>
                 {
                     return {
@@ -1011,7 +1547,7 @@ export namespace Reactivity
 
     export function CreateMemo<T>(derive: () => T, options: SignalOptions<T> & EffectOptions = {}): MemoContract<T>
     {
-        const node = {};
+        const node = new Source();
         SignalNodes.add(node);
         SignalSequence++;
         let value!: T;
@@ -1030,7 +1566,7 @@ export namespace Reactivity
             else if(!Equal(options.Equals, value, next))
             {
                 value = next;
-                Trigger(node, ['value']);
+                Version++; node.Notify();
             }
         }, { ...options, Schedule: 'sync' });
 
@@ -1038,7 +1574,7 @@ export namespace Reactivity
         {
             if(dirty) return;
             dirty = true;
-            Trigger(node, ['value']);
+            Version++; node.Notify();
         };
 
         const memo: MemoContract<T> =
@@ -1048,7 +1584,7 @@ export namespace Reactivity
                 get Dirty(): boolean { return dirty; },
                 Get(): T
                 {
-                    Track(node, 'value');
+                    TrackSource(node);
                     if(dirty) computation.Run();
                     return value;
                 },
@@ -1270,15 +1806,37 @@ export namespace Reactivity
 
     export function Flush(): void
     {
-        FlushPending();
-        FlushQueue(Microtasks);
-        FlushQueue(Frames);
-        FlushQueue(Idles);
+        // Deterministic consistency barrier. A computation flushed from one queue may
+        // enqueue work into another queue (or back into Pending), so a single pass is
+        // not sufficient as a public DOM/state consistency guarantee.
+        do
+        {
+            FlushPending();
+            FlushQueue(Microtasks);
+            FlushQueue(Frames);
+            FlushQueue(Idles);
+        }
+        while
+        (
+            BatchDepth === 0 &&
+            (
+                Pending.size   !== 0 ||
+                Microtasks.size !== 0 ||
+                Frames.size     !== 0 ||
+                Idles.size      !== 0
+            )
+        );
     }
 
     export function NextTick(): Promise<void>
     {
-        return new Promise(resolve => queueMicrotask(() => { Flush(); resolve(); }));
+        return new Promise(resolve =>
+            queueMicrotask(() =>
+            {
+                Flush();
+                resolve();
+            })
+        );
     }
 
     // ═════════════════════════════════════════════════════════════════════════

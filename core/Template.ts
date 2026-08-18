@@ -17,6 +17,7 @@ import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
 
 import { Core }       from './Core.ts';
 import { Reactivity } from './Reactive.ts';
+import { Events }     from './Events.ts';
 
 /** @name        Templates
  *  @public
@@ -240,6 +241,7 @@ export namespace Templates
         Value    : unknown;
         Index    : number;
         OldIndex : number;
+        Key?     : unknown;
     }
 
     /** @name        DelegatedEvent
@@ -252,9 +254,18 @@ export namespace Templates
      *  @license     MIT / Commercial (dual license) */
     interface DelegatedEvent
     {
+        Type       : string;
         Context    : unknown;
         Scope      : Scope;
         Expression : CompiledExpression;
+    }
+
+    /** Cached execution plan for one compiler-generated list row. */
+    interface CompiledListRuntime
+    {
+        Template : HTMLTemplateElement;
+        PatchOps : number[];
+        EventOps : number[];
     }
 
     /** @class       Compiled
@@ -292,17 +303,14 @@ export namespace Templates
         static readonly #ListNodes =
             new WeakMap<object, HTMLTemplateElement>();
 
-        /** @name        #Delegated
-         *  @private
-         *  @static
-         *  @readonly
-         *  @type        {WeakMap<Element, Map<string, DelegatedEvent>>}
-         *  @description Weak event metadata for compiler-generated list rows.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+        /** Delegated metadata is attached to AriannA-owned DOM nodes.
+         *  This removes one WeakMap entry/get/set per event target. */
         static readonly #Delegated =
-            new WeakMap<Element, Map<string, DelegatedEvent>>();
+            Symbol('arianna.template.delegated');
+
+        /** One compact list runtime plan per compiled child interface. */
+        static readonly #ListRuntimes =
+            new WeakMap<object, CompiledListRuntime>();
 
         /** @name        #DelegateRoots
          *  @private
@@ -315,6 +323,12 @@ export namespace Templates
          *  @license     MIT / Commercial (dual license) */
         static readonly #DelegateRoots =
             new WeakMap<EventTarget, Map<string, EventListener>>();
+
+        /** Standard DOM nodes created by the compiled Template runtime are already owned by AriannA.
+         *  Observer uses this mark to avoid rediscovering the framework's own insert/remove lifecycle
+         *  when no AriannA lifecycle listener has requested it. */
+        static readonly #ManagedNode =
+            Symbol.for('arianna.template.managed');
 
         /** @name        Interface
          *  @public
@@ -507,11 +521,25 @@ export namespace Templates
             path : readonly number[]
         ): Node | null
         {
-            let node: Node | null = root;
+            if(path.length === 0) return root;
 
-            for(const index of path)
+            const a = root.childNodes[path[0]] ?? null;
+            if(path.length === 1 || !a) return a;
+
+            const b = a.childNodes[path[1]] ?? null;
+            if(path.length === 2 || !b) return b;
+
+            const c = b.childNodes[path[2]] ?? null;
+            if(path.length === 3 || !c) return c;
+
+            const d = c.childNodes[path[3]] ?? null;
+            if(path.length === 4 || !d) return d;
+
+            let node: Node | null = d;
+
+            for(let depth = 4; depth < path.length; depth++)
             {
-                node = node?.childNodes[index] ?? null;
+                node = node?.childNodes[path[depth]] ?? null;
             }
 
             return node;
@@ -767,6 +795,46 @@ export namespace Templates
             return template;
         }
 
+        /** Resolve invariant flat-row runtime work once per compiled interface. */
+        private static ListRuntime(compiled: CompiledInterface): CompiledListRuntime
+        {
+            let runtime =
+                Compiled.#ListRuntimes.get(compiled as object);
+
+            if(runtime)
+            {
+                return runtime;
+            }
+
+            const patchOps: number[] = [];
+            const eventOps: number[] = [];
+
+            for(let index = 0; index < compiled.ops.length; index++)
+            {
+                const kind = compiled.ops[index].k;
+
+                if(kind === 'event')
+                {
+                    eventOps.push(index);
+                }
+                else if(kind === 'text' || kind === 'attr' || kind === 'html')
+                {
+                    patchOps.push(index);
+                }
+            }
+
+            runtime =
+            {
+                Template : Compiled.ListNode(compiled),
+                PatchOps : patchOps,
+                EventOps : eventOps
+            };
+
+            Compiled.#ListRuntimes.set(compiled as object, runtime);
+
+            return runtime;
+        }
+
         /** @name        IsSimpleList
          *  @private
          *  @static
@@ -857,23 +925,46 @@ export namespace Templates
             expression : CompiledExpression
         ): void
         {
-            let bindings = Compiled.#Delegated.get(target);
-
-            if(!bindings)
+            const binding: DelegatedEvent =
             {
-                bindings = new Map<string, DelegatedEvent>();
-                Compiled.#Delegated.set(target, bindings);
+                Type       : type,
+                Context    : context,
+                Scope      : scope,
+                Expression : expression
+            };
+
+            const targetRecord =
+                target as unknown as Record<
+                    symbol,
+                    DelegatedEvent | Map<string, DelegatedEvent> | undefined
+                >;
+            const current =
+                targetRecord[Compiled.#Delegated];
+
+            if(!current)
+            {
+                // Normal list row: one event target, one type. Store it directly.
+                targetRecord[Compiled.#Delegated] = binding;
+                return;
             }
 
-            bindings.set
-            (
-                type,
-                {
-                    Context    : context,
-                    Scope      : scope,
-                    Expression : expression
-                }
-            );
+            if(current instanceof Map)
+            {
+                current.set(type, binding);
+                return;
+            }
+
+            if(current.Type === type)
+            {
+                targetRecord[Compiled.#Delegated] = binding;
+                return;
+            }
+
+            // Allocate a Map only for the uncommon multi-event same-element case.
+            const bindings = new Map<string, DelegatedEvent>();
+            bindings.set(current.Type, current);
+            bindings.set(type, binding);
+            targetRecord[Compiled.#Delegated] = bindings;
         }
 
         /** @name        EnsureDelegation
@@ -915,8 +1006,18 @@ export namespace Templates
                 {
                     if(cursor instanceof Element)
                     {
+                        const metadata =
+                            (cursor as unknown as Record<
+                                symbol,
+                                DelegatedEvent | Map<string, DelegatedEvent> | undefined
+                            >)[Compiled.#Delegated];
+
                         const binding =
-                            Compiled.#Delegated.get(cursor)?.get(type);
+                            metadata instanceof Map
+                                ? metadata.get(type)
+                                : metadata?.Type === type
+                                    ? metadata
+                                    : undefined;
 
                         if(binding)
                         {
@@ -1044,6 +1145,7 @@ export namespace Templates
         private static CreateListRecord
         (
             compiled : CompiledInterface,
+            runtime  : CompiledListRuntime,
             context  : unknown,
             scope    : Scope,
             value    : unknown,
@@ -1051,18 +1153,32 @@ export namespace Templates
         ): CompiledListRecord
         {
             const fragment =
-                Compiled.ListNode(compiled).content.cloneNode(true) as DocumentFragment;
+                runtime.Template.content.cloneNode(true) as DocumentFragment;
+            const first =
+                fragment.firstChild;
             const nodes =
-                Array.from(fragment.childNodes);
-            const targets =
-                new Array<Node | null>(compiled.ops.length);
+                first && !first.nextSibling
+                    ? [first]
+                    : Array.from(fragment.childNodes);
 
-            for(let operationIndex = 0; operationIndex < compiled.ops.length; operationIndex++)
+            for(let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex++)
             {
-                const operation = compiled.ops[operationIndex];
-                const node = Compiled.At(fragment, operation.p);
+                const node = nodes[nodeIndex];
+                if(node instanceof Element && !node.localName.includes('-'))
+                {
+                    (node as unknown as Record<symbol, unknown>)[Compiled.#ManagedNode] = true;
+                }
+            }
 
-                targets[operationIndex] = node;
+            const targets =
+                new Array<Node | null>(runtime.PatchOps.length);
+
+            for(let eventIndex = 0; eventIndex < runtime.EventOps.length; eventIndex++)
+            {
+                const operation =
+                    compiled.ops[runtime.EventOps[eventIndex]];
+                const node =
+                    Compiled.At(fragment, operation.p);
 
                 if(operation.k === 'event' && node instanceof Element)
                 {
@@ -1077,8 +1193,43 @@ export namespace Templates
                 }
             }
 
-            const record: CompiledListRecord =
+            for(let targetIndex = 0; targetIndex < runtime.PatchOps.length; targetIndex++)
             {
+                const operation =
+                    compiled.ops[runtime.PatchOps[targetIndex]];
+                const node =
+                    Compiled.At(fragment, operation.p);
+
+                targets[targetIndex] = node;
+
+                if(operation.k === 'text' && node?.nodeType === globalThis.Node.TEXT_NODE)
+                {
+                    const initial =
+                        operation.e(context, scope);
+
+                    node.nodeValue =
+                        initial == null ? '' : String(initial);
+                }
+                else if(operation.k === 'attr' && node instanceof Element)
+                {
+                    Compiled.Set
+                    (
+                        node,
+                        operation.n,
+                        operation.e(context, scope)
+                    );
+                }
+                else if(operation.k === 'html' && node instanceof Element)
+                {
+                    const initial =
+                        operation.e(context, scope);
+
+                    node.innerHTML =
+                        initial == null ? '' : String(initial);
+                }
+            }
+
+            return {
                 Nodes    : nodes,
                 Targets  : targets,
                 Scope    : scope,
@@ -1087,10 +1238,6 @@ export namespace Templates
                 Index    : index,
                 OldIndex : -1
             };
-
-            Compiled.PatchListRecord(compiled, context, record);
-
-            return record;
         }
 
         /** @name        PatchListRecord
@@ -1107,14 +1254,17 @@ export namespace Templates
         private static PatchListRecord
         (
             compiled : CompiledInterface,
+            runtime  : CompiledListRuntime,
             context  : unknown,
             record   : CompiledListRecord
         ): void
         {
-            for(let index = 0; index < compiled.ops.length; index++)
+            for(let targetIndex = 0; targetIndex < runtime.PatchOps.length; targetIndex++)
             {
-                const operation = compiled.ops[index];
-                const node = record.Targets[index];
+                const operation =
+                    compiled.ops[runtime.PatchOps[targetIndex]];
+                const node =
+                    record.Targets[targetIndex];
 
                 if(operation.k === 'text' && node?.nodeType === globalThis.Node.TEXT_NODE)
                 {
@@ -1151,8 +1301,9 @@ export namespace Templates
          *  @license     MIT / Commercial (dual license) */
         private static RemoveRecord(record: CompiledListRecord): void
         {
-            for(const node of record.Nodes)
+            for(let index = 0; index < record.Nodes.length; index++)
             {
+                const node = record.Nodes[index];
                 node.parentNode?.removeChild(node);
             }
 
@@ -1179,9 +1330,9 @@ export namespace Templates
             anchor : Node
         ): void
         {
-            for(const node of record.Nodes)
+            for(let index = 0; index < record.Nodes.length; index++)
             {
-                parent.insertBefore(node, anchor);
+                parent.insertBefore(record.Nodes[index], anchor);
             }
         }
 
@@ -1194,59 +1345,42 @@ export namespace Templates
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        private static Lis(values: readonly number[]): Set<number>
+        private static Lis(values: readonly number[]): Uint8Array
         {
-            const predecessors = new Array<number>(values.length).fill(-1);
-            const tails: number[] = [];
-            const tailValues: number[] = [];
+            const length = values.length;
+            const predecessors = new Int32Array(length);
+            const tails = new Int32Array(length);
+            const tailValues = new Int32Array(length);
+            predecessors.fill(-1);
 
-            for(let index = 0; index < values.length; index++)
+            let size = 0;
+            for(let index = 0; index < length; index++)
             {
                 const value = values[index];
+                if(value < 0) continue;
 
-                if(value < 0)
-                {
-                    continue;
-                }
-
-                let low = 0;
-                let high = tailValues.length;
-
+                let low = 0, high = size;
                 while(low < high)
                 {
                     const middle = (low + high) >>> 1;
-
-                    if(tailValues[middle] < value)
-                    {
-                        low = middle + 1;
-                    }
-                    else
-                    {
-                        high = middle;
-                    }
+                    if(tailValues[middle] < value) low = middle + 1;
+                    else high = middle;
                 }
 
-                if(low > 0)
-                {
-                    predecessors[index] = tails[low - 1];
-                }
-
+                if(low > 0) predecessors[index] = tails[low - 1];
                 tails[low] = index;
                 tailValues[low] = value;
+                if(low === size) size++;
             }
 
-            const result = new Set<number>();
-            let cursor = tails.length
-                ? tails[tails.length - 1]
-                : -1;
-
+            const stable = new Uint8Array(length);
+            let cursor = size ? tails[size - 1] : -1;
             while(cursor >= 0)
             {
-                result.add(cursor);
+                stable[cursor] = 1;
                 cursor = predecessors[cursor];
             }
-
-            return result;
+            return stable;
         }
 
         /** @name        ClearRange
@@ -1265,13 +1399,10 @@ export namespace Templates
             end   : Comment
         ): void
         {
-            if(start.parentNode !== end.parentNode || !start.parentNode)
-            {
-                return;
-            }
+            const parent = start.parentNode;
+            if(parent !== end.parentNode || !parent) return;
 
             const range = document.createRange();
-
             range.setStartAfter(start);
             range.setEndBefore(end);
             range.deleteContents();
@@ -1448,6 +1579,39 @@ export namespace Templates
                             operation.index,
                             0
                         );
+                        let collectionTarget: object | null = null;
+                        const listRuntime =
+                            Compiled.ListRuntime(operation.c);
+
+                        const syncRecord =
+                        (
+                            record : CompiledListRecord,
+                            value  : unknown,
+                            index  : number
+                        ): void =>
+                        {
+                            const scope =
+                                record.Scope as Record<string, unknown>;
+
+                            scope[operation.item] = value;
+
+                            if(operation.index)
+                            {
+                                scope[operation.index] = index;
+                            }
+
+                            scope.$index = index;
+                            record.Value = value;
+                            record.Index = index;
+
+                            Compiled.PatchListRecord
+                                        (
+                                            operation.c,
+                                            listRuntime,
+                                            this.Context,
+                                record
+                            );
+                        };
 
                         const update = () =>
                         {
@@ -1458,10 +1622,14 @@ export namespace Templates
                                 return;
                             }
 
-                            const raw = operation.e(this.Context, this.Scope) ?? [];
-                            const values = Array.isArray(raw)
-                                ? raw
-                                : Array.from(raw as Iterable<unknown>);
+                            const source = operation.e(this.Context, this.Scope) ?? [];
+                            collectionTarget =
+                                source && typeof source === 'object'
+                                    ? Reactivity.ToRaw(source as object)
+                                    : null;
+                            const values = Array.isArray(collectionTarget)
+                                ? collectionTarget as unknown[]
+                                : Array.from(source as Iterable<unknown>);
                             const previousLength = order.length;
 
                             /*
@@ -1516,6 +1684,7 @@ export namespace Templates
                                         Compiled.PatchListRecord
                                         (
                                             operation.c,
+                                            listRuntime,
                                             this.Context,
                                             record
                                         );
@@ -1525,6 +1694,7 @@ export namespace Templates
                                 if(values.length > previousLength)
                                 {
                                     const batch = document.createDocumentFragment();
+                                    order.length = values.length;
 
                                     for(let index = previousLength; index < values.length; index++)
                                     {
@@ -1540,13 +1710,14 @@ export namespace Templates
                                         const record = Compiled.CreateListRecord
                                         (
                                             operation.c,
+                                            listRuntime,
                                             this.Context,
                                             scope,
                                             value,
                                             index
                                         );
 
-                                        order.push(record);
+                                        order[index] = record;
                                         batch.appendChild(record.Fragment!);
                                         record.Fragment = null;
                                     }
@@ -1567,8 +1738,262 @@ export namespace Templates
                             }
 
                             /*
-                             * Keyed lists reuse a single scratch scope for key calculation.
-                             * That removes one temporary scope allocation per row per update.
+                             * Pass 3.1 keeps only the benchmark-proven keyed specialisations.
+                             * First-create, replace-all and remove stay on the Pass-2 reconciler.
+                             */
+                            const scratch =
+                                scratchScope as Record<string, unknown>;
+
+                            /*
+                             * R7 first-create fast path. A brand-new keyed list does not need the
+                             * general reconciliation scratch arrays, LIS input or a second Map.
+                             * Compute each key once, create each row once, register it directly in
+                             * the canonical order/records structures and mount one DocumentFragment.
+                             */
+                            if(previousLength === 0)
+                            {
+                                const batch = document.createDocumentFragment();
+                                order = new Array<CompiledListRecord>(values.length);
+
+                                for(let index = 0; index < values.length; index++)
+                                {
+                                    const value = values[index];
+
+                                    scratch[operation.item] = value;
+
+                                    if(operation.index)
+                                    {
+                                        scratch[operation.index] = index;
+                                    }
+
+                                    scratch.$index = index;
+
+                                    const key =
+                                        operation.key!(this.Context, scratchScope);
+                                    const scope = this.ChildScope
+                                    (
+                                        this.Scope,
+                                        operation.item,
+                                        value,
+                                        operation.index,
+                                        index
+                                    );
+                                    const record = Compiled.CreateListRecord
+                                    (
+                                        operation.c,
+                                        listRuntime,
+                                        this.Context,
+                                        scope,
+                                        value,
+                                        index
+                                    );
+
+                                    record.Key = key;
+                                    order[index] = record;
+                                    records.set(key, record);
+                                    batch.appendChild(record.Fragment!);
+                                    record.Fragment = null;
+                                }
+
+                                parentNode.insertBefore(batch, end);
+
+                                return;
+                            }
+
+                            /*
+                             * Pure append: unchanged retained prefix by object identity. Only the
+                             * appended suffix needs key calculation, row creation and one bulk DOM
+                             * insertion. This avoids Map/LIS allocation for the common append case.
+                             */
+                            if(previousLength > 0 && values.length > previousLength)
+                            {
+                                let pureAppend = true;
+
+                                for(let index = 0; index < previousLength; index++)
+                                {
+                                    if(order[index].Value !== values[index])
+                                    {
+                                        pureAppend = false;
+
+                                        break;
+                                    }
+                                }
+
+                                if(pureAppend)
+                                {
+                                    const appendKeys =
+                                        new Array<unknown>(values.length - previousLength);
+                                    const localKeys =
+                                        new Set<unknown>();
+
+                                    for(let index = previousLength; index < values.length; index++)
+                                    {
+                                        scratch[operation.item] = values[index];
+
+                                        if(operation.index)
+                                        {
+                                            scratch[operation.index] = index;
+                                        }
+
+                                        scratch.$index = index;
+
+                                        const key =
+                                            operation.key!(this.Context, scratchScope);
+
+                                        if(records.has(key) || localKeys.has(key))
+                                        {
+                                            pureAppend = false;
+
+                                            break;
+                                        }
+
+                                        localKeys.add(key);
+                                        appendKeys[index - previousLength] = key;
+                                    }
+
+                                    if(pureAppend)
+                                    {
+                                        const batch =
+                                            document.createDocumentFragment();
+
+                                        for(let index = previousLength; index < values.length; index++)
+                                        {
+                                            const value = values[index];
+                                            const key = appendKeys[index - previousLength];
+                                            const scope = this.ChildScope
+                                            (
+                                                this.Scope,
+                                                operation.item,
+                                                value,
+                                                operation.index,
+                                                index
+                                            );
+                                            const record = Compiled.CreateListRecord
+                                        (
+                                            operation.c,
+                                            listRuntime,
+                                            this.Context,
+                                                scope,
+                                                value,
+                                                index
+                                            );
+
+                                            record.Key = key;
+                                            records.set(key, record);
+                                            order.push(record);
+                                            batch.appendChild(record.Fragment!);
+                                            record.Fragment = null;
+                                        }
+
+                                        parentNode.insertBefore(batch, end);
+
+                                        return;
+                                    }
+                                }
+                            }
+
+                            /*
+                             * Exact two-row swap: detect two identity mismatches and move the two
+                             * retained DOM groups directly. Arbitrary reorders fall through to LIS.
+                             */
+                            if(values.length === previousLength)
+                            {
+                                let first = -1;
+                                let second = -1;
+                                let many = false;
+
+                                for(let index = 0; index < values.length; index++)
+                                {
+                                    if(order[index].Value === values[index])
+                                    {
+                                        continue;
+                                    }
+
+                                    if(first < 0)
+                                    {
+                                        first = index;
+                                    }
+                                    else if(second < 0)
+                                    {
+                                        second = index;
+                                    }
+                                    else
+                                    {
+                                        many = true;
+
+                                        break;
+                                    }
+                                }
+
+                                if
+                                (
+                                    !many &&
+                                    first >= 0 &&
+                                    second >= 0 &&
+                                    order[first].Value === values[second] &&
+                                    order[second].Value === values[first]
+                                )
+                                {
+                                    const firstRecord = order[first];
+                                    const secondRecord = order[second];
+                                    const afterSecond =
+                                        secondRecord.Nodes[secondRecord.Nodes.length - 1].nextSibling ?? end;
+
+                                    Compiled.MoveRecord
+                                    (
+                                        secondRecord,
+                                        parentNode,
+                                        firstRecord.Nodes[0]
+                                    );
+
+                                    Compiled.MoveRecord
+                                    (
+                                        firstRecord,
+                                        parentNode,
+                                        afterSecond
+                                    );
+
+                                    order[first] = secondRecord;
+                                    order[second] = firstRecord;
+                                    secondRecord.Index = first;
+                                    firstRecord.Index = second;
+
+                                    if(operation.index)
+                                    {
+                                        const firstScope =
+                                            firstRecord.Scope as Record<string, unknown>;
+                                        const secondScope =
+                                            secondRecord.Scope as Record<string, unknown>;
+
+                                        firstScope[operation.index] = second;
+                                        firstScope.$index = second;
+                                        secondScope[operation.index] = first;
+                                        secondScope.$index = first;
+
+                                        Compiled.PatchListRecord
+                                        (
+                                            operation.c,
+                                            listRuntime,
+                                            this.Context,
+                                            firstRecord
+                                        );
+
+                                        Compiled.PatchListRecord
+                                        (
+                                            operation.c,
+                                            listRuntime,
+                                            this.Context,
+                                            secondRecord
+                                        );
+                                    }
+
+                                    return;
+                                }
+                            }
+
+                            /*
+                             * Pass-2 general keyed reconciliation remains canonical for first
+                             * create, replace-all, remove and arbitrary key/order changes.
                              */
                             const nextOrder =
                                 new Array<CompiledListRecord>(values.length);
@@ -1576,8 +2001,6 @@ export namespace Templates
                                 new Array<number>(values.length);
                             const nextRecords =
                                 new Map<unknown, CompiledListRecord>();
-                            const scratch =
-                                scratchScope as Record<string, unknown>;
 
                             for(let index = 0; index < values.length; index++)
                             {
@@ -1623,6 +2046,7 @@ export namespace Templates
                                         Compiled.PatchListRecord
                                         (
                                             operation.c,
+                                            listRuntime,
                                             this.Context,
                                             record
                                         );
@@ -1642,9 +2066,10 @@ export namespace Templates
                                     );
 
                                     record = Compiled.CreateListRecord
-                                    (
-                                        operation.c,
-                                        this.Context,
+                                        (
+                                            operation.c,
+                                            listRuntime,
+                                            this.Context,
                                         scope,
                                         value,
                                         index
@@ -1654,6 +2079,7 @@ export namespace Templates
                                 }
 
                                 nextOrder[index] = record;
+                                record.Key = key;
                                 nextRecords.set(key, record);
                             }
 
@@ -1707,7 +2133,7 @@ export namespace Templates
                                         parentNode.insertBefore(record.Fragment, anchor);
                                         record.Fragment = null;
                                     }
-                                    else if(!stable.has(index))
+                                    else if(!stable[index])
                                     {
                                         Compiled.MoveRecord(record, parentNode, anchor);
                                     }
@@ -1723,6 +2149,386 @@ export namespace Templates
 
                             order = nextOrder;
                         };
+
+                        const collectionChanged: EventListener =
+                            (event: Event): void =>
+                            {
+                                const detail =
+                                    (event as CustomEvent).detail as
+                                        Reactivity.CollectionChangeEvent | undefined;
+
+                                if
+                                (
+                                    !detail ||
+                                    detail.Type !== 'CollectionChanged' ||
+                                    detail.Collection !== 'Array' ||
+                                    !collectionTarget ||
+                                    detail.Target !== collectionTarget
+                                )
+                                {
+                                    return;
+                                }
+
+                                const values =
+                                    Array.isArray(collectionTarget)
+                                        ? collectionTarget as unknown[]
+                                        : null;
+
+                                if(!values)
+                                {
+                                    update();
+                                    return;
+                                }
+
+                                if(detail.Operation === 'clear')
+                                {
+                                    if(order.length)
+                                    {
+                                        Compiled.ClearRange(start, end);
+                                        order.length = 0;
+                                        records.clear();
+                                    }
+
+                                    return;
+                                }
+
+                                if(detail.Operation === 'update')
+                                {
+                                    const index = detail.Index;
+
+                                    if(typeof index === 'number' && index >= 0 && index < order.length && index < values.length)
+                                    {
+                                        syncRecord(order[index], values[index], index);
+                                        return;
+                                    }
+
+                                    update();
+                                    return;
+                                }
+
+                                if
+                                (
+                                    detail.Operation === 'push' ||
+                                    detail.Operation === 'pop' ||
+                                    detail.Operation === 'shift' ||
+                                    detail.Operation === 'unshift' ||
+                                    detail.Operation === 'splice'
+                                )
+                                {
+                                    const index = detail.Index ?? 0;
+                                    const removeCount = detail.DeleteCount ?? 0;
+                                    const addCount = detail.Added.length;
+
+                                    if
+                                    (
+                                        keyed && index === 0 &&
+                                        removeCount === order.length &&
+                                        addCount === values.length
+                                    )
+                                    {
+                                        const nextKeys = new Array<unknown>(values.length);
+                                        const seen = new Set<unknown>();
+                                        const scratch = scratchScope as Record<string, unknown>;
+                                        let disjoint = true;
+
+                                        for(let cursor = 0; cursor < values.length; cursor++)
+                                        {
+                                            const value = values[cursor];
+                                            scratch[operation.item] = value;
+                                            if(operation.index) scratch[operation.index] = cursor;
+                                            scratch.$index = cursor;
+                                            const key = operation.key!(this.Context, scratchScope);
+                                            nextKeys[cursor] = key;
+
+                                            if(seen.has(key) || records.has(key))
+                                            {
+                                                disjoint = false;
+                                                break;
+                                            }
+                                            seen.add(key);
+                                        }
+
+                                        if(disjoint)
+                                        {
+                                            if(order.length) Compiled.ClearRange(start, end);
+                                            order.length = 0;
+                                            records.clear();
+                                            const batch = document.createDocumentFragment();
+
+                                            for(let cursor = 0; cursor < values.length; cursor++)
+                                            {
+                                                const value = values[cursor];
+                                                const scope = this.ChildScope(this.Scope, operation.item, value, operation.index, cursor);
+                                                const record = Compiled.CreateListRecord
+                                        (
+                                            operation.c,
+                                            listRuntime,
+                                            this.Context, scope, value, cursor);
+                                                record.Key = nextKeys[cursor];
+                                                records.set(record.Key, record);
+                                                order.push(record);
+                                                batch.appendChild(record.Fragment!);
+                                                record.Fragment = null;
+                                            }
+
+                                            start.parentNode?.insertBefore(batch, end);
+                                            return;
+                                        }
+                                    }
+
+                                    if(!keyed)
+                                    {
+                                        const previousLength = order.length;
+                                        const nextLength = values.length;
+                                        const common = Math.min(previousLength, nextLength);
+
+                                        for
+                                        (
+                                            let cursor = Math.min(index, common);
+                                            cursor < common;
+                                            cursor++
+                                        )
+                                        {
+                                            if(order[cursor].Value !== values[cursor] || operation.index)
+                                            {
+                                                syncRecord(order[cursor], values[cursor], cursor);
+                                            }
+                                        }
+
+                                        if(nextLength > previousLength)
+                                        {
+                                            const batch = document.createDocumentFragment();
+                                            order.length = nextLength;
+
+                                            for(let cursor = previousLength; cursor < nextLength; cursor++)
+                                            {
+                                                const value = values[cursor];
+                                                const scope = this.ChildScope
+                                                (
+                                                    this.Scope,
+                                                    operation.item,
+                                                    value,
+                                                    operation.index,
+                                                    cursor
+                                                );
+                                                const record = Compiled.CreateListRecord
+                                        (
+                                            operation.c,
+                                            listRuntime,
+                                            this.Context,
+                                                    scope,
+                                                    value,
+                                                    cursor
+                                                );
+
+                                                order[cursor] = record;
+                                                batch.appendChild(record.Fragment!);
+                                                record.Fragment = null;
+                                            }
+
+                                            start.parentNode?.insertBefore(batch, end);
+                                        }
+                                        else if(nextLength < previousLength)
+                                        {
+                                            for(let cursor = previousLength - 1; cursor >= nextLength; cursor--)
+                                            {
+                                                Compiled.RemoveRecord(order[cursor]);
+                                            }
+
+                                            order.length = nextLength;
+                                        }
+
+                                        return;
+                                    }
+
+                                    const removedRecords =
+                                        order.slice(index, index + removeCount);
+                                    const removedKeys =
+                                        new Set(removedRecords.map(record => record.Key));
+                                    const created: CompiledListRecord[] = [];
+                                    const createdKeys: unknown[] = [];
+                                    let canApply = true;
+                                    const scratch =
+                                        scratchScope as Record<string, unknown>;
+
+                                    for(let offset = 0; offset < addCount; offset++)
+                                    {
+                                        const cursor = index + offset;
+                                        const value = values[cursor];
+
+                                        scratch[operation.item] = value;
+
+                                        if(operation.index)
+                                        {
+                                            scratch[operation.index] = cursor;
+                                        }
+
+                                        scratch.$index = cursor;
+
+                                        const key =
+                                            operation.key!(this.Context, scratchScope);
+
+                                        if(records.has(key) && !removedKeys.has(key))
+                                        {
+                                            canApply = false;
+                                            break;
+                                        }
+
+                                        const scope = this.ChildScope
+                                        (
+                                            this.Scope,
+                                            operation.item,
+                                            value,
+                                            operation.index,
+                                            cursor
+                                        );
+                                        const record = Compiled.CreateListRecord
+                                        (
+                                            operation.c,
+                                            listRuntime,
+                                            this.Context,
+                                            scope,
+                                            value,
+                                            cursor
+                                        );
+
+                                        record.Key = key;
+                                        created.push(record);
+                                        createdKeys.push(key);
+                                    }
+
+                                    if(!canApply)
+                                    {
+                                        for(const record of created)
+                                        {
+                                            Compiled.RemoveRecord(record);
+                                        }
+
+                                        update();
+                                        return;
+                                    }
+
+                                    const anchor =
+                                        order[index + removeCount]?.Nodes[0] ?? end;
+
+                                    for(const record of removedRecords)
+                                    {
+                                        if(record.Key !== undefined)
+                                        {
+                                            records.delete(record.Key);
+                                        }
+
+                                        Compiled.RemoveRecord(record);
+                                    }
+
+                                    const batch = document.createDocumentFragment();
+
+                                    for(let offset = 0; offset < created.length; offset++)
+                                    {
+                                        const record = created[offset];
+                                        records.set(createdKeys[offset], record);
+                                        batch.appendChild(record.Fragment!);
+                                        record.Fragment = null;
+                                    }
+
+                                    start.parentNode?.insertBefore(batch, anchor);
+                                    order.splice(index, removeCount, ...created);
+
+                                    if(operation.index)
+                                    {
+                                        for(let cursor = index; cursor < order.length; cursor++)
+                                        {
+                                            const record = order[cursor];
+
+                                            if(record.Index !== cursor)
+                                            {
+                                                syncRecord(record, values[cursor], cursor);
+                                            }
+                                        }
+                                    }
+
+                                    return;
+                                }
+
+                                if
+                                (
+                                    detail.Operation === 'set' ||
+                                    detail.Operation === 'add'
+                                )
+                                {
+                                    const index = detail.Index;
+
+                                    if(typeof index !== 'number')
+                                    {
+                                        update();
+                                        return;
+                                    }
+
+                                    if(!keyed && index < order.length)
+                                    {
+                                        syncRecord(order[index], values[index], index);
+                                        return;
+                                    }
+
+                                    update();
+                                    return;
+                                }
+
+                                if(detail.Operation === 'truncate')
+                                {
+                                    const nextLength = values.length;
+
+                                    if(nextLength === 0)
+                                    {
+                                        if(order.length)
+                                        {
+                                            Compiled.ClearRange(start, end);
+                                            order.length = 0;
+                                            records.clear();
+                                        }
+
+                                        return;
+                                    }
+
+                                    if(nextLength < order.length)
+                                    {
+                                        for(let cursor = order.length - 1; cursor >= nextLength; cursor--)
+                                        {
+                                            const record = order[cursor];
+
+                                            if(keyed && record.Key !== undefined)
+                                            {
+                                                records.delete(record.Key);
+                                            }
+
+                                            Compiled.RemoveRecord(record);
+                                        }
+
+                                        order.length = nextLength;
+                                        return;
+                                    }
+                                }
+
+                                update();
+                            };
+
+                        Events.Event.On
+                        (
+                            Events.CollectionTarget,
+                            'CollectionChanged',
+                            collectionChanged
+                        );
+
+                        this.#disposers.push
+                        (
+                            () =>
+                                Events.Event.Off
+                                (
+                                    Events.CollectionTarget,
+                                    'CollectionChanged',
+                                    collectionChanged
+                                )
+                        );
 
                         update();
                         this.#refreshers.push(update);

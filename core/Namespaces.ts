@@ -130,6 +130,31 @@ export namespace Namespaces
          */
         static readonly #upgraded  : WeakSet<Element> = new WeakSet();
 
+        /** O(1) constructor/interface identity cache. */
+        readonly #constructorCache = new WeakMap<Function, SchemaType>();
+
+        private CacheDescriptor(descriptor: SchemaType): void
+        {
+            if(typeof descriptor.Constructor === 'function')
+            {
+                this.#constructorCache.set
+                (
+                    descriptor.Constructor as unknown as Function,
+                    descriptor
+                );
+            }
+
+            if(typeof descriptor.Interface === 'function')
+            {
+                this.#constructorCache.set
+                (
+                    descriptor.Interface as unknown as Function,
+                    descriptor
+                );
+            }
+        }
+
+
         /** @name        Name
          *  @public
          *  @readonly
@@ -766,6 +791,14 @@ export namespace Namespaces
             { key = (query as Element).tagName?.toLowerCase() ?? ''; }
             else if (typeof query === 'function')
             {
+                const cached =
+                    this.#constructorCache.get(query as unknown as Function);
+
+                if(cached)
+                {
+                    return cached;
+                }
+
                 const nk = (query as { name?: string }).name?.toLowerCase() ?? '';
 
                 for (const d of this.Standard.values())
@@ -1441,6 +1474,7 @@ export namespace Namespaces
                                             };
 
                                         this.Custom.set(n, descriptor);
+                                        this.CacheDescriptor(descriptor);
                                         this.Custom.Tags.set(t, descriptor);
 
                                         return descriptor;
@@ -2008,6 +2042,7 @@ export namespace Namespaces
                     descriptor.Constructor = native;
                     descriptor.Interface   = native;
                     descriptor.Prototype   = (native as { prototype: object }).prototype;
+                    this.CacheDescriptor(descriptor);
                     if(!descriptor.Patched)
                     {
                         this.PatchIDL(name, descriptor);

@@ -93,6 +93,60 @@ export namespace Observers
          */
         static readonly #removed : WeakSet<Element> = new WeakSet();
 
+        /** Reentrancy guards for lifecycle delivery. */
+        static readonly #adding   : WeakSet<Element> = new WeakSet();
+        static readonly #removing : WeakSet<Element> = new WeakSet();
+
+        static #lifecycle(node: Element, type: 'NodeAdded' | 'NodeRemoved'): void
+        {
+            const guard =
+                type === 'NodeAdded'
+                    ? Observer.#adding
+                    : Observer.#removing;
+
+            if(guard.has(node))
+            {
+                return;
+            }
+
+            guard.add(node);
+
+            try
+            {
+                const events = Core.Services.Events;
+
+                if(events)
+                {
+                    events.Fire(node, { Type: type, Detail: { node }, Propagation: true });
+
+                    if(type === 'NodeRemoved' && typeof document !== 'undefined')
+                    {
+                        events.Fire(document, { Type: type, Detail: { node } });
+                    }
+                }
+                else
+                {
+                    node.dispatchEvent
+                    (
+                        new CustomEvent(type, { detail: { node }, bubbles: true })
+                    );
+
+                    if(type === 'NodeRemoved' && typeof document !== 'undefined')
+                    {
+                        document.dispatchEvent
+                        (
+                            new CustomEvent(type, { detail: { node } })
+                        );
+                    }
+                }
+            }
+            finally
+            {
+                guard.delete(node);
+            }
+        }
+
+
         /** @name        #events
          *  @private
          *  @static
@@ -103,8 +157,21 @@ export namespace Observers
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license)
          */
-        static get #events(): { Fire(t: EventTarget, d: { Type: string; Detail?: unknown }): void } | undefined
-        { return Core.Services.Events as { Fire(t: EventTarget, d: { Type: string; Detail?: unknown }): void } | undefined; }
+        static get #events():
+        {
+            Fire(t: EventTarget, d: { Type: string; Detail?: unknown }): void;
+            Has?(type: string): boolean;
+        } | undefined
+        {
+            return Core.Services.Events as
+            {
+                Fire(t: EventTarget, d: { Type: string; Detail?: unknown }): void;
+                Has?(type: string): boolean;
+            } | undefined;
+        }
+
+        static readonly #ManagedNode =
+            Symbol.for('arianna.template.managed');
 
         /** @name        #fire
          *  @private
@@ -212,17 +279,19 @@ export namespace Observers
             this.#configuration = { childList: true, subtree: true, attributes: true, attributeOldValue: true, ...configuration };
             this.#callback      = function(mutations: MutationRecord[])
             {
-                for (const m of mutations)
+                for(let mutationIndex = 0; mutationIndex < mutations.length; mutationIndex++)
                 {
-                    if (m.type === 'attributes' && m.target instanceof Element)
+                    const m = mutations[mutationIndex];
+
+                    if(m.type === 'attributes' && m.target instanceof Element)
                     {
                         const attributes = m.target.attributes;
-                        const attribute        = attributes.getNamedItem(m.attributeName ?? '');
+                        const attribute  = attributes.getNamedItem(m.attributeName ?? '');
 
-                        if (attribute)
+                        if(attribute)
                         {
                             const lower = /^(\w+)/.exec(attribute.name)?.[1]?.toLowerCase();
-                            const name           = lower ?? attribute.name;
+                            const name  = lower ?? attribute.name;
                             Observer.#fire
                             (
                                 m.target,
@@ -235,25 +304,47 @@ export namespace Observers
                         }
                     }
 
-                    /** Child list change → lifecycle events (neutral: no descriptor, no upgrade). */
-                    if (m.type === 'childList')
+                    if(m.type !== 'childList') continue;
+
+                    const events = Observer.#events;
+                    const nodeAddedObserved   = events?.Has?.('NodeAdded')   === true;
+                    const nodeRemovedObserved = events?.Has?.('NodeRemoved') === true;
+
+                    for(let nodeIndex = 0; nodeIndex < m.addedNodes.length; nodeIndex++)
                     {
-                        for (const node of m.addedNodes)
-                        {
-                            if (!(node instanceof Element)) continue;
-                            Observer.#added.add(node);
-                            Observer.#removed.delete(node);
-                            node.dispatchEvent
-                            (new CustomEvent('NodeAdded', { detail: { node }, bubbles: true }));
-                        }
-                        for (const node of m.removedNodes)
-                        {
-                            if (!(node instanceof Element)) continue;
-                            Observer.#added.delete(node);
-                            Observer.#removed.add(node);
-                            node.dispatchEvent(new CustomEvent('NodeRemoved', { detail: { node }, bubbles: true }));
-                            document.dispatchEvent(new CustomEvent('NodeRemoved', { detail: { node }, bubbles: true }));
-                        }
+                        const node = m.addedNodes[nodeIndex];
+                        if(!(node instanceof Element)) continue;
+
+                        const managed =
+                            (node as unknown as Record<symbol, unknown>)[Observer.#ManagedNode] === true;
+
+                        // Internally-managed standard nodes need no lifecycle bookkeeping at all
+                        // when that lifecycle is unobserved. R5 skipped dispatch but still paid two
+                        // WeakSet operations per node; bulk create/clear therefore still scaled with rows.
+                        if(managed && !nodeAddedObserved) continue;
+
+                        Observer.#added.add(node);
+                        Observer.#removed.delete(node);
+
+                        Observer.#lifecycle(node, 'NodeAdded');
+                    }
+
+                    for(let nodeIndex = 0; nodeIndex < m.removedNodes.length; nodeIndex++)
+                    {
+                        const node = m.removedNodes[nodeIndex];
+                        if(!(node instanceof Element)) continue;
+
+                        const managed =
+                            (node as unknown as Record<symbol, unknown>)[Observer.#ManagedNode] === true;
+
+                        // Same rule on removal: if no AriannA lifecycle consumer exists, the
+                        // framework's own row teardown must not re-enter Observer bookkeeping.
+                        if(managed && !nodeRemovedObserved) continue;
+
+                        Observer.#added.delete(node);
+                        Observer.#removed.add(node);
+
+                        Observer.#lifecycle(node, 'NodeRemoved');
                     }
                 }
             };
@@ -591,8 +682,12 @@ export namespace Observers
 
             if (tags && tags.length)
             {
-                for (const tag of tags)
-                    for (const el of Array.from(scope.getElementsByTagName(tag))) emit(el);   // mirato, C-fast
+                for(let tagIndex = 0; tagIndex < tags.length; tagIndex++)
+                {
+                    const elements = scope.getElementsByTagName(tags[tagIndex]);
+                    for(let elementIndex = 0; elementIndex < elements.length; elementIndex++)
+                        emit(elements[elementIndex]);
+                }
                 return this;
             }
 
