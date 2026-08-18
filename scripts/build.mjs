@@ -43,131 +43,60 @@ if(!existsSync(outDir))
     mkdirSync(outDir, { recursive: true });
 }
 
-const sourceRoots =
-[
-    resolve(repoRoot, 'core'),
-    resolve(repoRoot, 'components'),
-    resolve(repoRoot, 'additionals')
-];
+const AriannaCompiler = {
+    name: 'arianna-compiler',
 
-const isProjectSource =
-    file =>
-        sourceRoots.some
+    setup(build)
+    {
+        build.onLoad
         (
-            root =>
-                file === root ||
-                file.startsWith(root + sep)
-        );
-
-function AriannaCompiler(bundleName)
-{
-    let compiledFiles = 0;
-    let compiledTemplates = 0;
-    let promotedTemplates = 0;
-    let dynamicTemplates = 0;
-
-    return {
-        name: 'arianna-compiler',
-
-        setup(build)
-        {
-            build.onStart
-            (
-                () =>
+            { filter: /\.[cm]?[jt]sx?$/ },
+            async args =>
+            {
+                /*
+                 * Compiler.ts is the build-time compiler itself. Compiling the
+                 * compiler through itself is unnecessary and would recurse.
+                 */
+                if(resolve(args.path) === compilerFile)
                 {
-                    compiledFiles = 0;
-                    compiledTemplates = 0;
-                    promotedTemplates = 0;
-                    dynamicTemplates = 0;
+                    return null;
                 }
-            );
 
-            build.onLoad
-            (
-                { filter: /\.[cm]?[jt]sx?$/ },
-                async args =>
-                {
-                    if(!isProjectSource(args.path))
-                    {
-                        return null;
-                    }
+                const source =
+                    readFileSync(args.path, 'utf8');
 
-                    /*
-                     * Compiler.ts is the build-time compiler itself. Compiling
-                     * the compiler through itself would recurse.
-                     */
-                    if(resolve(args.path) === compilerFile)
-                    {
-                        return null;
-                    }
-
-                    const source =
-                        readFileSync(args.path, 'utf8');
-
-                    const result =
-                        await CompileSource
-                        (
-                            source,
-                            {
-                                FileName    : args.path,
-                                TemplateRef : 'Templates.Template'
-                            }
-                        );
-
-                    compiledTemplates += result.Compiled ?? 0;
-                    promotedTemplates += result.Promoted ?? 0;
-                    dynamicTemplates += result.Dynamic ?? 0;
-
-                    if(result.Code === source)
-                    {
-                        return null;
-                    }
-
-                    compiledFiles++;
-
-                    const extension =
-                        extname(args.path).toLowerCase();
-
-                    const loader =
-                        extension === '.tsx'
-                            ? 'tsx'
-                            : extension === '.jsx'
-                                ? 'jsx'
-                                : extension === '.js' ||
-                                  extension === '.mjs' ||
-                                  extension === '.cjs'
-                                    ? 'js'
-                                    : 'ts';
-
-                    return {
-                        contents   : result.Code,
-                        loader,
-                        resolveDir : dirname(args.path)
-                    };
-                }
-            );
-
-            build.onEnd
-            (
-                result =>
-                {
-                    if(result.errors.length)
-                    {
-                        return;
-                    }
-
-                    console.log
+                const result =
+                    await CompileSource
                     (
-                        `✓ compiler → ${bundleName}: ${compiledTemplates} compiled template(s)` +
-                        ` in ${compiledFiles} transformed file(s)` +
-                        `${promotedTemplates ? ` · ${promotedTemplates} promoted` : ''}` +
-                        `${dynamicTemplates ? ` · ${dynamicTemplates} dynamic fallback` : ''}`
+                        source,
+                        {
+                            FileName    : args.path,
+                            TemplateRef : 'Templates.Template'
+                        }
                     );
-                }
-            );
-        }
-    };
-}
+
+                const extension =
+                    extname(args.path).toLowerCase();
+
+                const loader =
+                    extension === '.tsx'
+                        ? 'tsx'
+                        : extension === '.jsx'
+                            ? 'jsx'
+                            : extension === '.js' ||
+                              extension === '.mjs' ||
+                              extension === '.cjs'
+                                ? 'js'
+                                : 'ts';
+
+                return {
+                    contents : result.Code,
+                    loader
+                };
+            }
+        );
+    }
+};
 
 const externalizeCore = {
     name: 'externalize-core',
@@ -244,19 +173,19 @@ const bundles = [
         name     : 'arianna',
         entry    : 'core/index.ts',
         external : ['@tauri-apps/*'],
-        plugins  : [AriannaCompiler('arianna')]
+        plugins  : [AriannaCompiler]
     },
     {
         name     : 'arianna-components',
         entry    : 'components/index.ts',
         external : ['@tauri-apps/*'],
-        plugins  : [AriannaCompiler('arianna-components'), externalizeCore]
+        plugins  : [AriannaCompiler, externalizeCore]
     },
     {
         name     : 'arianna-additionals',
         entry    : 'additionals/index.ts',
         external : ['@tauri-apps/*'],
-        plugins  : [AriannaCompiler('arianna-additionals'), externalizeCore]
+        plugins  : [AriannaCompiler, externalizeCore]
     }
 ];
 
@@ -450,82 +379,6 @@ async function buildBundle(bundle)
     );
 }
 
-async function syncBenchmarks()
-{
-    if(watch || skipMin)
-    {
-        return;
-    }
-
-    const runtime =
-        resolve(outDir, 'arianna.min.js');
-
-    if(!existsSync(runtime))
-    {
-        throw new Error
-        (
-            '[arianna] release/dist/arianna.min.js was not produced.'
-        );
-    }
-
-    const benchmarks =
-    [
-        resolve(repoRoot, 'release', 'benchmark', 'keyed', 'arianna', 'src'),
-        resolve(repoRoot, 'release', 'benchmark', 'non-keyed', 'arianna', 'src')
-    ];
-
-    console.log('');
-    console.log('── benchmark sync ─────────────────────────────────────');
-
-    for(const directory of benchmarks)
-    {
-        if(!existsSync(directory))
-        {
-            console.log
-            (
-                `⚠  benchmark source not found — skipping ${relative(repoRoot, directory)}`
-            );
-
-            continue;
-        }
-
-        const runtimeTarget =
-            resolve(directory, 'arianna.min.js');
-
-        copyFileSync(runtime, runtimeTarget);
-
-        const mainTs =
-            resolve(directory, 'Main.ts');
-
-        const mainJs =
-            resolve(directory, 'Main.js');
-
-        if(existsSync(mainTs))
-        {
-            const result =
-                await CompileFile
-                (
-                    mainTs,
-                    mainJs,
-                    {
-                        TemplateRef: 'Templates.Template'
-                    }
-                );
-
-            console.log
-            (
-                `✓ benchmark → ${relative(repoRoot, mainJs)}` +
-                ` (${result.Compiled} compiled, ${result.Promoted} promoted, ${result.Dynamic} dynamic)`
-            );
-        }
-
-        console.log
-        (
-            `✓ runtime   → ${relative(repoRoot, runtimeTarget)}`
-        );
-    }
-}
-
 function generateDeclarations()
 {
     if(skipTypes)
@@ -536,6 +389,10 @@ function generateDeclarations()
     console.log('');
     console.log('── declarations ─────────────────────────────────────');
 
+    /*
+     * 1. Keep the normal source declaration graph under types/dist for the
+     *    repository/package type tree.
+     */
     if(existsSync(typesOut))
     {
         try
@@ -560,34 +417,6 @@ function generateDeclarations()
         ...listTsFiles(resolve(repoRoot, 'additionals'))
     ];
 
-    if(tsFiles.length === 0)
-    {
-        console.log
-        (
-            '⚠  no .ts sources found — skipping declaration generation'
-        );
-
-        return;
-    }
-
-    const tscArgs = [
-        '--declaration',
-        '--emitDeclarationOnly',
-        '--declarationDir', typesOut,
-        '--rootDir', repoRoot,
-        '--target', 'es2022',
-        '--module', 'esnext',
-        '--moduleResolution', 'bundler',
-        '--allowImportingTsExtensions',
-        '--strict', 'false',
-        '--skipLibCheck',
-        '--noEmitOnError', 'false',
-        ...tsFiles.map
-        (
-            file => relative(repoRoot, file)
-        )
-    ];
-
     const isWindows =
         process.platform === 'win32';
 
@@ -605,11 +434,144 @@ function generateDeclarations()
             ? tscBin
             : 'tsc';
 
-    const result =
+    if(tsFiles.length > 0)
+    {
+        const sourceArgs = [
+            '--declaration',
+            '--emitDeclarationOnly',
+            '--declarationDir', typesOut,
+            '--rootDir', repoRoot,
+            '--target', 'es2022',
+            '--module', 'esnext',
+            '--moduleResolution', 'bundler',
+            '--allowImportingTsExtensions',
+            '--strict', 'false',
+            '--skipLibCheck',
+            '--noEmitOnError', 'false',
+            ...tsFiles.map
+            (
+                file => relative(repoRoot, file)
+            )
+        ];
+
+        const sourceResult =
+            spawnSync
+            (
+                tscCommand,
+                sourceArgs,
+                {
+                    cwd      : repoRoot,
+                    stdio    : ['ignore', 'pipe', 'pipe'],
+                    encoding : 'utf8',
+                    shell    : false
+                }
+            );
+
+        if(sourceResult.status !== 0)
+        {
+            const output =
+                (sourceResult.stdout || '') +
+                (sourceResult.stderr || '');
+
+            console.log
+            (
+                '⚠  tsc reported issues during source declaration emit (build continues):'
+            );
+
+            console.log
+            (
+                output
+                    .split('\n')
+                    .slice(-15)
+                    .join('\n')
+                    .replace(/^/gm, '   ')
+            );
+        }
+
+        const emitted =
+            readdirSync
+            (
+                typesOut,
+                {
+                    recursive: true
+                }
+            )
+            .filter
+            (
+                file =>
+                    typeof file === 'string' &&
+                    file.endsWith('.d.ts')
+            )
+            .length;
+
+        console.log
+        (
+            `✓ tsc     → types/dist/*.d.ts  (${emitted} files)`
+        );
+    }
+
+    /*
+     * 2. Generate the PORTABLE declaration directly from the already-bundled
+     *    AriannA ESM runtime.
+     *
+     *    This intentionally avoids dts-bundle-generator / API Extractor and
+     *    therefore avoids a second traversal of AriannA's source declaration
+     *    graph. The input is one file (arianna.js), so the emitted declaration
+     *    is one file and has no local ./types dependency.
+     */
+    const runtime =
+        resolve(outDir, 'arianna.js');
+
+    if(!existsSync(runtime))
+    {
+        throw new Error
+        (
+            'Portable declaration generation requires release/dist/arianna.js'
+        );
+    }
+
+    const portableTemp =
+        resolve(outDir, '.portable-types');
+
+    if(existsSync(portableTemp))
+    {
+        rmSync
+        (
+            portableTemp,
+            {
+                recursive : true,
+                force     : true
+            }
+        );
+    }
+
+    mkdirSync
+    (
+        portableTemp,
+        {
+            recursive: true
+        }
+    );
+
+    const portableArgs = [
+        '--allowJs',
+        '--checkJs', 'false',
+        '--declaration',
+        '--emitDeclarationOnly',
+        '--outDir', portableTemp,
+        '--target', 'es2022',
+        '--module', 'esnext',
+        '--moduleResolution', 'bundler',
+        '--skipLibCheck',
+        '--noEmitOnError', 'false',
+        runtime
+    ];
+
+    const portableResult =
         spawnSync
         (
             tscCommand,
-            tscArgs,
+            portableArgs,
             {
                 cwd      : repoRoot,
                 stdio    : ['ignore', 'pipe', 'pipe'],
@@ -618,49 +580,198 @@ function generateDeclarations()
             }
         );
 
-    if(result.status !== 0)
+    const generated =
+        resolve(portableTemp, 'arianna.d.ts');
+
+    if(!existsSync(generated))
     {
         const output =
-            (result.stdout || '') +
-            (result.stderr || '');
+            (portableResult.stdout || '') +
+            (portableResult.stderr || '');
 
-        const tail =
-            output
-                .split('\n')
-                .slice(-15)
-                .join('\n');
-
-        console.log
+        throw new Error
         (
-            '⚠  tsc reported issues during declaration emit (build continues):'
-        );
-
-        console.log
-        (
-            tail.replace(/^/gm, '   ')
+            'Portable declaration generation failed.\n' +
+            output.split('\n').slice(-25).join('\n')
         );
     }
 
-    const emitted =
-        readdirSync
+    const portable =
+        readFileSync(generated, 'utf8');
+
+    if
+    (
+        /(?:from|import)\s*["']\.\/types\//.test(portable) ||
+        /reference\s+path=["'][^"']*types\//.test(portable)
+    )
+    {
+        throw new Error
         (
-            typesOut,
-            {
-                recursive: true
-            }
-        )
-        .filter
-        (
-            file =>
-                typeof file === 'string' &&
-                file.endsWith('.d.ts')
-        )
-        .length;
+            'Generated arianna.d.ts is not portable: local ./types dependency detected.'
+        );
+    }
+
+    const declarationOut =
+        resolve(outDir, 'arianna.d.ts');
+
+    const minDeclarationOut =
+        resolve(outDir, 'arianna.min.d.ts');
+
+    writeFileSync
+    (
+        declarationOut,
+        portable
+    );
+
+    writeFileSync
+    (
+        minDeclarationOut,
+        portable
+    );
+
+    rmSync
+    (
+        portableTemp,
+        {
+            recursive : true,
+            force     : true
+        }
+    );
 
     console.log
     (
-        `✓ tsc     → types/dist/*.d.ts  (${emitted} files)`
+        `✓ dts     → release/dist/arianna.d.ts      (${fmtSize(sizeOf(declarationOut))})`
     );
+
+    console.log
+    (
+        `✓ dts     → release/dist/arianna.min.d.ts  (${fmtSize(sizeOf(minDeclarationOut))})`
+    );
+}
+
+async function syncBenchmarks()
+{
+    if(watch || skipMin)
+    {
+        return;
+    }
+
+    console.log('');
+    console.log('── benchmark sync ───────────────────────────────────');
+
+    const runtime =
+        resolve(outDir, 'arianna.min.js');
+
+    const declaration =
+        resolve(outDir, 'arianna.min.d.ts');
+
+    if(!existsSync(runtime))
+    {
+        throw new Error
+        (
+            'Benchmark sync requires release/dist/arianna.min.js'
+        );
+    }
+
+    if(!skipTypes && !existsSync(declaration))
+    {
+        throw new Error
+        (
+            'Benchmark sync requires release/dist/arianna.min.d.ts'
+        );
+    }
+
+    const benchmarkRoots = [
+        resolve
+        (
+            repoRoot,
+            '..',
+            'arianna-benchmarks',
+            'js-framework-benchmark',
+            'frameworks',
+            'keyed',
+            'arianna',
+            'src'
+        ),
+        resolve
+        (
+            repoRoot,
+            '..',
+            'arianna-benchmarks',
+            'js-framework-benchmark',
+            'frameworks',
+            'non-keyed',
+            'arianna',
+            'src'
+        )
+    ];
+
+    for(const srcDir of benchmarkRoots)
+    {
+        if(!existsSync(srcDir))
+        {
+            console.log
+            (
+                `⚠  benchmark not found — skipping ${relative(repoRoot, srcDir)}`
+            );
+
+            continue;
+        }
+
+        const mainTs =
+            resolve(srcDir, 'Main.ts');
+
+        const mainJs =
+            resolve(srcDir, 'Main.js');
+
+        copyFileSync
+        (
+            runtime,
+            resolve(srcDir, 'arianna.min.js')
+        );
+
+        if(!skipTypes)
+        {
+            copyFileSync
+            (
+                declaration,
+                resolve(srcDir, 'arianna.min.d.ts')
+            );
+
+        }
+
+        console.log
+        (
+            `✓ runtime → ${relative(repoRoot, resolve(srcDir, 'arianna.min.js'))}`
+        );
+
+        if(!skipTypes)
+        {
+            console.log
+            (
+                `✓ types   → ${relative(repoRoot, resolve(srcDir, 'arianna.min.d.ts'))}`
+            );
+        }
+
+        if(existsSync(mainTs))
+        {
+            const result =
+                await CompileFile
+                (
+                    mainTs,
+                    mainJs,
+                    {
+                        TemplateRef: 'Templates.Template'
+                    }
+                );
+
+            console.log
+            (
+                `✓ benchmark → ${relative(repoRoot, mainJs)}` +
+                ` (${result.Compiled} compiled, ${result.Promoted} promoted, ${result.Dynamic} dynamic)`
+            );
+        }
+    }
 }
 
 function generateAriannATs()
@@ -827,8 +938,8 @@ function copyMetaFiles()
 
         if(!watch)
         {
-            await syncBenchmarks();
             generateDeclarations();
+            await syncBenchmarks();
             generateAriannATs();
         }
 

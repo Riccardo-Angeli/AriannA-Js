@@ -276,6 +276,77 @@ var Compilers;
     static #Void = /* @__PURE__ */ new Set(
       ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]
     );
+    /** @name        #WhitespaceStructural
+     *  @private
+     *  @static
+     *  @readonly
+     *  @type        {Set<string>}
+     *  @description HTML parents whose inter-element formatting whitespace is structurally insignificant.
+     *               Keeping these nodes would multiply inert Text nodes in compiled table/list templates and
+     *               force the browser to carry them through cloning, style and layout. Explicit text content
+     *               and inline-significant spacing remain untouched.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    static #WhitespaceStructural = /* @__PURE__ */ new Set(
+      ["table", "thead", "tbody", "tfoot", "tr", "colgroup"]
+    );
+    /** @name        #NormalizeWhitespace
+     *  @private
+     *  @static
+     *  @param       {AstNode} node Template AST node.
+     *  @param       {string | null} [parentTag] Parent element tag, null for Root.
+     *  @returns     {AstNode} Semantically equivalent AST with formatting-only whitespace removed.
+     *  @description Remove indentation/newline Text nodes only when they are structural: at Root/element
+     *               boundaries or between children of table-structure elements. A literal single space between
+     *               inline siblings is preserved. Edge text containing interpolation has newline indentation
+     *               trimmed without changing the actual content. Normalisation runs before path generation so
+     *               operation paths always match the DOM that is actually cloned.
+     *  @author      Riccardo Angeli
+     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+     *  @license     MIT / Commercial (dual license) */
+    static #NormalizeWhitespace(node, parentTag = null) {
+      if (node.Type !== "Root" && node.Type !== "Element") {
+        return node;
+      }
+      const children = node.Children;
+      const normalized = [];
+      const structural = parentTag === null || Transform.#WhitespaceStructural.has(parentTag.toLowerCase());
+      for (let index = 0; index < children.length; index++) {
+        let child = children[index];
+        if (child.Type === "Text") {
+          const text = child.Text;
+          const edge = index === 0 || index === children.length - 1;
+          const formatting = /[\r\n\t]/.test(text);
+          if (/^\s*$/.test(text)) {
+            if (formatting && (edge || structural)) {
+              continue;
+            }
+          } else if (edge && formatting) {
+            let trimmed = text;
+            if (index === 0) {
+              trimmed = trimmed.replace(/^[\t \r\n]*[\r\n][\t ]*/, "");
+            }
+            if (index === children.length - 1) {
+              trimmed = trimmed.replace(/[\t ]*[\r\n][\t \r\n]*$/, "");
+            }
+            if (trimmed !== text) {
+              child = { Type: "Text", Text: trimmed };
+            }
+          }
+        } else if (child.Type === "Element") {
+          child = Transform.#NormalizeWhitespace(child, child.Tag);
+        }
+        normalized.push(child);
+      }
+      if (node.Type === "Root") {
+        return { Type: "Root", Children: normalized };
+      }
+      return {
+        ...node,
+        Children: normalized
+      };
+    }
     /** @name        Escape
      *  @public
      *  @static
@@ -397,6 +468,7 @@ var Compilers;
           "[arianna] Transform expects a Root AST node."
         );
       }
+      root = Transform.#NormalizeWhitespace(root);
       let html = "";
       const operations = [];
       const Emit = (node, path, localAliases) => {
