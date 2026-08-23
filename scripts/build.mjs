@@ -894,14 +894,89 @@ function copyMetaFiles()
         return;
     }
 
+    const rootPackagePath =
+        resolve(repoRoot, 'package.json');
+
+    const rootPackage =
+        JSON.parse
+        (
+            readFileSync
+            (
+                rootPackagePath,
+                'utf8'
+            )
+        );
+
+    const distPackage =
+        {
+            name: rootPackage.name,
+            version: rootPackage.version,
+            description: rootPackage.description,
+            author: rootPackage.author,
+            license: rootPackage.license,
+            type: 'module',
+
+            main: './arianna.js',
+            module: './arianna.js',
+            types: './arianna.d.ts',
+
+            exports:
+                {
+                    '.':
+                        {
+                            types: './arianna.d.ts',
+                            import: './arianna.js',
+                            default: './arianna.js'
+                        },
+
+                    './runtime':
+                        {
+                            import: './arianna-runtime.js'
+                        },
+
+                    './components':
+                        {
+                            import: './arianna-components.js'
+                        },
+
+                    './additionals':
+                        {
+                            import: './arianna-additionals.js'
+                        }
+                },
+
+            sideEffects: rootPackage.sideEffects,
+
+            engines: rootPackage.engines,
+            repository: rootPackage.repository,
+            homepage: rootPackage.homepage,
+            bugs: rootPackage.bugs,
+            funding: rootPackage.funding,
+
+            keywords: rootPackage.keywords
+        };
+
+    writeFileSync
+    (
+        resolve(outDir, 'package.json'),
+        JSON.stringify
+        (
+            distPackage,
+            null,
+            2
+        ) + '\n'
+    );
+
+    console.log
+    (
+        '✓ meta    → release/dist/package.json  (generated for dist)'
+    );
+
     const candidates = [
-        ['package.json',  ['release/package.json', 'dist-package.json', 'package.json']],
         ['README.md',     ['release/README.md', 'dist-README.md', 'README.md']],
         ['LICENSE',       ['release/LICENSE', 'LICENSE']],
         ['CHANGELOG.md',  ['release/CHANGELOG.md', 'CHANGELOG.md']]
     ];
-
-    console.log('');
 
     for(const [destinationName, sourceCandidates] of candidates)
     {
