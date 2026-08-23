@@ -1,5 +1,7 @@
 # Normative Overview
 
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 A source file is the implementation of one namespace-owned capability, not a bag of declarations.
 
 Every declaration must answer:

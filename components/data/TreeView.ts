@@ -9,7 +9,7 @@
  */
 
 import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 /** @namespace   TreeView
  *  @public

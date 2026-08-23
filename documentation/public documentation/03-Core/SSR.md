@@ -1,11 +1,5 @@
-# SSR
+# SSR — Architecture 2.0
 
-```ts
-const safe =
-    SSR.Renderer.EscapeHtml(untrusted);
+> **Version:** 2.0
 
-const html =
-    SSR.Renderer.RenderToString(node);
-```
-
-`EscapeHtml` belongs to `Renderer`; it is not a top-level compatibility function.
+SSR is a compiler/IR concern. Component and Template source converge on AriannA UI IR, which can generate a server execution plan and HTML. Client startup should support selective resume/hydration through Real, with a roadmap toward streaming, islands, Shadow hydration, custom-component hydration, and mismatch diagnostics.

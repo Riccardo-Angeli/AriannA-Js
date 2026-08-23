@@ -1,88 +1,58 @@
-# Source Structure
+# Source Structure — AriannA Architecture 2.0
+
+> **Version:** 2.0
+
+## Runtime stages
 
 ```text
-arianna-js/
-├── .github/
-├── additionals/
-├── components/
-├── config/
-├── core/
-│   ├── schema/
-│   │   ├── Interfaces.ts
-│   │   └── Types.ts
-│   ├── Compiler.ts
-│   ├── Components.ts
-│   ├── Context.ts
-│   ├── Core.ts
-│   ├── Css.ts
-│   ├── Directives.ts
-│   ├── Events.ts
-│   ├── index.ts
-│   ├── Jsx.ts
-│   ├── Namespaces.ts
-│   ├── Observer.ts
-│   ├── Plugins.ts
-│   ├── Properties.ts
-│   ├── Reactive.ts
-│   ├── Real.ts
-│   ├── Router.ts
-│   ├── Service.ts
-│   ├── Shadow.ts
-│   ├── SSR.ts
-│   ├── State.ts
-│   ├── Template.ts
-│   ├── Virtual.ts
-│   └── Workers.ts
-├── devtools/
-├── assets/
-├── examples/
-├── ideas/
-├── legacy/
-├── release/
-│   ├── benchmark/
-│   └── dist/
-├── scripts/
-│   ├── arianna-compile.mjs
-│   ├── build.mjs
-│   ├── check-barrel.cjs
-│   └── generate-component-stubs.cjs
-├── types/
-├── .gitignore
-├── global.d.ts
-├── index.cjs
-├── index.mjs
-├── index.ts
-├── LICENSE
-├── package-lock.json
-├── package.json
-├── README.md
-└── tsconfig.json
+schema/
+  Types.ts
+  Interfaces.ts
+
+kernel/
+  Core.ts
+  Service.ts
+
+runtime/
+  Reactive.ts
+  Events.ts
+
+dom/
+  Namespaces.ts
+  Real.ts
+  Template.ts
+  Shadow.ts
+
+ui/
+  Virtual.ts
+  Component.ts
+  Css.ts
+  Directives.ts
+  JSX...
+  State...
+  Context...
 ```
+
+The physical repository may migrate incrementally toward this layout; the dependency contract applies immediately even before every file is moved.
 
 ## Compiler architecture
 
-The compiler is now unified in:
-
 ```text
-core/Compiler.ts
+Template / Component / Virtual / JSX / analyzable Real authoring
+                         ↓
+                       Analyzer
+                         ↓
+                    AriannA UI IR
+                         ↓
+                      Optimizer
+                         ↓
+                     Generator
+                         ↓
+                   Execution Plan
+                         ↓
+                        Real
+                         ↓
+                         DOM
 ```
 
-and exposes:
-
-```text
-Compilers.Parser
-Compilers.Analyzer
-Compilers.Transform
-Compilers.Optimizer
-Compilers.Generator
-Compilers.Compiler
-```
-
-The previous standalone compiler directory is no longer part of the source structure.
-
-Build integration remains in:
-
-```text
-scripts/arianna-compile.mjs
-scripts/build.mjs
-```
+Compiler output classifies operations as static, semi-static, or dynamic. Static work is folded; semi-static work becomes specialized sinks; dynamic work remains Real runtime code.

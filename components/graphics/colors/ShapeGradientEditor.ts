@@ -11,7 +11,7 @@
 import { Component, Components, Css, Reactivity, Templates } from '../../../core/index.ts';
 import { LinearGradientEditor } from './LinearGradientEditor.ts';
 import { type RGBA, colorFieldHex, parseColorString } from './GradientEditor.ts';
-import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../../core/definitions/Interfaces.ts';
 
 /** @namespace   ShapeGradientEditor
  *  @public

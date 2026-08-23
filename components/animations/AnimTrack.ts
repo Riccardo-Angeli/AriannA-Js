@@ -26,7 +26,7 @@
      */
 import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
 import type { Keyframe } from './Keyframe.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 /** @name        html
  *  @public

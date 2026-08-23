@@ -13,7 +13,7 @@ import { AudioComponent as AudioComponentModule } from './AudioComponent.ts';
 
 type AudioComponentOptions = AudioComponentModule.AudioComponentOptions;
 import { TransportBar } from './TransportBar.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 /** @namespace   AudioPlayer
  *  @public

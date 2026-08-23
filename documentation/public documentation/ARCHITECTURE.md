@@ -1,236 +1,156 @@
-# AriannA — Layered Architecture (CANONICAL)
+# AriannA — Architecture 2.0 (CANONICAL)
 
-> **This file is the single source of truth.** When any other document
-> (`REAL_VIRTUAL.md`, `COMPONENT_CONVENTIONS.md`, `EXAMPLES.md`, `TESTING.md`)
-> appears to disagree with this one, **this file wins**. If you are an AI
-> assistant or a contributor re-reading the AriannA docs: read THIS file first
-> and treat everything below as binding invariants, not suggestions.
+> **Version:** 2.0  
+> **Status:** Canonical architecture contract. This document supersedes the previous layered model in which `Core.Create` was treated as the DOM authority or `Real`/`Virtual` as equivalent wrappers.
 
----
+## 0. Architectural invariant
 
-## 0. The one-paragraph model
+**Real is the DOM engine of AriannA.** There is exactly one AriannA authority for mutations of the real DOM: **Real**. `Core`, `Template`, `Virtual`, `Component`, `Shadow`, `Namespace`, `Reactive`, and `Events` may decide, describe, schedule, route, or orchestrate work, but DOM execution converges on Real.
 
-AriannA has **four strictly separated layers**. A bare DOM element is produced
-by **`Core.Create`** (Layer 0). A **`Real`** or **`Virtual`** *wraps* that element
-and adds only the fluent API (Layer 1) — `Real` is eager (Lit-like, live DOM),
-`Virtual` is lazy (React/Vue-like, renders at the end). A **`Components`** is a
-*super-layer object that sits ABOVE a `Real` and a `Virtual`, owns all the
-reactive/lifecycle/observer logic, and keeps the two DOM facets in sync —
-without ever becoming a DOM node itself and without leaking the underlying
-element* (Layer 2). **Directives** operate on the base (`Real`/`Virtual`)
-independently of the Components layer (Layer 3).
-
-The mantra:
-
-```
-Core.Create   →  an Element            (DOM only)
-Real / Virtual →  Element + fluent API  (DOM + ergonomics)
-Components      →  Real + Virtual + reactivity, kept in sync, node NOT exposed
+```text
+Compiler decides
+Virtual reconciles
+Template plans
+Reactive propagates
+Events distributes
+Namespace identifies
+Shadow targets
+Component orchestrates
+Real executes
 ```
 
----
+## 1. Compile-time schema
 
-## 1. The four layers
+The type-only source of truth is consolidated into `Types.ts` and `Interfaces.ts`. Type aliases, contracts, descriptors, compiler shapes, service contracts, reactive contracts, shadow contracts, and interop contracts belong there when they have no runtime behavior. They must compile away from JavaScript. Runtime modules must not duplicate type-only definitions.
 
-### Layer 0 — `Core.Create(tag)` : the bare element
+## 2. Runtime stages
 
-* **Input:** a tag name (compliant `div`, or non-compliant / custom
-  `arianna-card`, `case-4b`, …).
-* **Output:** a single **live `Element`**, already *upgraded* — its prototype
-  chain is spliced synchronously through the namespace registry, so a
-  registered custom tag comes back built, not as a bare un-upgraded node.
-* **Adds:** nothing else. **No fluent API. No signals. No lifecycle. No
-  `.Real` / `.Virtual`.** It is just an element.
-* **Where AriannA logic lives here:** non-compliant tag handling, `is=`
-  coercion, prototype splice — i.e. everything needed to make the element
-  behave like a native custom element regardless of the tag.
+AriannA 2.0 is split into four cumulative stages:
 
-```ts
-const el = Core.Create('arianna-card');   // → HTMLElement (upgraded), nothing more
-el.append // ← native node API only; NO .text(), NO .set(), NO Components
-```
-
-### Layer 1 — `Real` / `Virtual` : the element wrapped in the fluent API
-
-* **Input:** the SAME things `Core.Create` accepts, plus an existing
-  `Element` / `Real` / `Virtual` / `{Tag,…}` def, plus **optional style in any
-  form** (`Rule` / `Stylesheet` / flat object / nested).
-* **Internally:** for a tag string they obtain the element from **`Core.Create`**
-  (Layer 0) and wrap it. `Real` materialises immediately; `Virtual` defers
-  element creation to `render()` — but it must route through `Core.Create`
-  too (see §6, FIX-9).
-* **Adds:** the fluent API ONLY — `set/get/sub`, `add/append/push/unshift/
-  remove`, `on/off/fire`, `text/attr/cls/prop/style`, `signal/effect/computed`,
-  `Sheet`, `show/hide`, …
-* **Behaviour contract:**
-  * **`Real` behaves like a Lit component** — eager, every call mutates a live
-    Element now.
-  * **`Virtual` behaves like React/Vue** — lazy, nothing touches the DOM until
-    `.render()` / `.append()` / `.mount()`.
-* **What `.render()` returns:** an `Element` whose prototype chain contains
-  **NO Components class** — only `[UserSubclass?, HTMLXxxElement, HTMLElement,
-  Element, Node, EventTarget, Object]`.
-
-```ts
-new Real('arianna-card').set('title','Hi').append('#app');   // eager, live now
-const v = new Virtual('arianna-card').set('title','Hi');      // nothing yet
-v.append('#app');                                             // materialises now
-```
-
-> A `Real` / `Virtual` is therefore `Core.Create` element **+ fluent API**.
-> Nothing about reactivity-as-component, lifecycle hooks, or two-facet sync
-> belongs here.
-
-### Layer 2 — `Components` : the super-layer that dresses Real + Virtual
-
-A `Components` is **not** a DOM node and **not** a subclass-that-is-an-element.
-It is an **orchestrator object** that:
-
-1. **owns** a `Real` facet and a `Virtual` facet over the *same logical element*;
-2. **adds all the logic** — signals, reactivity, observers, lifecycle hooks,
-   attribute↔signal↔DOM bridge, bus, scoped Sheet inheritance;
-3. **keeps the two facets in sync** when component state changes, *without*
-   altering how each facet behaves on its own (non-intrusive composition);
-4. **never exposes the underlying HTML node directly.** You reach the DOM only
-   through the facets:
-
-```ts
-const c = new Components(document.createElement('div'));
-//  c is a Components. c is NOT a node. You cannot append c.
-c.Real.append(parent);              // ← now a <div> is in the DOM (eager)
-c.Virtual.render().append(parent);  // ← or via the lazy facet
-```
-
-* **`component.Real`** → the `Real` facet → its `.render()` is a live
-  `HTMLElement` with a chain that **does not** include `Components`
-  (classes, `HTMLXxxElement`/`HTMLElement` super, the usual optionals).
-* **`component.Virtual`** → the `Virtual` facet → updates in place and only
-  materialises at the end (it does not render until committed).
-
-**Composition is INDEPENDENT.** A Components sits on top; the Real and the
-Virtual retain their own identity and behaviour. The Components coordinates
-them — it does not absorb them.
-
-### Layer 3 — Directives : operate on the base, independently
-
-When you manipulate an AriannA element with directives (`a-if`, `a-for`,
-`a-model`, `@click`, `:attr`, `Directive.bootstrap`, …), those bindings fire
-**at the base** — i.e. on the `Real`/`Virtual` element — **not** through the
-Components layer, and they are **independent** of it. A directive bound to the
-element keeps working whether or not a Components is dressing it, and a Components
-re-sync does not clobber directive state.
-
----
-
-## 2. Master table — who is what
-
-| Aspect | `Core.Create(tag)` | `new Real(x)` | `new Virtual(x)` | `Components` (Layer 2) |
-|---|---|---|---|---|
-| **Layer** | 0 | 1 | 1 | 2 |
-| **Returns** | `Element` | `Real` | `VirtualNode` | `Components` instance |
-| **Is a DOM node?** | ✅ yes | ❌ no (wraps one) | ❌ no (describes one) | ❌ **no** |
-| **Directly appendable?** | ✅ (it's a node) | via `.append()` | via `.append()`/`.render()` | ❌ **never** — use `.Real`/`.Virtual` |
-| **Fluent API?** | ❌ none | ✅ full | ✅ full | ✅ delegated through `.Real`/`.Virtual` |
-| **Reactivity / lifecycle / observers / bus?** | ❌ | ❌ | ❌ | ✅ **owns it** |
-| **Eager vs lazy** | eager | **eager (Lit-like)** | **lazy (React/Vue-like)** | both facets, kept in sync |
-| **Element source** | itself | `Core.Create` | `Core.Create` (at `render()`) | via its two facets |
-| **Prototype chain of the produced element** | `[Sub?, HTMLXxx, HTMLElement, …]` | same | same | **same — never contains `Components`** |
-| **`.render()` → element chain has `Components`?** | n/a | ❌ no | ❌ no | ❌ no (facets produce plain elements) |
-
----
-
-## 3. Entry points → what you get back (the rule that removes all ambiguity)
-
-There are two families of entry points and **they return different things on
-purpose**:
-
-### Family A — you get a **Components** (super-layer object, NOT a node)
-
-| Form | Result | How to reach the DOM |
+| Stage | Contains | Responsibility |
 |---|---|---|
-| `@Components(spec) class X extends Base {}` | `X` is a **Components** class; `new X()` → Components instance | `inst.Real` / `inst.Virtual` |
-| `class X extends Components(tag, Base, …) {}` | same — base class is `Components` | `inst.Real` / `inst.Virtual` |
-| `new Components(tag, opts?)` | Components instance | `inst.Real` / `inst.Virtual` |
-| `new Components(existingElement)` | Components instance dressing that element | `inst.Real` / `inst.Virtual` |
-| `new X(props)` where `X` is a Components class | Components instance | `inst.Real` / `inst.Virtual` |
+| `kernel` | Core + Service | bootstrap, foundational utilities, lifecycle infrastructure, service registry |
+| `runtime` | kernel + Reactive + Events | signals, effects, scheduling, ownership/disposal, event lifecycle and delegation |
+| `dom` | runtime + Namespaces + Real + Template + Shadow | browser rendering, DOM primitives, compiled templates, sinks, lists, render targets |
+| `ui` | dom + Virtual + Component + Css + Directives + JSX + State + Context | complete authoring/framework surface |
 
-> A Components instance **cannot** be passed to `appendChild` / `.append()`
-> directly. `inst.Real.append(parent)` or `inst.Virtual.render().append(parent)`
-> is the only way it reaches the DOM.
+Dependencies flow only downward: `ui → dom → runtime → kernel`. Lower stages must never import higher-stage abstractions.
 
-### Family B — you get a **live Element** (a node), dressed by a Components
+## 3. Real — the DOM engine
 
-| Form | Result | Notes |
-|---|---|---|
-| `document.createElement('arianna-x')` | **a live `Element`** — i.e. a `Real`'s underlying node, *dressed* by a Components behind it | It IS a node ⇒ appendable. Directives hit the base. The Components dressing is reachable from the node (back-reference), but the **return value is the node, not the Components**. |
-| `<arianna-x>` in markup | same (upgraded on parse) | same |
+Real has one authority and two surfaces: low-level primitives and the fluent authoring API. The fluent API is built on the same primitives used by compiled templates and reconciliation. There is no hidden DOM engine beneath Real.
 
-This is the precise meaning of *"`document.createElement('my-custom-tag')`
-creates a new `Real`, dressed with a new `Components`"*: markup / `createElement`
-go through the browser's element machinery, so they yield the **element**
-(Layer 1 base). The Components rides on top of it; you did not ask for the
-Components object, so you don't get it as the return value — you get the node.
+### 3.1 Primitive surface
 
----
+The primitive family covers creation/resolution, append/insert/move/remove/clear, text, attributes, properties, classes, styles, child normalization, and target normalization. Hot paths must remain thin, allocation-conscious, compiler-friendly, and callable without constructing unnecessary high-level objects.
 
-## 4. Prototype-chain rules (re-extension)
+### 3.2 Fluent surface
 
-* The element produced by any path has a chain of the form
-  `[UserSubclass?, HTMLXxxElement, HTMLElement, Element, Node, EventTarget,
-  Object]`. **`Components` never appears in it.**
-* **When you extend an already-extended Components**, the **`Real` base chain
-  must be RE-SPLICED** so the new subclass prototype is actually in the live
-  element's chain (`[NewSub, OldSub, HTMLXxx, …]`). The eager facet renders
-  *now*, so its chain must be correct *now*.
-* **`Virtual` only needs to UPDATE its descriptor** on re-extension — it does
-  **not** re-render, because it materialises only at the end. The correct chain
-  is produced when `render()` finally runs (through `Core.Create`).
+Programmatic code may use `new Real(...).Add(...).Set(...).Style(...).On(...)`. Those operations resolve to Real primitives. Dynamic programmatic operations remain valid after compilation; compilation optimizes what is knowable and leaves genuinely dynamic work to Real at runtime.
 
----
+## 4. Template — planning, not DOM authority
 
-## 5. Synchronisation contract (how the two facets stay in sync)
+Template owns structure planning, compiled descriptors, sink plans, scopes, bindings, keyed/non-keyed list plans, reconciliation plans, mount lifecycle, and event plans. It does **not** own an independent implementation of DOM creation or mutation. Commit work is executed through Real.
 
-The Components is the **only** thing that talks to both facets. The rules:
+Compiled templates should avoid generic runtime `ops` interpretation when the compiler already knows the target and operation. The preferred path is a compact execution plan with direct specialized sinks.
 
-1. Components state lives in **signals/observables owned by the Components**.
-2. A state change drives **both** facets through their own fluent API
-   (`Real` mutates live; `Virtual` updates its pending descriptor / re-renders
-   on next commit). The Components does the fan-out; the facets do not know
-   about each other.
-3. Lifecycle hooks (`onCreated/onMount/onUpdate/onUnmount`, …) are fired by the
-   **Components**, not by the element.
-4. Directives bound at the base are **left untouched** by sync — non-intrusive.
+## 5. Virtual — optional VDOM and reconciliation
 
----
+Virtual remains a first-class rendering strategy, but it is not mandatory for every AriannA UI. Virtual owns virtual structure, identity, keys, parent/children relationships, diffing, reconciliation decisions, lazy representation, and foreign-renderer compatibility. When reconciliation commits to the browser, it does so through Real.
 
-## 6. What the current code does WRONG (the fix list)
+The hot-path virtual node should remain lightweight (`type`, `key`, `props`, `children`, identity). Debug/history/tooling metadata should be optional runtime metadata rather than mandatory payload on every node.
 
-Grounded in the present source. Each item is an invariant violation, with the
-location and the required correction.
+## 6. Three rendering modes
 
-| # | Where | Current (wrong) | Required (correct) |
-|---|---|---|---|
-| **FIX-1** | `Components.ts` `Components(el)` → `_installFacilities(el)` | Installs `set/get/text/attr/...` **directly onto the element**, so the element *becomes* the component (Layer 2 collapses into Layer 0/1). | `Components(el)` must **return a Components instance** whose `.Real` wraps `el`. The element keeps only the Layer-1 fluent API; reactivity/lifecycle live on the Components, not stamped on the node. |
-| **FIX-2** | `Components.ts` factory "clean form" returns `Base` unchanged | `class X extends Components(tag, Base)` ≡ `class X extends Base` → instances **are elements**, no `.Real`/`.Virtual`, no super-layer. | Must return a **Components base class**. `new X()` → Components instance. Register the Real-producing element ctor with `customElements` separately (Family B), so markup/`createElement` still yield a node. |
-| **FIX-3** | `Components.ts` `@Components` decorator returns `Target` unchanged | Same collapse as FIX-2 for the decorator path. | Decorator returns a Components-producing class; element ctor registered for the markup/`createElement` upgrade path. |
-| **FIX-4** | `Components.ts` `ComponentWrapper` | Thin shell: `new Real(tag)` + `new Virtual(element)`, no lifecycle/reactivity install, sketchy Virtual fallback. | Promote to the **real** Layer-2 object: owns signals/observers/lifecycle, drives both facets, exposes them via `.Real`/`.Virtual`; **not appendable** itself. |
-| **FIX-5** | `Real.ts` constructor | Auto-assigns `id` + `class` = `Real-Instance-N` on every `new Real`. Pollutes the element and the chain-name diagnostics. | Make auto-id **opt-in** (debug flag), or scope it so it never leaks into the Components-dressed element's public identity. |
-| **FIX-6** | `Virtual.ts` `render()` | Creates the element via `d.Namespace?.functions?.create` / `document.createElement`, **bypassing `Core.Create`**. Diverges from `Real`. | `Virtual.render()` must obtain its element from **`Core.Create`** (Layer 0), so both facets are byte-identical and chains match. |
-| **FIX-7** | `Components.ts` line ~1230 | `console.log("--- Components FN ARGUMENTS ---")` + `console.log(base)` left in the factory. | Remove the debug logging. |
-| **FIX-8** | `Real.ts` top block | `RealTarget`/`RealDef`/`NodeInput` exported with a "Questo Blocco va rimosso" note. | Move these into a private namespace or `Real`-internal types as the note says; keep `RealTarget` exported only if the public API needs it. |
-| **FIX-9** | `EXAMPLES.md` FORM 5 | `new CounterCard()` then `document.body.appendChild(d)` — treats a Components instance as a node. | `const d = new CounterCard(...); d.Real.append('#app')` (or `.Virtual`). See rewritten `EXAMPLES.md`. |
+AriannA supports three native modes over the same DOM engine:
 
-FORM 6 (`document.createElement('arianna-counter-card')` + `appendChild`) is
-**correct** and stays — it is Family B (you get the node).
+1. **Compiled:** source → Compiler → IR → execution plan → Real → DOM. No VDOM is paid for when it is unnecessary.
+2. **Virtual:** Virtual N → Virtual N+1 → diff/reconciliation → Real → DOM.
+3. **Imperative:** application code → Real → DOM. This remains the correct path for animations, editors, dynamic composition, and other runtime-only behavior.
 
----
+## 7. Component — orchestration
 
-## 7. Quick decision guide
+Component orchestrates identity, props, attributes, events, template, shadow target, styles, lifecycle, state, and namespace metadata. Component does not become a second DOM engine. A component may expose or own a host element, but all AriannA-controlled real-DOM mutations still converge on Real.
 
-* *"I just want a DOM element, upgraded"* → `Core.Create(tag)`.
-* *"I want to build live DOM fluently, now"* → `new Real(tag, style?)`.
-* *"I want to build a tree and commit later / SSR"* → `new Virtual(tag, style?)`.
-* *"I want a stateful, reactive component with lifecycle"* → `Components`
-  (decorator / `extends` / `new`). Reach DOM via `.Real` / `.Virtual`.
-* *"I wrote `document.createElement('arianna-x')`"* → you have a **node**
-  (a Real, dressed by a Components). Append it; directives hit the base.
+```text
+Component
+├── Namespace → identity / upgrade
+├── Shadow    → render target
+├── Template  → render plan
+├── Reactive  → invalidation / propagation
+├── Events    → event lifecycle
+└── Real      → DOM execution
+```
+
+## 8. Namespace — identity and upgrade
+
+Namespace is AriannA's DOM identity/type system. It resolves native tags, custom tags, descriptors, constructors, upgrade rules, creation metadata, and lookup. Namespace tells Real what element/identity is required; it does not perform rendering.
+
+## 9. Shadow — target selection
+
+Shadow answers **where** a component renders: native ShadowRoot, light DOM, iframe/document, or a future isolated root. Open is the normal AriannA-managed default. Native closed Shadow DOM is an explicit opt-in exception where native custom-element constraints apply. Shadow chooses/owns the target boundary; Template plans into it; Real executes mutations.
+
+## 10. Reactive
+
+Reactive is rendering-independent. Signals, computed values, effects, batching, ownership, disposal, and dependency propagation must not know DOM semantics. Compiled code may register specialized sinks, but propagation remains Reactive and sink execution resolves to the appropriate lower-level target operation.
+
+## 11. Events
+
+Events owns listener lifecycle, delegation, dispatch, registries, and normalization. Real consumes Events where event behavior is needed. Compiled Template may emit event plans directly. Large convenience/catalog surfaces should remain separable from the minimal runtime path.
+
+## 12. Compiler and AriannA UI IR
+
+The compiler evolves from a template-only compiler into the **AriannA UI Compiler**. Template, Component, Virtual, JSX, and statically analyzable Real authoring converge on a shared UI IR.
+
+```text
+frontends → analyzer → UI IR → optimizer → generator → execution plan
+```
+
+The execution plan can describe structure, nodes, sinks, events, lists, components, shadow targets, actions, animations, and lifecycle hooks. The runtime should not rediscover semantics already proven at compile time.
+
+### 12.1 Static, semi-static, dynamic
+
+- **Static:** completely known operations are folded into compiled structure.
+- **Semi-static:** known target/operation with dynamic value becomes a specialized runtime sink/primitive call.
+- **Dynamic:** unknown property/target/action remains a normal Real runtime operation.
+
+The compiler is conservative: it optimizes only what it can prove.
+
+## 13. Foreign renderer ownership
+
+React, Vue VDOM, Vue Vapor, Angular, and future adapters may coexist through explicit renderer boundaries. A DOM subtree has exactly one renderer owner. AriannA owns the host/boundary; the foreign renderer owns its subtree until unmount. AriannA must not reconcile inside a foreign-owned subtree.
+
+A generic adapter contract is `Mount(host)`, `Update(...)`, `Unmount()`. React keeps Fiber; Vue may keep its VDOM or Vapor runtime; Angular can interoperate through custom-element/adapter boundaries and later through compiler-assisted migration.
+
+## 14. SSR and resumability direction
+
+SSR is generated from the same semantic IR, not from an unrelated renderer. The target pipeline is Component/Template → UI IR → server plan → HTML, followed by selective resume/hydration through Real. Architecture 2.0 is designed for partial hydration, islands, compiled hydration, custom-component hydration, Shadow hydration, streaming, and mismatch diagnostics.
+
+## 15. WYSIWYG / Studio direction
+
+The visual editor must manipulate the same semantic UI representation used by code. Code and visual authoring converge on UI IR instead of maintaining unrelated HTML state. This is the architectural basis for CMS, commerce, landing pages, dashboards, SaaS UI, and application builders.
+
+## 16. Performance contract
+
+Architecture work is not allowed to trade away the benchmark gains without an explicit reason. The post-split reference envelope established before Architecture 2.0 is approximately: keyed weighted geometric mean ~1.17–1.19; non-keyed ~1.17; ready memory ~0.75 MB; run memory ~3.4–3.5 MB; create/clear memory ~1.04 MB; benchmark runtime payload ~54 KB uncompressed / ~16 KB Brotli; first paint ~240 ms. These are regression guards, not eternal fixed targets.
+
+## 17. Implementation order
+
+1. Types / Interfaces consolidation.
+2. Core / Service drying.
+3. Dependency-stage enforcement.
+4. Real audit and primitive consolidation.
+5. Template → Real convergence.
+6. Virtual → Real convergence.
+7. Shadow cleanup.
+8. Component cleanup.
+9. Namespace cleanup.
+10. Events / Reactive cleanup.
+11. UI IR foundation and execution plan.
+12. SSR architecture.
+13. Kanban component and higher-level product work.
+14. Full regression/performance pass.
+
+## 18. Canonical summary
+
+**Types describe. Interfaces contract. Core grounds. Service resolves. Reactive propagates. Events distribute. Namespace identifies. Shadow targets. Template plans. Virtual reconciles. Component orchestrates. Real executes. Compiler decides early.**

@@ -2,7 +2,7 @@
 /**
  * @module      scripts/build
  * @description AriannA distribution build with the Template compiler integrated as an esbuild onLoad stage.
- *              Compiler implementation is loaded from core/Compiler.ts through scripts/arianna-compile.mjs.
+ *              Compiler implementation is loaded from core/compiler/Compiler.ts through scripts/arianna-compile.mjs.
  */
 
 import {
@@ -36,7 +36,7 @@ const repoRoot  = resolve(__dirname, '..');
 const outDir    = resolve(repoRoot, 'release', 'dist');
 const typesOut  = resolve(repoRoot, 'types', 'dist');
 const coreDir   = resolve(repoRoot, 'core');
-const compilerFile = resolve(coreDir, 'Compiler.ts');
+const compilerFile = resolve(coreDir, 'compiler', 'Compiler.ts');
 
 if(!existsSync(outDir))
 {
@@ -176,6 +176,18 @@ const bundles = [
         plugins  : [AriannaCompiler]
     },
     {
+        name   : 'arianna-runtime',
+        source : `
+// R32.3 benchmark runtime: expose only the public symbols consumed by Main.js.
+// Core / Reactive / Primitives remain transitively included only when required,
+// allowing esbuild to tree-shake them instead of pinning them as public roots.
+export { Reactivity } from './core/reactivity/Reactivity.ts';
+export { Templates }  from './core/dom/Template.ts';
+`,
+        external : ['@tauri-apps/*'],
+        plugins  : [AriannaCompiler]
+    },
+    {
         name     : 'arianna-components',
         entry    : 'components/index.ts',
         external : ['@tauri-apps/*'],
@@ -268,9 +280,11 @@ const listTsFiles = (directory, accumulator = []) =>
 async function buildBundle(bundle)
 {
     const entry =
-        resolve(repoRoot, bundle.entry);
+        bundle.entry
+            ? resolve(repoRoot, bundle.entry)
+            : null;
 
-    if(!existsSync(entry))
+    if(entry && !existsSync(entry))
     {
         console.log
         (
@@ -285,7 +299,21 @@ async function buildBundle(bundle)
 
     const options =
     {
-        entryPoints       : [entry],
+        ...(bundle.source
+            ?
+            {
+                stdin:
+                {
+                    contents   : bundle.source,
+                    resolveDir : repoRoot,
+                    sourcefile : `${bundle.name}.entry.ts`,
+                    loader     : 'ts'
+                }
+            }
+            :
+            {
+                entryPoints: [entry]
+            }),
         bundle            : true,
         format            : 'esm',
         platform          : 'browser',
@@ -660,7 +688,7 @@ async function syncBenchmarks()
     console.log('── benchmark sync ───────────────────────────────────');
 
     const runtime =
-        resolve(outDir, 'arianna.min.js');
+        resolve(outDir, 'arianna-runtime.min.js');
 
     const declaration =
         resolve(outDir, 'arianna.min.d.ts');
@@ -669,7 +697,7 @@ async function syncBenchmarks()
     {
         throw new Error
         (
-            'Benchmark sync requires release/dist/arianna.min.js'
+            'Benchmark sync requires the generated release/dist/arianna-runtime.min.js profile'
         );
     }
 

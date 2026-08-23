@@ -1,23 +1,7 @@
-# Namespace-First Architecture
+# Namespace-First Architecture — Architecture 2.0
 
-AriannA organizes implementation by capability.
+> **Version:** 2.0
 
-```ts
-export namespace SSR
-{
-    export class Island
-    {
-    }
+Namespace remains the identity and upgrade authority, but **Real is the DOM execution authority**. Namespace resolves native/custom tag identity, descriptors, constructors, and upgrade metadata. Real consumes that resolution to create or mutate the actual DOM. Namespace must not become a renderer.
 
-    export class Renderer
-    {
-    }
-
-    const Service =
-        new Services.Service<ServiceContract>(...);
-}
-
-export default SSR;
-```
-
-Namespaces provide discoverability, classes own behavior, Schema owns Core contracts and Services provide controlled integration. This prevents free-function drift, duplicate registries, accidental globals, type/runtime collisions and compatibility bridges.
+The dependency is therefore: `Component/Template/Virtual → Namespace (identity decision) → Real (DOM execution)`.

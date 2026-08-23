@@ -1,5 +1,9 @@
 # AriannA — Shadow
 
+> **Version:** 2.0
+
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 > **The complete Shadow DOM story in AriannA: native, polyfilled, iframe-isolated, and light. Why each mode exists, when to use it, how it works mechanically, and what guarantees it provides.**
 >
 > Companion to `COMPONENTS.md` §6 (which covers the user-facing API). This document goes deep on the internals and the architectural rationale.

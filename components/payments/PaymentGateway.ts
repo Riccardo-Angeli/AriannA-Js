@@ -17,7 +17,7 @@ import { Stripe } from './Stripe.ts';
 import { Satispay } from './Satispay.ts';
 import { Nexi } from './Nexi.ts';
 import { AliPay } from './AliPay.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 /** @namespace   PaymentGateway
  *  @public

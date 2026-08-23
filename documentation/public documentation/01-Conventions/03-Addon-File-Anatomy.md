@@ -1,5 +1,7 @@
 # Addon File Anatomy
 
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 Addons follow Core ownership discipline, while addon-specific contracts may remain inside the addon namespace.
 
 ```ts

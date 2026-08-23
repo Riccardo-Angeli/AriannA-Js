@@ -1,5 +1,7 @@
 # AriannA CSS — Catalogo Canonico delle Sintassi (Golem E2E)
 
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 > Fonte di verità: 22 file di test E2E del Golem originale + legacy `Css.js` (9271 righe).
 > Ogni formato di dichiarazione di una Rule/Sheet è documentato qui con l'esempio esatto.
 > **Questi formati sono DATI PER SCONTATI**: le statiche (GetSelector/GetType/GetContents/

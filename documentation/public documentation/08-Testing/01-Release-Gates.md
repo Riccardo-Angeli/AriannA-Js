@@ -1,5 +1,7 @@
 # Release Gates
 
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 1. strict TypeScript compilation;
 2. declaration emit;
 3. bundle import audit;

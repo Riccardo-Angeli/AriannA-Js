@@ -1,5 +1,14 @@
 # Complete Worked Examples
 
+> **Version:** 2.0
+
+
+## Architecture 2.0 merge rule
+
+This document preserves the public API examples and conventions that remain useful, but its architectural interpretation is governed by `ARCHITECTURE.md`. In Architecture 2.0, **Real is the DOM engine**; Template plans; Virtual reconciles and commits through Real; Component orchestrates; Namespace identifies; Shadow selects the target; Reactive propagates; Events distributes. Any older statement that treats `Core.Create` as the DOM engine, treats Real and Virtual as equivalent wrappers, or makes Component a competing DOM mutation authority is superseded by this rule.
+
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 > **Model reminder (binding).** See [`ARCHITECTURE.md`](ARCHITECTURE.md). Inside a
 > `Component` class, **`this` is the Component**, *not* the DOM node. Touch the
 > live element through **`this.Real`** (eager facet) or **`this.Virtual`** (lazy

@@ -9,7 +9,7 @@
  */
 
 import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 /** @name        html
  *  @public
@@ -344,7 +344,7 @@ export namespace NodeEditor
             /** @name        schema
              *  @public
              *  @type        {NodeEditor.Interfaces.NodeSchema}
-             *  @description Component member for schema.
+             *  @description Component member for definitions.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
@@ -785,7 +785,7 @@ export namespace NodeEditor
                  *  @author      Riccardo Angeli
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
-                const type = e.dataTransfer?.getData('arianna/node-schema');
+                const type = e.dataTransfer?.getData('arianna/node-definitions');
                 if (!type)
                     return;
 
@@ -900,7 +900,7 @@ export namespace NodeEditor
                     name.textContent = s.name;
                     it.append(icon, name);
                     it.addEventListener('dragstart', (e: DragEvent) => {
-                        e.dataTransfer?.setData('arianna/node-schema', s.type);
+                        e.dataTransfer?.setData('arianna/node-definitions', s.type);
                     });
                     palette.appendChild(it);
                 }
@@ -1667,7 +1667,7 @@ export namespace NodeEditor
             /** @name        schema
              *  @public
              *  @type        {inferred}
-             *  @description Namespace-owned schema value.
+             *  @description Namespace-owned definitions value.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */

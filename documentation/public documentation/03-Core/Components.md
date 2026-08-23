@@ -1,17 +1,5 @@
-# Components
+# Components — Architecture 2.0
 
-`Components.Component` is a class and `Component.Callable` is its callable public proxy.
+> **Version:** 2.0
 
-Supported forms:
-
-```ts
-Component(element);
-Component('#selector');
-
-@Component('arianna-example', {}, { Attributes: ['value'] })
-class Example extends HTMLElement
-{
-}
-```
-
-The decorator installs the AriannA prototype surface, defines namespace metadata and returns a constructor proxy. The Core barrel exports the callable surface as the named binding `Component`.
+Component orchestrates Namespace identity, Shadow target, Template plan, Reactive state, Events, styles, and lifecycle. Component is not a second DOM mutation engine: all AriannA-controlled real-DOM mutations converge on Real.

@@ -1,4 +1,7 @@
-# Component Lifecycle
+# Component Lifecycle — Architecture 2.0
+
+> **Version:** 2.0  
+> Lifecycle is orchestration. Component/Template lifecycle stages may schedule work, but DOM commits converge on Real. Shadow selects the render target; Reactive owns invalidation/cleanup; Events owns listener lifecycle. Open Shadow is the normal AriannA-managed default; native closed Shadow is an explicit exception.
 
 **Purpose**: precise ordering of every hook, browser callback, and internal step from `new MyClass()` through DOM removal. Reference this when debugging "why isn't my hook firing" or "why is my style applied at the wrong moment".
 
@@ -37,7 +40,7 @@
 │                          │   • attrSignal accessor patched onto element
 │                          │   • _children accessor (if def.bus configured)
 │                          │   • Sheet.Current = clone(Sheet.Default)
-│                          │   • Shadow root attached (closed by default)
+│                          │   • Shadow root attached (open by default)
 └──────────┬───────────────┘
            │
            ▼

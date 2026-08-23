@@ -1,5 +1,7 @@
 # Indentation and Layout
 
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 - four spaces, never tabs;
 - opening braces on their own line;
 - one semantic operation per visual block;

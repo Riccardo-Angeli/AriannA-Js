@@ -1,5 +1,14 @@
 # AriannA — Complete Conventions
 
+> **Version:** 2.0
+
+
+## Architecture 2.0 merge rule
+
+This document preserves the public API examples and conventions that remain useful, but its architectural interpretation is governed by `ARCHITECTURE.md`. In Architecture 2.0, **Real is the DOM engine**; Template plans; Virtual reconciles and commits through Real; Component orchestrates; Namespace identifies; Shadow selects the target; Reactive propagates; Events distributes. Any older statement that treats `Core.Create` as the DOM engine, treats Real and Virtual as equivalent wrappers, or makes Component a competing DOM mutation authority is superseded by this rule.
+
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 **Version**: 2.0 (revision 2026-05-19)
 **Author**: Riccardo Angeli
 **Status**: Authoritative single-source-of-truth for the AriannA framework
@@ -576,7 +585,7 @@ See `js-framework-benchmark` results in the main README.
 │                          │   • attrSignal accessor patched onto element
 │                          │   • _children accessor (if def.bus configured)
 │                          │   • Sheet.Current = clone(Sheet.Default)
-│                          │   • Shadow root attached (closed by default)
+│                          │   • Shadow root attached (open by default)
 └──────────┬───────────────┘
            │
            ▼
@@ -1443,7 +1452,7 @@ class Button extends Component(
     },
     {                           // 4. def — { attrs, shadow, bus, render }
         attrs : ['variant', 'size', 'icon', 'disabled'],
-        shadow: 'closed',       // default — see §4.5
+        shadow: 'open',         // default — see §4.5
     }
 ) {
     build(opts) { /* ... */ }
@@ -1558,7 +1567,7 @@ export class Button extends Component(
     },
     {
         attrs : ['variant', 'size', 'icon', 'disabled'],
-        shadow: 'closed',   // default — explicit for clarity
+        shadow: 'open',     // default — explicit for clarity
         bus   : null,
     }
 ) {
@@ -2257,7 +2266,7 @@ class MyCounter extends Component('arianna-counter', HTMLElement, {...}, { attrs
 // (a) HTML markup
 <arianna-counter initial="5">Children here</arianna-counter>
 
-// (b) Real fluent — live DOM wrapper
+// (b) Real fluent — live DOM engine surface
 const a = new Real('arianna-counter').set('initial', '5').append('#app');
 
 // (c) Virtual — virtual node, materialised on append/render
@@ -2654,7 +2663,7 @@ The reference site reads this JSDoc + parses the component's `Sheet.Default` to 
 Every component must render **completely and correctly** with zero additional configuration using any of the six instantiation forms (§5). This means:
 
 - The `Sheet.Default` from the factory `css` argument is applied automatically
-- The template renders inside shadow DOM (closed by default)
+- The template renders inside shadow DOM (open by default)
 - All internal class selectors (`.ar-cal__header`, etc.) resolve correctly because they live inside the same shadow root as the template
 - The element appears identical whether created via HTML markup, `new Real('tag')`, `new Virtual('tag')`, `new Component('tag', opts)`, `new ClassName()`, or `document.createElement('tag')`
 

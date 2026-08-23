@@ -1,21 +1,23 @@
 # AriannA JS 2 — Public Documentation
 
-AriannA JS is a namespace-first, metadata-driven TypeScript framework for native, reactive and server-renderable interfaces.
+> **Documentation version:** 2.0 — Architecture 2.0 merge
 
-The documents under `01-Conventions/` are normative. They describe the final architecture used by Workers, Service, State, Reactivity, SSR, Real, Virtual and Components.
+This package is the public documentation set aligned to **AriannA Architecture 2.0**. `ARCHITECTURE.md` is the canonical architectural contract; topic documents refine it and must not override its invariants.
 
 ## Canonical package import
 
-```ts
-import
-{
-    Component,
-    Css,
-    Reactivity,
-    SSR,
-    Templates
-}
-from '../../core/index.ts';
-```
+Use the public package entry points documented by the current release. Internal stage boundaries (`kernel`, `runtime`, `dom`, `ui`) describe architecture and bundle composition; they are not a promise that every internal source path is a public import.
 
-Separately bundled packages use named imports. One JavaScript module has only one default binding, so individual Core APIs must never depend on source-module defaults after bundling.
+## Architecture 2.0 reading order
+
+1. `ARCHITECTURE.md`
+2. `REAL_VIRTUAL.md`
+3. `REACTIVITY.md`
+4. `TEMPLATE_DIRECTIVES.md`
+5. `COMPONENTS.md`
+6. `SHADOW.md`
+7. `LIFECYCLE.md`
+8. `TESTING.md`
+9. `SourceStructure.MD`
+
+Core invariant: **Real is the DOM engine of AriannA.**

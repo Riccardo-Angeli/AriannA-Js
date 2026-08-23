@@ -10,7 +10,7 @@
 
 import { Component, Components, Css, Reactivity, Templates } from '../../../core/index.ts';
 import { parseHexRgba, rgbToHex, rgbToHsl, hslToRgb } from './GraphicsColorPicker.ts';
-import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../../core/definitions/Interfaces.ts';
 
 /** @namespace   ColorPickerSquare
  *  @public

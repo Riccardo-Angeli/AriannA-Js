@@ -8,5 +8,7 @@
   },
   "component_core_imports": "named imports from core/index.ts",
   "global_HTMLElement_augmentation": "forbidden",
-  "service_wrapper": "Services.Service"
+  "service_wrapper": "Services.Service",
+  "documentationVersion": "2.0",
+  "architectureVersion": "2.0"
 }

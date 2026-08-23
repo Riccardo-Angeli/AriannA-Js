@@ -1,5 +1,9 @@
 # Template Directives — complete reference
 
+> **Version:** 2.0
+
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 **Purpose**: exhaustive reference for the template parser. Every directive, every modifier, every expression context rule. Complements `COMPONENT_CONVENTIONS.md` §4.7.
 
 ---

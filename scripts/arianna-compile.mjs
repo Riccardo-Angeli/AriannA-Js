@@ -2,18 +2,19 @@
 /**
  * @module      scripts/arianna-compile
  * @description AriannA compiler CLI and Node build adapter. The actual compiler implementation lives only in
- *              core/Compiler.ts under the Compilers namespace; this script transpiles that source for Node,
+ *              core/compiler/Compiler.ts under the Compilers namespace; this script transpiles that source for Node,
  *              loads it once, and delegates compilation to Compilers.Compiler.
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { dirname, resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
-const compilerSource = resolve(repoRoot, 'core', 'Compiler.ts');
+const compilerSource = resolve(repoRoot, 'core', 'compiler', 'Compiler.ts');
 
 let compilerPromise = null;
 
@@ -77,7 +78,7 @@ export async function LoadCompiler()
             {
                 throw new Error
                 (
-                    '[arianna] core/Compiler.ts did not export Compilers.Compiler.'
+                    '[arianna] core/compiler/Compiler.ts did not export Compilers.Compiler.'
                 );
             }
 
@@ -125,52 +126,49 @@ export async function CompileFile
             }
         );
 
-    await mkdir(dirname(output), { recursive: true });
-
     /*
-     * The AriannA compiler transforms templates but intentionally preserves
-     * the surrounding source language. When a TypeScript input is explicitly
-     * requested as a .js output (the benchmark Main.ts -> Main.js path),
-     * perform the final syntax lowering here so the produced file is real
-     * JavaScript rather than TypeScript stored under a .js extension.
+     * CompileSource intentionally preserves the source language because the
+     * build plugin hands result.Code back to esbuild with the original loader.
+     *
+     * CompileFile is different: its destination can be a real .js file
+     * (benchmarks generate src/Main.js from src/Main.ts). Therefore the
+     * compiler output must be transpiled before it is written, otherwise
+     * TypeScript-only syntax such as interfaces and type annotations leaks
+     * into JavaScript.
      */
-    const inputExtension =
+    const extension =
         extname(input).toLowerCase();
 
-    const outputExtension =
-        extname(output).toLowerCase();
+    const loader =
+        extension === '.tsx'
+            ? 'tsx'
+            : extension === '.jsx'
+                ? 'jsx'
+                : extension === '.js' ||
+                  extension === '.mjs' ||
+                  extension === '.cjs'
+                    ? 'js'
+                    : 'ts';
 
-    let code =
-        result.Code;
+    const transpiled =
+        await esbuild.transform
+        (
+            result.Code,
+            {
+                loader,
+                format    : 'esm',
+                target    : 'es2022',
+                sourcemap : false,
+                sourcefile: options.FileName ?? input
+            }
+        );
 
-    if
-    (
-        (inputExtension === '.ts' || inputExtension === '.tsx') &&
-        (outputExtension === '.js' || outputExtension === '.mjs' || outputExtension === '.cjs')
-    )
-    {
-        const transformed =
-            await esbuild.transform
-            (
-                code,
-                {
-                    loader    : inputExtension === '.tsx' ? 'tsx' : 'ts',
-                    format    : 'esm',
-                    target    : 'es2022',
-                    sourcemap : false,
-                    legalComments : 'none'
-                }
-            );
-
-        code =
-            transformed.code;
-    }
-
-    await writeFile(output, code, 'utf8');
+    await mkdir(dirname(output), { recursive: true });
+    await writeFile(output, transpiled.code, 'utf8');
 
     return {
         ...result,
-        Code: code
+        Code: transpiled.code
     };
 }
 

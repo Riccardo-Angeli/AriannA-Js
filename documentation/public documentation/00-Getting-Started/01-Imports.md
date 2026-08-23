@@ -1,5 +1,7 @@
 # Imports
 
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 Use named imports from the Core barrel.
 
 ```ts

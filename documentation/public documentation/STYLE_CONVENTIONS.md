@@ -1,5 +1,9 @@
 # AriannA Style Conventions
 
+> **Version:** 2.0
+
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 **Version**: 2.0 draft 2026-05-22  
 **Status**: Proposed canonical convention for AriannA CSS, `Rule`, `Stylesheet`, Shadow DOM styling, and component override contracts.
 
@@ -22,7 +26,7 @@ The goal is not to make Shadow DOM disappear. The goal is to give users the same
 
 ## 1. Core Principles
 
-### 1.1 Closed Shadow DOM remains the default
+### 1.1 Open Shadow DOM is the default
 
 AriannA components use Shadow DOM by default, preferably `closed`.
 

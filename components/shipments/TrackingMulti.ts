@@ -14,7 +14,7 @@ import { UPSTracker } from './UPSTracker.ts';
 import { FedExTracker } from './FedExTracker.ts';
 import { BRTTracker } from './BRTTracker.ts';
 import type { TrackingEvent } from './Tracker.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 /** @namespace   TrackingMulti
  *  @public

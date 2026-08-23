@@ -1,6 +1,6 @@
 import { Reactivity } from '../../../core/index.ts';
 import { parseHexRgba, rgbToHex } from './GraphicsColorPicker.ts';
-import type { Interfaces as SchemaInterfaces } from '../../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../../core/definitions/Interfaces.ts';
 
 /** @namespace   GradientEditor
  *  @public

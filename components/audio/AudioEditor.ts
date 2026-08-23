@@ -12,7 +12,7 @@ import { Css, Reactivity } from '../../core/index.ts';
 import { AudioComponent as AudioComponentModule } from './AudioComponent.ts';
 
 type AudioComponentOptions = AudioComponentModule.AudioComponentOptions;
-import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 /** @namespace   AudioEditor
  *  @public

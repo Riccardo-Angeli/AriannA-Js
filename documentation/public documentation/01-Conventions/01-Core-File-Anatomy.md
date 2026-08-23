@@ -1,5 +1,7 @@
 # Core File Anatomy
 
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 A Core file follows this order:
 
 1. complete module header;
@@ -16,8 +18,8 @@ A Core file follows this order:
 ```ts
 import { Services } from './Service.ts';
 
-import type { Types as SchemaTypes }           from './schema/Types.ts';
-import type { Interfaces as SchemaInterfaces } from './schema/Interfaces.ts';
+import type { Types as SchemaTypes }           from './definitions/Types.ts';
+import type { Interfaces as SchemaInterfaces } from './definitions/Interfaces.ts';
 
 export namespace Workers
 {

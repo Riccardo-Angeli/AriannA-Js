@@ -1,13 +1,5 @@
-# Templates
+# Templates — Architecture 2.0
 
-`Templates.Template` compiles immutable template definitions.
+> **Version:** 2.0
 
-```ts
-const html =
-    Templates.Template.Html;
-
-const view =
-    html`<span>{{ this.Value }}</span>`;
-```
-
-`Template.Create` owns caching. `Template.Html` and `Template.Css` are static tagged-template helpers. Consumers use the named `Templates` binding from the Core barrel.
+Template plans structure, bindings, sinks, lists, events, scopes, and mount lifecycle. It is not a DOM engine. Compiled Template output should become a compact execution plan and commit through Real primitives. Generic runtime operation decoding should be removed from hot paths whenever the compiler already knows the operation.

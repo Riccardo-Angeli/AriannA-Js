@@ -10,7 +10,7 @@
 
 import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _fmt, _fmtK, _esc } from './helpers.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/schema/Interfaces.ts';
+import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 /** @namespace   Screener
  *  @public

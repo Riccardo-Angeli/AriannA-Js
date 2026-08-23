@@ -1,7 +1,7 @@
 {
   "name": "arianna",
   "version": "2.0.0",
-  "description": "AriannA — Reactive UI framework. Performant like SolidJS, pleasant like React, native as the DOM. Pipeline 6 (May 2026): audio/video editors, chat, graphics 2D/3D, colour pickers, gradient editors, payments, shipments.",
+  "description": "AriannA \u2014 Reactive UI framework. Performant like SolidJS, pleasant like React, native as the DOM. Pipeline 6 (May 2026): audio/video editors, chat, graphics 2D/3D, colour pickers, gradient editors, payments, shipments.",
   "author": "Riccardo Angeli <riccardo.angeli@arianna.dev> (https://arianna.dev)",
   "license": "MIT",
   "type": "module",
@@ -15,42 +15,6 @@
     ".": {
       "import": "./core/index.ts",
       "default": "./core/index.ts"
-    },
-    "./core": {
-      "import": "./core/Core.ts"
-    },
-    "./observable": {
-      "import": "./core/Observable.ts"
-    },
-    "./state": {
-      "import": "./core/State.ts"
-    },
-    "./real": {
-      "import": "./core/Real.ts"
-    },
-    "./virtual": {
-      "import": "./core/Virtual.ts"
-    },
-    "./rule": {
-      "import": "./core/Rule.ts"
-    },
-    "./stylesheet": {
-      "import": "./core/Stylesheet.ts"
-    },
-    "./directive": {
-      "import": "./core/Directive.ts"
-    },
-    "./context": {
-      "import": "./core/Context.ts"
-    },
-    "./namespace": {
-      "import": "./core/Namespace.ts"
-    },
-    "./jsx-runtime": {
-      "import": "./core/jsx/jsx-runtime.ts"
-    },
-    "./jsx-dev-runtime": {
-      "import": "./core/jsx/jsx-dev-runtime.ts"
     },
     "./components": {
       "import": "./components/index.ts"
@@ -87,6 +51,27 @@
     },
     "./config": {
       "import": "./arianna-config/arianna.config.ts"
+    },
+    "./router": {
+      "import": "./core/platform/Router.ts"
+    },
+    "./ssr": {
+      "import": "./core/platform/SSR.ts"
+    },
+    "./workers": {
+      "import": "./core/platform/Workers.ts"
+    },
+    "./wasm": {
+      "import": "./core/platform/Wasm.ts"
+    },
+    "./reactive": {
+      "import": "./core/reactivity/Reactive.ts"
+    },
+    "./reactivity": {
+      "import": "./core/reactivity/Reactivity.ts"
+    },
+    "./template": {
+      "import": "./core/dom/Template.ts"
     }
   },
   "files": [
@@ -159,9 +144,7 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "sideEffects": [
-    "./core/Namespace.ts"
-  ],
+  "sideEffects": false,
   "funding": {
     "type": "commercial",
     "url": "https://arianna.dev/licensing"

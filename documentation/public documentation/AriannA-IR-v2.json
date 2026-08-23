@@ -1053,5 +1053,18 @@
         }
       }
     }
+  },
+  "architectureVersion": "2.0",
+  "domAuthority": "Real",
+  "architectureContract": {
+    "Compiler": "decides early",
+    "Template": "plans",
+    "Virtual": "reconciles",
+    "Component": "orchestrates",
+    "Real": "executes DOM mutations",
+    "Namespace": "identifies",
+    "Shadow": "targets",
+    "Reactive": "propagates",
+    "Events": "distributes"
   }
 }

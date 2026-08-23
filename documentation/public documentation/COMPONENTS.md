@@ -1,5 +1,14 @@
 # AriannA — Components
 
+> **Version:** 2.0
+
+
+## Architecture 2.0 merge rule
+
+This document preserves the public API examples and conventions that remain useful, but its architectural interpretation is governed by `ARCHITECTURE.md`. In Architecture 2.0, **Real is the DOM engine**; Template plans; Virtual reconciles and commits through Real; Component orchestrates; Namespace identifies; Shadow selects the target; Reactive propagates; Events distributes. Any older statement that treats `Core.Create` as the DOM engine, treats Real and Virtual as equivalent wrappers, or makes Component a competing DOM mutation authority is superseded by this rule.
+
+> **Architecture:** AriannA 2.0. Where older examples describe a different DOM ownership model, `ARCHITECTURE.md` is authoritative: **Real executes DOM mutations; Template plans; Virtual reconciles; Component orchestrates.**
+
 > **The single canonical document for everything component-related in AriannA v2.**
 > Mechanics, conventions, lifecycle, instantiation, templating, styling, decorators, JSX, accessibility, testing, migration.
 >
@@ -64,9 +73,9 @@
 **Part 0 — THE CANONICAL MODEL (authoritative; read this first)**
 - §0.1. The three primitives: Real, Virtual, Component
 - §0.1.1. The Higgs model — the one metaphor that explains everything
-- §0.2. Real and Virtual are ONLY elements
-- §0.3. Component is element + Template + Shadow + State + Observer
-- §0.4. Component IS the DOM node — Lit-like, embedded (the canonical model)
+- §0.2. Real is the DOM engine; Virtual is the optional virtual representation
+- §0.3. Component orchestrates host + Template + Shadow + State + Observer
+- §0.4. Component owns/coordinates the host boundary — Real remains the DOM engine
 - §0.4.1. WHY: lazy rendering — work before layout, layout touched once
 - §0.5. The element carries its own Real / Virtual facets
 - §0.5.1. Identity invariant: this.element === this.Real.render() === this
@@ -125,7 +134,7 @@ Corollaries (all consistent with "the component IS the element"):
 
 Why this matters: it explains *why* Shadow/Template/State are Component concerns and not Real/Virtual concerns (they are mass, not "node"), while still letting the component be a first-class DOM element you can `querySelector`, `instanceof HTMLElement`, and pass anywhere a node is expected.
 
-## §0.2. Real and Virtual are ONLY elements
+## §0.2. Real is the DOM engine; Virtual is the optional virtual representation
 
 A `Real` or a `Virtual` is **just an element** with a fluent API. It has:
 
@@ -144,7 +153,7 @@ These belong to **Component**. This is the key conceptual boundary in AriannA: *
 
 Real and Virtual remain **complete and compatible** on their own. In particular, **Virtual MUST stay React/JSX-compatible** — it is the import surface for React code and for `h()`/JSX. Component must never compromise that compatibility (§0.11).
 
-## §0.3. Component is element + Template + Shadow + State + Observer
+## §0.3. Component orchestrates host + Template + Shadow + State + Observer
 
 A `Component` is the union:
 
@@ -158,7 +167,7 @@ Component  =  (Real ⊕ Virtual, kept in sync)         ← the element, in both 
 
 It is the element, plus the embedded Component layer that confers Template, Shadow, State, and the Observer lifecycle. The `this.Real` / `this.Virtual` facets give eager / lazy views over the same element (which is `this`), kept in sync with signals and the template.
 
-## §0.4. Component IS the DOM node — Lit-like, embedded (the canonical model)
+## §0.4. Component owns/coordinates the host boundary — Real remains the DOM engine
 
 **A Component IS the custom element.** `class Button extends Component('arianna-button', HTMLElement, css, def)` produces a class whose instances **are** `<arianna-button>` DOM nodes — exactly like Lit, where a component *is* the custom element. The base is **embedded** in the prototype chain:
 
@@ -218,7 +227,7 @@ Because the component **is** the element, the Real and Virtual facets are views 
 
 Both facets are views of the **same** node — which is `this`. A mutation through either lands on `this`. The **default fluent behaviour is Real** (eager / SolidJS-style / plain DOM); `Virtual` is available on demand for the React-style world. The facets exist so that, inside a Component, you can drop to either the eager or the lazy element API over the very element the component is.
 
-`Real` and `Virtual` also remain fully usable **standalone** (outside any Component) as pure element wrappers — that does not change (§0.2).
+`Real` and `Virtual` also remain fully usable **standalone** (outside any Component) as standalone DOM/virtual authoring surfaces — that does not change (§0.2).
 
 ### §0.5.1. Identity invariant: `this.element === this.Real.render() === this`
 
@@ -411,7 +420,7 @@ This is exactly what the diagnostic tests rely on: they read `btn.Shadow.Root` *
 
 AriannA keeps **element** and **component** as distinct, layered concepts, even though a component IS an element:
 
-- You can use `Real`/`Virtual` with **zero** knowledge of components, shadow, or templates — they are complete standalone element wrappers (photons).
+- You can use `Real`/`Virtual` with **zero** knowledge of components, shadow, or templates — they are complete standalone DOM/virtual authoring surfaces (photons).
 - A component is an element that additionally carries the embedded Component layer (mass): Template, Shadow, State, Observer. You adopt those capabilities incrementally.
 - Native DOM is always right there on `this` (the element); the Fluent API and shadow model are the value-add you opt into where they matter (§0.6).
 - `Real`/`Virtual` never depend on `Component`. `Component` builds on them. The dependency arrow points one way — the foundation (elements) knows nothing about the layer above (components).
@@ -1561,7 +1570,7 @@ Adds rules on top of whatever was passed to the `Component(...)` factory.
 │                          │   • attrSignal accessor patched onto element
 │                          │   • _children accessor (if def.bus configured)
 │                          │   • Sheet.Current = clone(Sheet.Default)
-│                          │   • Shadow root attached (closed by default)
+│                          │   • Shadow root attached (open by default)
 │                          │     [native or AriannaShadow polyfill]
 └──────────┬───────────────┘
            │
@@ -1699,7 +1708,7 @@ PHASE B — instance lifecycle (runs N times, once per element)
   9. attrSignals created for each name in def.attrs
  10. _children accessor (if def.bus configured)
  11. Sheet.Current = clone(Sheet.Default)
- 12. Shadow root attached (closed by default; AriannaShadow polyfill
+ 12. Shadow root attached (open by default; AriannaShadow polyfill
      when native attachShadow throws on unregistered tag)
  13. onCreated() — user hook (semantics reserved)
  14. build(opts) ✅ — assigns this.template, registers effects

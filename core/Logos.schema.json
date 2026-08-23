@@ -1,0 +1,3991 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:alchemia:logos:2",
+  "title": "Logos IR 2.1",
+  "description": "Canonical schema for Logos Fragment, Program, FragmentPatch and EventEnvelope documents.",
+  "$ref": "#/$defs/Document",
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "SchemaVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$"
+    },
+    "DefinitionVersion": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Primitive": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Value": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Primitive"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Value"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Value"
+          }
+        }
+      ]
+    },
+    "ValueMap": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Value"
+      }
+    },
+    "Hash": {
+      "type": "object",
+      "properties": {
+        "Algorithm": {
+          "type": "string",
+          "enum": [
+            "sha256",
+            "sha384",
+            "sha512"
+          ]
+        },
+        "Value": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "Algorithm",
+        "Value"
+      ],
+      "additionalProperties": false
+    },
+    "Integrity": {
+      "type": "object",
+      "properties": {
+        "Canonicalization": {
+          "const": "logos-c14n-v1"
+        },
+        "Scope": {
+          "type": "string",
+          "enum": [
+            "definition",
+            "fragment",
+            "program",
+            "artifact"
+          ]
+        },
+        "Hash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "SignatureAlgorithm": {
+          "type": "string",
+          "enum": [
+            "ed25519",
+            "ecdsa-p256",
+            "rsa-pss-sha256"
+          ]
+        },
+        "KeyId": {
+          "type": "string"
+        },
+        "Signature": {
+          "type": "string"
+        },
+        "CertificateChain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ExcludedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "Canonicalization",
+        "Scope",
+        "Hash"
+      ],
+      "additionalProperties": false
+    },
+    "ProvenanceTool": {
+      "type": "object",
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "Version"
+      ],
+      "additionalProperties": false
+    },
+    "Provenance": {
+      "type": "object",
+      "properties": {
+        "Source": {
+          "type": "string"
+        },
+        "Tool": {
+          "$ref": "#/$defs/ProvenanceTool"
+        },
+        "Inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Hash"
+          }
+        },
+        "RequirementIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "BuildId": {
+          "type": "string"
+        },
+        "Timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "DefinitionKind": {
+      "type": "string",
+      "enum": [
+        "namespace",
+        "dialect",
+        "platform",
+        "target",
+        "policy",
+        "type",
+        "style",
+        "node",
+        "component",
+        "event",
+        "event-target",
+        "event-handler",
+        "event-code",
+        "event-binding",
+        "event-broker",
+        "signal",
+        "binding",
+        "expression",
+        "mapping",
+        "action",
+        "tensor",
+        "operation",
+        "graph",
+        "device",
+        "vision-operation",
+        "neural-model",
+        "quantization",
+        "model-transform",
+        "constraint",
+        "rewrite",
+        "pass",
+        "pipeline",
+        "artifact",
+        "resource"
+      ]
+    },
+    "Stage": {
+      "type": "string",
+      "enum": [
+        "HIR",
+        "MIR",
+        "LIR"
+      ]
+    },
+    "Profile": {
+      "type": "string",
+      "enum": [
+        "open",
+        "standard",
+        "regulated",
+        "safety"
+      ]
+    },
+    "DialectLevel": {
+      "type": "string",
+      "enum": [
+        "source",
+        "semantic",
+        "computational",
+        "target"
+      ]
+    },
+    "PlatformKind": {
+      "type": "string",
+      "enum": [
+        "web",
+        "server",
+        "native",
+        "qnx",
+        "vxworks",
+        "embedded",
+        "nvidia-gpu",
+        "amd-gpu",
+        "apple"
+      ]
+    },
+    "MemorySpaceKind": {
+      "type": "string",
+      "enum": [
+        "host",
+        "device",
+        "unified",
+        "shared",
+        "constant",
+        "texture"
+      ]
+    },
+    "ExecutionModel": {
+      "type": "string",
+      "enum": [
+        "scalar",
+        "simd",
+        "simt",
+        "dataflow",
+        "event-driven"
+      ]
+    },
+    "ElementType": {
+      "type": "string",
+      "enum": [
+        "f64",
+        "f32",
+        "f16",
+        "bf16",
+        "i64",
+        "i32",
+        "i16",
+        "i8",
+        "u8",
+        "bool"
+      ]
+    },
+    "NamespaceDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "namespace"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "NamespaceKind": {
+          "type": "string",
+          "enum": [
+            "html",
+            "svg",
+            "mathml",
+            "x3d",
+            "custom",
+            "ui",
+            "events",
+            "vision",
+            "tensor",
+            "neural",
+            "cuda",
+            "llvm",
+            "device",
+            "application"
+          ]
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Uri": {
+          "type": "string"
+        },
+        "Prefix": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "NamespaceKind",
+        "Name"
+      ],
+      "additionalProperties": false
+    },
+    "DialectDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "dialect"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Level": {
+          "$ref": "#/$defs/DialectLevel"
+        },
+        "TypeNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "OperationNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "LowersTo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "ValidatorRefs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Name",
+        "Level",
+        "TypeNames",
+        "OperationNames"
+      ],
+      "additionalProperties": false
+    },
+    "PlatformDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "platform"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "PlatformKind": {
+          "$ref": "#/$defs/PlatformKind"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "PlatformVersion": {
+          "type": "string"
+        },
+        "Profile": {
+          "$ref": "#/$defs/Profile"
+        },
+        "NamespaceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "DialectIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "Capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "MemorySpaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemorySpaceKind"
+          },
+          "uniqueItems": true
+        },
+        "ExecutionModels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExecutionModel"
+          },
+          "uniqueItems": true
+        },
+        "DataTypes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ElementType"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "PlatformKind",
+        "Name",
+        "Profile",
+        "NamespaceIds",
+        "DialectIds",
+        "Capabilities",
+        "MemorySpaces",
+        "ExecutionModels",
+        "DataTypes"
+      ],
+      "additionalProperties": false
+    },
+    "TargetDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "target"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "TargetKind": {
+          "type": "string",
+          "enum": [
+            "dom",
+            "html",
+            "swiftui",
+            "c",
+            "cpp",
+            "rust",
+            "wasm",
+            "cuda",
+            "ptx",
+            "spirv",
+            "metal",
+            "llvm",
+            "binary-table"
+          ]
+        },
+        "PlatformId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Triple": {
+          "type": "string"
+        },
+        "Features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "TargetKind",
+        "PlatformId",
+        "Name"
+      ],
+      "additionalProperties": false
+    },
+    "PolicyDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "policy"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Profile": {
+          "$ref": "#/$defs/Profile"
+        },
+        "AllowedHandlerKinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "reference",
+              "source",
+              "bytecode",
+              "native",
+              "remote"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "ForbidDynamicCode": {
+          "type": "boolean"
+        },
+        "RequireSignedCode": {
+          "type": "boolean"
+        },
+        "AllowedCodeLanguages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "javascript",
+              "typescript",
+              "webassembly",
+              "llvm-ir",
+              "c",
+              "cpp",
+              "rust",
+              "swift",
+              "bytecode",
+              "expression",
+              "none"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "CapabilityAllowList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Profile",
+        "AllowedHandlerKinds",
+        "ForbidDynamicCode",
+        "RequireSignedCode"
+      ],
+      "additionalProperties": false
+    },
+    "PropertySchema": {
+      "type": "object",
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "ValueType": {
+          "type": "string"
+        },
+        "Required": {
+          "type": "boolean"
+        },
+        "Mutable": {
+          "type": "boolean"
+        },
+        "Default": {
+          "$ref": "#/$defs/Value"
+        }
+      },
+      "required": [
+        "Name",
+        "ValueType",
+        "Required",
+        "Mutable"
+      ],
+      "additionalProperties": false
+    },
+    "TypeShadow": {
+      "type": "object",
+      "properties": {
+        "Mode": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed",
+            "none"
+          ]
+        },
+        "Options": {
+          "$ref": "#/$defs/ValueMap"
+        }
+      },
+      "required": [
+        "Mode"
+      ],
+      "additionalProperties": false
+    },
+    "PrimitiveMap": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Primitive"
+      }
+    },
+    "TypeDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "type"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "NamespaceId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Declaration": {
+          "type": "string",
+          "enum": [
+            "FUNCTION",
+            "CLASS",
+            "IDL",
+            "STRUCT",
+            "ENUM",
+            "TRAIT",
+            "PROTOCOL"
+          ]
+        },
+        "TypeKind": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "custom"
+          ]
+        },
+        "Custom": {
+          "type": "boolean"
+        },
+        "Native": {
+          "type": "boolean"
+        },
+        "InterfaceRef": {
+          "type": "string"
+        },
+        "BaseTypeIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "ConstructorRef": {
+          "type": "string"
+        },
+        "StyleIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "Shadow": {
+          "$ref": "#/$defs/TypeShadow"
+        },
+        "TemplateRef": {
+          "type": "string"
+        },
+        "Slot": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "Attributes": {
+          "$ref": "#/$defs/PrimitiveMap"
+        },
+        "PropertySchemas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PropertySchema"
+          }
+        },
+        "EventIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Name",
+        "Tags",
+        "NamespaceId",
+        "Declaration",
+        "TypeKind",
+        "Custom",
+        "Native"
+      ],
+      "additionalProperties": false
+    },
+    "CssSelectorObject": {
+      "type": "object",
+      "properties": {
+        "Type": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Value": {
+          "type": "string"
+        },
+        "Media": {
+          "type": "string"
+        },
+        "Url": {
+          "type": "string"
+        },
+        "Prefix": {
+          "type": "string"
+        },
+        "Domain": {
+          "type": "string"
+        },
+        "Regex": {
+          "type": "string"
+        },
+        "Right": {
+          "type": "boolean"
+        },
+        "Left": {
+          "type": "boolean"
+        },
+        "And": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Or": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Not": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Extensions": {
+          "$ref": "#/$defs/ValueMap"
+        }
+      },
+      "required": [
+        "Type"
+      ],
+      "additionalProperties": false
+    },
+    "CssSelector": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/CssSelectorObject"
+        }
+      ]
+    },
+    "CssScope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Kind": {
+              "const": "global"
+            }
+          },
+          "required": [
+            "Kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Kind": {
+              "const": "class"
+            },
+            "Name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "Kind",
+            "Name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Kind": {
+              "const": "host"
+            }
+          },
+          "required": [
+            "Kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Kind": {
+              "const": "instance"
+            },
+            "Id": {
+              "$ref": "#/$defs/Id"
+            }
+          },
+          "required": [
+            "Kind",
+            "Id"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CssRule": {
+      "type": "object",
+      "properties": {
+        "Selector": {
+          "$ref": "#/$defs/CssSelector"
+        },
+        "Declarations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "Rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CssRule"
+          }
+        }
+      },
+      "required": [
+        "Selector",
+        "Declarations"
+      ],
+      "additionalProperties": false
+    },
+    "StyleDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "style"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Scope": {
+          "$ref": "#/$defs/CssScope"
+        },
+        "Rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CssRule"
+          }
+        },
+        "Extensions": {
+          "$ref": "#/$defs/ValueMap"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Name",
+        "Scope",
+        "Rules"
+      ],
+      "additionalProperties": false
+    },
+    "ExpressionNode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Op": {
+              "const": "constant"
+            },
+            "Value": {
+              "$ref": "#/$defs/Value"
+            }
+          },
+          "required": [
+            "Op",
+            "Value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Op": {
+              "const": "reference"
+            },
+            "Path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "Op",
+            "Path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Op": {
+              "const": "not"
+            },
+            "Operand": {
+              "$ref": "#/$defs/ExpressionNode"
+            }
+          },
+          "required": [
+            "Op",
+            "Operand"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Op": {
+              "type": "string",
+              "enum": [
+                "and",
+                "or"
+              ]
+            },
+            "Operands": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ExpressionNode"
+              }
+            }
+          },
+          "required": [
+            "Op",
+            "Operands"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Op": {
+              "type": "string",
+              "enum": [
+                "eq",
+                "neq",
+                "lt",
+                "lte",
+                "gt",
+                "gte",
+                "add",
+                "sub",
+                "mul",
+                "div"
+              ]
+            },
+            "Left": {
+              "$ref": "#/$defs/ExpressionNode"
+            },
+            "Right": {
+              "$ref": "#/$defs/ExpressionNode"
+            }
+          },
+          "required": [
+            "Op",
+            "Left",
+            "Right"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Op": {
+              "const": "call"
+            },
+            "OperationId": {
+              "$ref": "#/$defs/Id"
+            },
+            "Arguments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ExpressionNode"
+              }
+            }
+          },
+          "required": [
+            "Op",
+            "OperationId",
+            "Arguments"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ExpressionDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "expression"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Root": {
+          "$ref": "#/$defs/ExpressionNode"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Root"
+      ],
+      "additionalProperties": false
+    },
+    "MappingAssignment": {
+      "type": "object",
+      "properties": {
+        "TargetPath": {
+          "type": "string"
+        },
+        "ExpressionId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "TargetPath",
+        "ExpressionId"
+      ],
+      "additionalProperties": false
+    },
+    "MappingDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "mapping"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "SourceSchema": {
+          "type": "string"
+        },
+        "TargetSchema": {
+          "type": "string"
+        },
+        "Assignments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MappingAssignment"
+          }
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Assignments"
+      ],
+      "additionalProperties": false
+    },
+    "ResourceBudget": {
+      "type": "object",
+      "properties": {
+        "MaxDurationUs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "MaxMemoryBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "MaxStackBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "MaxAllocations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "MaxEmittedEvents": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "ActionInstruction": {
+      "type": "object",
+      "properties": {
+        "Op": {
+          "type": "string"
+        },
+        "Arguments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Value"
+          }
+        }
+      },
+      "required": [
+        "Op"
+      ],
+      "additionalProperties": false
+    },
+    "ActionDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "action"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "ActionKind": {
+          "type": "string",
+          "enum": [
+            "native-reference",
+            "graph",
+            "bytecode",
+            "remote"
+          ]
+        },
+        "NativeReference": {
+          "type": "string"
+        },
+        "CodeId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Instructions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionInstruction"
+          }
+        },
+        "InputSchema": {
+          "type": "string"
+        },
+        "OutputSchema": {
+          "type": "string"
+        },
+        "Capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "ResourceBudget": {
+          "$ref": "#/$defs/ResourceBudget"
+        },
+        "NativeAddress": {
+          "$ref": "#/$defs/ActionNativeAddress"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "ActionKind"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "ActionKind": {
+                "const": "native-reference"
+              }
+            },
+            "required": [
+              "ActionKind"
+            ]
+          },
+          "then": {
+            "anyOf": [
+              {
+                "required": [
+                  "NativeAddress"
+                ]
+              },
+              {
+                "required": [
+                  "NativeReference"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "EventDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "event"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Namespace": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "QualifiedName": {
+          "type": "string"
+        },
+        "Category": {
+          "type": "string",
+          "enum": [
+            "DOM",
+            "Application",
+            "Lifecycle",
+            "State",
+            "Message",
+            "Timer",
+            "Interrupt",
+            "Device",
+            "Compute",
+            "Custom"
+          ]
+        },
+        "State": {
+          "type": "string",
+          "enum": [
+            "Active",
+            "Deprecated",
+            "Experimental",
+            "Disabled"
+          ]
+        },
+        "PayloadSchema": {
+          "type": "string"
+        },
+        "ResultSchema": {
+          "type": "string"
+        },
+        "ErrorIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "Bubbles": {
+          "type": "boolean"
+        },
+        "Cancelable": {
+          "type": "boolean"
+        },
+        "Composed": {
+          "type": "boolean"
+        },
+        "TrustedOnly": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Namespace",
+        "Name",
+        "QualifiedName",
+        "Category",
+        "State",
+        "Bubbles",
+        "Cancelable",
+        "Composed",
+        "TrustedOnly"
+      ],
+      "additionalProperties": false
+    },
+    "EventTargetDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "event-target"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "TargetKind": {
+          "type": "string",
+          "enum": [
+            "node",
+            "component",
+            "service",
+            "device",
+            "process",
+            "channel",
+            "topic",
+            "selector",
+            "kernel",
+            "runtime"
+          ]
+        },
+        "Namespace": {
+          "type": "string"
+        },
+        "Reference": {
+          "type": "string"
+        },
+        "PlatformId": {
+          "$ref": "#/$defs/Id"
+        },
+        "TypeId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "TargetKind",
+        "Reference"
+      ],
+      "additionalProperties": false
+    },
+    "CompilerDefinition": {
+      "type": "object",
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "string"
+        },
+        "Options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "Version",
+        "Options"
+      ],
+      "additionalProperties": false
+    },
+    "EventCodeDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "event-code"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Language": {
+          "type": "string",
+          "enum": [
+            "javascript",
+            "typescript",
+            "webassembly",
+            "llvm-ir",
+            "c",
+            "cpp",
+            "rust",
+            "swift",
+            "bytecode",
+            "expression",
+            "none"
+          ]
+        },
+        "Encoding": {
+          "type": "string",
+          "enum": [
+            "utf-8",
+            "base64",
+            "hex",
+            "binary-reference"
+          ]
+        },
+        "MediaType": {
+          "type": "string"
+        },
+        "Source": {
+          "type": "string"
+        },
+        "ArtifactUri": {
+          "type": "string"
+        },
+        "EntryPoint": {
+          "type": "string"
+        },
+        "ExportName": {
+          "type": "string"
+        },
+        "SourceMap": {
+          "type": "string"
+        },
+        "Compiler": {
+          "$ref": "#/$defs/CompilerDefinition"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Language",
+        "Encoding",
+        "MediaType"
+      ],
+      "additionalProperties": false
+    },
+    "EventHandlerDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "event-handler"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "HandlerKind": {
+          "type": "string",
+          "enum": [
+            "reference",
+            "source",
+            "bytecode",
+            "native",
+            "remote"
+          ]
+        },
+        "Reference": {
+          "type": "string"
+        },
+        "CodeId": {
+          "$ref": "#/$defs/Id"
+        },
+        "ActionId": {
+          "$ref": "#/$defs/Id"
+        },
+        "InputSchema": {
+          "type": "string"
+        },
+        "OutputSchema": {
+          "type": "string"
+        },
+        "Async": {
+          "type": "boolean"
+        },
+        "Pure": {
+          "type": "boolean"
+        },
+        "Deterministic": {
+          "type": "boolean"
+        },
+        "TimeoutMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "MaxRetries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "Capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "Idempotent": {
+          "type": "boolean"
+        },
+        "IdempotencyExpressionId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Name",
+        "HandlerKind",
+        "Reference",
+        "Async",
+        "Pure",
+        "Deterministic"
+      ],
+      "additionalProperties": false
+    },
+    "EventBrokerDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "event-broker"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "SourceTargetId": {
+          "$ref": "#/$defs/Id"
+        },
+        "DestinationTargetId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Enabled": {
+          "type": "boolean"
+        },
+        "Priority": {
+          "type": "integer"
+        },
+        "PredicateExpressionId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Name",
+        "DestinationTargetId",
+        "Enabled",
+        "Priority"
+      ],
+      "additionalProperties": false
+    },
+    "EventBindingDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "event-binding"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "EventId": {
+          "$ref": "#/$defs/Id"
+        },
+        "TargetId": {
+          "$ref": "#/$defs/Id"
+        },
+        "HandlerId": {
+          "$ref": "#/$defs/Id"
+        },
+        "ObserverTargetId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Phase": {
+          "type": "string",
+          "enum": [
+            "capture",
+            "target",
+            "bubble",
+            "broker"
+          ]
+        },
+        "Priority": {
+          "type": "integer"
+        },
+        "Once": {
+          "type": "boolean"
+        },
+        "Passive": {
+          "type": "boolean"
+        },
+        "Enabled": {
+          "type": "boolean"
+        },
+        "Propagate": {
+          "type": "boolean"
+        },
+        "PreventDefault": {
+          "type": "boolean"
+        },
+        "TrustedOnly": {
+          "type": "boolean"
+        },
+        "BrokerIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "ConditionExpressionId": {
+          "$ref": "#/$defs/Id"
+        },
+        "InputMappingId": {
+          "$ref": "#/$defs/Id"
+        },
+        "OutputMappingId": {
+          "$ref": "#/$defs/Id"
+        },
+        "DispatchMode": {
+          "type": "string",
+          "enum": [
+            "synchronous",
+            "sequential",
+            "parallel",
+            "first-success",
+            "all-settled",
+            "fire-and-forget"
+          ]
+        },
+        "DeliveryGuarantee": {
+          "type": "string",
+          "enum": [
+            "at-most-once",
+            "at-least-once",
+            "effectively-once"
+          ]
+        },
+        "Durable": {
+          "type": "boolean"
+        },
+        "Ordered": {
+          "type": "boolean"
+        },
+        "SecurityPolicyId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "EventId",
+        "TargetId",
+        "HandlerId",
+        "Phase",
+        "Priority",
+        "Once",
+        "Passive",
+        "Enabled",
+        "Propagate",
+        "PreventDefault",
+        "TrustedOnly",
+        "DispatchMode"
+      ],
+      "additionalProperties": false
+    },
+    "SignalDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "signal"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "ValueType": {
+          "type": "string"
+        },
+        "InitialValue": {
+          "$ref": "#/$defs/Value"
+        },
+        "Mutable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "ValueType",
+        "InitialValue",
+        "Mutable"
+      ],
+      "additionalProperties": false
+    },
+    "ReactiveBindingDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "binding"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "SignalId": {
+          "$ref": "#/$defs/Id"
+        },
+        "TargetNodeId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Property": {
+          "type": "string"
+        },
+        "TransformExpressionId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Direction": {
+          "type": "string",
+          "enum": [
+            "one-way",
+            "two-way"
+          ]
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "SignalId",
+        "TargetNodeId",
+        "Property",
+        "Direction"
+      ],
+      "additionalProperties": false
+    },
+    "NodeDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "node"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "NodeKind": {
+          "type": "string",
+          "enum": [
+            "element",
+            "text",
+            "component",
+            "resource",
+            "operation"
+          ]
+        },
+        "Path": {
+          "type": "string"
+        },
+        "NamespaceId": {
+          "$ref": "#/$defs/Id"
+        },
+        "TypeId": {
+          "$ref": "#/$defs/Id"
+        },
+        "ParentId": {
+          "$ref": "#/$defs/Id"
+        },
+        "ChildIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "Tag": {
+          "type": "string"
+        },
+        "Text": {
+          "type": "string"
+        },
+        "Attributes": {
+          "$ref": "#/$defs/PrimitiveMap"
+        },
+        "StyleIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "EventBindingIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "ReactiveBindingIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "State": {
+          "$ref": "#/$defs/ValueMap"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "NodeKind",
+        "Path",
+        "NamespaceId",
+        "ChildIds",
+        "Attributes",
+        "StyleIds",
+        "EventBindingIds",
+        "ReactiveBindingIds"
+      ],
+      "additionalProperties": false
+    },
+    "ComponentDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "component"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "NamespaceId": {
+          "$ref": "#/$defs/Id"
+        },
+        "TypeId": {
+          "$ref": "#/$defs/Id"
+        },
+        "RootNodeId": {
+          "$ref": "#/$defs/Id"
+        },
+        "NodeIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "StyleIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "EventBindingIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "SignalIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Name",
+        "NamespaceId",
+        "TypeId",
+        "RootNodeId",
+        "NodeIds",
+        "StyleIds",
+        "EventBindingIds",
+        "SignalIds"
+      ],
+      "additionalProperties": false
+    },
+    "TensorDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "tensor"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "ElementType": {
+          "$ref": "#/$defs/ElementType"
+        },
+        "Shape": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": -1
+          }
+        },
+        "DynamicDimensions": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "Layout": {
+          "type": "string",
+          "enum": [
+            "row-major",
+            "column-major",
+            "nchw",
+            "nhwc",
+            "blocked",
+            "custom"
+          ]
+        },
+        "MemorySpace": {
+          "$ref": "#/$defs/MemorySpaceKind"
+        },
+        "QuantizationId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "ElementType",
+        "Shape",
+        "Layout"
+      ],
+      "additionalProperties": false
+    },
+    "OperationDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "operation"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Namespace": {
+          "type": "string"
+        },
+        "OperationType": {
+          "type": "string"
+        },
+        "InputTensorIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "OutputTensorIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "Attributes": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "DeviceRequirements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Namespace",
+        "OperationType",
+        "InputTensorIds",
+        "OutputTensorIds",
+        "Attributes"
+      ],
+      "additionalProperties": false
+    },
+    "GraphDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "graph"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "InputTensorIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "OutputTensorIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "TensorIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "OperationIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Name",
+        "InputTensorIds",
+        "OutputTensorIds",
+        "TensorIds",
+        "OperationIds"
+      ],
+      "additionalProperties": false
+    },
+    "DeviceDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "device"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "PlatformId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "MemoryBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "Capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "PlatformId",
+        "Name",
+        "Capabilities"
+      ],
+      "additionalProperties": false
+    },
+    "VisionOperationDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "vision-operation"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "OperationType": {
+          "type": "string"
+        },
+        "InputIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "OutputIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "Parameters": {
+          "$ref": "#/$defs/ValueMap"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "OperationType",
+        "InputIds",
+        "OutputIds",
+        "Parameters"
+      ],
+      "additionalProperties": false
+    },
+    "TensorReference": {
+      "type": "object",
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "TensorId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "TensorId",
+        "Role"
+      ],
+      "additionalProperties": false
+    },
+    "NeuralModelDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "neural-model"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Architecture": {
+          "type": "string"
+        },
+        "VocabularySize": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ContextLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "HiddenSize": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "IntermediateSize": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "LayerCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "GraphId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Tensors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TensorReference"
+          }
+        },
+        "TokenizerId": {
+          "$ref": "#/$defs/Id"
+        },
+        "GenerationConfigId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Architecture",
+        "GraphId",
+        "Tensors"
+      ],
+      "additionalProperties": false
+    },
+    "QuantizationDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "quantization"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Scheme": {
+          "type": "string",
+          "enum": [
+            "none",
+            "int8",
+            "int4",
+            "fp8",
+            "nf4",
+            "mixed"
+          ]
+        },
+        "Granularity": {
+          "type": "string",
+          "enum": [
+            "tensor",
+            "channel",
+            "group"
+          ]
+        },
+        "GroupSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "Symmetric": {
+          "type": "boolean"
+        },
+        "ScaleType": {
+          "type": "string",
+          "enum": [
+            "f32",
+            "f16"
+          ]
+        },
+        "CalibrationDatasetId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Scheme",
+        "Granularity",
+        "Symmetric",
+        "ScaleType"
+      ],
+      "additionalProperties": false
+    },
+    "ModelValidation": {
+      "type": "object",
+      "properties": {
+        "CompareLogits": {
+          "type": "boolean"
+        },
+        "MaximumAbsoluteError": {
+          "type": "number",
+          "minimum": 0
+        },
+        "MaximumRelativeError": {
+          "type": "number",
+          "minimum": 0
+        },
+        "PerplexityTolerance": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "ModelTransformDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "model-transform"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "SourceModelId": {
+          "$ref": "#/$defs/Id"
+        },
+        "TargetModelId": {
+          "$ref": "#/$defs/Id"
+        },
+        "PassIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "Validation": {
+          "$ref": "#/$defs/ModelValidation"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "SourceModelId",
+        "TargetModelId",
+        "PassIds"
+      ],
+      "additionalProperties": false
+    },
+    "ConstraintDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "constraint"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "ExpressionId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "ExpressionId"
+      ],
+      "additionalProperties": false
+    },
+    "RewriteDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "rewrite"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "MatchDialect": {
+          "$ref": "#/$defs/Id"
+        },
+        "ReplaceDialect": {
+          "$ref": "#/$defs/Id"
+        },
+        "MatchOperation": {
+          "type": "string"
+        },
+        "ReplaceOperation": {
+          "type": "string"
+        },
+        "ConditionExpressionId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "MatchDialect",
+        "ReplaceDialect",
+        "MatchOperation",
+        "ReplaceOperation"
+      ],
+      "additionalProperties": false
+    },
+    "PassDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "pass"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "InputDialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "OutputDialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "PreconditionIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "RewriteIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "Preserves": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "Invalidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "CostModelId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Deterministic": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "Name",
+        "InputDialectId",
+        "OutputDialectId",
+        "PreconditionIds",
+        "RewriteIds",
+        "Preserves",
+        "Invalidates",
+        "Deterministic"
+      ],
+      "additionalProperties": false
+    },
+    "PipelineDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "pipeline"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "InputDialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "OutputDialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "PassIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "TargetPlatformId": {
+          "$ref": "#/$defs/Id"
+        },
+        "OptimizationLevel": {
+          "type": "string",
+          "enum": [
+            "none",
+            "size",
+            "speed",
+            "latency",
+            "throughput",
+            "memory"
+          ]
+        },
+        "ValidationPolicyId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "InputDialectId",
+        "OutputDialectId",
+        "PassIds",
+        "TargetPlatformId",
+        "OptimizationLevel"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "artifact"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "MediaType": {
+          "type": "string"
+        },
+        "Uri": {
+          "type": "string"
+        },
+        "Inline": {
+          "type": "string"
+        },
+        "Encoding": {
+          "type": "string",
+          "enum": [
+            "utf-8",
+            "base64",
+            "hex"
+          ]
+        },
+        "TargetId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "MediaType"
+      ],
+      "additionalProperties": false
+    },
+    "ResourceDefinition": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Kind": {
+          "const": "resource"
+        },
+        "DialectId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Version": {
+          "$ref": "#/$defs/DefinitionVersion"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Metadata": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "ResourceType": {
+          "type": "string"
+        },
+        "Uri": {
+          "type": "string"
+        },
+        "ContentHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "Attributes": {
+          "$ref": "#/$defs/ValueMap"
+        }
+      },
+      "required": [
+        "Id",
+        "Kind",
+        "DialectId",
+        "Version",
+        "ResourceType"
+      ],
+      "additionalProperties": false
+    },
+    "Definition": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/NamespaceDefinition"
+        },
+        {
+          "$ref": "#/$defs/DialectDefinition"
+        },
+        {
+          "$ref": "#/$defs/PlatformDefinition"
+        },
+        {
+          "$ref": "#/$defs/TargetDefinition"
+        },
+        {
+          "$ref": "#/$defs/PolicyDefinition"
+        },
+        {
+          "$ref": "#/$defs/TypeDefinition"
+        },
+        {
+          "$ref": "#/$defs/StyleDefinition"
+        },
+        {
+          "$ref": "#/$defs/NodeDefinition"
+        },
+        {
+          "$ref": "#/$defs/ComponentDefinition"
+        },
+        {
+          "$ref": "#/$defs/EventDefinition"
+        },
+        {
+          "$ref": "#/$defs/EventTargetDefinition"
+        },
+        {
+          "$ref": "#/$defs/EventCodeDefinition"
+        },
+        {
+          "$ref": "#/$defs/EventHandlerDefinition"
+        },
+        {
+          "$ref": "#/$defs/EventBrokerDefinition"
+        },
+        {
+          "$ref": "#/$defs/EventBindingDefinition"
+        },
+        {
+          "$ref": "#/$defs/SignalDefinition"
+        },
+        {
+          "$ref": "#/$defs/ReactiveBindingDefinition"
+        },
+        {
+          "$ref": "#/$defs/ExpressionDefinition"
+        },
+        {
+          "$ref": "#/$defs/MappingDefinition"
+        },
+        {
+          "$ref": "#/$defs/ActionDefinition"
+        },
+        {
+          "$ref": "#/$defs/TensorDefinition"
+        },
+        {
+          "$ref": "#/$defs/OperationDefinition"
+        },
+        {
+          "$ref": "#/$defs/GraphDefinition"
+        },
+        {
+          "$ref": "#/$defs/DeviceDefinition"
+        },
+        {
+          "$ref": "#/$defs/VisionOperationDefinition"
+        },
+        {
+          "$ref": "#/$defs/NeuralModelDefinition"
+        },
+        {
+          "$ref": "#/$defs/QuantizationDefinition"
+        },
+        {
+          "$ref": "#/$defs/ModelTransformDefinition"
+        },
+        {
+          "$ref": "#/$defs/ConstraintDefinition"
+        },
+        {
+          "$ref": "#/$defs/RewriteDefinition"
+        },
+        {
+          "$ref": "#/$defs/PassDefinition"
+        },
+        {
+          "$ref": "#/$defs/PipelineDefinition"
+        },
+        {
+          "$ref": "#/$defs/ArtifactDefinition"
+        },
+        {
+          "$ref": "#/$defs/ResourceDefinition"
+        }
+      ]
+    },
+    "CapabilityRequirement": {
+      "type": "object",
+      "properties": {
+        "Capability": {
+          "type": "string"
+        },
+        "VersionRange": {
+          "type": "string"
+        },
+        "Optional": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "Capability"
+      ],
+      "additionalProperties": false
+    },
+    "ExternalReference": {
+      "type": "object",
+      "properties": {
+        "Id": {
+          "$ref": "#/$defs/Id"
+        },
+        "Domain": {
+          "type": "string"
+        },
+        "Kind": {
+          "$ref": "#/$defs/DefinitionKind"
+        },
+        "VersionRange": {
+          "type": "string"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Hash"
+        },
+        "Optional": {
+          "type": "boolean"
+        },
+        "SourceFragmentId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "Id",
+        "Domain",
+        "Kind"
+      ],
+      "additionalProperties": false
+    },
+    "Fragment": {
+      "type": "object",
+      "properties": {
+        "Schema": {
+          "const": "urn:alchemia:logos:2"
+        },
+        "SchemaVersion": {
+          "$ref": "#/$defs/SchemaVersion"
+        },
+        "FragmentId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Domain": {
+          "type": "string"
+        },
+        "Definitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Definition"
+          }
+        },
+        "References": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExternalReference"
+          }
+        },
+        "Requirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilityRequirement"
+          }
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        }
+      },
+      "required": [
+        "Schema",
+        "SchemaVersion",
+        "FragmentId",
+        "Revision",
+        "Domain",
+        "Definitions",
+        "References",
+        "Requirements"
+      ],
+      "additionalProperties": false
+    },
+    "ProgramCommon": {
+      "type": "object",
+      "properties": {
+        "Schema": {
+          "const": "urn:alchemia:logos:2"
+        },
+        "SchemaVersion": {
+          "$ref": "#/$defs/SchemaVersion"
+        },
+        "ProgramId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Stage": {
+          "$ref": "#/$defs/Stage"
+        },
+        "Profile": {
+          "$ref": "#/$defs/Profile"
+        },
+        "PlatformIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "ActivePlatformId": {
+          "$ref": "#/$defs/Id"
+        },
+        "TargetId": {
+          "$ref": "#/$defs/Id"
+        },
+        "RootNodeIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "Definitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Definition"
+          }
+        },
+        "UnresolvedReferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExternalReference"
+          }
+        },
+        "Requirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilityRequirement"
+          }
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        }
+      },
+      "required": [
+        "Schema",
+        "SchemaVersion",
+        "ProgramId",
+        "Revision",
+        "Stage",
+        "Profile",
+        "PlatformIds",
+        "RootNodeIds",
+        "Definitions",
+        "UnresolvedReferences",
+        "Requirements"
+      ],
+      "additionalProperties": false
+    },
+    "HIR": {
+      "type": "object",
+      "properties": {
+        "Schema": {
+          "const": "urn:alchemia:logos:2"
+        },
+        "SchemaVersion": {
+          "$ref": "#/$defs/SchemaVersion"
+        },
+        "ProgramId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Stage": {
+          "const": "HIR"
+        },
+        "Profile": {
+          "$ref": "#/$defs/Profile"
+        },
+        "PlatformIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "RootNodeIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "Definitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Definition"
+          }
+        },
+        "UnresolvedReferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExternalReference"
+          }
+        },
+        "Requirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilityRequirement"
+          }
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        }
+      },
+      "required": [
+        "Schema",
+        "SchemaVersion",
+        "ProgramId",
+        "Revision",
+        "Stage",
+        "Profile",
+        "PlatformIds",
+        "RootNodeIds",
+        "Definitions",
+        "UnresolvedReferences",
+        "Requirements"
+      ],
+      "additionalProperties": false
+    },
+    "MIR": {
+      "type": "object",
+      "properties": {
+        "Schema": {
+          "const": "urn:alchemia:logos:2"
+        },
+        "SchemaVersion": {
+          "$ref": "#/$defs/SchemaVersion"
+        },
+        "ProgramId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Stage": {
+          "const": "MIR"
+        },
+        "Profile": {
+          "$ref": "#/$defs/Profile"
+        },
+        "PlatformIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "ActivePlatformId": {
+          "$ref": "#/$defs/Id"
+        },
+        "RootNodeIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "Definitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Definition"
+          }
+        },
+        "UnresolvedReferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExternalReference"
+          }
+        },
+        "Requirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilityRequirement"
+          }
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        }
+      },
+      "required": [
+        "Schema",
+        "SchemaVersion",
+        "ProgramId",
+        "Revision",
+        "Stage",
+        "Profile",
+        "PlatformIds",
+        "RootNodeIds",
+        "Definitions",
+        "UnresolvedReferences",
+        "Requirements",
+        "ActivePlatformId"
+      ],
+      "additionalProperties": false
+    },
+    "LIR": {
+      "type": "object",
+      "properties": {
+        "Schema": {
+          "const": "urn:alchemia:logos:2"
+        },
+        "SchemaVersion": {
+          "$ref": "#/$defs/SchemaVersion"
+        },
+        "ProgramId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Stage": {
+          "const": "LIR"
+        },
+        "Profile": {
+          "$ref": "#/$defs/Profile"
+        },
+        "PlatformIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "ActivePlatformId": {
+          "$ref": "#/$defs/Id"
+        },
+        "TargetId": {
+          "$ref": "#/$defs/Id"
+        },
+        "RootNodeIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "uniqueItems": true
+        },
+        "Definitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Definition"
+          }
+        },
+        "UnresolvedReferences": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "Requirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilityRequirement"
+          }
+        },
+        "Provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        }
+      },
+      "required": [
+        "Schema",
+        "SchemaVersion",
+        "ProgramId",
+        "Revision",
+        "Stage",
+        "Profile",
+        "PlatformIds",
+        "RootNodeIds",
+        "Definitions",
+        "UnresolvedReferences",
+        "Requirements",
+        "ActivePlatformId",
+        "TargetId"
+      ],
+      "additionalProperties": false
+    },
+    "Program": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/HIR"
+        },
+        {
+          "$ref": "#/$defs/MIR"
+        },
+        {
+          "$ref": "#/$defs/LIR"
+        }
+      ]
+    },
+    "PatchOperation": {
+      "type": "object",
+      "properties": {
+        "Op": {
+          "type": "string",
+          "enum": [
+            "add",
+            "replace",
+            "remove",
+            "move",
+            "test"
+          ]
+        },
+        "Path": {
+          "type": "string"
+        },
+        "Value": {
+          "$ref": "#/$defs/Value"
+        },
+        "From": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Op",
+        "Path"
+      ],
+      "additionalProperties": false
+    },
+    "FragmentPatch": {
+      "type": "object",
+      "properties": {
+        "Schema": {
+          "const": "urn:alchemia:logos:2"
+        },
+        "SchemaVersion": {
+          "$ref": "#/$defs/SchemaVersion"
+        },
+        "FragmentId": {
+          "$ref": "#/$defs/Id"
+        },
+        "BaseRevision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "TargetRevision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "Operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchOperation"
+          }
+        },
+        "Integrity": {
+          "$ref": "#/$defs/Integrity"
+        }
+      },
+      "required": [
+        "Schema",
+        "SchemaVersion",
+        "FragmentId",
+        "BaseRevision",
+        "TargetRevision",
+        "Operations"
+      ],
+      "additionalProperties": false
+    },
+    "EventEnvelope": {
+      "type": "object",
+      "properties": {
+        "Schema": {
+          "type": "string"
+        },
+        "SchemaVersion": {
+          "$ref": "#/$defs/SchemaVersion"
+        },
+        "MessageId": {
+          "$ref": "#/$defs/Id"
+        },
+        "CorrelationId": {
+          "$ref": "#/$defs/Id"
+        },
+        "CausationId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "SourceTargetId": {
+          "$ref": "#/$defs/Id"
+        },
+        "DestinationTargetId": {
+          "$ref": "#/$defs/Id"
+        },
+        "EventId": {
+          "$ref": "#/$defs/Id"
+        },
+        "BindingId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Headers": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Payload": {
+          "$ref": "#/$defs/Value"
+        },
+        "Security": {
+          "$ref": "#/$defs/ValueMap"
+        },
+        "Trace": {
+          "$ref": "#/$defs/ValueMap"
+        }
+      },
+      "required": [
+        "Schema",
+        "SchemaVersion",
+        "MessageId",
+        "Timestamp",
+        "EventId",
+        "Payload"
+      ],
+      "additionalProperties": false
+    },
+    "Document": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Fragment"
+        },
+        {
+          "$ref": "#/$defs/Program"
+        },
+        {
+          "$ref": "#/$defs/FragmentPatch"
+        },
+        {
+          "$ref": "#/$defs/EventEnvelope"
+        }
+      ]
+    },
+    "ActionNativeAddress": {
+      "type": "object",
+      "properties": {
+        "RuntimeId": {
+          "$ref": "#/$defs/Id"
+        },
+        "Type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Member": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Static": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "RuntimeId",
+        "Type",
+        "Member",
+        "Static"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
