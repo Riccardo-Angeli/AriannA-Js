@@ -1,5 +1,5 @@
 /**
- * @module Logos
+ * @module Logos IR
  * @version 2.1.0
  *
  * Canonical, stratified, multi-dialect, function-free IR contract.
