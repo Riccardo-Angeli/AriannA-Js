@@ -19,7 +19,7 @@
 
 ---
 
-AriannA is a TypeScript UI framework built around **Signal+Sink fine-grain reactivity** — only the exact DOM node that depends on a signal updates. No component re-render, no VDOM diffing, zero dependencies. Around the runtime sits a 141-component design system, a CSS engine with full @-rule support, an SSR pipeline, and twelve project starters spanning browser and Tauri (macOS, Windows, Linux, iOS, Android).
+AriannA is a TypeScript UI framework built around **Signal + Sink fine-grain reactivity**: state changes propagate directly to the exact subscribed sink instead of re-rendering a component tree. The reactive path does not require Virtual DOM diffing, and the runtime has zero external dependencies. Around that core sits a 141-component design system, a programmable CSS engine, templates and directives, SSR/hydration, Workers and WebAssembly support, Shadow backends, and twelve project starters spanning the browser and Tauri targets (macOS, Windows, Linux, iOS and Android).
 
 ## At a glance
 
@@ -39,9 +39,11 @@ AriannA is a TypeScript UI framework built around **Signal+Sink fine-grain react
 
 ---
 
-## Performance vs Solid v1.9.3
+## Performance — independently reproducible keyed benchmark
 
-AriannA's Signal+Sink architecture eliminates the render-phase entirely. The numbers below are measured on the standard `js-framework-benchmark` keyed suite, Chrome with 4× CPU throttle, Mac M-series.
+AriannA's Signal+Sink architecture updates sinks directly instead of re-rendering component trees. The figures below are **measured results**, not synthetic estimates: they come from the standard `js-framework-benchmark` keyed suite under Chrome with 4× CPU slowdown on Apple Silicon. The comparison run used AriannA v2.0.0 and Solid v1.9.14. Lower is better.
+
+> Benchmark numbers are intentionally presented as measurements from the recorded run, not as universal performance claims. Browser, hardware, framework versions and benchmark revisions can move the absolute values.
 
 | Benchmark | AriannA | Solid | Δ Total | Δ Script |
 |-----------|---------|-------|---------|----------|
@@ -56,6 +58,8 @@ AriannA's Signal+Sink architecture eliminates the render-phase entirely. The num
 | **bundle (gz)** | **1.5 KB**  | 4.5 KB    | **3× less** | —     |
 
 Run the benchmark yourself: [github.com/Riccardo-Angeli/js-framework-benchmark](https://github.com/Riccardo-Angeli/js-framework-benchmark)
+
+The recorded final benchmark logs identify the compared implementations as `arianna-v2.0.0-keyed`, `solid-v1.9.14-keyed` and `svelte-v5.56.8-keyed`. Keep the raw result JSON/traces with release artifacts whenever publishing updated numbers.
 
 ---
 
@@ -241,6 +245,27 @@ const parsed = Stylesheet.Less(`
 }
 `);
 ```
+
+---
+
+## Runtime architecture
+
+AriannA 2.0 is deliberately split into small, orthogonal subsystems rather than a monolithic renderer:
+
+- **Signal → Sink reactivity** — signals invalidate only their subscribed computations/sinks; `signalMono` + `sinkText` provide a minimal hot path for direct text updates.
+- **Real DOM** — eager, mutation-oriented DOM construction with a fluent API.
+- **Virtual DOM** — an optional deferred tree representation; it is not required by the reactive runtime.
+- **Components** — standards-based Custom Elements with AriannA templates, directives, lifecycle, styles and decorators.
+- **CSS engine** — programmatic `Rule` / `Stylesheet` construction plus nested at-rules and stylesheet lifecycle management.
+- **SSR + hydration** — server rendering, client hydration and islands.
+- **Workers + WebAssembly** — first-class worker pools and WASM loading/streaming primitives, including abort-aware asynchronous loading.
+- **Shadow backends** — encapsulation facilities designed to work across normal and constrained execution contexts.
+
+### CSP-first execution
+
+The 2.0 runtime is designed to operate under a strict Content Security Policy without depending on `eval()` or `new Function()` for its directive execution path. The release gate includes dedicated probes for strict CSP execution, `worker-src 'self'`, WASM streaming, sandboxed Shadow operation and lifecycle/disposal.
+
+This matters because CSP support is treated as a runtime constraint, not as an after-the-fact deployment workaround.
 
 ---
 

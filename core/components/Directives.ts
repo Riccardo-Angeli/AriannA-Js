@@ -8,6 +8,7 @@
 import { Events }     from '../reactivity/Events.ts';
 import { Namespaces } from '../dom/Namespaces.ts';
 import { Services }   from '../kernel/Services.ts';
+import { Debug }      from '../kernel/Debug.ts';
 
 import type { Types }      from '../definitions/Types.ts';
 import type { Interfaces } from '../definitions/Interfaces.ts';
@@ -1049,8 +1050,13 @@ export namespace Directives
                     if(peek().Kind !== 'eof') throw new SyntaxError(`Unexpected token ${peek().Value}`);
                     return result;
                 }
-                catch
+                catch(error)
                 {
+                    Debug.warn
+                    (
+                        'DIRECTIVE_EXPRESSION',
+                        { Expression: expr, Error: error }
+                    );
                     return undefined;
                 }
             }

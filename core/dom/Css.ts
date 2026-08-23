@@ -1941,6 +1941,12 @@ export namespace Css
          *  @license     MIT / Commercial (dual license) */
         #link    : HTMLLinkElement | null         = null;
 
+        /** Object URL owned by this Stylesheet's internally-created link, if any. */
+        #blobUrl : string | null = null;
+
+        /** Whether #link was created by this Stylesheet and may be removed on Dispose(). */
+        #ownsLink : boolean = false;
+
         /** @member      #sheet
          *  @private
          *  @type        {CSSStyleSheet | null}
@@ -2098,6 +2104,7 @@ export namespace Css
                     } else if (input instanceof HTMLLinkElement)
                     {
                         this.#link = input;
+                        this.#ownsLink = false;
                     } else if (input instanceof Rule)
                     {
                         this.#rules = [input];
@@ -2144,12 +2151,14 @@ export namespace Css
                 this.#link      = document.createElement('link') as HTMLLinkElement;
                 this.#link.type = 'text/css';
                 this.#link.rel  = 'stylesheet';
+                this.#ownsLink  = true;
             }
 
             if (!this.#link.href)
             {
                 const blob      = new Blob([''], { type: 'text/css' });
-                this.#link.href = URL.createObjectURL(blob);
+                this.#blobUrl   = URL.createObjectURL(blob);
+                this.#link.href = this.#blobUrl;
                 this.#head.appendChild(this.#link);
             }
 
@@ -2667,15 +2676,51 @@ export namespace Css
          *  @license     MIT / Commercial (dual license) */
         set Link(v: HTMLLinkElement | string | null)
         {
-            if (typeof v === 'string') {
+            if (this.#blobUrl)
+            {
+                URL.revokeObjectURL(this.#blobUrl);
+                this.#blobUrl = null;
+            }
+
+            if (this.#ownsLink && this.#link?.parentNode)
+            {
+                this.#link.parentNode.removeChild(this.#link);
+            }
+
+            if (typeof v === 'string')
+            {
                 this.#link      = document.createElement('link') as HTMLLinkElement;
                 this.#link.rel  = 'stylesheet';
                 this.#link.href = v;
+                this.#ownsLink  = true;
                 this.#head.appendChild(this.#link);
-            } else
+            }
+            else
             {
                 this.#link = v;
+                this.#ownsLink = false;
             }
+        }
+
+        /**
+         * Release resources owned by this Stylesheet. Safe to call more than once.
+         * Externally supplied HTMLLinkElements are never removed.
+         */
+        Dispose(): void
+        {
+            if (this.#blobUrl)
+            {
+                URL.revokeObjectURL(this.#blobUrl);
+                this.#blobUrl = null;
+            }
+
+            if (this.#ownsLink && this.#link?.parentNode)
+            {
+                this.#link.parentNode.removeChild(this.#link);
+            }
+
+            this.#link = null;
+            this.#ownsLink = false;
         }
 
         /** @name        Sheet
