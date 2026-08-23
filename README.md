@@ -39,29 +39,93 @@ AriannA is a TypeScript UI framework built around **Signal + Sink fine-grain rea
 
 ---
 
-## Performance — independently reproducible keyed benchmark
+## Performance — measured, reproducible, and versioned
 
-AriannA's Signal+Sink architecture updates sinks directly instead of re-rendering component trees. The figures below are **measured results**, not synthetic estimates: they come from the standard `js-framework-benchmark` keyed suite under Chrome with 4× CPU slowdown on Apple Silicon. The comparison run used AriannA v2.0.0 and Solid v1.9.14. Lower is better.
+AriannA is benchmarked with the **js-framework-benchmark** harness rather than a private microbenchmark. The recorded comparison set uses:
 
-> Benchmark numbers are intentionally presented as measurements from the recorded run, not as universal performance claims. Browser, hardware, framework versions and benchmark revisions can move the absolute values.
+- **AriannA 2.0.0**
+- **Solid 1.9.14**
+- **Svelte 5.56.8**
+- **Vue 3.6.0-rc.2**
+- **Vue Vapor 3.6.0-alpha.2**
+- Chrome/Puppeteer runner
+- 15 iterations for CPU benchmarks
+- 1 iteration for memory, size, and startup measurements
+- keyed and non-keyed implementations maintained separately
 
-| Benchmark | AriannA | Solid | Δ Total | Δ Script |
-|-----------|---------|-------|---------|----------|
-| create 1k       | 82.5 ms     | 80.6 ms   | +2%      | −2%      |
-| replace 1k      | 89.3 ms     | 90.2 ms   | −1%      | −11%     |
-| update 10th     | 40.5 ms     | 40.2 ms   | ≈        | **−54%** |
-| **select row**  | **8.7 ms**  | 11.1 ms   | **−22%** | **−91%** |
-| **swap rows**   | **30.5 ms** | 48.8 ms   | **−38%** | **−97%** |
-| remove row      | 37.1 ms     | 38.1 ms   | −3%      | −85%     |
-| create 10k      | 874 ms      | 839 ms    | +4%      | +23%     |
-| **memory**      | **2.06 MB** | 2.64 MB   | **−22%** | —        |
-| **bundle (gz)** | **1.5 KB**  | 4.5 KB    | **3× less** | —     |
+Lower is better in every table below.
 
-Run the benchmark yourself: [github.com/Riccardo-Angeli/js-framework-benchmark](https://github.com/Riccardo-Angeli/js-framework-benchmark)
+> **Benchmark policy:** this README reports measurements actually produced by the benchmark harness. It does not substitute synthetic estimates for missing results, and it keeps framework version identifiers alongside the numbers.
 
-The recorded final benchmark logs identify the compared implementations as `arianna-v2.0.0-keyed`, `solid-v1.9.14-keyed` and `svelte-v5.56.8-keyed`. Keep the raw result JSON/traces with release artifacts whenever publishing updated numbers.
+### Overall CPU position
 
----
+The complete benchmark campaign produced the following weighted geometric means for the **keyed CPU suite**:
+
+| Framework | Weighted geometric mean |
+|---|---:|
+| **Vue Vapor 3.6.0-alpha.2** | **1.05** |
+| **Solid 1.9.14** | **1.07** |
+| **Svelte 5.56.8** | **1.08** |
+| **AriannA 2.0.0** | **1.11** |
+| **Vue 3.6.0-rc.2** | **1.22** |
+
+AriannA's corresponding **non-keyed** weighted mean was **1.13**.
+
+These aggregate scores are the useful headline: AriannA is in the same performance class as the mature compiler-led implementations in this comparison, while the individual tests show where each architecture wins.
+
+### Keyed CPU — final recorded medians
+
+The final retained five-framework run contains the following directly recorded medians for the large-table tail of the CPU suite:
+
+| js-framework-benchmark test | AriannA 2.0.0 | Solid 1.9.14 | Svelte 5.56.8 | Vue 3.6.0-rc.2 | Vue Vapor 3.6.0-alpha.2 |
+|---|---:|---:|---:|---:|---:|
+| create 10,000 rows | 1272.5 ms | 970.9 ms | **912.1 ms** | 1034.7 ms | 944.3 ms |
+| append 1,000 to 1,000 | 101.8 ms | 95.3 ms | 96.5 ms | 105.6 ms | **91.9 ms** |
+| clear 1,000 rows | 35.9 ms | 35.7 ms | **32.1 ms** | 49.9 ms | 34.1 ms |
+
+A separate final optimization run of AriannA itself recorded **~882 ms create-10k**, **~92.1 ms append-1k**, and **~32.7 ms clear**, demonstrating the effect of the final compiler/runtime tuning. Those later AriannA-only values are not substituted into the five-framework table above because that would mix comparison runs.
+
+### Keyed interaction samples
+
+The retained comparison runs also show AriannA's strength on fine-grained interaction work:
+
+| Test | AriannA | Solid | Svelte | Vue |
+|---|---:|---:|---:|---:|
+| select row | **10.7 ms** | 11.6 ms | 20.7 ms | 20.9 ms |
+| swap rows | 84.7 ms | 82.0 ms | **68.7 ms** | 70.4 ms |
+| remove row | 60.1 ms | 62.4 ms | 63.4 ms | **59.5 ms** |
+
+The optimized AriannA campaign subsequently recorded approximately **9.1 ms select**, **43.3 ms swap**, and **40.4 ms remove**. Again, those optimization-run values are kept separate rather than spliced into an earlier cross-framework run.
+
+### Keyed memory
+
+These are direct harness measurements from the retained five-framework keyed run:
+
+| Memory benchmark | AriannA | Solid | Svelte | Vue | Vue Vapor |
+|---|---:|---:|---:|---:|---:|
+| ready / page loaded | 0.828 MB | **0.610 MB** | 0.728 MB | 0.868 MB | 0.667 MB |
+| after creating 1,000 rows | 3.485 MB | **2.699 MB** | 3.045 MB | 3.956 MB | 2.911 MB |
+| after repeated run/clear | 1.129 MB | **0.791 MB** | 1.097 MB | 1.220 MB | 0.976 MB |
+
+The later AriannA memory-torture campaign separately recorded approximately **0.77 MB ready**, **3.10 MB after 1k**, **1.09 MB after repeated create/clear**, and **22.44 MB at 10k**.
+
+### Delivered size and first paint
+
+The js-framework-benchmark size test measures the benchmark application delivered for each framework, **not the entire framework distribution or AriannA component library**.
+
+| Metric | AriannA | Solid | Svelte | Vue | Vue Vapor |
+|---|---:|---:|---:|---:|---:|
+| benchmark app, uncompressed | 92.0 KB | **11.5 KB** | 41.4 KB | 67.0 KB | 39.9 KB |
+| benchmark app, compressed | 25.6 KB | **4.5 KB** | 14.3 KB | 24.0 KB | 14.2 KB |
+| first paint | 300.8 ms | **175.9 ms** | 223.3 ms | 261.6 ms | 224.7 ms |
+
+This distinction matters. Earlier development notes quoted a tiny AriannA runtime slice; that is **not comparable** with the js-framework-benchmark application's compressed-size result above and is therefore not presented as if it were.
+
+### What the benchmark actually says
+
+AriannA does **not** win every benchmark, and the README should not pretend otherwise. Solid, Svelte, and Vue Vapor remain exceptionally strong in several creation-heavy paths. AriannA's result is more interesting than a cherry-picked win: a new framework/runtime reaches the same broad performance tier while also carrying a much wider native platform surface — Real/Virtual DOM primitives, fine-grained reactivity, components, CSS, Shadow isolation, SSR, Workers, routing, and Rust/WASM integration.
+
+The benchmark suite is therefore treated as a **release gate**, not advertising copy. Future changes to the core are expected to preserve or improve these results before release.
 
 ## Install
 
