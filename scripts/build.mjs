@@ -948,7 +948,11 @@ function copyMetaFiles()
             sideEffects: rootPackage.sideEffects,
 
             engines: rootPackage.engines,
-            repository: rootPackage.repository,
+            repository:
+            {
+                type: 'git',
+                url: 'git+https://github.com/riccardo-angeli/arianna.git'
+            },
             homepage: rootPackage.homepage,
             bugs: rootPackage.bugs,
             funding: rootPackage.funding,
