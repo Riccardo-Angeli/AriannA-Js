@@ -8,8 +8,17 @@
  * @description AriannA Stripe component module.
  */
 
-import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
+
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountPaymentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Reactivity: any;
+declare namespace Reactivity { type Signal<T> = any; type Effect = any; }
+declare const Templates: any;
+
 
 /** @namespace   Stripe
  *  @public
@@ -139,7 +148,7 @@ export namespace Stripe
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -238,11 +247,43 @@ export namespace Stripe
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
+    export const STRIPE_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 28" role="img" aria-label="Stripe"><rect width="90" height="28" rx="6" fill="#635BFF"/><text x="45" y="20" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="800" fill="#fff">stripe</text></svg>`;
+
     @Component('arianna-stripe', {}, {
+        shadow: false,
         Attributes: ['publishable-key', 'client-secret', 'return-url', 'locale', 'appearance-theme'],
     })
-    export class Stripe extends HTMLElement
+    export class Stripe extends HTMLDivElement
     {
+        public static readonly Styles = Stripe.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'Stripe';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(!this.ready$) this.ready$ = signal<boolean>(false);
+            if(!this.error$) this.error$ = signal<string | null>(null);
+            if(!this.busy$) this.busy$ = signal<boolean>(false);
+            if(this._stripe === undefined) this._stripe = null;
+            if(this._elements === undefined) this._elements = null;
+            this.classList.add('Stripe');
+        }
+
         /** Compiler-visible template slot installed by the Component decorator. */
         declare template: unknown;
 
@@ -253,7 +294,7 @@ export namespace Stripe
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        ready$: Types.Signal<boolean> = signal<boolean>(false);
+        declare ready$: Types.Signal<boolean>;
 
         /** @name        error$
          *  @public
@@ -262,7 +303,7 @@ export namespace Stripe
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        error$: Types.Signal<string | null> = signal<string | null>(null);
+        declare error$: Types.Signal<string | null>;
 
         /** @name        busy$
          *  @public
@@ -271,25 +312,25 @@ export namespace Stripe
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        busy$: Types.Signal<boolean> = signal<boolean>(false);
+        declare busy$: Types.Signal<boolean>;
 
-        /** @name        #stripe
+        /** @name        _stripe
          *  @public
          *  @type        {unknown}
          *  @description Component member for stripe.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #stripe: unknown = null;
+        declare _stripe: unknown;
 
-        /** @name        #elements
+        /** @name        _elements
          *  @public
          *  @type        {unknown}
          *  @description Component member for elements.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #elements: unknown = null;
+        declare _elements: unknown;
 
         /** @name        onConnected
          *  @public
@@ -302,12 +343,20 @@ export namespace Stripe
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.StripeOptions = {} as Interfaces.StripeOptions)
         {
+            if(!this.ready$) this.ready$ = signal<boolean>(false);
+            if(!this.error$) this.error$ = signal<string | null>(null);
+            if(!this.busy$) this.busy$ = signal<boolean>(false);
+            if(this._stripe === undefined) this._stripe = null;
+            if(this._elements === undefined) this._elements = null;
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            (this as any).STRIPE_LOGO = STRIPE_LOGO;
             this.statusMsg = () => this.error$.Get() ?? (this.ready$.Get() ? '' : 'Loading Stripe…');
             this.payDisabled = () => !this.ready$.Get() || this.busy$.Get();
             this.payLabel = () => this.busy$.Get() ? 'Processing…' : 'Pay';
             this.onPay = () => { void this.pay(); };
             this.template = html `
             <div class="ar-stripe">
+                <div class="ar-stripe__brand" a-html="this.STRIPE_LOGO"></div>
                 <div class="ar-stripe__mount" data-r="mount"></div>
                 <div class="ar-stripe__status" a-if="this.statusMsg()">{{ this.statusMsg() }}</div>
                 <button type="button" class="ar-stripe__pay"
@@ -315,6 +364,8 @@ export namespace Stripe
                         @click="this.onPay">{{ this.payLabel() }}</button>
             </div>
         `;
+            MountPaymentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -349,7 +400,7 @@ export namespace Stripe
                  *  @author      Riccardo Angeli
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
-                const stripe = this.#stripe as {
+                const stripe = this._stripe as {
                     /** @name        confirmPayment
                      *  @public
                      *  @type        {Promise<{
@@ -453,7 +504,7 @@ export namespace Stripe
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 const result = await stripe.confirmPayment({
-                    elements: this.#elements,
+                    elements: this._elements,
                     confirmParams: { return_url: this.getAttribute('return-url') ?? window.location.href },
                     redirect: 'if_required',
                 });
@@ -485,7 +536,7 @@ export namespace Stripe
             }
         }
 
-        /** @name        #initStripe
+        /** @name        _initStripe
          *  @public
          *  @type        {Promise<void>}
          *  @description Component member for init Stripe.
@@ -493,7 +544,7 @@ export namespace Stripe
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        async #initStripe(): Promise<void>
+        async _initStripe(): Promise<void>
         {
             /** @name        pk
              *  @public
@@ -527,7 +578,7 @@ export namespace Stripe
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 const StripeCtor = await loadStripeSDK() as (key: string, opts?: unknown) => unknown;
-                this.#stripe = StripeCtor(pk, {
+                this._stripe = StripeCtor(pk, {
                     locale: this.getAttribute('locale') ?? 'auto',
                 });
 
@@ -538,7 +589,7 @@ export namespace Stripe
                  *  @author      Riccardo Angeli
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
-                const stripe = this.#stripe as {
+                const stripe = this._stripe as {
                     /** @name        elements
                      *  @public
                      *  @type        {{
@@ -589,7 +640,7 @@ export namespace Stripe
                         };
                     };
                 };
-                this.#elements = stripe.elements({
+                this._elements = stripe.elements({
                     clientSecret: cs,
                     appearance: { theme: (this.getAttribute('appearance-theme') ?? 'stripe') as 'stripe' | 'flat' | 'night' },
                 });
@@ -601,7 +652,7 @@ export namespace Stripe
                  *  @author      Riccardo Angeli
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
-                const paymentEl = (this.#elements as {
+                const paymentEl = (this._elements as {
                     /** @name        create
                      *  @public
                      *  @type        {{
@@ -681,7 +732,7 @@ export namespace Stripe
          *  @license     MIT / Commercial (dual license) */
         async onMount()
         {
-            await this.#initStripe();
+            await this._initStripe();
         }
 
         /** @name        onBeforeUpdate
@@ -772,24 +823,27 @@ export namespace Stripe
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', {
+                new Rule('.Stripe', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
                     display: 'block',
                     width: '100%', maxWidth: '420px',
                     fontFamily: '-apple-system, system-ui, sans-serif',
                     fontSize: '13px',
-                    color: 'var(--arianna-text, #1f2328)',
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
                 }),
                 new Rule('.ar-stripe', {
                     display: 'flex', flexDirection: 'column', gap: '12px',
                     padding: '14px',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                     borderRadius: 'var(--arianna-radius, 8px)',
                 }),
                 new Rule('.ar-stripe__mount', { minHeight: '60px' }),
                 new Rule('.ar-stripe__status', {
                     fontSize: '11px',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
                     textAlign: 'center',
                 }),
                 new Rule('.ar-stripe__pay', {

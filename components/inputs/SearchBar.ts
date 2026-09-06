@@ -9,6 +9,7 @@
  */
 
 import { Component, Components, Css, Templates } from '../../core/index.ts';
+import { MountInputTemplate } from './Base.ts';
 
 /** @namespace   SearchBar
  *  @public
@@ -115,6 +116,7 @@ export namespace SearchBar
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-search-bar', {}, {
+        shadow: false,
         Attributes: ['placeholder', 'debounce', 'value'],
     })
     export class SearchBar extends HTMLElement
@@ -125,14 +127,14 @@ export namespace SearchBar
         /** Compiler-visible AriannA template slot installed by @Component. */
         declare template: unknown;
 
-        /** @name        #timer
+        /** @name        __timer
          *  @public
          *  @type        {unknown}
          *  @description Component member for timer.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #timer = 0;
+        __timer = 0;
 
         /** @name        onConnected
          *  @public
@@ -145,6 +147,7 @@ export namespace SearchBar
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.SearchBarOptions = {})
         {
+            this.__timer ??= 0;
             /** @name        ph
              *  @public
              *  @type        {inferred}
@@ -175,7 +178,7 @@ export namespace SearchBar
                  *  @license     MIT / Commercial (dual license) */
                 const inp = e.target as HTMLInputElement;
                 this.setAttribute('value', inp.value);
-                clearTimeout(this.#timer);
+                clearTimeout(this.__timer);
 
                 /** @name        delay
                  *  @public
@@ -185,7 +188,7 @@ export namespace SearchBar
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 const delay = parseInt(this.getAttribute('debounce') ?? '300', 10) || 300;
-                this.#timer = window.setTimeout(() => {
+                this.__timer = window.setTimeout(() => {
                     this.dispatchEvent(new CustomEvent('arianna:search', {
                         bubbles: true, detail: { value: inp.value },
                     }));
@@ -193,7 +196,7 @@ export namespace SearchBar
             };
             this.onClear = () => {
                 this.removeAttribute('value');
-                clearTimeout(this.#timer);
+                clearTimeout(this.__timer);
                 this.dispatchEvent(new CustomEvent('arianna:search', {
                     bubbles: true, detail: { value: '' },
                 }));
@@ -211,6 +214,7 @@ export namespace SearchBar
                     @click="this.onClear"
                     aria-label="Clear">✕</button>
         `;
+            MountInputTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -297,7 +301,7 @@ export namespace SearchBar
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        onUnmount() { clearTimeout(this.#timer); }
+        onUnmount() { clearTimeout(this.__timer); }
 
         /** @name        value
          *  @public
@@ -416,7 +420,7 @@ export namespace SearchBar
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', {
+                new Rule('arianna-search-bar', {
                     alignItems: 'center',
                     background: 'var(--arianna-bg, #ffffff)',
                     border: '1px solid var(--arianna-border, #d8d8d8)',
@@ -429,7 +433,7 @@ export namespace SearchBar
                     maxWidth: '320px',
                     boxSizing: 'border-box',
                 }),
-                new Rule(':host:focus-within', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
+                new Rule('arianna-search-bar:focus-within', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
                 new Rule('.ar-searchbar__icon', { color: 'var(--arianna-muted, #6e6b62)', flexShrink: '0' }),
                 new Rule('.ar-searchbar__input', {
                     background: 'none',

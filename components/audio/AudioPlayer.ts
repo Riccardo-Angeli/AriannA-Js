@@ -1,852 +1,271 @@
 /**
- * @module    components/audio/AudioPlayer
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA AudioPlayer component module.
+ * @module components/audio/AudioPlayer
+ * @version 2.0.0
  */
-
-import { Css, Reactivity } from '../../core/index.ts';
+import { Component, Css, Templates } from '../../core/index.ts';
 import { AudioComponent as AudioComponentModule } from './AudioComponent.ts';
-
-type AudioComponentOptions = AudioComponentModule.AudioComponentOptions;
 import { TransportBar } from './TransportBar.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
-/** @namespace   AudioPlayer
- *  @public
- *  @description Namespace containing AudioPlayer contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
+const html = Templates.Template.Html;
+
 export namespace AudioPlayer
 {
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Types
     {
-        /** @name        Signal
-         *  @public
-         *  @type        {SchemaInterfaces.Reactivity.Signal<T>}
-         *  @description Type alias for Signal.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
-
-        /** @name        Rule
-         *  @public
-         *  @type        {Css.Rule}
-         *  @description Type alias for Rule.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Rule = Css.Rule;
-
-        /** @name        Stylesheet
-         *  @public
-         *  @type        {Css.Stylesheet}
-         *  @description Type alias for Stylesheet.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Stylesheet = Css.Stylesheet;
+        export type Theme = 'dark' | 'light';
     }
 
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Interfaces
     {
-        /** @interface   AudioPlayerOptions
-         *  @public
-         *  @description AudioPlayerOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface AudioPlayerOptions extends AudioComponentOptions
+        export interface AudioPlayerOptions extends AudioComponentModule.AudioComponentOptions
         {
-            /** @name        src
-             *  @public
-             *  @type        {string}
-             *  @description Component member for src.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             src?: string;
-
-            /** @name        autoplay
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for autoplay.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             autoplay?: boolean;
-
-            /** @name        loop
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for loop.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             loop?: boolean;
-
-            /** @name        label
-             *  @public
-             *  @type        {string}
-             *  @description Component member for label.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             label?: string;
+            theme?: Types.Theme;
         }
     }
-    /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
-       members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
-       `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
-       not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
-       returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
-       Map, Effect" with the same name printed twice. */
-    /** @name        signal
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned signal value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
 
-    /** @name        effect
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned effect value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const effect = (fn: () => void): (() => void) => {
-        /** @name        e
-         *  @public
-         *  @type        {inferred}
-         *  @description Namespace-owned e value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        const e = Reactivity.CreateEffect(fn);
-        return () => e.Stop();
-    };
+    export const Styles = new Css.Stylesheet([
+        new Css.Rule('.AudioPlayer', {
+            Background: '#171a1e', Border: '1px solid #0c0e10', BorderRadius: '6px',
+            BoxShadow: 'inset 0 1px 0 rgba(255,255,255,.04), 0 2px 8px rgba(0,0,0,.3)',
+            BoxSizing: 'border-box', Color: '#e7eaed', Display: 'grid', Gap: '7px',
+            FontFamily: 'var(--arianna-font, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)',
+            Padding: '8px', Width: '100%'
+        }),
+        new Css.Rule('.AudioPlayer-Header', {
+            AlignItems: 'center', Display: 'flex', Gap: '8px', MinHeight: '24px', Padding: '0 3px'
+        }),
+        new Css.Rule('.AudioPlayer-Indicator', {
+            Background: '#4c9be8', BorderRadius: '50%', BoxShadow: '0 0 0 1px rgba(255,255,255,.12)', Height: '7px', Width: '7px'
+        }),
+        new Css.Rule('.AudioPlayer-Label', {
+            Color: '#d7dce1', Flex: '1 1 auto', FontSize: '11px', FontWeight: '650', MinWidth: '0', Overflow: 'hidden', TextOverflow: 'ellipsis', WhiteSpace: 'nowrap'
+        }),
+        new Css.Rule('.AudioPlayer-State', {
+            Color: '#7f8992', Font: '10px/1 ui-monospace, SFMono-Regular, Menlo, monospace', TextTransform: 'uppercase'
+        }),
+        new Css.Rule('.AudioPlayer-Audio', { Display: 'none' }),
+        new Css.Rule('.AudioPlayer[theme="light"]', {
+            Background: '#f8f9fa', BorderColor: '#c9cdd1', BoxShadow: 'inset 0 1px 0 #fff, 0 2px 8px rgba(0,0,0,.10)', Color: '#24282c'
+        }),
+        new Css.Rule('.AudioPlayer[theme="light"] .AudioPlayer-Label', { Color: '#30353a' }),
+        new Css.Rule('.AudioPlayer[theme="light"] .AudioPlayer-State', { Color: '#7a8188' })
+    ]);
 
-    /** @name        { Rule, Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Rule, Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const { Rule, Stylesheet } = Css;
-
-    /** @class       AudioPlayer
-     *  @public
-     *  @description AriannA AudioPlayer component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
+    @Component('arianna-audio-player', Styles, {
+        Shadow: false,
+        Attributes: ['src', 'autoplay', 'loop', 'label', 'theme']
+    })
     export class AudioPlayer extends AudioComponentModule.AudioComponent
     {
-        /** @name        tag
-         *  @public
-         *  @readonly
-         *  @static
-         *  @type        {unknown}
-         *  @description Component member for tag.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static readonly tag = 'arianna-audio-player';
+        public static readonly Styles = Styles;
+        public template = html``;
+        public static readonly tag = 'arianna-audio-player';
 
-        /** @name        src$
-         *  @public
-         *  @readonly
-         *  @type        {AudioPlayer.Types.Signal<string>}
-         *  @description Component member for src$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly src$: Types.Signal<string> = signal('');
+        private Audio?: HTMLAudioElement;
+        private Transport?: TransportBar.TransportBar;
+        private State?: HTMLElement;
+        private Source?: MediaElementAudioSourceNode;
+        private Gain?: GainNode;
+        private Raf = 0;
 
-        /** @name        label$
-         *  @public
-         *  @readonly
-         *  @type        {AudioPlayer.Types.Signal<string>}
-         *  @description Component member for label$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly label$: Types.Signal<string> = signal('');
-
-        /** @name        loading$
-         *  @public
-         *  @readonly
-         *  @type        {AudioPlayer.Types.Signal<boolean>}
-         *  @description Component member for loading$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly loading$: Types.Signal<boolean> = signal(false);
-
-        /** @name        #audio
-         *  @public
-         *  @type        {HTMLAudioElement}
-         *  @description Component member for audio.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #audio?: HTMLAudioElement;
-
-        /** @name        #source
-         *  @public
-         *  @type        {MediaElementAudioSourceNode}
-         *  @description Component member for source.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #source?: MediaElementAudioSourceNode;
-
-        /** @name        #gain
-         *  @public
-         *  @type        {GainNode}
-         *  @description Component member for gain.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #gain?: GainNode;
-
-        /** @name        #transport
-         *  @public
-         *  @type        {TransportBar}
-         *  @description Component member for transport.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #transport?: TransportBar.TransportBar;
-
-        /** @name        #rafId
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for raf Id.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #rafId = 0;
-
-        /** @name        constructor
-         *  @public
-         *  @type        {constructor}
-         *  @description Constructs the component for constructor.
-         *  @param       {AudioPlayer.Interfaces.AudioPlayerOptions} opts Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        constructor(opts: Interfaces.AudioPlayerOptions = {})
+        constructor(options: Interfaces.AudioPlayerOptions = {})
         {
-            super(opts as never);
-
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-            };
-
-            /** @name        el
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned el value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const el = self.render();
-            if (opts.src)
-                el.setAttribute('src', opts.src);
-            if (opts.autoplay)
-                el.setAttribute('autoplay', '');
-            if (opts.loop)
-                el.setAttribute('loop', '');
-            if (opts.label)
-                el.setAttribute('label', opts.label);
-            if (opts.src)
-                this.src$.Set(opts.src);
-            if (opts.label)
-                this.label$.Set(opts.label);
+            super(options);
+            if(options.src) this.setAttribute('src', options.src);
+            if(options.autoplay) this.setAttribute('autoplay', '');
+            if(options.loop) this.setAttribute('loop', '');
+            if(options.label) this.setAttribute('label', options.label);
+            if(options.theme) this.setAttribute('theme', options.theme);
         }
 
-        /** @name        onConnected
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Connected.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onConnected(): void
+        public onConnected(): void
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-
-                /** @name        fire
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for fire.
-                 *  @param       {string} t Parameter.
-                 *  @param       {CustomEventInit} init Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                fire(t: string, init?: CustomEventInit): void;
-
-                /** @name        signal
-                 *  @public
-                 *  @type        {{
-                    attribute(name: string): AudioPlayer.Types.Signal<string | null>;
-                }}
-                 *  @description Component member for signal.
-                 *  @returns     {{
-                    attribute(name: string): AudioPlayer.Types.Signal<string | null>;
-                }} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                signal():
-                {
-                    /** @name        attribute
-                     *  @public
-                     *  @type        {AudioPlayer.Types.Signal<string | null>}
-                     *  @description Component member for attribute.
-                     *  @param       {string} name Parameter.
-                     *  @returns     {AudioPlayer.Types.Signal<string | null>} Result.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    attribute(name: string): Types.Signal<string | null>;
-                };
-
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {AudioPlayer.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            };
-
-            /** @name        root
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned root value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const root = self.render();
-            if (root.querySelector('.ap-wrap'))
-                return;
-
-            /** @name        wrap
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned wrap value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const wrap = document.createElement('div');
-            wrap.className = 'ap-wrap';
-            // Label (optional)
-            /** @name        label
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned label value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const label = document.createElement('div');
-            label.className = 'ap-label';
-
-            /** @name        sLabel
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned sLabel value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const sLabel = self.signal().attribute('label');
-            effect(() => {
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = sLabel?.Get() ?? this.label$.Get();
-                label.textContent = v ?? '';
-                label.style.display = v ? '' : 'none';
-            });
-            // Hidden <audio> element (controls disabled — we drive it via TransportBar)
-            /** @name        audio
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned audio value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const audio = document.createElement('audio') as HTMLAudioElement;
-            audio.preload = 'metadata';
-            audio.crossOrigin = 'anonymous';
-            audio.style.display = 'none';
-            this.#audio = audio;
-            // TransportBar
-            /** @name        transport
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned transport value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const transport = new TransportBar.TransportBar();
-            this.#transport = transport;
-            wrap.appendChild(label);
-            wrap.appendChild(audio);
-
-            /** @name        tEl
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned tEl value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const tEl = (transport as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-            }).render();
-            wrap.appendChild(tEl);
-            root.appendChild(wrap);
-            // Reactive src binding (attr OR signal)
-            /** @name        sSrc
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned sSrc value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const sSrc = self.signal().attribute('src');
-            effect(() => {
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = sSrc?.Get() ?? this.src$.Get();
-                if (v && v !== audio.src)
-                {
-                    this.loading$.Set(true);
-                    audio.src = v;
-                    audio.load();
-                }
-            });
-            // Wire audio events → component events + transport state
-            audio.addEventListener('loadedmetadata', () => {
-                transport.setDuration(audio.duration || 0);
-                this.loading$.Set(false);
-                self.fire('arianna:audio-load', { detail: { duration: audio.duration, source: this }, bubbles: true });
-                if (audio.hasAttribute('autoplay') || root.hasAttribute('autoplay'))
-                {
-                    void audio.play().catch(() => { });
-                }
-            });
-            audio.addEventListener('play', () => {
-                transport.setPlaying(true);
-                self.fire('arianna:audio-play', { detail: { source: this }, bubbles: true });
-                this.#startTimeUpdater();
-            });
-            audio.addEventListener('pause', () => {
-                transport.setPlaying(false);
-                self.fire('arianna:audio-pause', { detail: { source: this }, bubbles: true });
-                this.#stopTimeUpdater();
-            });
-            audio.addEventListener('ended', () => {
-                transport.setPlaying(false);
-                transport.setCurrentTime(0);
-                self.fire('arianna:audio-ended', { detail: { source: this }, bubbles: true });
-                this.#stopTimeUpdater();
-            });
-            audio.addEventListener('error', () => {
-                this.loading$.Set(false);
-                self.fire('arianna:audio-error', { detail: { error: audio.error, source: this }, bubbles: true });
-            });
-            // Transport events → audio control
-            /** @name        tEl2
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned tEl2 value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const tEl2 = tEl;
-            tEl2.addEventListener('arianna:transport-play', () => { void audio.play().catch(() => { }); });
-            tEl2.addEventListener('arianna:transport-pause', () => audio.pause());
-            tEl2.addEventListener('arianna:transport-stop', () => { audio.pause(); audio.currentTime = 0; });
-            tEl2.addEventListener('arianna:transport-seek', (e: Event) => {
-                /** @name        t
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned t value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const t = (e as CustomEvent<{
-                    /** @name        time
-                     *  @public
-                     *  @type        {number}
-                     *  @description Component member for time.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    time: number;
-                }>).detail.time;
-                audio.currentTime = t;
-            });
-            tEl2.addEventListener('arianna:transport-volume', (e: Event) => {
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = (e as CustomEvent<{
-                    /** @name        value
-                     *  @public
-                     *  @type        {number}
-                     *  @description Component member for value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    value: number;
-                }>).detail.value;
-                if (this.#gain)
-                    this.#gain.gain.value = v;
-            });
-            // Loop
-            effect(() => {
-                audio.loop = root.hasAttribute('loop');
-            });
-            self.Sheet = AudioPlayer.DefaultSheet();
+            super.onConnected();
+            this.classList.add('AudioPlayer');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            if(!this.hasAttribute('src')) this.setAttribute('src', '/devtools/playground/assets/audio/VivaldiSummer.mp3');
+            if(!this.hasAttribute('label')) this.setAttribute('label', 'Vivaldi · Summer');
+            this.Render();
+            this.SyncSource();
         }
 
-        /** @name        _buildAudioGraph
-         *  @protected
-         *  @type        {void}
-         *  @description Component member for _build Audio Graph.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+        public onCreated(): void
+        {
+            requestAnimationFrame(() => { if(this.isConnected) this.onConnected(); });
+        }
+
+        public onAttributeChanged(name: string): void
+        {
+            if(!this.isConnected) return;
+            if(name === 'src' || name === 'loop' || name === 'autoplay') this.SyncSource();
+            else if(name === 'label')
+            {
+                const label = this.querySelector<HTMLElement>(':scope > .AudioPlayer-Header .AudioPlayer-Label');
+                if(label) label.textContent = this.getAttribute('label') || 'Audio';
+            }
+            else if(name === 'theme')
+            {
+                this.Transport?.setAttribute('theme', this.getAttribute('theme') ?? 'dark');
+            }
+        }
+
         protected _buildAudioGraph(): void
         {
-            if (!this.#audio)
-                return;
-            this._audioCtx = this._audioCtx ?? AudioComponentModule.AudioComponent.context;
-            this.#source = this._audioCtx.createMediaElementSource(this.#audio);
-            this.#gain = this._audioCtx.createGain();
-            this.#source.connect(this.#gain);
-            this._input = this.#source;
-            this._output = this.#gain;
-        }
-
-        /** @name        onMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onMount()
-        {
-            super.onMount();
-            // _buildAudioGraph already invoked by AudioComponent.onMount() default
-        }
-
-        /** @name        onUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUnmount()
-        {
-            this.#stopTimeUpdater();
-            if (this.#audio)
+            if(!this.Audio) return;
+            try
             {
-                try
-                {
-                    this.#audio.pause();
-                }
-                catch { /* ignore */ }
+                this.Source ??= this._audioCtx.createMediaElementSource(this.Audio);
+                this.Gain ??= this._audioCtx.createGain();
+                this.Source.connect(this.Gain);
+                this._input = this.Gain;
+                this._output = this.Gain;
+                this.Gain.connect(this._audioCtx.destination);
             }
-            super.onUnmount();
+            catch {}
         }
 
-        /** @name        #startTimeUpdater
-         *  @public
-         *  @type        {void}
-         *  @description Component member for start Time Updater.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #startTimeUpdater(): void
+        public setSource(src: string): this
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        fire
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for fire.
-                 *  @param       {string} t Parameter.
-                 *  @param       {CustomEventInit} init Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                fire(t: string, init?: CustomEventInit): void;
-            };
-
-            /** @name        tick
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned tick value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const tick = () => {
-                if (!this.#audio || this.#audio.paused)
-                {
-                    this.#rafId = 0;
-                    return;
-                }
-
-                /** @name        cur
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned cur value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const cur = this.#audio.currentTime;
-
-                /** @name        dur
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned dur value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const dur = this.#audio.duration || 0;
-                this.#transport?.setCurrentTime(cur);
-                self.fire('arianna:audio-time', { detail: { current: cur, duration: dur, source: this }, bubbles: true });
-                this.#rafId = requestAnimationFrame(tick);
-            };
-            this.#rafId = requestAnimationFrame(tick);
-        }
-
-        /** @name        #stopTimeUpdater
-         *  @public
-         *  @type        {void}
-         *  @description Component member for stop Time Updater.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #stopTimeUpdater(): void
-        {
-            if (this.#rafId)
-                cancelAnimationFrame(this.#rafId);
-            this.#rafId = 0;
-        }
-
-        /** Public API: set source. */
-        setSource(src: string): this
-        {
-            this.src$.Set(src);
-
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-            };
-            self.render().setAttribute('src', src);
+            this.setAttribute('src', src);
+            this.SyncSource();
             return this;
         }
 
-        /** Public API: control playback. */
-        play(): Promise<void> { return this.#audio?.play() ?? Promise.resolve(); }
-
-        /** @name        pause
-         *  @public
-         *  @type        {void}
-         *  @description Component member for pause.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        pause(): void { this.#audio?.pause(); }
-
-        /** @name        seek
-         *  @public
-         *  @type        {void}
-         *  @description Component member for seek.
-         *  @param       {number} t Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        seek(t: number): void
+        public seek(time: number): void
         {
-            if (this.#audio)
-                this.#audio.currentTime = t;
+            if(!this.Audio) return;
+            this.Audio.currentTime = Math.max(0, Math.min(this.Audio.duration || time, time));
+            if(this.Transport) this.Transport.current = this.Audio.currentTime;
         }
 
-        /** @name        duration
-         *  @public
-         *  @type        {number}
-         *  @description Component member for duration.
-         *  @returns     {number} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get duration(): number { return this.#audio?.duration ?? 0; }
+        public get duration(): number { return this.Audio?.duration ?? 0; }
+        public get currentTime(): number { return this.Audio?.currentTime ?? 0; }
+        public get isPlaying(): boolean { return Boolean(this.Audio && !this.Audio.paused); }
 
-        /** @name        currentTime
-         *  @public
-         *  @type        {number}
-         *  @description Component member for current Time.
-         *  @returns     {number} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get currentTime(): number { return this.#audio?.currentTime ?? 0; }
-
-        /** @name        isPlaying
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for is Playing.
-         *  @returns     {boolean} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get isPlaying(): boolean { return this.#audio ? !this.#audio.paused : false; }
-
-        /** @name        DefaultSheet
-         *  @public
-         *  @static
-         *  @type        {AudioPlayer.Types.Stylesheet}
-         *  @description Component member for Default Sheet.
-         *  @returns     {AudioPlayer.Types.Stylesheet} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
+        public async play(): Promise<void>
         {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--ar-bg, #0d0d0d)',
-                    border: '1px solid var(--ar-border, #2a2a2a)',
-                    borderRadius: 'var(--ar-radius, 5px)',
-                    color: 'var(--ar-text, #e0e0e0)',
-                    display: 'inline-block',
-                    padding: '8px',
-                }),
-                new Rule(':host .ap-wrap', {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                }),
-                new Rule(':host .ap-label', {
-                    color: 'var(--ar-muted, #888)',
-                    fontSize: '0.8rem',
-                    padding: '0 4px',
-                }),
-            ]);
+            if(!this.Audio) return;
+            try { await AudioComponentModule.AudioComponent.resume(); } catch {}
+            await this.Audio.play();
+        }
+
+        public pause(): void
+        {
+            this.Audio?.pause();
+        }
+
+        public togglePlayback(): void
+        {
+            if(!this.Audio) return;
+            if(this.Audio.paused) void this.play().catch(() => undefined);
+            else this.pause();
+        }
+
+        private Render(): void
+        {
+            if(this.querySelector(':scope > .AudioPlayer-Header')) return;
+
+            const header = document.createElement('div');
+            header.className = 'AudioPlayer-Header';
+            const indicator = document.createElement('span');
+            indicator.className = 'AudioPlayer-Indicator';
+            const label = document.createElement('span');
+            label.className = 'AudioPlayer-Label';
+            label.textContent = this.getAttribute('label') || 'Audio';
+            this.State = document.createElement('span');
+            this.State.className = 'AudioPlayer-State';
+            this.State.textContent = 'ready';
+            header.append(indicator, label, this.State);
+
+            this.Audio = document.createElement('audio');
+            this.Audio.className = 'AudioPlayer-Audio';
+            this.Audio.preload = 'metadata';
+            this.Audio.loop = this.hasAttribute('loop');
+
+            this.Transport = document.createElement('arianna-transport-bar') as TransportBar.TransportBar;
+            this.Transport.setAttribute('theme', this.getAttribute('theme') ?? 'dark');
+            this.Transport.setAttribute('show-skip', 'true');
+
+            this.append(header, this.Audio, this.Transport);
+            this.Bind();
+        }
+
+        private Bind(): void
+        {
+            if(!this.Audio || !this.Transport) return;
+            const audio = this.Audio;
+            const transport = this.Transport;
+
+            transport.addEventListener('arianna:play', () => void this.play().catch(() => undefined));
+            transport.addEventListener('arianna:pause', () => this.pause());
+            transport.addEventListener('arianna:stop', () => { audio.pause(); audio.currentTime = 0; });
+            transport.addEventListener('arianna:seek', event =>
+            {
+                const current = Number((event as CustomEvent<{ current?: number }>).detail?.current ?? 0);
+                if(Number.isFinite(current)) audio.currentTime = current;
+            });
+            transport.addEventListener('arianna:volume', event =>
+            {
+                const volume = Number((event as CustomEvent<{ volume?: number }>).detail?.volume ?? 1);
+                audio.volume = Math.max(0, Math.min(1, volume));
+                if(this.Gain) this.Gain.gain.value = audio.volume;
+            });
+            transport.addEventListener('arianna:rewind', () => this.seek(audio.currentTime - 5));
+            transport.addEventListener('arianna:forward', () => this.seek(audio.currentTime + 5));
+
+            audio.addEventListener('loadedmetadata', () =>
+            {
+                transport.duration = audio.duration || 0;
+                if(this.State) this.State.textContent = 'ready';
+                if(!this._output) this._buildAudioGraph();
+            });
+            audio.addEventListener('play', () =>
+            {
+                transport.playing = true;
+                if(this.State) this.State.textContent = 'playing';
+                this.Tick();
+            });
+            audio.addEventListener('pause', () =>
+            {
+                transport.playing = false;
+                if(this.State) this.State.textContent = audio.ended ? 'ended' : 'paused';
+                if(this.Raf) cancelAnimationFrame(this.Raf);
+            });
+            audio.addEventListener('ended', () =>
+            {
+                transport.playing = false;
+                if(this.State) this.State.textContent = 'ended';
+            });
+        }
+
+        private SyncSource(): void
+        {
+            if(!this.Audio) return;
+            const source = this.getAttribute('src') ?? '';
+            if(source && this.Audio.src !== new URL(source, document.baseURI).href) this.Audio.src = source;
+            this.Audio.loop = this.hasAttribute('loop');
+            if(this.hasAttribute('autoplay')) void this.Audio.play().catch(() => undefined);
+        }
+
+        private Tick(): void
+        {
+            if(!this.Audio || !this.Transport || this.Audio.paused) return;
+            this.Transport.current = this.Audio.currentTime;
+            this.Transport.duration = this.Audio.duration || 0;
+            this.Raf = requestAnimationFrame(() => this.Tick());
+        }
+
+        public onUnmount(): void
+        {
+            if(this.Raf) cancelAnimationFrame(this.Raf);
+            this.Audio?.pause();
+            super.onUnmount();
         }
     }
 }
+
 export default AudioPlayer;

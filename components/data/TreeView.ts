@@ -5,1674 +5,914 @@
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description AriannA TreeView component module.
+ * TreeView — hierarchical tree control with expand/collapse, selection,
+ * checkboxes, badges, lazy loading, search, drag/drop and keyboard navigation.
  */
 
-import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
+import { Component, Css, Reactivity } from '../../core/index.ts';
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
-/** @namespace   TreeView
- *  @public
- *  @description Namespace containing TreeView contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 export namespace TreeView
 {
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
+    export namespace Types
+    {
+        export type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
+        export type SelectMode = 'none' | 'single' | 'multi';
+        export type Theme = 'dark' | 'light';
+        export type Rule = Css.Rule;
+        export type Stylesheet = Css.Stylesheet;
+    }
+
     export namespace Interfaces
     {
-        /** @interface   TreeNodeContract
-         *  @public
-         *  @description TreeNodeContract contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface TreeNodeContract extends TreeNode
+        export interface TreeNode
         {
+            id: string;
+            label: string;
+            icon?: string;
+            badge?: string | number;
+            children?: TreeNode[];
+            lazy?: boolean;
+            expanded?: boolean;
+            selected?: boolean;
+            checked?: boolean;
+            selectable?: boolean;
+            data?: unknown;
         }
 
-        /** @interface   Options
-         *  @public
-         *  @description Options contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface Options extends TreeViewOptions
+        export interface TreeViewOptions
         {
-        }
-
-        /** @interface   NodeStateContract
-         *  @public
-         *  @description NodeStateContract contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface NodeStateContract extends NodeState
-        {
-        }
-
-        /** @interface   FlatRowContract
-         *  @public
-         *  @description FlatRowContract contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface FlatRowContract extends FlatRow
-        {
+            nodes?: TreeNode[];
+            selectable?: Types.SelectMode;
+            checkboxes?: boolean;
+            icons?: boolean;
+            badges?: boolean;
+            indent?: number;
+            rowHeight?: number;
+            draggable?: boolean;
+            keyboard?: boolean;
+            expandOnSelect?: boolean;
+            searchable?: boolean;
+            theme?: Types.Theme;
         }
     }
 
-    /** @name        html
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned html value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    const html = Templates.Template.Html;
-
-    /**
-     * @convention AriannA component namespace merge
-     * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
-     */
-    /**
-     * @module    components/data/TreeView
-     * @author    Riccardo Angeli
-     * @copyright Riccardo Angeli 2012-2026
-     * @license   MIT / Commercial (dual license)
-     *
-     * TreeView — hierarchical tree control with expand/collapse, single/multi
-     * selection, checkboxes, badges, lazy children loading, search filter,
-     * drag-and-drop, and keyboard navigation (arrow keys + Enter).
-     *
-     * @example JS
-     *   const tree = new TreeView();
-     *   tree.selectable = 'single';
-     *   tree.nodes = [
-     *     { id: '1', label: 'Root', children: [
-     *       { id: '1.1', label: 'Child A', icon: '📄' },
-     *       { id: '1.2', label: 'Child B', lazy: true },
-     *     ]},
-     *   ];
-     *   tree.addEventListener('arianna:select', e => console.log(e.detail.node));
-     *   tree.addEventListener('arianna:load',   e => fetchChildren(e.detail.node).then(e.detail.resolve));
-     *   tree.addEventListener('arianna:drop',   e => move(e.detail.sourceId, e.detail.targetId));
-     *
-     * @example HTML
-     *   <arianna-tree-view selectable="multi" checkboxes searchable draggable></arianna-tree-view>
-     *
-     * Events:
-     *   - arianna:select   detail: { node, selected }
-     *   - arianna:expand   detail: { node }
-     *   - arianna:collapse detail: { node }
-     *   - arianna:check    detail: { node, checked }
-     *   - arianna:load     detail: { node, resolve(children) }   (lazy nodes)
-     *   - arianna:drop     detail: { sourceId, targetId }
-     *
-     * Slots:  (none)
-     *
-     * Attributes:
-     *   selectable ('none' | 'single' | 'multi'), checkboxes, icons, badges,
-     *   indent, row-height, draggable, keyboard, expand-on-select, searchable,
-     *   class
-     */
-    /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
-       members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
-       `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
-       not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
-       returns the contract, so aliasing the class yields "Type 'SchemaInterfaces.Reactivity.Signal<T>' is missing … Source, Mutate,
-       Map, Effect" with the same name printed twice. */
-    const signal = Reactivity.CreateSignal;
-
-    /** @name        { Rule, Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Rule, Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    const { Rule, Stylesheet } = Css;
-
-    /** @interface   TreeNode
-     *  @public
-     *  @description TreeNode contract for this component.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export interface TreeNode
-    {
-        /** @name        id
-         *  @public
-         *  @type        {string}
-         *  @description Component member for id.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        id: string;
-
-        /** @name        label
-         *  @public
-         *  @type        {string}
-         *  @description Component member for label.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        label: string;
-
-        /** @name        icon
-         *  @public
-         *  @type        {string}
-         *  @description Component member for icon.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        icon?: string;
-
-        /** @name        badge
-         *  @public
-         *  @type        {string | number}
-         *  @description Component member for badge.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        badge?: string | number;
-
-        /** @name        children
-         *  @public
-         *  @type        {TreeNode[]}
-         *  @description Component member for children.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        children?: TreeNode[];
-
-        /** @name        lazy
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for lazy.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        lazy?: boolean;
-
-        /** @name        expanded
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for expanded.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        expanded?: boolean;
-
-        /** @name        selected
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for selected.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        selected?: boolean;
-
-        /** @name        checked
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for checked.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        checked?: boolean;
-
-        /** @name        selectable
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for selectable.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        selectable?: boolean;
-
-        /** @name        data
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for data.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        data?: unknown;
-
-        /** @name        class
-         *  @public
-         *  @type        {string}
-         *  @description Component member for class.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        class?: string;
-    }
-
-    /** @interface   TreeViewOptions
-     *  @public
-     *  @description TreeViewOptions contract for this component.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export interface TreeViewOptions
-    {
-        /** @name        nodes
-         *  @public
-         *  @type        {TreeNode[]}
-         *  @description Component member for nodes.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        nodes?: TreeNode[];
-
-        /** @name        selectable
-         *  @public
-         *  @type        {'none' | 'single' | 'multi'}
-         *  @description Component member for selectable.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        selectable?: 'none' | 'single' | 'multi';
-
-        /** @name        checkboxes
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for checkboxes.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        checkboxes?: boolean;
-
-        /** @name        icons
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for icons.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        icons?: boolean;
-
-        /** @name        badges
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for badges.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        badges?: boolean;
-
-        /** @name        indent
-         *  @public
-         *  @type        {number}
-         *  @description Component member for indent.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        indent?: number;
-
-        /** @name        rowHeight
-         *  @public
-         *  @type        {number}
-         *  @description Component member for row Height.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        rowHeight?: number;
-
-        /** @name        draggable
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for draggable.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        draggable?: boolean;
-
-        /** @name        keyboard
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for keyboard.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        keyboard?: boolean;
-
-        /** @name        expandOnSelect
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for expand On Select.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        expandOnSelect?: boolean;
-
-        /** @name        searchable
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for searchable.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        searchable?: boolean;
-    }
-
-    /** Internal node state record (the "NS" of legacy). */
     interface NodeState
     {
-        /** @name        node
-         *  @public
-         *  @type        {TreeNode}
-         *  @description Component member for node.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        node: TreeNode;
-
-        /** @name        expanded
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for expanded.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+        node: Interfaces.TreeNode;
         expanded: boolean;
-
-        /** @name        selected
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for selected.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         selected: boolean;
-
-        /** @name        checked
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for checked.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         checked: boolean;
-
-        /** @name        loading
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for loading.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         loading: boolean;
-
-        /** @name        loaded
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for loaded.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         loaded: boolean;
-
-        /** @name        depth
-         *  @public
-         *  @type        {number}
-         *  @description Component member for depth.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         depth: number;
-
-        /** @name        parent
-         *  @public
-         *  @type        {NodeState | null}
-         *  @description Component member for parent.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         parent: NodeState | null;
-
-        /** @name        children
-         *  @public
-         *  @type        {NodeState[]}
-         *  @description Component member for children.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         children: NodeState[];
-
-        /** @name        visible
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for visible.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         visible: boolean;
     }
 
-    /** Flattened row used for rendering. */
     interface FlatRow
     {
-        /** @name        state
-         *  @public
-         *  @type        {NodeState}
-         *  @description Component member for state.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         state: NodeState;
-
-        /** @name        hasChildren
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for has Children.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         hasChildren: boolean;
-
-        /** @name        arrow
-         *  @public
-         *  @type        {string}
-         *  @description Component member for arrow.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         arrow: string;
-
-        /** @name        rowCls
-         *  @public
-         *  @type        {string}
-         *  @description Component member for row Cls.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        rowCls: string;
-
-        /** @name        rowStyle
-         *  @public
-         *  @type        {string}
-         *  @description Component member for row Style.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        rowStyle: string;
-
-        /** @name        indentPx
-         *  @public
-         *  @type        {number}
-         *  @description Component member for indent Px.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        indentPx: number;
     }
 
-    /** @class       TreeView
-     *  @public
-     *  @description AriannA TreeView component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-tree-view', {}, {
+    const signal = Reactivity.CreateSignal;
+
+    export const Styles = new Css.Stylesheet([
+        new Css.Rule('.TreeView', {
+            Background: '#171a1e',
+            Border: '1px solid #0c0e10',
+            BorderRadius: '6px',
+            BoxShadow: 'inset 0 1px 0 rgba(255,255,255,.04), 0 2px 8px rgba(0,0,0,.30)',
+            BoxSizing: 'border-box',
+            Color: '#e7eaed',
+            Display: 'block',
+            FontFamily: 'var(--arianna-font, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)',
+            FontSize: '.82rem',
+            MinWidth: '0',
+            Outline: 'none',
+            Overflow: 'hidden',
+            UserSelect: 'none',
+            Width: '100%'
+        }),
+        new Css.Rule('.TreeView-Search', {
+            Background: '#111418',
+            Border: '1px solid #343a40',
+            BorderRadius: '5px',
+            BoxSizing: 'border-box',
+            Color: '#e7eaed',
+            Font: 'inherit',
+            FontSize: '.82rem',
+            Margin: '8px',
+            Outline: 'none',
+            Padding: '7px 9px',
+            Width: 'calc(100% - 16px)'
+        }),
+        new Css.Rule('.TreeView-Search:focus', {
+            BorderColor: '#4c9be8',
+            BoxShadow: '0 0 0 2px rgba(76,155,232,.16)'
+        }),
+        new Css.Rule('.TreeView-Search::placeholder', { Color: '#727b84' }),
+        new Css.Rule('.TreeView-List', {
+            ListStyle: 'none',
+            Margin: '0',
+            MaxHeight: '420px',
+            OverflowY: 'auto',
+            Padding: '5px 6px 7px'
+        }),
+        new Css.Rule('.TreeView-Node', { ListStyle: 'none', Margin: '0', Padding: '0' }),
+        new Css.Rule('.TreeView-Row', {
+            AlignItems: 'center',
+            Border: '1px solid transparent',
+            BorderRadius: '4px',
+            BoxSizing: 'border-box',
+            Color: '#cfd4d9',
+            Cursor: 'pointer',
+            Display: 'flex',
+            Gap: '6px',
+            MinWidth: '0',
+            PaddingRight: '8px',
+            Transition: 'background .12s ease, border-color .12s ease, color .12s ease'
+        }),
+        new Css.Rule('.TreeView-Row:hover', { Background: '#24292f' }),
+        new Css.Rule('.TreeView-Row-Focus', { BorderColor: '#4c9be8' }),
+        new Css.Rule('.TreeView-Row-Active', {
+            Background: 'linear-gradient(180deg,#2f6da9 0%,#245c92 100%)',
+            BorderColor: '#4c9be8',
+            Color: '#ffffff'
+        }),
+        new Css.Rule('.TreeView-Row-Active:hover', {
+            Background: 'linear-gradient(180deg,#3477b8 0%,#28659f 100%)'
+        }),
+        new Css.Rule('.TreeView-Arrow', {
+            AlignItems: 'center',
+            Color: '#8d969f',
+            Display: 'inline-flex',
+            Flex: '0 0 14px',
+            FontSize: '.7rem',
+            Height: '18px',
+            JustifyContent: 'center',
+            Width: '14px'
+        }),
+        new Css.Rule('.TreeView-Row-Active .TreeView-Arrow', { Color: '#ffffff' }),
+        new Css.Rule('.TreeView-Checkbox', { AccentColor: '#4c9be8', FlexShrink: '0', Margin: '0' }),
+        new Css.Rule('.TreeView-Icon', { FlexShrink: '0', Width: '16px' }),
+        new Css.Rule('.TreeView-Label', {
+            Flex: '1 1 auto',
+            MinWidth: '0',
+            Overflow: 'hidden',
+            TextOverflow: 'ellipsis',
+            WhiteSpace: 'nowrap'
+        }),
+        new Css.Rule('.TreeView-Badge', {
+            Background: '#3b4249',
+            Border: '1px solid #4a525b',
+            BorderRadius: '999px',
+            Color: '#d9dde1',
+            FlexShrink: '0',
+            FontSize: '.64rem',
+            LineHeight: '1.3',
+            Padding: '1px 6px'
+        }),
+        new Css.Rule('.TreeView-Loading', { Color: '#4c9be8' }),
+
+        new Css.Rule('.TreeView[theme="light"]', {
+            Background: '#f8f9fa',
+            BorderColor: '#c9cdd1',
+            BoxShadow: 'inset 0 1px 0 #fff, 0 2px 8px rgba(0,0,0,.10)',
+            Color: '#24282c'
+        }),
+        new Css.Rule('.TreeView[theme="light"] .TreeView-Search', {
+            Background: '#ffffff',
+            BorderColor: '#c9cdd1',
+            Color: '#24282c'
+        }),
+        new Css.Rule('.TreeView[theme="light"] .TreeView-Search::placeholder', { Color: '#858c93' }),
+        new Css.Rule('.TreeView[theme="light"] .TreeView-Row', { Color: '#30353a' }),
+        new Css.Rule('.TreeView[theme="light"] .TreeView-Row:hover', { Background: '#e9ecef' }),
+        new Css.Rule('.TreeView[theme="light"] .TreeView-Row-Active', {
+            Background: 'linear-gradient(180deg,#5aa8ee 0%,#3c8ed8 100%)',
+            BorderColor: '#2f7fc8',
+            Color: '#ffffff'
+        }),
+        new Css.Rule('.TreeView[theme="light"] .TreeView-Arrow', { Color: '#7a8188' }),
+        new Css.Rule('.TreeView[theme="light"] .TreeView-Row-Active .TreeView-Arrow', { Color: '#ffffff' }),
+        new Css.Rule('.TreeView[theme="light"] .TreeView-Badge', {
+            Background: '#e7eaed',
+            BorderColor: '#c9cdd1',
+            Color: '#42484e'
+        })
+    ]);
+
+    @Component('arianna-tree-view', Styles, {
+        Shadow: false,
         Attributes: [
-            'selectable', 'checkboxes', 'icons', 'badges',
-            'indent', 'row-height', 'draggable', 'keyboard',
-            'expand-on-select', 'searchable',
+            'selectable', 'checkboxes', 'icons', 'badges', 'indent', 'row-height',
+            'draggable', 'keyboard', 'expand-on-select', 'searchable', 'theme', 'nodes'
         ],
+        Properties: ['nodes']
     })
     export class TreeView extends HTMLElement
     {
-        /** Compiler-visible AriannA template slot installed by @Component. */
-        declare template: unknown;
+        public static readonly Styles = Styles;
 
-        /** @name        roots$
-         *  @public
-         *  @type        {SchemaInterfaces.Reactivity.Signal<NodeState[]>}
-         *  @description Component member for roots$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        roots$: SchemaInterfaces.Reactivity.Signal<NodeState[]> = signal<NodeState[]>([]);
+        private _rootsSignal?: Types.Signal<NodeState[]>;
+        private _querySignal?: Types.Signal<string>;
+        private _tickSignal?: Types.Signal<number>;
+        private _map?: Map<string, NodeState>;
+        private _focus?: NodeState | null;
+        private _keyHandler?: (event: KeyboardEvent) => void;
+        private _rendering = false;
 
-        /** @name        query$
-         *  @public
-         *  @type        {SchemaInterfaces.Reactivity.Signal<string>}
-         *  @description Component member for query$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        query$: SchemaInterfaces.Reactivity.Signal<string> = signal<string>('');
-
-        /** Bump to force a re-render after internal NodeState mutation. */
-        tick$: SchemaInterfaces.Reactivity.Signal<number> = signal<number>(0);
-
-        /** @name        #map
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for map.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #map = new Map<string, NodeState>();
-
-        /** @name        #focus
-         *  @public
-         *  @type        {NodeState | null}
-         *  @description Component member for focus.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #focus: NodeState | null = null;
-
-        /** @name        onConnected
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Connected.
-         *  @param       {TreeViewOptions} _opts Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onConnected(_opts: TreeViewOptions = {})
+        public get roots$(): Types.Signal<NodeState[]>
         {
+            this._rootsSignal ??= signal<NodeState[]>([]);
+            return this._rootsSignal;
+        }
+
+        public get query$(): Types.Signal<string>
+        {
+            this._querySignal ??= signal<string>('');
+            return this._querySignal;
+        }
+
+        public get tick$(): Types.Signal<number>
+        {
+            this._tickSignal ??= signal<number>(0);
+            return this._tickSignal;
+        }
+
+        private get Map(): Map<string, NodeState>
+        {
+            this._map ??= new Map<string, NodeState>();
+            return this._map;
+        }
+
+        constructor(options: Interfaces.TreeViewOptions = {})
+        {
+            super();
+
+            if(options.nodes) this.nodes = options.nodes;
+            if(options.selectable) this.selectable = options.selectable;
+            if(options.checkboxes != null) this.checkboxes = options.checkboxes;
+            if(options.icons != null) this.icons = options.icons;
+            if(options.badges != null) this.badges = options.badges;
+            if(options.indent != null) this.indent = options.indent;
+            if(options.rowHeight != null) this.rowHeight = options.rowHeight;
+            if(options.draggable != null) this.draggable = options.draggable;
+            if(options.keyboard != null) this.keyboard = options.keyboard;
+            if(options.expandOnSelect != null) this.expandOnSelect = options.expandOnSelect;
+            if(options.searchable != null) this.searchable = options.searchable;
+            if(options.theme) this.theme = options.theme;
+        }
+
+        public onConnected(): void
+        {
+            this.classList.add('TreeView');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            if(!this.hasAttribute('selectable')) this.setAttribute('selectable', 'single');
+            if(!this.hasAttribute('searchable')) this.setAttribute('searchable', 'true');
+            if(!this.hasAttribute('icons')) this.setAttribute('icons', 'true');
+            if(!this.hasAttribute('badges')) this.setAttribute('badges', 'true');
+            if(!this.hasAttribute('keyboard')) this.setAttribute('keyboard', 'true');
+
             this.setAttribute('role', 'tree');
             this.tabIndex = 0;
-            this.isSearchable = () => this.getAttribute('searchable') !== 'false';
-            this.searchValue = () => this.query$.Get();
-            this.showCheckboxes = () => this.hasAttribute('checkboxes');
-            this.showIcons = () => this.getAttribute('icons') !== 'false';
-            this.showBadges = () => this.getAttribute('badges') !== 'false';
-            this.indentPx = () => parseInt(this.getAttribute('indent') ?? '20', 10) || 20;
-            this.rowHeightPx = () => parseInt(this.getAttribute('row-height') ?? '32', 10) || 32;
-            this.isDraggable = () => this.hasAttribute('draggable');
-            this.rows = (): FlatRow[] => {
-                // Tick$ read forces re-render when internal mutation calls bump().
-                void this.tick$.Get();
+            this.InstallKeyboard();
+            this.Render();
+        }
 
-                /** @name        q
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned q value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const q = this.query$.Get();
+        public onAttributeChanged(name: string): void
+        {
+            if(!this.isConnected || this._rendering) return;
+            if(name === 'theme') return;
+            this.Render();
+        }
 
-                /** @name        out
-                 *  @public
-                 *  @type        {FlatRow[]}
-                 *  @description Namespace-owned out value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const out: FlatRow[] = [];
+        public onDisconnected(): void
+        {
+            if(this._keyHandler)
+            {
+                this.removeEventListener('keydown', this._keyHandler);
+                this._keyHandler = undefined;
+            }
+        }
 
-                /** @name        walk
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned walk value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const walk = (states: NodeState[]) => {
-                    for (const s of states)
+        public onCreated(): void {}
+        public onBeforeMount(): void {}
+        public onMount(): void {}
+        public onBeforeUpdate(): void {}
+        public onUpdate(): void {}
+        public onBeforeUnmount(): void {}
+        public onUnmount(): void { this.onDisconnected(); }
+
+        public get nodes(): Interfaces.TreeNode[]
+        {
+            return this.roots$.Get().map(state => state.node);
+        }
+
+        public set nodes(value: Interfaces.TreeNode[])
+        {
+            this.Map.clear();
+            const states = (Array.isArray(value) ? value : [])
+                .map(node => this.MakeState(node, null, 0));
+
+            this.roots$.Set(states);
+            this._focus = states[0] ?? null;
+            this.Bump();
+        }
+
+        public get selectable(): Types.SelectMode
+        {
+            const value = this.getAttribute('selectable') ?? 'single';
+            return value === 'none' || value === 'multi' ? value : 'single';
+        }
+
+        public set selectable(value: Types.SelectMode) { this.setAttribute('selectable', value); }
+
+        public get checkboxes(): boolean { return this.hasAttribute('checkboxes'); }
+        public set checkboxes(value: boolean) { this.toggleAttribute('checkboxes', value); }
+
+        public get icons(): boolean { return this.getAttribute('icons') !== 'false'; }
+        public set icons(value: boolean) { this.setAttribute('icons', String(value)); }
+
+        public get badges(): boolean { return this.getAttribute('badges') !== 'false'; }
+        public set badges(value: boolean) { this.setAttribute('badges', String(value)); }
+
+        public get indent(): number { return this.indentPx(); }
+        public set indent(value: number) { this.setAttribute('indent', String(value)); }
+
+        public get rowHeight(): number { return this.rowHeightPx(); }
+        public set rowHeight(value: number) { this.setAttribute('row-height', String(value)); }
+
+        public get draggable(): boolean { return this.hasAttribute('draggable'); }
+        public set draggable(value: boolean) { this.toggleAttribute('draggable', value); }
+
+        public get keyboard(): boolean { return this.getAttribute('keyboard') !== 'false'; }
+        public set keyboard(value: boolean) { this.setAttribute('keyboard', String(value)); }
+
+        public get expandOnSelect(): boolean { return this.hasAttribute('expand-on-select'); }
+        public set expandOnSelect(value: boolean) { this.toggleAttribute('expand-on-select', value); }
+
+        public get searchable(): boolean { return this.getAttribute('searchable') !== 'false'; }
+        public set searchable(value: boolean) { this.setAttribute('searchable', String(value)); }
+
+        public get theme(): Types.Theme { return (this.getAttribute('theme') ?? 'dark') as Types.Theme; }
+        public set theme(value: Types.Theme) { this.setAttribute('theme', value); }
+
+        public expand(id: string): this
+        {
+            const state = this.Map.get(id);
+            if(state && !state.expanded) this.ExpandState(state);
+            return this;
+        }
+
+        public collapse(id: string): this
+        {
+            const state = this.Map.get(id);
+            if(state?.expanded) this.CollapseState(state);
+            return this;
+        }
+
+        public toggle(id: string): this
+        {
+            const state = this.Map.get(id);
+            if(state) state.expanded ? this.CollapseState(state) : this.ExpandState(state);
+            return this;
+        }
+
+        public expandAll(): this
+        {
+            for(const state of this.Map.values())
+                if(!state.expanded && (!state.node.lazy || state.loaded)) state.expanded = true;
+
+            this.Bump();
+            return this;
+        }
+
+        public collapseAll(): this
+        {
+            for(const state of this.Map.values()) state.expanded = false;
+            this.Bump();
+            return this;
+        }
+
+        public select(id: string): this
+        {
+            const state = this.Map.get(id);
+            if(!state || state.node.selectable === false || this.selectable === 'none') return this;
+
+            if(this.selectable === 'single') this.ClearSelection();
+            this.SetSelected(state, true);
+            this._focus = state;
+            return this;
+        }
+
+        public deselect(id: string): this
+        {
+            const state = this.Map.get(id);
+            if(state) this.SetSelected(state, false);
+            return this;
+        }
+
+        public getSelected(): Interfaces.TreeNode[]
+        {
+            return [...this.Map.values()]
+                .filter(state => state.selected)
+                .map(state => state.node);
+        }
+
+        public check(id: string, value: boolean = true): this
+        {
+            const state = this.Map.get(id);
+            if(state) this.SetChecked(state, value);
+            return this;
+        }
+
+        public getChecked(): Interfaces.TreeNode[]
+        {
+            return [...this.Map.values()]
+                .filter(state => state.checked)
+                .map(state => state.node);
+        }
+
+        public search(query: string): this
+        {
+            this.query$.Set(String(query ?? '').toLowerCase().trim());
+            this.Bump();
+            return this;
+        }
+
+        public clearSearch(): this { return this.search(''); }
+
+        public isSearchable(): boolean { return this.searchable; }
+        public searchValue(): string { return this.query$.Get(); }
+        public showCheckboxes(): boolean { return this.checkboxes; }
+        public showIcons(): boolean { return this.icons; }
+        public showBadges(): boolean { return this.badges; }
+        public indentPx(): number { return Math.max(0, parseInt(this.getAttribute('indent') ?? '20', 10) || 20); }
+        public rowHeightPx(): number { return Math.max(22, parseInt(this.getAttribute('row-height') ?? '32', 10) || 32); }
+        public isDraggable(): boolean { return this.draggable; }
+
+        public rows(): FlatRow[]
+        {
+            void this.tick$.Get();
+
+            const query = this.query$.Get();
+            const output: FlatRow[] = [];
+
+            const walk = (states: NodeState[]): void =>
+            {
+                for(const state of states)
+                {
+                    const matches = !query || this.NodeMatchesQuery(state, query);
+                    state.visible = matches;
+                    if(!matches) continue;
+
+                    const hasChildren =
+                        state.children.length > 0 ||
+                        (state.node.children?.length ?? 0) > 0 ||
+                        Boolean(state.node.lazy);
+
+                    output.push({
+                        state,
+                        hasChildren,
+                        arrow:
+                            hasChildren
+                                ? state.loading
+                                    ? '⟳'
+                                    : state.expanded
+                                        ? '▾'
+                                        : '▸'
+                                : ''
+                    });
+
+                    if(state.children.length && (state.expanded || Boolean(query))) walk(state.children);
+                }
+            };
+
+            walk(this.roots$.Get());
+            return output;
+        }
+
+        public onArrowClick(row: FlatRow, event: Event): void
+        {
+            event.stopPropagation();
+            if(!row.hasChildren) return;
+            row.state.expanded ? this.CollapseState(row.state) : this.ExpandState(row.state);
+        }
+
+        public onCheckChange(row: FlatRow, event: Event): void
+        {
+            event.stopPropagation();
+            this.SetChecked(row.state, Boolean((event.target as HTMLInputElement).checked));
+        }
+
+        public onRowClick(row: FlatRow): void
+        {
+            this._focus = row.state;
+
+            if(row.state.node.selectable !== false && this.selectable !== 'none')
+            {
+                if(this.selectable === 'single')
+                {
+                    const alreadySelected = row.state.selected;
+                    this.ClearSelection();
+                    this.SetSelected(row.state, !alreadySelected);
+                }
+                else
+                {
+                    this.SetSelected(row.state, !row.state.selected);
+                }
+
+                this.dispatchEvent(new CustomEvent('arianna:select', {
+                    bubbles: true,
+                    detail: { node: row.state.node, selected: row.state.selected }
+                }));
+            }
+
+            if(this.expandOnSelect && row.hasChildren)
+                row.state.expanded ? this.CollapseState(row.state) : this.ExpandState(row.state);
+            else
+                this.Bump();
+        }
+
+        public onSearchInput(event: Event): void
+        {
+            this.search((event.target as HTMLInputElement).value);
+        }
+
+        public onDragStart(row: FlatRow, event: DragEvent): void
+        {
+            event.dataTransfer?.setData('text/plain', row.state.node.id);
+            if(event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+        }
+
+        public onDragOver(event: DragEvent): void
+        {
+            event.preventDefault();
+            if(event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+        }
+
+        public onDrop(row: FlatRow, event: DragEvent): void
+        {
+            event.preventDefault();
+            const sourceId = event.dataTransfer?.getData('text/plain');
+
+            if(sourceId && sourceId !== row.state.node.id)
+            {
+                this.dispatchEvent(new CustomEvent('arianna:drop', {
+                    bubbles: true,
+                    detail: { sourceId, targetId: row.state.node.id }
+                }));
+            }
+        }
+
+        private Render(): void
+        {
+            if(this._rendering) return;
+            this._rendering = true;
+
+            try
+            {
+                const nodes: Node[] = [];
+
+                if(this.searchable)
+                {
+                    const search = document.createElement('input');
+                    search.className = 'TreeView-Search';
+                    search.type = 'search';
+                    search.placeholder = 'Search…';
+                    search.value = this.searchValue();
+                    search.setAttribute('aria-label', 'Search tree');
+                    search.addEventListener('input', event => this.onSearchInput(event));
+                    search.addEventListener('keydown', event => event.stopPropagation());
+                    nodes.push(search);
+                }
+
+                const list = document.createElement('ul');
+                list.className = 'TreeView-List';
+                list.setAttribute('role', 'group');
+
+                for(const row of this.rows())
+                {
+                    const state = row.state;
+                    const item = document.createElement('li');
+                    item.className = 'TreeView-Node';
+                    item.dataset.id = state.node.id;
+                    item.setAttribute('role', 'treeitem');
+                    item.setAttribute('aria-level', String(state.depth + 1));
+                    item.setAttribute('aria-selected', String(state.selected));
+                    if(row.hasChildren) item.setAttribute('aria-expanded', String(state.expanded));
+                    item.draggable = this.draggable;
+
+                    const line = document.createElement('div');
+                    line.className =
+                        'TreeView-Row' +
+                        (state.selected ? ' TreeView-Row-Active' : '') +
+                        (state === this._focus ? ' TreeView-Row-Focus' : '');
+                    line.style.paddingLeft = `${state.depth * this.indentPx() + 8}px`;
+                    line.style.height = `${this.rowHeightPx()}px`;
+                    line.addEventListener('click', () => this.onRowClick(row));
+
+                    const arrow = document.createElement('span');
+                    arrow.className = 'TreeView-Arrow' + (state.loading ? ' TreeView-Loading' : '');
+                    arrow.textContent = row.arrow;
+                    arrow.setAttribute('aria-hidden', 'true');
+                    arrow.addEventListener('click', event => this.onArrowClick(row, event));
+                    line.append(arrow);
+
+                    if(this.checkboxes)
                     {
-                        // Filter: show if matches OR has a descendant that matches.
-                        if (q)
+                        const checkbox = document.createElement('input');
+                        checkbox.className = 'TreeView-Checkbox';
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = state.checked;
+                        checkbox.setAttribute('aria-label', `Check ${state.node.label}`);
+                        checkbox.addEventListener('change', event => this.onCheckChange(row, event));
+                        checkbox.addEventListener('click', event => event.stopPropagation());
+                        line.append(checkbox);
+                    }
+
+                    if(this.icons && state.node.icon)
+                    {
+                        const icon = document.createElement('span');
+                        icon.className = 'TreeView-Icon';
+                        icon.textContent = state.node.icon;
+                        icon.setAttribute('aria-hidden', 'true');
+                        line.append(icon);
+                    }
+
+                    const label = document.createElement('span');
+                    label.className = 'TreeView-Label';
+                    label.textContent = state.node.label;
+                    line.append(label);
+
+                    if(this.badges && state.node.badge !== undefined)
+                    {
+                        const badge = document.createElement('span');
+                        badge.className = 'TreeView-Badge';
+                        badge.textContent = String(state.node.badge);
+                        line.append(badge);
+                    }
+
+                    item.addEventListener('dragstart', event => this.onDragStart(row, event));
+                    item.addEventListener('dragover', event => this.onDragOver(event));
+                    item.addEventListener('drop', event => this.onDrop(row, event));
+                    item.append(line);
+                    list.append(item);
+                }
+
+                nodes.push(list);
+                this.replaceChildren(...nodes);
+            }
+            finally
+            {
+                this._rendering = false;
+            }
+        }
+
+        private InstallKeyboard(): void
+        {
+            if(this._keyHandler) return;
+
+            this._keyHandler = (event: KeyboardEvent): void =>
+            {
+                if(!this.keyboard) return;
+                if(event.target instanceof HTMLInputElement) return;
+
+                const rows = this.rows();
+                if(!rows.length) return;
+
+                let index = this._focus
+                    ? rows.findIndex(row => row.state === this._focus)
+                    : -1;
+
+                switch(event.key)
+                {
+                    case 'ArrowDown':
+                    {
+                        event.preventDefault();
+                        index = Math.min(rows.length - 1, index + 1);
+                        this._focus = rows[index < 0 ? 0 : index].state;
+                        this.Bump();
+                        break;
+                    }
+
+                    case 'ArrowUp':
+                    {
+                        event.preventDefault();
+                        index = index < 0 ? 0 : Math.max(0, index - 1);
+                        this._focus = rows[index].state;
+                        this.Bump();
+                        break;
+                    }
+
+                    case 'Home':
+                        event.preventDefault();
+                        this._focus = rows[0].state;
+                        this.Bump();
+                        break;
+
+                    case 'End':
+                        event.preventDefault();
+                        this._focus = rows[rows.length - 1].state;
+                        this.Bump();
+                        break;
+
+                    case 'ArrowRight':
+                        event.preventDefault();
+                        if(this._focus && !this._focus.expanded) this.ExpandState(this._focus);
+                        break;
+
+                    case 'ArrowLeft':
+                        event.preventDefault();
+                        if(this._focus?.expanded) this.CollapseState(this._focus);
+                        else if(this._focus?.parent)
                         {
-                            s.visible = this.#nodeMatchesQuery(s, q);
+                            this._focus = this._focus.parent;
+                            this.Bump();
+                        }
+                        break;
+
+                    case 'Enter':
+                    case ' ':
+                    {
+                        event.preventDefault();
+                        if(!this._focus || this._focus.node.selectable === false || this.selectable === 'none') break;
+
+                        if(this.selectable === 'single')
+                        {
+                            const alreadySelected = this._focus.selected;
+                            this.ClearSelection();
+                            this.SetSelected(this._focus, !alreadySelected);
                         }
                         else
                         {
-                            s.visible = true;
+                            this.SetSelected(this._focus, !this._focus.selected);
                         }
-                        if (!s.visible)
-                            continue;
 
-                        /** @name        hasChildren
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned hasChildren value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const hasChildren = (s.node.children?.length ?? 0) > 0 || !!s.node.lazy;
-                        out.push({
-                            state: s,
-                            hasChildren,
-                            arrow: hasChildren ? (s.loading ? '⟳' : (s.expanded ? '▾' : '▸')) : '',
-                            rowCls: 'ar-tree__row' + (s.selected ? ' ar-tree__row--on' : ''),
-                            rowStyle: `padding-left: ${s.depth * this.indentPx() + 8}px; height: ${this.rowHeightPx()}px`,
-                            indentPx: s.depth * this.indentPx() + 8,
-                        });
-                        if (s.expanded && s.children.length)
-                            walk(s.children);
-                    }
-                };
-                walk(this.roots$.Get());
-                return out;
-            };
-            // Event handlers (set before template registration)
-            this.onArrowClick = (r: FlatRow, e: Event) => {
-                e.stopPropagation();
-                if (!r.hasChildren)
-                    return;
-                if (r.state.expanded)
-                    this.#collapse(r.state);
-                else
-                    this.#expand(r.state);
-            };
-            this.onCheckChange = (r: FlatRow, e: Event) => {
-                e.stopPropagation();
-                this.#setChecked(r.state, (e.target as HTMLInputElement).checked);
-            };
-            this.onRowClick = (r: FlatRow) => {
-                if (r.state.node.selectable === false)
-                    return;
-
-                /** @name        mode
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned mode value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const mode = (this.getAttribute('selectable') ?? 'single') as 'none' | 'single' | 'multi';
-                if (mode === 'none')
-                    return;
-                if (mode === 'single')
-                    this.#clearSel();
-                this.#setSel(r.state, !r.state.selected);
-                this.#focus = r.state;
-                if (this.hasAttribute('expand-on-select') && r.hasChildren)
-                {
-                    if (r.state.expanded)
-                        this.#collapse(r.state);
-                    else
-                        this.#expand(r.state);
-                }
-                this.dispatchEvent(new CustomEvent('arianna:select', {
-                    bubbles: true, detail: { node: r.state.node, selected: r.state.selected },
-                }));
-            };
-            this.onSearchInput = (e: Event) => {
-                this.query$.Set((e.target as HTMLInputElement).value.toLowerCase().trim());
-            };
-            // Drag & drop handlers — attached only when draggable attr is set
-            this.onDragStart = (r: FlatRow, e: Event) => {
-                (e as DragEvent).dataTransfer?.setData('text/plain', r.state.node.id);
-            };
-            this.onDragOver = (e: Event) => { e.preventDefault(); };
-            this.onDrop = (r: FlatRow, e: Event) => {
-                e.preventDefault();
-
-                /** @name        src
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned src value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const src = (e as DragEvent).dataTransfer?.getData('text/plain');
-                if (src && src !== r.state.node.id)
-                {
-                    this.dispatchEvent(new CustomEvent('arianna:drop', {
-                        bubbles: true, detail: { sourceId: src, targetId: r.state.node.id },
-                    }));
-                }
-            };
-            // Keyboard navigation
-            this.addEventListener('keydown', (ev: Event) => {
-                /** @name        e
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned e value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const e = ev as KeyboardEvent;
-                if (this.getAttribute('keyboard') === 'false')
-                    return;
-
-                /** @name        flat
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned flat value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const flat = this.rows();
-
-                /** @name        idx
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned idx value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const idx = this.#focus ? flat.findIndex(r => r.state === this.#focus) : -1;
-                switch (e.key)
-                {
-                    case 'ArrowDown': {
-                        e.preventDefault();
-
-                        /** @name        n
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned n value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const n = flat[idx + 1];
-                        if (n)
-                            this.#focus = n.state;
-                        this.#bump();
-                        break;
-                    }
-                    case 'ArrowUp': {
-                        e.preventDefault();
-
-                        /** @name        n
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned n value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const n = flat[idx - 1];
-                        if (n)
-                            this.#focus = n.state;
-                        this.#bump();
-                        break;
-                    }
-                    case 'ArrowRight': {
-                        e.preventDefault();
-                        if (this.#focus && !this.#focus.expanded)
-                            this.#expand(this.#focus);
-                        break;
-                    }
-                    case 'ArrowLeft': {
-                        e.preventDefault();
-                        if (this.#focus?.expanded)
-                            this.#collapse(this.#focus);
-                        else if (this.#focus?.parent)
-                        {
-                            this.#focus = this.#focus.parent;
-                            this.#bump();
-                        }
-                        break;
-                    }
-                    case 'Enter':
-                    case ' ': {
-                        e.preventDefault();
-                        if (this.#focus)
-                        {
-                            /** @name        mode
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned mode value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const mode = (this.getAttribute('selectable') ?? 'single') as 'none' | 'single' | 'multi';
-                            if (mode !== 'none')
-                            {
-                                if (mode === 'single')
-                                    this.#clearSel();
-                                this.#setSel(this.#focus, !this.#focus.selected);
-                                this.dispatchEvent(new CustomEvent('arianna:select', {
-                                    bubbles: true,
-                                    detail: { node: this.#focus.node, selected: this.#focus.selected },
-                                }));
-                            }
-                        }
+                        this.dispatchEvent(new CustomEvent('arianna:select', {
+                            bubbles: true,
+                            detail: { node: this._focus.node, selected: this._focus.selected }
+                        }));
                         break;
                     }
                 }
-            });
-            this.template = html `
-            <input class="ar-tree__search"
-                   a-if="this.isSearchable()"
-                   type="text"
-                   placeholder="Search…"
-                   :value="this.searchValue()"
-                   @input="this.onSearchInput"/>
-            <ul class="ar-tree__list" role="group">
-                <li class="ar-tree__node"
-                    a-for="r in this.rows()"
-                    :data-id="r.state.node.id"
-                    :draggable="this.isDraggable()"
-                    @dragstart="(e) => this.onDragStart(r, e)"
-                    @dragover="this.onDragOver"
-                    @drop="(e) => this.onDrop(r, e)">
-                    <div :class="r.rowCls"
-                         :style="r.rowStyle"
-                         @click="(e) => this.onRowClick(r)">
-                        <span class="ar-tree__arrow"
-                              @click="(e) => this.onArrowClick(r, e)">{{ r.arrow }}</span>
-                        <input class="ar-tree__cb"
-                               a-if="this.showCheckboxes()"
-                               type="checkbox"
-                               :checked="r.state.checked"
-                               @change="(e) => this.onCheckChange(r, e)"
-                               @click="(e) => e.stopPropagation()"/>
-                        <span class="ar-tree__icon"
-                              a-if="this.showIcons() && r.state.node.icon">{{ r.state.node.icon }}</span>
-                        <span class="ar-tree__label">{{ r.state.node.label }}</span>
-                        <span class="ar-tree__badge"
-                              a-if="this.showBadges() && r.state.node.badge !== undefined">{{ r.state.node.badge }}</span>
-                    </div>
-                </li>
-            </ul>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Css.Stylesheet | null;
-            }).Sheet = TreeView.DefaultSheet();
-        }
-        // ── Public API ───────────────────────────────────────────────────────────
-        /** @name        nodes
-         *  @public
-         *  @type        {void}
-         *  @description Component member for nodes.
-         *  @param       {TreeNode[]} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set nodes(v: TreeNode[])
-        {
-            this.#map.clear();
+            };
 
-            /** @name        states
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned states value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const states = (v ?? []).map(n => this.#makeState(n, null, 0));
-            this.roots$.Set(states);
+            this.addEventListener('keydown', this._keyHandler);
         }
 
-        /** @name        nodes
-         *  @public
-         *  @type        {TreeNode[]}
-         *  @description Component member for nodes.
-         *  @returns     {TreeNode[]} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get nodes(): TreeNode[] { return this.roots$.Get().map((s: any) => s.node); }
-
-        /** @name        expand
-         *  @public
-         *  @type        {this}
-         *  @description Component member for expand.
-         *  @param       {string} id Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        expand(id: string): this
+        private MakeState
+        (
+            node: Interfaces.TreeNode,
+            parent: NodeState | null,
+            depth: number
+        ): NodeState
         {
-            /** @name        s
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned s value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const s = this.#map.get(id);
-            if (s && !s.expanded)
-                this.#expand(s);
-            return this;
-        }
-
-        /** @name        collapse
-         *  @public
-         *  @type        {this}
-         *  @description Component member for collapse.
-         *  @param       {string} id Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        collapse(id: string): this
-        {
-            /** @name        s
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned s value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const s = this.#map.get(id);
-            if (s && s.expanded)
-                this.#collapse(s);
-            return this;
-        }
-
-        /** @name        expandAll
-         *  @public
-         *  @type        {this}
-         *  @description Component member for expand All.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        expandAll(): this
-        {
-            this.#map.forEach(s => {
-                if (!s.expanded)
-                    this.#expand(s);
-            });
-            return this;
-        }
-
-        /** @name        collapseAll
-         *  @public
-         *  @type        {this}
-         *  @description Component member for collapse All.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        collapseAll(): this
-        {
-            this.#map.forEach(s => {
-                if (s.expanded)
-                    this.#collapse(s);
-            });
-            return this;
-        }
-
-        /** @name        select
-         *  @public
-         *  @type        {this}
-         *  @description Component member for select.
-         *  @param       {string} id Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        select(id: string): this
-        {
-            /** @name        s
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned s value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const s = this.#map.get(id);
-            if (!s || s.node.selectable === false)
-                return this;
-            if ((this.getAttribute('selectable') ?? 'single') === 'single')
-                this.#clearSel();
-            this.#setSel(s, true);
-            return this;
-        }
-
-        /** @name        deselect
-         *  @public
-         *  @type        {this}
-         *  @description Component member for deselect.
-         *  @param       {string} id Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        deselect(id: string): this
-        {
-            /** @name        s
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned s value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const s = this.#map.get(id);
-            if (s)
-                this.#setSel(s, false);
-            return this;
-        }
-
-        /** @name        getSelected
-         *  @public
-         *  @type        {TreeNode[]}
-         *  @description Component member for get Selected.
-         *  @returns     {TreeNode[]} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        getSelected(): TreeNode[] { return [...this.#map.values()].filter(s => s.selected).map(s => s.node); }
-
-        /** @name        check
-         *  @public
-         *  @type        {this}
-         *  @description Component member for check.
-         *  @param       {string} id Parameter.
-         *  @param       {unknown} value Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        check(id: string, value = true): this
-        {
-            /** @name        s
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned s value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const s = this.#map.get(id);
-            if (s)
-                this.#setChecked(s, value);
-            return this;
-        }
-
-        /** @name        getChecked
-         *  @public
-         *  @type        {TreeNode[]}
-         *  @description Component member for get Checked.
-         *  @returns     {TreeNode[]} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        getChecked(): TreeNode[] { return [...this.#map.values()].filter(s => s.checked).map(s => s.node); }
-
-        /** @name        search
-         *  @public
-         *  @type        {this}
-         *  @description Component member for search.
-         *  @param       {string} q Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        search(q: string): this { this.query$.Set(q.toLowerCase().trim()); return this; }
-        // ── Internal helpers ─────────────────────────────────────────────────────
-        /** @name        #makeState
-         *  @public
-         *  @type        {NodeState}
-         *  @description Component member for make State.
-         *  @param       {TreeNode} node Parameter.
-         *  @param       {NodeState | null} parent Parameter.
-         *  @param       {number} depth Parameter.
-         *  @returns     {NodeState} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #makeState(node: TreeNode, parent: NodeState | null, depth: number): NodeState
-        {
-            /** @name        s
-             *  @public
-             *  @type        {NodeState}
-             *  @description Namespace-owned s value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const s: NodeState = {
+            const state: NodeState = {
                 node,
                 expanded: node.expanded ?? false,
                 selected: node.selected ?? false,
                 checked: node.checked ?? false,
                 loading: false,
-                loaded: !node.lazy,
+                loaded: !node.lazy || Boolean(node.children),
                 depth,
                 parent,
                 children: [],
-                visible: true,
+                visible: true
             };
-            this.#map.set(node.id, s);
-            if (node.children)
-            {
-                s.children = node.children.map(c => this.#makeState(c, s, depth + 1));
-            }
-            return s;
+
+            this.Map.set(node.id, state);
+
+            if(node.children)
+                state.children = node.children.map(child => this.MakeState(child, state, depth + 1));
+
+            return state;
         }
 
-        /** @name        #expand
-         *  @public
-         *  @type        {void}
-         *  @description Component member for expand.
-         *  @param       {NodeState} s Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #expand(s: NodeState): void
+        private ExpandState(state: NodeState): void
         {
-            if (s.node.lazy && !s.loaded)
+            if(state.node.lazy && !state.loaded)
             {
-                s.loading = true;
-                this.#bump();
-
-                /** @name        resolved
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned resolved value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
+                state.loading = true;
+                this.Bump();
                 let resolved = false;
 
-                /** @name        resolve
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned resolve value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const resolve = (children: TreeNode[]) => {
-                    if (resolved)
-                        return;
+                const resolve = (children: Interfaces.TreeNode[]): void =>
+                {
+                    if(resolved) return;
                     resolved = true;
-                    s.children = children.map(c => this.#makeState(c, s, s.depth + 1));
-                    s.node.children = children;
-                    s.loaded = true;
-                    s.loading = false;
-                    s.expanded = true;
-                    this.#bump();
+
+                    state.children = (Array.isArray(children) ? children : [])
+                        .map(child => this.MakeState(child, state, state.depth + 1));
+                    state.node.children = Array.isArray(children) ? children : [];
+                    state.loaded = true;
+                    state.loading = false;
+                    state.expanded = true;
+                    this.Bump();
+
                     this.dispatchEvent(new CustomEvent('arianna:expand', {
-                        bubbles: true, detail: { node: s.node },
+                        bubbles: true,
+                        detail: { node: state.node }
                     }));
                 };
+
                 this.dispatchEvent(new CustomEvent('arianna:load', {
-                    bubbles: true, detail: { node: s.node, resolve },
+                    bubbles: true,
+                    detail: { node: state.node, resolve }
                 }));
                 return;
             }
-            s.expanded = true;
-            this.#bump();
+
+            state.expanded = true;
+            state.node.expanded = true;
+            this.Bump();
+
             this.dispatchEvent(new CustomEvent('arianna:expand', {
-                bubbles: true, detail: { node: s.node },
+                bubbles: true,
+                detail: { node: state.node }
             }));
         }
 
-        /** @name        #collapse
-         *  @public
-         *  @type        {void}
-         *  @description Component member for collapse.
-         *  @param       {NodeState} s Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #collapse(s: NodeState): void
+        private CollapseState(state: NodeState): void
         {
-            s.expanded = false;
-            this.#bump();
+            state.expanded = false;
+            state.node.expanded = false;
+            this.Bump();
+
             this.dispatchEvent(new CustomEvent('arianna:collapse', {
-                bubbles: true, detail: { node: s.node },
+                bubbles: true,
+                detail: { node: state.node }
             }));
         }
 
-        /** @name        #clearSel
-         *  @public
-         *  @type        {void}
-         *  @description Component member for clear Sel.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #clearSel(): void
+        private ClearSelection(): void
         {
-            this.#map.forEach(s => {
-                if (s.selected)
-                    s.selected = false;
-            });
+            for(const state of this.Map.values())
+            {
+                state.selected = false;
+                state.node.selected = false;
+            }
         }
 
-        /** @name        #setSel
-         *  @public
-         *  @type        {void}
-         *  @description Component member for set Sel.
-         *  @param       {NodeState} s Parameter.
-         *  @param       {boolean} v Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #setSel(s: NodeState, v: boolean): void
+        private SetSelected(state: NodeState, value: boolean): void
         {
-            s.selected = v;
-            this.#bump();
+            state.selected = value;
+            state.node.selected = value;
+            this.Bump();
         }
 
-        /** @name        #setChecked
-         *  @public
-         *  @type        {void}
-         *  @description Component member for set Checked.
-         *  @param       {NodeState} s Parameter.
-         *  @param       {boolean} v Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #setChecked(s: NodeState, v: boolean): void
+        private SetChecked(state: NodeState, value: boolean): void
         {
-            s.checked = v;
-            s.node.checked = v;
-            this.#bump();
+            const apply = (current: NodeState): void =>
+            {
+                current.checked = value;
+                current.node.checked = value;
+                current.children.forEach(apply);
+            };
+
+            apply(state);
+
+            let parent = state.parent;
+            while(parent)
+            {
+                const checked = parent.children.length > 0 && parent.children.every(child => child.checked);
+                parent.checked = checked;
+                parent.node.checked = checked;
+                parent = parent.parent;
+            }
+
+            this.Bump();
+
             this.dispatchEvent(new CustomEvent('arianna:check', {
-                bubbles: true, detail: { node: s.node, checked: v },
+                bubbles: true,
+                detail: { node: state.node, checked: value }
             }));
         }
 
-        /** @name        #nodeMatchesQuery
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for node Matches Query.
-         *  @param       {NodeState} s Parameter.
-         *  @param       {string} q Parameter.
-         *  @returns     {boolean} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #nodeMatchesQuery(s: NodeState, q: string): boolean
+        private NodeMatchesQuery(state: NodeState, query: string): boolean
         {
-            if (s.node.label.toLowerCase().includes(q))
-                return true;
-            return s.children.some(c => this.#nodeMatchesQuery(c, q));
+            if(state.node.label.toLowerCase().includes(query)) return true;
+            return state.children.some(child => this.NodeMatchesQuery(child, query));
         }
 
-        /** Bump the tick signal to force a template re-render. */
-        #bump(): void { this.tick$.Set(this.tick$.Get() + 1); }
-
-        /** @name        onCreated
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Created.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onCreated() { }
-
-        /** @name        onBeforeMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeMount() { }
-
-        /** @name        onMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onMount() { }
-
-        /** @name        onBeforeUpdate
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Update.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeUpdate() { }
-
-        /** @name        onUpdate
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Update.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUpdate() { }
-
-        /** @name        onBeforeUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeUnmount() { }
-
-        /** @name        onUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUnmount() { }
-        // ── Attr getters / setters ───────────────────────────────────────────────
-        /** @name        selectable
-         *  @public
-         *  @type        {'none' | 'single' | 'multi'}
-         *  @description Component member for selectable.
-         *  @returns     {'none' | 'single' | 'multi'} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get selectable(): 'none' | 'single' | 'multi' { return (this.getAttribute('selectable') ?? 'single') as never; }
-
-        /** @name        selectable
-         *  @public
-         *  @type        {void}
-         *  @description Component member for selectable.
-         *  @param       {'none' | 'single' | 'multi'} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set selectable(v: 'none' | 'single' | 'multi') { this.setAttribute('selectable', v); }
-
-        /** @name        checkboxes
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for checkboxes.
-         *  @returns     {boolean} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get checkboxes(): boolean { return this.hasAttribute('checkboxes'); }
-
-        /** @name        checkboxes
-         *  @public
-         *  @type        {void}
-         *  @description Component member for checkboxes.
-         *  @param       {boolean} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set checkboxes(v: boolean) { v ? this.setAttribute('checkboxes', '') : this.removeAttribute('checkboxes'); }
-
-        /** @name        draggable
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for draggable.
-         *  @returns     {boolean} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get draggable(): boolean { return this.hasAttribute('draggable'); }
-
-        /** @name        draggable
-         *  @public
-         *  @type        {void}
-         *  @description Component member for draggable.
-         *  @param       {boolean} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set draggable(v: boolean) { v ? this.setAttribute('draggable', '') : this.removeAttribute('draggable'); }
-
-        /** @name        searchable
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for searchable.
-         *  @returns     {boolean} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get searchable(): boolean { return this.getAttribute('searchable') !== 'false'; }
-
-        /** @name        searchable
-         *  @public
-         *  @type        {void}
-         *  @description Component member for searchable.
-         *  @param       {boolean} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set searchable(v: boolean) { this.setAttribute('searchable', v ? 'true' : 'false'); }
-        // ── Template helpers (set in build) ──────────────────────────────────────
-        /** @name        isSearchable
-         *  @private
-         *  @type        {() => boolean}
-         *  @description Component member for is Searchable.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private isSearchable: () => boolean = () => true;
-
-        /** @name        searchValue
-         *  @private
-         *  @type        {() => string}
-         *  @description Component member for search Value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private searchValue: () => string = () => '';
-
-        /** @name        showCheckboxes
-         *  @private
-         *  @type        {() => boolean}
-         *  @description Component member for show Checkboxes.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private showCheckboxes: () => boolean = () => false;
-
-        /** @name        showIcons
-         *  @private
-         *  @type        {() => boolean}
-         *  @description Component member for show Icons.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private showIcons: () => boolean = () => true;
-
-        /** @name        showBadges
-         *  @private
-         *  @type        {() => boolean}
-         *  @description Component member for show Badges.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private showBadges: () => boolean = () => true;
-
-        /** @name        indentPx
-         *  @private
-         *  @type        {() => number}
-         *  @description Component member for indent Px.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private indentPx: () => number = () => 20;
-
-        /** @name        rowHeightPx
-         *  @private
-         *  @type        {() => number}
-         *  @description Component member for row Height Px.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private rowHeightPx: () => number = () => 32;
-
-        /** @name        isDraggable
-         *  @private
-         *  @type        {() => boolean}
-         *  @description Component member for is Draggable.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private isDraggable: () => boolean = () => false;
-
-        /** @name        rows
-         *  @private
-         *  @type        {() => FlatRow[]}
-         *  @description Component member for rows.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private rows: () => FlatRow[] = () => [];
-
-        /** @name        onArrowClick
-         *  @private
-         *  @type        {(r: FlatRow, e: Event) => void}
-         *  @description Component member for on Arrow Click.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private onArrowClick: (r: FlatRow, e: Event) => void = () => { };
-
-        /** @name        onCheckChange
-         *  @private
-         *  @type        {(r: FlatRow, e: Event) => void}
-         *  @description Component member for on Check Change.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private onCheckChange: (r: FlatRow, e: Event) => void = () => { };
-
-        /** @name        onRowClick
-         *  @private
-         *  @type        {(r: FlatRow) => void}
-         *  @description Component member for on Row Click.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private onRowClick: (r: FlatRow) => void = () => { };
-
-        /** @name        onSearchInput
-         *  @private
-         *  @type        {(e: Event) => void}
-         *  @description Component member for on Search Input.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private onSearchInput: (e: Event) => void = () => { };
-
-        /** @name        onDragStart
-         *  @private
-         *  @type        {(r: FlatRow, e: Event) => void}
-         *  @description Component member for on Drag Start.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private onDragStart: (r: FlatRow, e: Event) => void = () => { };
-
-        /** @name        onDragOver
-         *  @private
-         *  @type        {(e: Event) => void}
-         *  @description Component member for on Drag Over.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private onDragOver: (e: Event) => void = () => { };
-
-        /** @name        onDrop
-         *  @private
-         *  @type        {(r: FlatRow, e: Event) => void}
-         *  @description Component member for on Drop.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private onDrop: (r: FlatRow, e: Event) => void = () => { };
-
-        /** @name        DefaultSheet
-         *  @public
-         *  @static
-         *  @type        {Stylesheet}
-         *  @description Component member for Default Sheet.
-         *  @returns     {Stylesheet} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Css.Stylesheet
+        private Bump(): void
         {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'transparent',
-                    color: 'var(--arianna-text, #1f2328)',
-                    display: 'block',
-                    fontSize: '0.82rem',
-                    outline: 'none',
-                    overflowY: 'auto',
-                    userSelect: 'none',
-                }),
-                new Rule('.ar-tree__search', {
-                    background: 'var(--arianna-bg, #ffffff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    boxSizing: 'border-box',
-                    color: 'var(--arianna-text, #1f2328)',
-                    font: 'inherit',
-                    fontSize: '0.82rem',
-                    margin: '4px 8px',
-                    outline: 'none',
-                    padding: '4px 8px',
-                    width: 'calc(100% - 16px)',
-                }),
-                new Rule('.ar-tree__search:focus', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
-                new Rule('.ar-tree__list', {
-                    listStyle: 'none', margin: '0', padding: '0',
-                }),
-                new Rule('.ar-tree__node', { listStyle: 'none' }),
-                new Rule('.ar-tree__row', {
-                    alignItems: 'center',
-                    borderRadius: '4px',
-                    boxSizing: 'border-box',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    gap: '6px',
-                    transition: 'background 0.14s ease',
-                }),
-                new Rule('.ar-tree__row:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
-                new Rule('.ar-tree__row--on', {
-                    background: 'var(--arianna-primary, #1f6feb)',
-                    color: '#ffffff',
-                }),
-                new Rule('.ar-tree__arrow', {
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    flexShrink: '0',
-                    fontSize: '0.7rem',
-                    textAlign: 'center',
-                    width: '14px',
-                }),
-                new Rule('.ar-tree__row--on .ar-tree__arrow', { color: '#ffffff' }),
-                new Rule('.ar-tree__cb', { flexShrink: '0', margin: '0' }),
-                new Rule('.ar-tree__icon', { flexShrink: '0' }),
-                new Rule('.ar-tree__label', {
-                    flex: '1',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                }),
-                new Rule('.ar-tree__badge', {
-                    background: 'var(--arianna-warning, #f5a623)',
-                    borderRadius: '8px',
-                    color: '#000000',
-                    flexShrink: '0',
-                    fontSize: '0.65rem',
-                    padding: '1px 5px',
-                }),
-            ]);
+            this.tick$.Set(this.tick$.Get() + 1);
+            if(this.isConnected) this.Render();
+        }
+
+        public static DefaultSheet(): Types.Stylesheet
+        {
+            return Styles;
         }
     }
 }
-export default TreeView;
 
-export type TreeNode = TreeView.TreeNode;
-
-export type TreeViewOptions = TreeView.TreeViewOptions;
+export type TreeNode = TreeView.Interfaces.TreeNode;
+export type TreeViewOptions = TreeView.Interfaces.TreeViewOptions;
+export default TreeView.TreeView;

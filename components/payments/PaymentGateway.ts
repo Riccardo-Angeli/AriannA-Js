@@ -8,7 +8,7 @@
  * @description AriannA PaymentGateway component module.
  */
 
-import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
+
 import { ApplePay } from './ApplePay.ts';
 import { GooglePay } from './GooglePay.ts';
 import { CreditCard } from './CreditCard.ts';
@@ -18,6 +18,17 @@ import { Satispay } from './Satispay.ts';
 import { Nexi } from './Nexi.ts';
 import { AliPay } from './AliPay.ts';
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountPaymentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Reactivity: any;
+declare namespace Reactivity { type Signal<T> = any; type Effect = any; }
+declare const Templates: any;
+
 
 /** @namespace   PaymentGateway
  *  @public
@@ -625,7 +636,7 @@ export namespace PaymentGateway
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -657,41 +668,18 @@ export namespace PaymentGateway
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     export const METHOD_META: Array<{
-        /** @name        id
-         *  @public
-         *  @type        {PaymentGateway.Types.PaymentMethodId}
-         *  @description Component member for id.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         id: Types.PaymentMethodId;
-
-        /** @name        label
-         *  @public
-         *  @type        {string}
-         *  @description Component member for label.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         label: string;
-
-        /** @name        icon
-         *  @public
-         *  @type        {string}
-         *  @description Component member for icon.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         icon: string;
     }> = [
-        { id: 'applePay', label: 'Apple Pay', icon: '' },
-        { id: 'googlePay', label: 'Google Pay', icon: 'G' },
-        { id: 'card', label: 'Credit / Debit Card', icon: '▣' },
-        { id: 'paypal', label: 'PayPal', icon: 'P' },
-        { id: 'stripe', label: 'Stripe', icon: 'S' },
-        { id: 'satispay', label: 'Satispay', icon: '◉' },
-        { id: 'nexi', label: 'Nexi', icon: 'n' },
-        { id: 'alipay', label: 'Alipay', icon: '支' },
+        { id: 'applePay', label: 'Apple Pay', icon: `<svg viewBox="0 0 66 24" aria-label="Apple Pay"><path fill="currentColor" d="M15.8 7.5c.9-1.1 1.5-2.6 1.3-4.1-1.3.1-2.9.9-3.8 2-.8.9-1.6 2.5-1.4 4 1.5.1 3-.8 3.9-1.9zM20.7 13.5c0-3.2 2.6-4.8 2.7-4.9-1.5-2.2-3.9-2.5-4.7-2.5-2-.2-3.9 1.2-4.9 1.2s-2.6-1.1-4.2-1.1c-2.2 0-4.2 1.3-5.3 3.2-2.3 3.9-.6 9.7 1.6 12.9 1.1 1.6 2.4 3.3 4 3.2 1.6-.1 2.2-1 4.2-1 2 0 2.5 1 4.2 1 1.8 0 2.9-1.6 3.9-3.1 1.2-1.8 1.7-3.6 1.8-3.7-.1 0-3.4-1.3-3.3-5.2z"/><text x="28" y="18" font-family="Arial,sans-serif" font-size="14" font-weight="700" fill="currentColor">Pay</text></svg>` },
+        { id: 'googlePay', label: 'Google Pay', icon: `<svg viewBox="0 0 76 24" aria-label="Google Pay"><text x="3" y="18" font-family="Arial,sans-serif" font-size="15" font-weight="700"><tspan fill="#4285F4">G</tspan><tspan fill="currentColor"> Pay</tspan></text></svg>` },
+        { id: 'card', label: 'Credit / Debit Card', icon: `<svg viewBox="0 0 42 28" aria-label="Card"><rect x="1" y="3" width="40" height="22" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2 9h38" stroke="currentColor" stroke-width="3"/><rect x="6" y="16" width="10" height="3" rx="1" fill="currentColor"/></svg>` },
+        { id: 'paypal', label: 'PayPal', icon: `<svg viewBox="0 0 64 24" aria-label="PayPal"><text x="2" y="18" font-family="Arial,sans-serif" font-size="15" font-style="italic" font-weight="800"><tspan fill="#003087">Pay</tspan><tspan fill="#009CDE">Pal</tspan></text></svg>` },
+        { id: 'stripe', label: 'Stripe', icon: `<svg viewBox="0 0 58 24" aria-label="Stripe"><rect width="58" height="24" rx="5" fill="#635BFF"/><text x="29" y="17" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="800" fill="#fff">stripe</text></svg>` },
+        { id: 'satispay', label: 'Satispay', icon: `<svg viewBox="0 0 70 24" aria-label="Satispay"><circle cx="12" cy="12" r="10" fill="#FF3A44"/><circle cx="12" cy="12" r="4" fill="#fff"/><text x="27" y="17" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="currentColor">Satispay</text></svg>` },
+        { id: 'nexi', label: 'Nexi', icon: `<svg viewBox="0 0 58 24" aria-label="Nexi"><rect width="58" height="24" rx="5" fill="#081E5B"/><text x="29" y="17" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="800" fill="#fff">nexi</text></svg>` },
+        { id: 'alipay', label: 'Alipay', icon: `<svg viewBox="0 0 64 24" aria-label="Alipay"><rect width="64" height="24" rx="5" fill="#1677FF"/><text x="32" y="17" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="800" fill="#fff">Alipay</text></svg>` },
     ];
 
     /** @class       PaymentGateway
@@ -701,10 +689,38 @@ export namespace PaymentGateway
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-payment-gateway', {}, {
+        shadow: false,
         Attributes: ['amount', 'currency', 'title'],
     })
-    export class PaymentGateway extends HTMLElement
+    export class PaymentGateway extends HTMLDivElement
     {
+        public static readonly Styles = PaymentGateway.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'PaymentGateway';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(!this.methods$) this.methods$ = signal<Interfaces.PaymentGatewayMethodConfig>({});
+            if(!this.selected$) this.selected$ = signal<Types.PaymentMethodId | null>(null);
+            if(!this._instances) this._instances = {};
+            this.classList.add('PaymentGateway');
+        }
+
         /** Compiler-visible binding factory installed by the Component decorator. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -718,7 +734,7 @@ export namespace PaymentGateway
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        methods$: Types.Signal<Interfaces.PaymentGatewayMethodConfig> = signal<Interfaces.PaymentGatewayMethodConfig>({});
+        declare methods$: Types.Signal<Interfaces.PaymentGatewayMethodConfig>;
 
         /** @name        selected$
          *  @public
@@ -727,16 +743,16 @@ export namespace PaymentGateway
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        selected$: Types.Signal<Types.PaymentMethodId | null> = signal<Types.PaymentMethodId | null>(null);
+        declare selected$: Types.Signal<Types.PaymentMethodId | null>;
         // Cached widget instances — created lazily when a method is selected
-        /** @name        #instances
+        /** @name        _instances
          *  @public
          *  @type        {Partial<Record<PaymentGateway.Types.PaymentMethodId, Element>>}
          *  @description Component member for instances.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #instances: Partial<Record<Types.PaymentMethodId, Element>> = {};
+        declare _instances: Partial<Record<Types.PaymentMethodId, Element>>;
 
         /** @name        onConnected
          *  @public
@@ -749,6 +765,10 @@ export namespace PaymentGateway
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.PaymentGatewayOptions = {} as Interfaces.PaymentGatewayOptions)
         {
+            if(!this.methods$) this.methods$ = signal<Interfaces.PaymentGatewayMethodConfig>({});
+            if(!this.selected$) this.selected$ = signal<Types.PaymentMethodId | null>(null);
+            if(!this._instances) this._instances = {};
+            if(this.dataset.ariannaFolderReady === 'true') return;
             /** @name        titleAttr
              *  @public
              *  @type        {inferred}
@@ -863,7 +883,7 @@ export namespace PaymentGateway
                             <span class="ar-pg__radio">
                                 <span a-if="m.selected">●</span>
                             </span>
-                            <span class="ar-pg__icon">{{ m.icon }}</span>
+                            <span class="ar-pg__icon" a-html="m.icon"></span>
                             <span class="ar-pg__label">{{ m.label }}</span>
                         </div>
                         <div class="ar-pg__mount" :data-mount="m.id" a-if="m.selected"></div>
@@ -871,6 +891,8 @@ export namespace PaymentGateway
                 </div>
             </div>
         `;
+            MountPaymentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -938,7 +960,7 @@ export namespace PaymentGateway
                 bubbles: true, detail: { method: id },
             }));
             // Mount the underlying widget lazily after DOM update
-            queueMicrotask(() => this.#mountMethod(id));
+            queueMicrotask(() => this._mountMethod(id));
             return this;
         }
 
@@ -973,7 +995,7 @@ export namespace PaymentGateway
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const inst = this.#instances[sel as Types.PaymentMethodId];
+            const inst = this._instances[sel as Types.PaymentMethodId];
             if (!inst)
                 return;
 
@@ -999,7 +1021,7 @@ export namespace PaymentGateway
                 await w.pay();
         }
         // ── Internal ─────────────────────────────────────────────────────────────
-        /** @name        #mountMethod
+        /** @name        _mountMethod
          *  @public
          *  @type        {void}
          *  @description Component member for mount Method.
@@ -1008,7 +1030,7 @@ export namespace PaymentGateway
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #mountMethod(id: Types.PaymentMethodId): void
+        _mountMethod(id: Types.PaymentMethodId): void
         {
             /** @name        host
              *  @public
@@ -1317,7 +1339,7 @@ export namespace PaymentGateway
             if (el)
             {
                 host.appendChild(el);
-                this.#instances[id] = el;
+                this._instances[id] = el;
             }
         }
 
@@ -1481,35 +1503,38 @@ export namespace PaymentGateway
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', {
+                new Rule('.PaymentGateway', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
                     display: 'block',
                     fontFamily: '-apple-system, system-ui, sans-serif',
                     fontSize: '13px',
-                    color: 'var(--arianna-text, #1f2328)',
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
                     maxWidth: '480px',
                 }),
                 new Rule('.ar-pg', {
                     display: 'flex', flexDirection: 'column',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                     borderRadius: 'var(--arianna-radius, 8px)',
                     overflow: 'hidden',
                 }),
                 new Rule('.ar-pg__title', {
                     padding: '14px 18px',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg-3, var(--bg3, #f6f7f9))',
+                    borderBottom: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                     fontWeight: '600',
                     fontSize: '14px',
                 }),
                 new Rule('.ar-pg__list', { display: 'flex', flexDirection: 'column' }),
                 new Rule('.ar-pg__row', {
                     display: 'flex', flexDirection: 'column',
-                    borderBottom: '1px solid var(--arianna-bg-3, #f3f3f3)',
+                    borderBottom: '1px solid var(--arianna-bg-3, var(--bg3, #f6f7f9))',
                     cursor: 'pointer',
                     transition: 'background 0.1s',
                 }),
-                new Rule('.ar-pg__row:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+                new Rule('.ar-pg__row:hover', { background: 'var(--arianna-bg-3, var(--bg3, #f6f7f9))' }),
                 new Rule('.ar-pg__row--selected', {
                     background: 'rgba(31,111,235,0.04)',
                     cursor: 'default',
@@ -1520,14 +1545,14 @@ export namespace PaymentGateway
                 }),
                 new Rule('.ar-pg__radio', {
                     width: '18px', height: '18px',
-                    border: '2px solid var(--arianna-muted, #6e6b62)',
+                    border: '2px solid var(--arianna-muted, var(--muted, #687079))',
                     borderRadius: '50%',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '14px',
-                    color: 'var(--arianna-primary, #1f6feb)',
+                    color: 'var(--arianna-primary, var(--accent, #e40c88))',
                 }),
                 new Rule('.ar-pg__row--selected .ar-pg__radio', {
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                    borderColor: 'var(--arianna-primary, var(--accent, #e40c88))',
                 }),
                 new Rule('.ar-pg__icon', {
                     fontSize: '16px', fontWeight: '700',

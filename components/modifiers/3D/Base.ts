@@ -8,7 +8,10 @@
  * @description AriannA Base component module.
  */
 
-import { Component, Templates } from '../../../core/index.ts';
+declare const Component: any;
+declare const Templates: any;
+
+
 
 /** @name        html
  *  @public
@@ -414,8 +417,30 @@ export namespace Modifier3D
         @Component('arianna-modifier-3d', {}, {
         Attributes: ['for', 'enabled'],
     })
-    export class Modifier3DElement extends HTMLElement
+    export class Modifier3DElement extends HTMLDivElement
     {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'Modifier3DElement';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+        }
+
         /** @name        template
          *  @public
          *  @type        {unknown}

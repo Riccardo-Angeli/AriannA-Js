@@ -1,3 +1,4 @@
+import { MountPaymentTemplate } from './Base.ts';
 /**
  * @module    components/payments/Satispay
  * @author    Riccardo Angeli
@@ -8,7 +9,14 @@
  * @description AriannA Satispay component module.
  */
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Templates: any;
+
+
 
 /** @namespace   Satispay
  *  @public
@@ -133,10 +141,35 @@ export namespace Satispay
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-satispay', {}, {
+        shadow: false,
         Attributes: ['redirect-url', 'amount', 'currency', 'target'],
     })
-    export class Satispay extends HTMLElement
+    export class Satispay extends HTMLDivElement
     {
+        public static readonly Styles = Satispay.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'Satispay';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('Satispay');
+        }
+
         /** Compiler-visible binding factory installed by the Component decorator. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -154,6 +187,8 @@ export namespace Satispay
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.SatispayOptions = {} as Interfaces.SatispayOptions)
         {
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            (this as any).SATISPAY_LOGO = SATISPAY_LOGO;
             /** @name        amountAttr
              *  @public
              *  @type        {inferred}
@@ -194,10 +229,12 @@ export namespace Satispay
             this.onClick = () => { void this.pay(); };
             this.template = html `
             <button type="button" class="ar-satispay__btn" @click="this.onClick">
-                <span class="ar-satispay__logo" a-html="SATISPAY_LOGO"></span>
+                <span class="ar-satispay__logo" a-html="this.SATISPAY_LOGO"></span>
                 <span>{{ this.btnLabel() }}</span>
             </button>
         `;
+            MountPaymentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -353,7 +390,10 @@ export namespace Satispay
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'inline-block' }),
+                new Rule('.Satispay', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0', display: 'inline-block' }),
                 new Rule('.ar-satispay__btn', {
                     display: 'inline-flex',
                     alignItems: 'center',

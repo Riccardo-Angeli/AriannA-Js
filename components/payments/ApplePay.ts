@@ -8,8 +8,19 @@
  * @description AriannA ApplePay component module.
  */
 
-import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
+
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountPaymentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Reactivity: any;
+declare namespace Reactivity { type Signal<T> = any; type Effect = any; }
+declare const Templates: any;
+
 
 /** @namespace   ApplePay
  *  @public
@@ -220,7 +231,7 @@ export namespace ApplePay
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -247,14 +258,41 @@ export namespace ApplePay
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-apple-pay', {}, {
+        shadow: false,
         Attributes: [
             'merchant-id', 'country-code', 'currency', 'amount', 'label',
             'supported-networks', 'merchant-capabilities',
             'force-show', 'button-style', 'button-type',
         ],
     })
-    export class ApplePay extends HTMLElement
+    export class ApplePay extends HTMLDivElement
     {
+        public static readonly Styles = ApplePay.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'ApplePay';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(!this.available$) this.available$ = signal<boolean>(false);
+            if(!this.busy$) this.busy$ = signal<boolean>(false);
+            this.classList.add('ApplePay');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -268,7 +306,7 @@ export namespace ApplePay
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        available$: Types.Signal<boolean> = signal<boolean>(false);
+        declare available$: Types.Signal<boolean>;
 
         /** @name        busy$
          *  @public
@@ -277,7 +315,7 @@ export namespace ApplePay
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        busy$: Types.Signal<boolean> = signal<boolean>(false);
+        declare busy$: Types.Signal<boolean>;
 
         /** @name        onConnected
          *  @public
@@ -290,6 +328,10 @@ export namespace ApplePay
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.ApplePayOptions = {} as Interfaces.ApplePayOptions)
         {
+            if(!this.available$) this.available$ = signal<boolean>(false);
+            if(!this.busy$) this.busy$ = signal<boolean>(false);
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            (this as any).APPLE_LOGO_SVG = APPLE_LOGO_SVG;
             /** @name        styleAttr
              *  @public
              *  @type        {inferred}
@@ -354,13 +396,15 @@ export namespace ApplePay
                     :class="this.btnCls()"
                     a-if="this.visible()"
                     @click="this.onClick">
-                <span class="ar-applepay__logo" a-html="APPLE_LOGO_SVG"></span>
+                <span class="ar-applepay__logo" a-html="this.APPLE_LOGO_SVG"></span>
                 <span class="ar-applepay__label">{{ this.btnLabel() }} Pay</span>
             </button>
             <div class="ar-applepay__fallback" a-if="!this.visible()">
                 Apple Pay isn't available on this device.
             </div>
         `;
+            MountPaymentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -709,7 +753,10 @@ export namespace ApplePay
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'inline-block' }),
+                new Rule('.ApplePay', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0', display: 'inline-block' }),
                 new Rule('.ar-applepay__btn', {
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -732,7 +779,7 @@ export namespace ApplePay
                 }),
                 new Rule('.ar-applepay__btn--white', {
                     background: '#fff', color: '#000',
-                    border: '1px solid #d8d8d8',
+                    border: '1px solid #e6e8eb',
                 }),
                 new Rule('.ar-applepay__btn--white-outline', {
                     background: '#fff', color: '#000',
@@ -745,7 +792,7 @@ export namespace ApplePay
                 new Rule('.ar-applepay__logo svg', { width: '100%', height: '100%' }),
                 new Rule('.ar-applepay__fallback', {
                     fontSize: '12px',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
                     padding: '8px',
                 }),
             ]);

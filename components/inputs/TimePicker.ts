@@ -142,6 +142,7 @@ export namespace TimePicker
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-time-picker', {}, {
+        shadow: false,
         Attributes: ['label', 'value', 'seconds', 'min', 'max', 'disabled'],
     })
     export class TimePicker extends HTMLElement
@@ -163,68 +164,432 @@ export namespace TimePicker
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.TimePickerOptions = {})
         {
-            /** @name        label
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned label value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const label = this.signal().attribute('label');
-
-            /** @name        value
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned value value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const value = this.signal().attribute('value');
-            this.hasLabel = () => !!label.Get();
-            this.labelText = () => label.Get() ?? '';
-            this.inpValue = () => value.Get() ?? '';
-            this.inpMin = () => this.getAttribute('min') ?? '';
-            this.inpMax = () => this.getAttribute('max') ?? '';
-            this.inpStep = () => this.hasAttribute('seconds') ? '1' : '60';
-            this.isDisabled = () => this.hasAttribute('disabled');
-            this.onChange = (e: Event) => {
-                /** @name        inp
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned inp value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const inp = e.target as HTMLInputElement;
-                this.setAttribute('value', inp.value);
-                this.dispatchEvent(new CustomEvent('arianna:change', {
-                    bubbles: true, detail: { value: inp.value },
-                }));
+            type Draft = {
+                hour: number;
+                minute: number;
+                second: number;
+                period: 'AM' | 'PM';
             };
-            this.template = html `
-            <div class="ar-timepicker__label" a-if="this.hasLabel()">{{ this.labelText() }}</div>
-            <div class="ar-timepicker__wrap">
-                <span class="ar-timepicker__icon">🕐</span>
-                <input class="ar-timepicker__input"
-                       type="time"
-                       :value="this.inpValue()"
-                       :min="this.inpMin()"
-                       :max="this.inpMax()"
-                       :step="this.inpStep()"
-                       :disabled="this.isDisabled()"
-                       @change="this.onChange"/>
-            </div>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {TimePicker.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = TimePicker.DefaultSheet();
+
+            type Runtime = TimePicker & {
+                __timeOpen?: boolean;
+                __timeDraft?: Draft;
+                __timeRender?: () => void;
+                __timeOutside?: (event: Event) => void;
+                onAttributeChanged?: () => void;
+            };
+
+            const self = this as Runtime;
+            this.classList.add('TimePicker');
+
+            if (self.__timeOpen === undefined)
+                self.__timeOpen = false;
+
+            const clamp = (value: number, min: number, max: number): number =>
+                Math.min(max, Math.max(min, value));
+
+            const pad = (value: number): string =>
+                String(value).padStart(2, '0');
+
+            const parse = (value: string): Draft =>
+            {
+                const [rawHour = '0', rawMinute = '0', rawSecond = '0'] =
+                    value.trim().split(':');
+
+                const hour = clamp(Number(rawHour) || 0, 0, 23);
+
+                return {
+                    hour,
+                    minute: clamp(Number(rawMinute) || 0, 0, 59),
+                    second: clamp(Number(rawSecond) || 0, 0, 59),
+                    period: hour >= 12 ? 'PM' : 'AM',
+                };
+            };
+
+            const copy = (draft: Draft): Draft => ({ ...draft });
+
+            const toSeconds = (draft: Draft): number =>
+                draft.hour * 3600 + draft.minute * 60 + draft.second;
+
+            const fromSeconds = (total: number): Draft =>
+            {
+                total = clamp(total, 0, 86399);
+
+                const hour = Math.floor(total / 3600);
+
+                return {
+                    hour,
+                    minute: Math.floor((total % 3600) / 60),
+                    second: total % 60,
+                    period: hour >= 12 ? 'PM' : 'AM',
+                };
+            };
+
+            const bound = (draft: Draft): Draft =>
+            {
+                let total = toSeconds(draft);
+
+                const min = this.getAttribute('min');
+                const max = this.getAttribute('max');
+
+                if (min)
+                    total = Math.max(total, toSeconds(parse(min)));
+
+                if (max)
+                    total = Math.min(total, toSeconds(parse(max)));
+
+                return fromSeconds(total);
+            };
+
+            const valueOf = (draft: Draft, withSeconds: boolean): string =>
+                `${pad(draft.hour)}:${pad(draft.minute)}${withSeconds ? `:${pad(draft.second)}` : ''}`;
+
+            const displayOf = (draft: Draft, withSeconds: boolean): string =>
+            {
+                if (withSeconds)
+                    return `${pad(draft.hour)}:${pad(draft.minute)}:${pad(draft.second)}`;
+
+                const hour12 = draft.hour % 12 || 12;
+                return `${pad(hour12)}:${pad(draft.minute)} ${draft.hour >= 12 ? 'PM' : 'AM'}`;
+            };
+
+            const render = () =>
+            {
+                const withSeconds = this.hasAttribute('seconds');
+                const disabled = this.hasAttribute('disabled');
+                const current = parse(this.getAttribute('value') ?? '12:00');
+                const labelText = this.getAttribute('label') ?? '';
+
+                const label = document.createElement('div');
+                label.className = 'ar-timepicker__label';
+                label.textContent = labelText;
+                label.hidden = !labelText;
+
+                const wrap = document.createElement('div');
+                wrap.className = 'ar-timepicker__wrap';
+
+                const input = document.createElement('button');
+                input.type = 'button';
+                input.className = 'ar-timepicker__input ar-timepicker__button';
+                input.disabled = disabled;
+                input.textContent = displayOf(current, withSeconds);
+                input.setAttribute('aria-haspopup', 'dialog');
+                input.setAttribute('aria-expanded', self.__timeOpen ? 'true' : 'false');
+
+                const icon = document.createElement('button');
+                icon.type = 'button';
+                icon.className = 'ar-timepicker__icon';
+                icon.textContent = '◷';
+                icon.disabled = disabled;
+                icon.ariaLabel = 'Open time picker';
+                icon.setAttribute('aria-expanded', self.__timeOpen ? 'true' : 'false');
+
+                wrap.append(input, icon);
+
+                const nodes: Node[] = [label, wrap];
+
+                if (self.__timeOpen && !disabled)
+                {
+                    const draft = self.__timeDraft ?? copy(current);
+                    self.__timeDraft = draft;
+
+                    const popup = document.createElement('div');
+                    popup.className = 'ar-timepicker__popup';
+                    popup.addEventListener('pointerdown', event => event.stopPropagation());
+
+                    const header = document.createElement('div');
+                    header.className = 'ar-timepicker__header';
+
+                    const headline = document.createElement('strong');
+                    headline.className = 'ar-timepicker__headline';
+
+                    const now = document.createElement('button');
+                    now.type = 'button';
+                    now.className = 'ar-timepicker__now';
+                    now.textContent = 'NOW';
+
+                    header.append(headline, now);
+
+                    const columnHeads = document.createElement('div');
+                    columnHeads.className = 'ar-timepicker__column-heads';
+
+                    for (const heading of withSeconds ? ['Hour', 'Minute', 'Second'] : ['Hour', 'Minute', 'AM/PM'])
+                    {
+                        const item = document.createElement('span');
+                        item.textContent = heading;
+                        columnHeads.appendChild(item);
+                    }
+
+                    const wheels = document.createElement('div');
+                    wheels.className = 'ar-timepicker__wheels';
+
+                    const repaintFunctions: Array<() => void> = [];
+                    let programmaticScroll = false;
+
+                    const repaintAll = () =>
+                    {
+                        headline.textContent = displayOf(draft, withSeconds);
+                        programmaticScroll = true;
+
+                        for (const repaint of repaintFunctions)
+                            repaint();
+
+                        requestAnimationFrame(() => { programmaticScroll = false; });
+                    };
+
+                    const range = (start: number, end: number): number[] =>
+                        Array.from({ length: end - start + 1 }, (_, index) => start + index);
+
+                    const createWheel =
+                    (
+                        entries: Array<{ label: string; value: string }>,
+                        selected: () => string,
+                        choose: (value: string) => void
+                    ) =>
+                    {
+                        const root = document.createElement('div');
+                        root.className = 'ar-timepicker__wheel';
+
+                        const list = document.createElement('div');
+                        list.className = 'ar-timepicker__wheel-list';
+                        list.tabIndex = 0;
+
+                        for (const entry of entries)
+                        {
+                            const item = document.createElement('button');
+                            item.type = 'button';
+                            item.className = 'ar-timepicker__wheel-item';
+                            item.dataset.value = entry.value;
+                            item.textContent = entry.label;
+
+                            item.addEventListener('click', () =>
+                            {
+                                choose(entry.value);
+                                repaintAll();
+                            });
+
+                            list.appendChild(item);
+                        }
+
+                        let frame = 0;
+
+                        list.addEventListener('scroll', () =>
+                        {
+                            if (programmaticScroll)
+                                return;
+
+                            cancelAnimationFrame(frame);
+
+                            frame = requestAnimationFrame(() =>
+                            {
+                                const index = clamp(Math.round(list.scrollTop / 36), 0, entries.length - 1);
+                                const entry = entries[index];
+
+                                if (entry && entry.value !== selected())
+                                {
+                                    choose(entry.value);
+                                    repaintAll();
+                                }
+                            });
+                        }, { passive: true });
+
+                        list.addEventListener('keydown', (event: KeyboardEvent) =>
+                        {
+                            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')
+                                return;
+
+                            event.preventDefault();
+
+                            const currentIndex = Math.max(0, entries.findIndex(entry => entry.value === selected()));
+                            const delta = event.key === 'ArrowDown' ? 1 : -1;
+                            const nextIndex = clamp(currentIndex + delta, 0, entries.length - 1);
+
+                            choose(entries[nextIndex].value);
+                            repaintAll();
+                        });
+
+                        const repaint = () =>
+                        {
+                            const selectedValue = selected();
+
+                            for (const child of Array.from(list.children))
+                            {
+                                const item = child as HTMLButtonElement;
+                                const active = item.dataset.value === selectedValue;
+
+                                item.classList.toggle('is-selected', active);
+                                item.ariaSelected = active ? 'true' : 'false';
+                            }
+
+                            const index = Math.max(0, entries.findIndex(entry => entry.value === selectedValue));
+                            list.scrollTop = index * 36;
+                        };
+
+                        root.appendChild(list);
+                        return { root, repaint };
+                    };
+
+                    if (withSeconds)
+                    {
+                        const hours = createWheel(
+                            range(0, 23).map(value => ({ label: pad(value), value: String(value) })),
+                            () => String(draft.hour),
+                            value => {
+                                draft.hour = Number(value);
+                                draft.period = draft.hour >= 12 ? 'PM' : 'AM';
+                            }
+                        );
+
+                        const minutes = createWheel(
+                            range(0, 59).map(value => ({ label: pad(value), value: String(value) })),
+                            () => String(draft.minute),
+                            value => { draft.minute = Number(value); }
+                        );
+
+                        const seconds = createWheel(
+                            range(0, 59).map(value => ({ label: pad(value), value: String(value) })),
+                            () => String(draft.second),
+                            value => { draft.second = Number(value); }
+                        );
+
+                        wheels.append(hours.root, minutes.root, seconds.root);
+                        repaintFunctions.push(hours.repaint, minutes.repaint, seconds.repaint);
+                    }
+                    else
+                    {
+                        const hours = createWheel(
+                            range(1, 12).map(value => ({ label: pad(value), value: String(value) })),
+                            () => String(draft.hour % 12 || 12),
+                            value => {
+                                const hour12 = Number(value) % 12;
+                                draft.hour = hour12 + (draft.period === 'PM' ? 12 : 0);
+                            }
+                        );
+
+                        const minutes = createWheel(
+                            range(0, 59).map(value => ({ label: pad(value), value: String(value) })),
+                            () => String(draft.minute),
+                            value => { draft.minute = Number(value); }
+                        );
+
+                        const period = createWheel(
+                            [{ label: 'AM', value: 'AM' }, { label: 'PM', value: 'PM' }],
+                            () => draft.period,
+                            value => {
+                                draft.period = value as 'AM' | 'PM';
+                                const hour12 = draft.hour % 12;
+                                draft.hour = hour12 + (draft.period === 'PM' ? 12 : 0);
+                            }
+                        );
+
+                        wheels.append(hours.root, minutes.root, period.root);
+                        repaintFunctions.push(hours.repaint, minutes.repaint, period.repaint);
+                    }
+
+                    const footer = document.createElement('div');
+                    footer.className = 'ar-timepicker__footer';
+
+                    const cancel = document.createElement('button');
+                    cancel.type = 'button';
+                    cancel.className = 'ar-timepicker__footer-action';
+                    cancel.textContent = 'Cancel';
+
+                    const set = document.createElement('button');
+                    set.type = 'button';
+                    set.className = 'ar-timepicker__footer-action ar-timepicker__footer-action--set';
+                    set.textContent = 'Set';
+
+                    footer.append(cancel, set);
+
+                    now.addEventListener('click', () =>
+                    {
+                        const date = new Date();
+
+                        draft.hour = date.getHours();
+                        draft.minute = date.getMinutes();
+                        draft.second = date.getSeconds();
+                        draft.period = draft.hour >= 12 ? 'PM' : 'AM';
+
+                        repaintAll();
+                    });
+
+                    cancel.addEventListener('click', () =>
+                    {
+                        self.__timeOpen = false;
+                        self.__timeDraft = undefined;
+                        render();
+                    });
+
+                    set.addEventListener('click', () =>
+                    {
+                        const committed = bound(draft);
+                        const value = valueOf(committed, withSeconds);
+
+                        self.__timeOpen = false;
+                        self.__timeDraft = undefined;
+
+                        this.setAttribute('value', value);
+
+                        this.dispatchEvent(new CustomEvent(
+                            'arianna:change',
+                            { bubbles: true, composed: true, detail: { value } }
+                        ));
+
+                        render();
+                    });
+
+                    popup.append(header, columnHeads, wheels, footer);
+                    nodes.push(popup);
+
+                    requestAnimationFrame(repaintAll);
+                }
+
+                const toggle = (event: Event) =>
+                {
+                    event.stopPropagation();
+
+                    if (disabled)
+                        return;
+
+                    self.__timeOpen = !self.__timeOpen;
+                    self.__timeDraft = self.__timeOpen ? copy(current) : undefined;
+                    render();
+                };
+
+                input.addEventListener('click', toggle);
+                icon.addEventListener('click', toggle);
+
+                this.replaceChildren(...nodes);
+            };
+
+            self.__timeRender = render;
+            self.onAttributeChanged = () => render();
+
+            if (!self.__timeOutside)
+            {
+                self.__timeOutside = (event: Event) =>
+                {
+                    const target = event.target;
+
+                    if (
+                        self.__timeOpen &&
+                        target instanceof Node &&
+                        !this.contains(target)
+                    )
+                    {
+                        self.__timeOpen = false;
+                        self.__timeDraft = undefined;
+                        render();
+                    }
+                };
+
+                document.addEventListener('pointerdown', self.__timeOutside);
+            }
+
+            render();
+
+            (this as unknown as { Sheet: Types.Stylesheet | null }).Sheet =
+                TimePicker.DefaultSheet();
         }
 
         /** @name        onCreated
@@ -295,7 +660,25 @@ export namespace TimePicker
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        onUnmount() { }
+        onUnmount()
+        {
+            const self = this as TimePicker & {
+                __timeOutside?: (event: Event) => void;
+                __timeRender?: () => void;
+                __timeOpen?: boolean;
+                __timeDraft?: unknown;
+            };
+
+            if (self.__timeOutside)
+            {
+                document.removeEventListener('pointerdown', self.__timeOutside);
+                self.__timeOutside = undefined;
+            }
+
+            self.__timeRender = undefined;
+            self.__timeOpen = false;
+            self.__timeDraft = undefined;
+        }
 
         /** @name        value
          *  @public
@@ -421,31 +804,186 @@ export namespace TimePicker
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '4px' }),
+                new Rule('arianna-time-picker', {
+                    display: 'inline-block',
+                    position: 'relative',
+                    width: '100%',
+                    maxWidth: '280px',
+                }),
                 new Rule('.ar-timepicker__label', {
                     color: 'var(--arianna-muted, #6e6b62)',
                     fontSize: '0.78rem',
                     fontWeight: '500',
+                    marginBottom: '4px',
                 }),
                 new Rule('.ar-timepicker__wrap', {
                     alignItems: 'center',
                     background: 'var(--arianna-bg, #ffffff)',
                     border: '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',
+                    cursor: 'pointer',
                     display: 'flex',
                     gap: '8px',
+                    minHeight: '36px',
                     padding: '5px 10px',
                     transition: 'border-color 0.18s ease',
                 }),
-                new Rule('.ar-timepicker__wrap:focus-within', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
-                new Rule('.ar-timepicker__icon', { flexShrink: '0' }),
+                new Rule('.ar-timepicker__wrap:focus-within', {
+                    borderColor: 'var(--arianna-primary, #e40c88)',
+                }),
                 new Rule('.ar-timepicker__input', {
                     background: 'none',
                     border: 'none',
                     color: 'var(--arianna-text, #1f2328)',
+                    cursor: 'pointer',
+                    flex: '1',
+                    font: 'inherit',
+                    fontSize: '0.86rem',
+                    minWidth: '0',
+                    outline: 'none',
+                    padding: '0',
+                    textAlign: 'left',
+                }),
+                new Rule('.ar-timepicker__icon', {
+                    background: 'transparent',
+                    border: '0',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    flexShrink: '0',
+                    font: 'inherit',
+                    fontSize: '1rem',
+                    lineHeight: '1',
+                    padding: '2px 4px',
+                }),
+                new Rule('.ar-timepicker__icon:hover:not(:disabled)', {
+                    color: 'var(--arianna-primary, #e40c88)',
+                }),
+                new Rule('.ar-timepicker__popup', {
+                    background: 'var(--arianna-bg, #ffffff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,.18)',
+                    color: 'var(--arianna-text, #1f2328)',
+                    left: '0',
+                    minWidth: '280px',
+                    overflow: 'hidden',
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    width: '100%',
+                    zIndex: '900',
+                }),
+                new Rule('.ar-timepicker__header', {
+                    alignItems: 'center',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    minHeight: '48px',
+                    padding: '0 16px',
+                }),
+                new Rule('.ar-timepicker__headline', {
+                    fontSize: '0.96rem',
+                    fontVariantNumeric: 'tabular-nums',
+                    fontWeight: '600',
+                }),
+                new Rule('.ar-timepicker__now', {
+                    background: 'transparent',
+                    border: '0',
+                    color: 'var(--arianna-primary, #e40c88)',
+                    cursor: 'pointer',
                     font: 'inherit',
                     fontSize: '0.82rem',
-                    outline: 'none',
+                    fontWeight: '600',
+                    padding: '6px 0 6px 12px',
+                }),
+                new Rule('.ar-timepicker__column-heads', {
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    display: 'grid',
+                    fontSize: '0.70rem',
+                    fontWeight: '600',
+                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                    padding: '0 12px 5px',
+                    textAlign: 'center',
+                }),
+                new Rule('.ar-timepicker__wheels', {
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                    height: '224px',
+                    position: 'relative',
+                }),
+                new Rule('.ar-timepicker__wheels::before', {
+                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                    content: '""',
+                    height: '36px',
+                    left: '0',
+                    pointerEvents: 'none',
+                    position: 'absolute',
+                    right: '0',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    zIndex: '2',
+                }),
+                new Rule('.ar-timepicker__wheel', {
+                    minWidth: '0',
+                    overflow: 'hidden',
+                    position: 'relative',
+                }),
+                new Rule('.ar-timepicker__wheel-list', {
+                    height: '100%',
+                    overflowX: 'hidden',
+                    overflowY: 'auto',
+                    overscrollBehavior: 'contain',
+                    padding: '94px 0',
+                    scrollbarWidth: 'none',
+                    scrollSnapType: 'y mandatory',
+                }),
+                new Rule('.ar-timepicker__wheel-list::-webkit-scrollbar', {
+                    display: 'none',
+                }),
+                new Rule('.ar-timepicker__wheel-item', {
+                    alignItems: 'center',
+                    background: 'transparent',
+                    border: '0',
+                    color: 'var(--arianna-muted, #6e6b62)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    font: 'inherit',
+                    fontSize: '0.88rem',
+                    fontVariantNumeric: 'tabular-nums',
+                    height: '36px',
+                    justifyContent: 'center',
+                    padding: '0 6px',
+                    scrollSnapAlign: 'center',
+                    width: '100%',
+                }),
+                new Rule('.ar-timepicker__wheel-item:hover', {
+                    color: 'var(--arianna-text, #1f2328)',
+                }),
+                new Rule('.ar-timepicker__wheel-item.is-selected', {
+                    color: 'var(--arianna-text, #1f2328)',
+                    fontWeight: '600',
+                }),
+                new Rule('.ar-timepicker__footer', {
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    minHeight: '48px',
+                }),
+                new Rule('.ar-timepicker__footer-action', {
+                    background: 'transparent',
+                    border: '0',
+                    borderRight: '1px solid var(--arianna-border, #d8d8d8)',
+                    color: 'var(--arianna-text, #1f2328)',
+                    cursor: 'pointer',
+                    font: 'inherit',
+                    fontSize: '0.84rem',
+                }),
+                new Rule('.ar-timepicker__footer-action:last-child', {
+                    borderRight: '0',
+                }),
+                new Rule('.ar-timepicker__footer-action--set', {
+                    color: 'var(--arianna-primary, #e40c88)',
+                    fontWeight: '600',
                 }),
             ]);
         }

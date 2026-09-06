@@ -1,3 +1,4 @@
+import { MountPaymentTemplate } from './Base.ts';
 /**
  * @module    components/payments/AliPay
  * @author    Riccardo Angeli
@@ -8,7 +9,14 @@
  * @description AriannA AliPay component module.
  */
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Templates: any;
+
+
 
 /** @namespace   AliPay
  *  @public
@@ -160,10 +168,35 @@ export namespace AliPay
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-alipay', {}, {
+        shadow: false,
         Attributes: ['mode', 'redirect-url', 'qr-url', 'amount', 'currency', 'target'],
     })
-    export class AliPay extends HTMLElement
+    export class AliPay extends HTMLDivElement
     {
+        public static readonly Styles = AliPay.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'AliPay';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('AliPay');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -181,6 +214,8 @@ export namespace AliPay
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.AliPayOptions = {} as Interfaces.AliPayOptions)
         {
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            (this as any).ALIPAY_LOGO = ALIPAY_LOGO;
             /** @name        modeAttr
              *  @public
              *  @type        {inferred}
@@ -257,7 +292,7 @@ export namespace AliPay
             this.template = html `
             <div class="ar-alipay" a-if="!this.isQrMode()">
                 <button type="button" class="ar-alipay__btn" @click="this.onClick">
-                    <span class="ar-alipay__logo" a-html="ALIPAY_LOGO"></span>
+                    <span class="ar-alipay__logo" a-html="this.ALIPAY_LOGO"></span>
                     <span>{{ this.btnLabel() }}</span>
                 </button>
             </div>
@@ -269,6 +304,8 @@ export namespace AliPay
                 <div class="ar-alipay__qr-amount">{{ this.btnLabel() }}</div>
             </div>
         `;
+            MountPaymentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -442,7 +479,10 @@ export namespace AliPay
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'inline-block' }),
+                new Rule('.AliPay', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0', display: 'inline-block' }),
                 new Rule('.ar-alipay__btn', {
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -471,8 +511,8 @@ export namespace AliPay
                     alignItems: 'center',
                     gap: '8px',
                     padding: '14px',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                     borderRadius: 'var(--arianna-radius, 8px)',
                 }),
                 new Rule('.ar-alipay__qr', {
@@ -481,12 +521,12 @@ export namespace AliPay
                 }),
                 new Rule('.ar-alipay__qr-hint', {
                     fontSize: '11px',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
                 }),
                 new Rule('.ar-alipay__qr-amount', {
                     fontSize: '13px',
                     fontWeight: '600',
-                    color: 'var(--arianna-text, #1f2328)',
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
                 }),
             ]);
         }

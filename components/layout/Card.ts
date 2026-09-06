@@ -1,385 +1,330 @@
 /**
- * @module    components/layout/Card
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA Card component module.
+ * @module      components/layout/Card
+ * @description AriannA Card — light-DOM, class-driven, fluent component.
+ * @author      Riccardo Angeli
+ * @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+ * @license     MIT / Commercial (dual license)
  */
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
+/* Runtime symbols are published by AriannA Core before arianna-components is evaluated. */
+declare const Component: any;
+declare const Css: any;
 
-/** @namespace   Card
- *  @public
- *  @description Namespace containing Card contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 export namespace Card
 {
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Types
     {
-        /** @name        Rule
-         *  @public
-         *  @type        {Css.Rule}
-         *  @description Type alias for Rule.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Rule = Css.Rule;
-
-        /** @name        Stylesheet
-         *  @public
-         *  @type        {Css.Stylesheet}
-         *  @description Type alias for Stylesheet.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Stylesheet = Css.Stylesheet;
+        export type Elevation = 0 | 1 | 2 | 3;
     }
 
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Interfaces
     {
-        /** @interface   CardOptions
-         *  @public
-         *  @description CardOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         export interface CardOptions
         {
-            /** @name        title
-             *  @public
-             *  @type        {string}
-             *  @description Component member for title.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             title?: string;
-
-            /** @name        elevation
-             *  @public
-             *  @type        {0 | 1 | 2 | 3}
-             *  @description Component member for elevation.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            elevation?: 0 | 1 | 2 | 3;
-
-            /** @name        interactive
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for interactive.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
+            elevation?: Types.Elevation;
             interactive?: boolean;
         }
     }
 
-    /** @name        html
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned html value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const html = Templates.Template.Html;
+    export type CardOptions = Interfaces.CardOptions;
 
-    /** @name        { Rule, Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Rule, Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const { Rule, Stylesheet } = Css;
-
-    /** @class       Card
-     *  @public
-     *  @description AriannA Card component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-card', {}, {
-        Attributes: ['title', 'elevation', 'interactive'],
-    })
-    export class Card extends HTMLElement
-    {
-        /** Compiler-visible AriannA binding factory installed by @Component. */
-        declare signal: <T>(initial?: T) => Components.Binding<T>;
-
-        /** Compiler-visible AriannA template slot installed by @Component. */
-        declare template: unknown;
-
-        /** @name        onConnected
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Connected.
-         *  @param       {Card.Interfaces.CardOptions} _opts Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onConnected(_opts: Interfaces.CardOptions = {})
+    export const CardStyleMap = Object.freeze
+    (
         {
-            /** @name        title
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned title value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const title = this.signal().attribute('title');
-            this.hasTitle = () => !!title.Get();
-            this.titleText = () => title.Get() ?? '';
-            this.isInteractive = () => this.hasAttribute('interactive');
-            this.onCardClick = () => {
-                if (!this.isInteractive())
-                    return;
-                this.dispatchEvent(new CustomEvent('arianna:click', {
-                    bubbles: true, detail: { source: this },
-                }));
-            };
-            this.template = html `
-            <header class="ar-card__header" a-if="this.hasTitle()">{{ this.titleText() }}</header>
-            <header class="ar-card__header"><slot name="header"></slot></header>
-            <section class="ar-card__body" @click="this.onCardClick"><slot></slot></section>
-            <footer class="ar-card__footer"><slot name="footer"></slot></footer>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Card.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = Card.DefaultSheet();
+            Self   : 'Card',
+            Header : 'Card-header',
+            Body   : 'Card-body',
+            Footer : 'Card-footer'
+        }
+    );
+
+    export function CardDefaultSheet()
+    {
+        return new Css.Stylesheet
+        (
+            [
+                new Css.Rule('arianna-card',
+                {
+                    Background    : 'var(--arianna-bg, #fff)',
+                    Border        : '1px solid var(--arianna-border, #e2e2e6)',
+                    BorderRadius  : '8px',
+                    BoxSizing     : 'border-box',
+                    Color         : 'var(--arianna-text, #1c1e21)',
+                    Display       : 'block',
+                    FontFamily    : 'var(--arianna-font, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)',
+                    MaxWidth      : '100%',
+                    MinWidth      : '0',
+                    Overflow      : 'hidden',
+                    Width         : '100%'
+                }),
+                new Css.Rule('arianna-card[elevation="1"]', { BoxShadow: '0 1px 3px rgba(0,0,0,.08)' }),
+                new Css.Rule('arianna-card[elevation="2"]', { BoxShadow: '0 3px 10px rgba(0,0,0,.10)' }),
+                new Css.Rule('arianna-card[elevation="3"]', { BoxShadow: '0 8px 24px rgba(0,0,0,.14)' }),
+                new Css.Rule('arianna-card[interactive]',
+                {
+                    Cursor     : 'pointer',
+                    Transition : 'border-color .15s ease, box-shadow .15s ease, transform .15s ease'
+                }),
+                new Css.Rule('arianna-card[interactive]:hover',
+                {
+                    BorderColor : 'var(--arianna-primary, #e40c88)',
+                    Transform   : 'translateY(-1px)'
+                }),
+                new Css.Rule('.Card-header',
+                {
+                    Background   : 'var(--arianna-surface-soft, #fafafb)',
+                    BorderBottom : '1px solid var(--arianna-border, #e2e2e6)',
+                    BoxSizing    : 'border-box',
+                    FontSize     : '.82rem',
+                    FontWeight   : '650',
+                    Padding      : '10px 14px'
+                }),
+                new Css.Rule('.Card-body',
+                {
+                    BoxSizing  : 'border-box',
+                    Color      : 'var(--arianna-muted, #666)',
+                    FontSize   : '.80rem',
+                    LineHeight : '1.55',
+                    Padding    : '12px 14px'
+                }),
+                new Css.Rule('.Card-footer',
+                {
+                    BorderTop : '1px solid var(--arianna-border, #e2e2e6)',
+                    BoxSizing : 'border-box',
+                    Padding   : '10px 14px'
+                })
+
+                ,
+                new Css.Rule('arianna-card:not([theme="light"]), .Card:not([theme="light"])',
+                {
+                    Background : '#17181c',
+                    BorderColor: '#303238',
+                    Color      : '#e6e8eb'
+                }),
+                new Css.Rule('arianna-card:not([theme="light"]) .Card-header, .Card:not([theme="light"]) .Card-header',
+                {
+                    Background        : '#1d1e23',
+                    BorderBottomColor : '#303238',
+                    BoxShadow         : 'inset 0 2px 0 #e40c88',
+                    Color             : '#f1f2f4'
+                }),
+                new Css.Rule('arianna-card:not([theme="light"]) .Card-body, .Card:not([theme="light"]) .Card-body',
+                {
+                    Background : '#17181c',
+                    Color      : '#a9afb8'
+                }),
+                new Css.Rule('arianna-card:not([theme="light"]) .Card-footer, .Card:not([theme="light"]) .Card-footer',
+                {
+                    Background     : '#1a1b1f',
+                    BorderTopColor : '#303238'
+                })
+
+            ]
+        );
+    }
+
+    @Component
+    (
+        'arianna-card',
+        CardDefaultSheet(),
+        {
+            Attributes: ['title', 'elevation', 'interactive']
+        }
+    )
+    export class Card extends HTMLDivElement
+    {
+        /** Embedded component icon used by WYSIWYG palettes and drag/drop panels. */
+        static readonly Icon = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 9h18" stroke="currentColor" stroke-width="2"/></svg>`;
+        /** Canonical named default styles. Use e.g. Component.Styles['Disabled']. */
+        static readonly Styles = Object.freeze
+        (
+            {
+                Default:
+                new Css.Rule('arianna-card',
+                {
+                Background    : 'var(--arianna-bg, #fff)',
+                Border        : '1px solid var(--arianna-border, #e2e2e6)',
+                BorderRadius  : '8px',
+                BoxSizing     : 'border-box',
+                Color         : 'var(--arianna-text, #1c1e21)',
+                Display       : 'block',
+                FontFamily    : 'var(--arianna-font, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)',
+                MaxWidth      : '100%',
+                MinWidth      : '0',
+                Overflow      : 'hidden',
+                Width         : '100%'
+                }),
+                Elevation1:
+                new Css.Rule('arianna-card[elevation="1"]', { BoxShadow: '0 1px 3px rgba(0,0,0,.08)' }),
+                Elevation2:
+                new Css.Rule('arianna-card[elevation="2"]', { BoxShadow: '0 3px 10px rgba(0,0,0,.10)' }),
+                Elevation3:
+                new Css.Rule('arianna-card[elevation="3"]', { BoxShadow: '0 8px 24px rgba(0,0,0,.14)' }),
+                Interactive:
+                new Css.Rule('arianna-card[interactive]',
+                {
+                Cursor     : 'pointer',
+                Transition : 'border-color .15s ease, box-shadow .15s ease, transform .15s ease'
+                }),
+                InteractiveHover:
+                new Css.Rule('arianna-card[interactive]:hover',
+                {
+                BorderColor : 'var(--arianna-primary, #e40c88)',
+                Transform   : 'translateY(-1px)'
+                }),
+                Header:
+                new Css.Rule('.Card-header',
+                {
+                Background   : 'var(--arianna-surface-soft, #fafafb)',
+                BorderBottom : '1px solid var(--arianna-border, #e2e2e6)',
+                BoxSizing    : 'border-box',
+                FontSize     : '.82rem',
+                FontWeight   : '650',
+                Padding      : '10px 14px'
+                }),
+                Body:
+                new Css.Rule('.Card-body',
+                {
+                BoxSizing  : 'border-box',
+                Color      : 'var(--arianna-muted, #666)',
+                FontSize   : '.80rem',
+                LineHeight : '1.55',
+                Padding    : '12px 14px'
+                }),
+                Footer:
+                new Css.Rule('.Card-footer',
+                {
+                BorderTop : '1px solid var(--arianna-border, #e2e2e6)',
+                BoxSizing : 'border-box',
+                Padding   : '10px 14px'
+                }),
+            }
+        );
+
+
+        /** Embedded component icon. */
+        get Icon(): string { return Card.Icon; }
+
+        static StyleMap = CardStyleMap;
+        static DefaultSheet = CardDefaultSheet;
+
+        private _generatedHeader?: HTMLElement;
+        private _clickInstalled = false;
+
+        constructor(opts: Interfaces.CardOptions = {})
+        {
+            super();
+            this.classList.add(CardStyleMap.Self);
+            this.applyOptions(opts);
+            this.installInteraction();
+            this.syncTitle();
         }
 
-        /** @name        onCreated
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Created.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onCreated() { }
-
-        /** @name        onBeforeMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeMount() { }
-
-        /** @name        onMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onMount() { }
-
-        /** @name        onBeforeUpdate
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Update.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeUpdate() { }
-
-        /** @name        onUpdate
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Update.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUpdate() { }
-
-        /** @name        onBeforeUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeUnmount() { }
-
-        /** @name        onUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUnmount() { }
-
-        /** @name        title
-         *  @public
-         *  @type        {string}
-         *  @description Component member for title.
-         *  @returns     {string} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get title(): string { return this.getAttribute('title') ?? ''; }
-
-        /** @name        title
-         *  @public
-         *  @type        {void}
-         *  @description Component member for title.
-         *  @param       {string} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set title(v: string) { v ? this.setAttribute('title', v) : this.removeAttribute('title'); }
-
-        /** @name        elevation
-         *  @public
-         *  @type        {number}
-         *  @description Component member for elevation.
-         *  @returns     {number} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get elevation(): number { return parseInt(this.getAttribute('elevation') ?? '0', 10); }
-
-        /** @name        elevation
-         *  @public
-         *  @type        {void}
-         *  @description Component member for elevation.
-         *  @param       {number} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set elevation(v: number) { this.setAttribute('elevation', String(v)); }
-
-        /** @name        interactive
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for interactive.
-         *  @returns     {boolean} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get interactive(): boolean { return this.hasAttribute('interactive'); }
-
-        /** @name        interactive
-         *  @public
-         *  @type        {void}
-         *  @description Component member for interactive.
-         *  @param       {boolean} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set interactive(v: boolean) { v ? this.setAttribute('interactive', '') : this.removeAttribute('interactive'); }
-
-        /** @name        hasTitle
-         *  @private
-         *  @type        {() => boolean}
-         *  @description Component member for has Title.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private hasTitle: () => boolean = () => false;
-
-        /** @name        titleText
-         *  @private
-         *  @type        {() => string}
-         *  @description Component member for title Text.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private titleText: () => string = () => '';
-
-        /** @name        isInteractive
-         *  @private
-         *  @type        {() => boolean}
-         *  @description Component member for is Interactive.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private isInteractive: () => boolean = () => false;
-
-        /** @name        onCardClick
-         *  @private
-         *  @type        {() => void}
-         *  @description Component member for on Card Click.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private onCardClick: () => void = () => { };
-
-        /** @name        DefaultSheet
-         *  @public
-         *  @static
-         *  @type        {Card.Types.Stylesheet}
-         *  @description Component member for Default Sheet.
-         *  @returns     {Card.Types.Stylesheet} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
+        onConnected(): void
         {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--arianna-bg, #ffffff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 8px)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    display: 'block',
-                    overflow: 'hidden',
-                    padding: '0',
-                }),
-                new Rule(':host([elevation="1"])', { boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }),
-                new Rule(':host([elevation="2"])', { boxShadow: '0 2px 6px rgba(0,0,0,0.10)' }),
-                new Rule(':host([elevation="3"])', { boxShadow: '0 6px 18px rgba(0,0,0,0.14)' }),
-                new Rule(':host([interactive])', { cursor: 'pointer', transition: 'transform 0.15s' }),
-                new Rule(':host([interactive]):hover', { transform: 'translateY(-1px)' }),
-                new Rule('.ar-card__header', {
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    fontWeight: '600',
-                    padding: '10px 14px',
-                }),
-                new Rule('.ar-card__header:empty', { display: 'none' }),
-                new Rule('.ar-card__body', { padding: '12px 14px' }),
-                new Rule('.ar-card__footer', {
-                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
-                    padding: '10px 14px',
-                }),
-                new Rule('.ar-card__footer:empty', { display: 'none' }),
-            ]);
+            this.classList.add(CardStyleMap.Self);
+            this.installInteraction();
+            this.syncTitle();
+        }
+
+        get title(): string
+        {
+            return this.getAttribute('title') ?? '';
+        }
+        set title(value: string)
+        {
+            value ? this.setAttribute('title', value) : this.removeAttribute('title');
+            this.syncTitle();
+        }
+
+        get elevation(): Types.Elevation
+        {
+            const value = Number(this.getAttribute('elevation') ?? 0);
+            return (value >= 0 && value <= 3 ? value : 0) as Types.Elevation;
+        }
+        set elevation(value: Types.Elevation)
+        {
+            this.setAttribute('elevation', String(value));
+        }
+
+        get interactive(): boolean
+        {
+            return this.hasAttribute('interactive');
+        }
+        set interactive(value: boolean)
+        {
+            value ? this.setAttribute('interactive', '') : this.removeAttribute('interactive');
+        }
+
+        private applyOptions(opts: Interfaces.CardOptions): void
+        {
+            if(opts.title !== undefined) this.title = opts.title;
+            if(opts.elevation !== undefined) this.elevation = opts.elevation;
+            if(opts.interactive !== undefined) this.interactive = opts.interactive;
+        }
+
+        private installInteraction(): void
+        {
+            if(this._clickInstalled) return;
+            this._clickInstalled = true;
+            this.addEventListener('click', event =>
+            {
+                if(!this.interactive) return;
+                this.dispatchEvent
+                (
+                    new CustomEvent
+                    (
+                        'arianna:click',
+                        {
+                            bubbles: true,
+                            composed: true,
+                            detail: { source: this, originalEvent: event }
+                        }
+                    )
+                );
+            });
+        }
+
+        /**
+         * HTML-first Card support. The title attribute becomes a generated light-DOM
+         * header while authored children remain ordinary portable HTML.
+         */
+        private syncTitle(): void
+        {
+            const title = this.title.trim();
+
+            if(!title)
+            {
+                this._generatedHeader?.remove();
+                this._generatedHeader = undefined;
+                return;
+            }
+
+            let header = this._generatedHeader;
+            if(!header || header.parentElement !== this)
+            {
+                header = document.createElement('header');
+                header.className = CardStyleMap.Header;
+                header.dataset.cardGenerated = 'title';
+                this.prepend(header);
+                this._generatedHeader = header;
+            }
+            header.textContent = title;
+
+            for(const child of Array.from(this.children))
+            {
+                if(child === header) continue;
+                if(!child.classList.contains(CardStyleMap.Footer) && !child.classList.contains(CardStyleMap.Body))
+                    child.classList.add(CardStyleMap.Body);
+            }
         }
     }
 }
-export default Card;
 
 export type CardOptions = Card.Interfaces.CardOptions;
+export type CardElevation = Card.Types.Elevation;
+export const CardDefaultSheet = Card.CardDefaultSheet;
+export const CardStyleMap = Card.CardStyleMap;
+export const CardClass = Card.Card;
+export default Card.Card;

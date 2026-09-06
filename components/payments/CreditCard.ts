@@ -8,8 +8,19 @@
  * @description AriannA CreditCard component module.
  */
 
-import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
+
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountPaymentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Reactivity: any;
+declare namespace Reactivity { type Signal<T> = any; type Effect = any; }
+declare const Templates: any;
+
 
 /** @namespace   CreditCard
  *  @public
@@ -283,7 +294,7 @@ export namespace CreditCard
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -505,10 +516,36 @@ export namespace CreditCard
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-credit-card', {}, {
+        shadow: false,
         Attributes: ['amount', 'currency', 'save-option', 'holder-name-required'],
     })
-    export class CreditCard extends HTMLElement
+    export class CreditCard extends HTMLDivElement
     {
+        public static readonly Styles = CreditCard.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'CreditCard';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(!this.form$) this.form$ = signal<Interfaces.CardFormState>({ number: '', holder: '', expMonth: '', expYear: '', cvv: '', save: false, flipped: false });
+            this.classList.add('CreditCard');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -522,10 +559,7 @@ export namespace CreditCard
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        form$: Types.Signal<Interfaces.CardFormState> = signal<Interfaces.CardFormState>({
-            number: '', holder: '', expMonth: '', expYear: '', cvv: '',
-            save: false, flipped: false,
-        });
+        declare form$: Types.Signal<Interfaces.CardFormState>;
 
         /** @name        onConnected
          *  @public
@@ -538,6 +572,8 @@ export namespace CreditCard
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.CreditCardOptions = {} as Interfaces.CreditCardOptions)
         {
+            if(!this.form$) this.form$ = signal<Interfaces.CardFormState>({ number: '', holder: '', expMonth: '', expYear: '', cvv: '', save: false, flipped: false });
+            if(this.dataset.ariannaFolderReady === 'true') return;
             /** @name        amountAttr
              *  @public
              *  @type        {inferred}
@@ -708,7 +744,7 @@ export namespace CreditCard
                  *  @license     MIT / Commercial (dual license) */
                 const cur = this.form$.Get();
                 this.form$.Set({ ...cur, number: v.replace(/\D/g, '').slice(0, 19) });
-                this.#fireChange();
+                this._fireChange();
             };
             this.onHolder = (e: Event) => {
                 /** @name        cur
@@ -720,7 +756,7 @@ export namespace CreditCard
                  *  @license     MIT / Commercial (dual license) */
                 const cur = this.form$.Get();
                 this.form$.Set({ ...cur, holder: (e.target as HTMLInputElement).value });
-                this.#fireChange();
+                this._fireChange();
             };
             this.onExpMonth = (e: Event) => {
                 /** @name        v
@@ -741,7 +777,7 @@ export namespace CreditCard
                  *  @license     MIT / Commercial (dual license) */
                 const cur = this.form$.Get();
                 this.form$.Set({ ...cur, expMonth: v });
-                this.#fireChange();
+                this._fireChange();
             };
             this.onExpYear = (e: Event) => {
                 /** @name        v
@@ -762,7 +798,7 @@ export namespace CreditCard
                  *  @license     MIT / Commercial (dual license) */
                 const cur = this.form$.Get();
                 this.form$.Set({ ...cur, expYear: v });
-                this.#fireChange();
+                this._fireChange();
             };
             this.onCvv = (e: Event) => {
                 /** @name        v
@@ -783,7 +819,7 @@ export namespace CreditCard
                  *  @license     MIT / Commercial (dual license) */
                 const cur = this.form$.Get();
                 this.form$.Set({ ...cur, cvv: v });
-                this.#fireChange();
+                this._fireChange();
             };
             this.onCvvFocus = () => {
                 this.form$.Set({ ...this.form$.Get(), flipped: true });
@@ -863,6 +899,8 @@ export namespace CreditCard
                 </div>
             </div>
         `;
+            MountPaymentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -952,7 +990,7 @@ export namespace CreditCard
             };
         }
 
-        /** @name        #fireChange
+        /** @name        _fireChange
          *  @public
          *  @type        {void}
          *  @description Component member for fire Change.
@@ -960,7 +998,7 @@ export namespace CreditCard
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #fireChange(): void
+        _fireChange(): void
         {
             this.dispatchEvent(new CustomEvent('arianna:card-change', {
                 bubbles: true, detail: { card: this.getCard(), valid: this.valid() },
@@ -1278,17 +1316,20 @@ export namespace CreditCard
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', {
+                new Rule('.CreditCard', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
                     display: 'inline-block',
                     fontFamily: '-apple-system, system-ui, sans-serif',
                     fontSize: '13px',
-                    color: 'var(--arianna-text, #1f2328)',
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
                 }),
                 new Rule('.ar-cc', {
                     display: 'flex', flexDirection: 'column', gap: '14px',
                     padding: '14px',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                     borderRadius: 'var(--arianna-radius, 8px)',
                     width: '320px',
                 }),
@@ -1299,36 +1340,65 @@ export namespace CreditCard
                     transformStyle: 'preserve-3d',
                 }),
                 new Rule('.ar-cc__preview-face', {
-                    position: 'absolute', inset: '0',
-                    borderRadius: '10px',
-                    padding: '16px',
-                    color: '#fff',
-                    backfaceVisibility: 'hidden',
-                    transition: 'transform 0.5s',
-                    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+                    position: 'absolute', inset: '0', borderRadius: '13px', padding: '17px', color: '#fff',
+                    backfaceVisibility: 'hidden', transition: 'transform 0.5s',
+                    background: 'radial-gradient(circle at 18% 14%,rgba(255,255,255,.22),transparent 26%),linear-gradient(135deg,#20242c 0%,#0e1116 68%,#272d36 100%)',
+                    border: '1px solid rgba(255,255,255,.14)', boxShadow: '0 14px 28px rgba(0,0,0,.30),inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.32)'
                 }),
                 new Rule('.ar-cc__preview-front', {
                     display: 'flex', flexDirection: 'column',
                     justifyContent: 'space-between',
                 }),
-                new Rule('.ar-cc__preview--visa .ar-cc__preview-front', { background: 'linear-gradient(135deg, #1a1f71 0%, #1e3c8f 100%)' }),
-                new Rule('.ar-cc__preview--mastercard .ar-cc__preview-front', { background: 'linear-gradient(135deg, #eb001b 0%, #f79e1b 100%)' }),
-                new Rule('.ar-cc__preview--amex .ar-cc__preview-front', { background: 'linear-gradient(135deg, #2671b9 0%, #006fcf 100%)' }),
+                new Rule('.ar-cc__preview--visa .ar-cc__preview-front', { background: 'radial-gradient(circle at 18% 14%,rgba(255,255,255,.22),transparent 28%),linear-gradient(135deg,#172a75 0%,#0b3c8e 58%,#081d51 100%)' }),
+                new Rule('.ar-cc__preview--mastercard .ar-cc__preview-front', { background: 'radial-gradient(circle at 18% 14%,rgba(255,255,255,.18),transparent 28%),linear-gradient(135deg,#16191e 0%,#272022 58%,#111317 100%)' }),
+                new Rule('.ar-cc__preview--amex .ar-cc__preview-front', { background: 'radial-gradient(circle at 18% 14%,rgba(255,255,255,.24),transparent 30%),linear-gradient(135deg,#5f666d 0%,#252b31 56%,#70767c 100%)' }),
                 new Rule('.ar-cc__preview--discover .ar-cc__preview-front', { background: 'linear-gradient(135deg, #ff6000 0%, #ff8c00 100%)' }),
-                new Rule('.ar-cc__preview--maestro .ar-cc__preview-front', { background: 'linear-gradient(135deg, #0099df 0%, #ed0006 100%)' }),
+                new Rule('.ar-cc__preview--maestro .ar-cc__preview-front', { background: 'radial-gradient(circle at 18% 14%,rgba(255,255,255,.20),transparent 28%),linear-gradient(135deg,#0e202d 0%,#20262b 55%,#101419 100%)' }),
                 new Rule('.ar-cc__preview-back', {
                     transform: 'rotateY(180deg)',
                     display: 'flex', flexDirection: 'column',
                 }),
                 new Rule('.ar-cc__preview--flipped .ar-cc__preview-front', { transform: 'rotateY(180deg)' }),
                 new Rule('.ar-cc__preview--flipped .ar-cc__preview-back', { transform: 'rotateY(360deg)' }),
-                new Rule('.ar-cc__preview-brand', { fontSize: '11px', fontWeight: '700', letterSpacing: '0.15em' }),
-                new Rule('.ar-cc__preview-chip', { fontSize: '24px', color: '#ffd700' }),
-                new Rule('.ar-cc__preview-number', { fontSize: '18px', fontFamily: 'ui-monospace, monospace', letterSpacing: '0.08em' }),
+                new Rule('.ar-cc__preview-brand', {
+                    alignItems: 'center', display: 'flex', height: '34px', justifyContent: 'flex-end',
+                    minWidth: '72px', position: 'relative', fontSize: '0', fontWeight: '900',
+                    letterSpacing: '-.04em', lineHeight: '1', textShadow: '0 2px 5px rgba(0,0,0,.28)'
+                }),
+                new Rule('.ar-cc__preview-brand::after', {
+                    content: '"ARIANNA"', color: '#f4f5f6', font: 'italic 900 18px/1 Arial,sans-serif', letterSpacing: '-.06em'
+                }),
+                new Rule('.ar-cc__preview--visa .ar-cc__preview-brand::after', {
+                    content: '"VISA"', color: '#fff', font: 'italic 900 24px/1 Arial,sans-serif', letterSpacing: '-.08em'
+                }),
+                new Rule('.ar-cc__preview--mastercard .ar-cc__preview-brand', {
+                    width: '76px', background: 'radial-gradient(circle at 36% 43%,#eb001b 0 18px,transparent 18.5px),radial-gradient(circle at 64% 43%,#f79e1b 0 18px,transparent 18.5px)'
+                }),
+                new Rule('.ar-cc__preview--mastercard .ar-cc__preview-brand::after', {
+                    bottom: '-1px', color: '#fff', content: '"mastercard"', font: '700 8px/1 Arial,sans-serif', left: '50%', letterSpacing: '-.03em', position: 'absolute', transform: 'translateX(-50%)'
+                }),
+                new Rule('.ar-cc__preview--maestro .ar-cc__preview-brand', {
+                    width: '76px', background: 'radial-gradient(circle at 36% 43%,#0099df 0 18px,transparent 18.5px),radial-gradient(circle at 64% 43%,#ed0006 0 18px,transparent 18.5px)'
+                }),
+                new Rule('.ar-cc__preview--maestro .ar-cc__preview-brand::after', {
+                    bottom: '-1px', color: '#fff', content: '"maestro"', font: '700 8px/1 Arial,sans-serif', left: '50%', letterSpacing: '-.03em', position: 'absolute', transform: 'translateX(-50%)'
+                }),
+                new Rule('.ar-cc__preview--amex .ar-cc__preview-brand::after', {
+                    background: '#1677c8', border: '1px solid rgba(255,255,255,.85)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.22)',
+                    color: '#fff', content: '"AMERICAN EXPRESS"', font: '900 8px/9px Arial,sans-serif', letterSpacing: '-.02em', padding: '3px 5px', textAlign: 'center', whiteSpace: 'pre'
+                }),
+                new Rule('.ar-cc__preview-chip', {
+                    alignItems: 'center', background: 'linear-gradient(135deg,#d7bc66,#f1dc90 48%,#b28e31)', border: '1px solid rgba(70,53,12,.55)',
+                    borderRadius: '5px', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.28),0 2px 5px rgba(0,0,0,.2)', color: 'transparent', display: 'flex',
+                    fontSize: '0', height: '30px', position: 'relative', width: '39px'
+                }),
+                new Rule('.ar-cc__preview-chip::before', { borderBottom: '1px solid rgba(75,55,8,.48)', borderTop: '1px solid rgba(75,55,8,.48)', content: '""', height: '12px', left: '0', position: 'absolute', right: '0', top: '8px' }),
+                new Rule('.ar-cc__preview-chip::after', { borderLeft: '1px solid rgba(75,55,8,.48)', borderRight: '1px solid rgba(75,55,8,.48)', bottom: '0', content: '""', left: '13px', position: 'absolute', top: '0', width: '11px' }),
+                new Rule('.ar-cc__preview-number', { fontSize: '18px', fontFamily: '"OCR A Std","SFMono-Regular",Consolas,monospace', fontWeight: '650', letterSpacing: '0.10em', textShadow: '0 1px 0 rgba(0,0,0,.7),0 2px 4px rgba(0,0,0,.48)' }),
                 new Rule('.ar-cc__preview-row', { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }),
                 new Rule('.ar-cc__preview-meta', { fontSize: '9px', opacity: '0.7', letterSpacing: '0.1em' }),
-                new Rule('.ar-cc__preview-holder', { fontSize: '12px', letterSpacing: '0.05em' }),
-                new Rule('.ar-cc__preview-exp', { fontSize: '12px', fontFamily: 'ui-monospace, monospace' }),
+                new Rule('.ar-cc__preview-holder', { fontSize: '12px', fontWeight: '650', letterSpacing: '0.05em', textShadow: '0 1px 2px rgba(0,0,0,.55)' }),
+                new Rule('.ar-cc__preview-exp', { fontSize: '12px', fontFamily: 'ui-monospace, monospace', fontWeight: '650', textShadow: '0 1px 2px rgba(0,0,0,.55)' }),
                 new Rule('.ar-cc__preview-strip', { marginTop: '16px', height: '34px', background: '#000' }),
                 new Rule('.ar-cc__preview-cvv-box', {
                     marginTop: '12px', alignSelf: 'flex-end',
@@ -1341,27 +1411,27 @@ export namespace CreditCard
                 new Rule('.ar-cc__field', { display: 'flex', flexDirection: 'column', gap: '4px' }),
                 new Rule('.ar-cc__field span', {
                     fontSize: '10px', textTransform: 'uppercase',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
                     letterSpacing: '0.06em',
                 }),
                 new Rule('.ar-cc__field input', {
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    color: 'var(--arianna-text, #1f2328)',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
                     padding: '8px 10px',
                     font: '13px ui-monospace, monospace',
                     borderRadius: '4px',
                 }),
                 new Rule('.ar-cc__field input:focus', {
                     outline: 'none',
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                    borderColor: 'var(--arianna-primary, var(--accent, #e40c88))',
                 }),
                 new Rule('.ar-cc__row', { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }),
                 new Rule('.ar-cc__save', { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }),
                 new Rule('.ar-cc__pay', {
                     marginTop: '4px',
                     padding: '11px',
-                    background: 'var(--arianna-primary, #1f6feb)',
+                    background: 'var(--arianna-primary, var(--accent, #e40c88))',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '6px',

@@ -9,6 +9,7 @@
  */
 
 import { Component, Components, Css, Templates } from '../../core/index.ts';
+import { MountInputTemplate } from './Base.ts';
 
 /** @namespace   TextField
  *  @public
@@ -142,6 +143,7 @@ export namespace TextField
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-text-field', {}, {
+        shadow: false,
         Attributes: ['value', 'placeholder', 'type', 'disabled', 'readonly', 'size'],
     })
     export class TextField extends HTMLElement
@@ -231,6 +233,7 @@ export namespace TextField
                    @input="this.onInput"
                    @change="this.onChange"/>
         `;
+            MountInputTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -471,7 +474,7 @@ export namespace TextField
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', {
+                new Rule('arianna-text-field', {
                     display: 'inline-block',
                     width: '100%',
                     maxWidth: '320px',
@@ -493,8 +496,8 @@ export namespace TextField
                     borderColor: 'var(--arianna-primary, #1f6feb)',
                     boxShadow: '0 0 0 2px rgba(31,111,235,0.18)',
                 }),
-                new Rule(':host([size="sm"]) .ar-textfield__input', { fontSize: '0.75rem', padding: '4px 8px' }),
-                new Rule(':host([size="lg"]) .ar-textfield__input', { fontSize: '0.95rem', padding: '8px 12px' }),
+                new Rule('arianna-text-field[size="sm"] .ar-textfield__input', { fontSize: '0.75rem', padding: '4px 8px' }),
+                new Rule('arianna-text-field[size="lg"] .ar-textfield__input', { fontSize: '0.95rem', padding: '8px 12px' }),
                 new Rule('.ar-textfield__input:disabled', { cursor: 'not-allowed', opacity: '0.55' }),
             ]);
         }

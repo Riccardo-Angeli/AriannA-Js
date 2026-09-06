@@ -6,6 +6,7 @@
  * @license     MIT / Commercial (dual license)
  */
 import { Events }     from '../reactivity/Events.ts';
+import { Reactivity } from '../reactivity/Reactivity.ts';
 import { Namespaces } from '../dom/Namespaces.ts';
 import { Services }   from '../kernel/Services.ts';
 import { Debug }      from '../kernel/Debug.ts';
@@ -824,19 +825,39 @@ export namespace Directives
         (
             root    : Element = document.body,
             context : Record<string, unknown> = {},
-        ): void
+        ): () => void
         {
-            const ctx = { ...(typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : {}), ...context };
+            /*
+             * The directive scope is EXPLICIT. Never enumerate/spread Window here:
+             * Safari exposes protected host properties whose getters can throw
+             * SecurityError during object spread. Unknown identifiers may still fall
+             * back to globalThis lazily, one name at a time, through lookup().
+             */
+            const ctx: Record<string, unknown> = { ...context };
+            const disposers: Array<() => void> = [];
 
-            function evalExpr(expr: string): unknown
+            const disposeEffect = (effect: unknown): (() => void) =>
             {
-                /*
-                 * CSP-safe directive expressions. Runtime code generation (`eval` / `new Function`)
-                 * would require `script-src 'unsafe-eval'`, so Bootstrap intentionally evaluates the
-                 * declarative subset directly. The grammar covers the expressions directives need:
-                 * literals, identifiers, dot/bracket access, calls, unary/binary/logical operators
-                 * and the conditional operator. Assignment and arbitrary statements are not accepted.
-                 */
+                const e = effect as { Dispose?: () => void; Stop?: () => void };
+                return () =>
+                {
+                    if(typeof e.Dispose === 'function') e.Dispose();
+                    else if(typeof e.Stop === 'function') e.Stop();
+                };
+            };
+
+            const reactive = (run: () => void): void =>
+            {
+                const effect = new Reactivity.Effect(run);
+                disposers.push(disposeEffect(effect));
+            };
+
+            function evalExpr
+            (
+                expr  : string,
+                scope : Record<string, unknown> = ctx
+            ): unknown
+            {
                 type Token = { Kind: 'id' | 'number' | 'string' | 'op' | 'eof'; Value: string };
 
                 const tokens: Token[] = [];
@@ -890,7 +911,7 @@ export namespace Directives
 
                     const three = expr.slice(cursor, cursor + 3);
                     const two = expr.slice(cursor, cursor + 2);
-                    if(['===', '!==', '>>>', '**='].includes(three))
+                    if(['===', '!==', '>>>'].includes(three))
                     {
                         tokens.push({ Kind: 'op', Value: three }); cursor += 3; continue;
                     }
@@ -927,16 +948,30 @@ export namespace Directives
                     if(name === 'undefined') return undefined;
                     if(name === 'NaN') return NaN;
                     if(name === 'Infinity') return Infinity;
-                    return ctx[name];
+                    if(Object.prototype.hasOwnProperty.call(scope, name)) return scope[name];
+
+                    try
+                    {
+                        return (globalThis as unknown as Record<string, unknown>)[name];
+                    }
+                    catch
+                    {
+                        return undefined;
+                    }
                 };
 
+                let callThis: unknown = undefined;
                 const member = (base: unknown, key: unknown): unknown =>
-                    base == null ? undefined : (base as Record<PropertyKey, unknown>)[key as PropertyKey];
+                {
+                    callThis = base;
+                    return base == null ? undefined : (base as Record<PropertyKey, unknown>)[key as PropertyKey];
+                };
 
                 const primary = (): unknown =>
                 {
                     const token = peek();
                     let value: unknown;
+                    callThis = undefined;
 
                     if(token.Kind === 'number') { take(); value = Number(token.Value); }
                     else if(token.Kind === 'string') { take(); value = token.Value; }
@@ -956,7 +991,11 @@ export namespace Directives
                         }
                         if(peek().Value === '[')
                         {
-                            take('['); const key = conditional(); take(']'); value = member(value, key); continue;
+                            take('[');
+                            const key = conditional();
+                            take(']');
+                            value = member(value, key);
+                            continue;
                         }
                         if(peek().Value === '(')
                         {
@@ -965,10 +1004,18 @@ export namespace Directives
                             const args: unknown[] = [];
                             if(peek().Value !== ')')
                             {
-                                do { args.push(conditional()); if(peek().Value !== ',') break; take(','); } while(true);
+                                do
+                                {
+                                    args.push(conditional());
+                                    if(peek().Value !== ',') break;
+                                    take(',');
+                                }
+                                while(true);
                             }
                             take(')');
-                            value = (value as (...args: unknown[]) => unknown)(...args);
+                            const receiver = callThis;
+                            callThis = undefined;
+                            value = (value as (...args: unknown[]) => unknown).apply(receiver, args);
                             continue;
                         }
                         break;
@@ -981,7 +1028,8 @@ export namespace Directives
                     const op = peek().Value;
                     if(op === '!' || op === '~' || op === '+' || op === '-')
                     {
-                        take(); const value = unary();
+                        take();
+                        const value = unary();
                         if(op === '!') return !value;
                         if(op === '~') return ~Number(value);
                         if(op === '+') return +Number(value);
@@ -1040,7 +1088,10 @@ export namespace Directives
                 {
                     const test = nullish();
                     if(peek().Value !== '?') return test;
-                    take('?'); const yes = conditional(); take(':'); const no = conditional();
+                    take('?');
+                    const yes = conditional();
+                    take(':');
+                    const no = conditional();
                     return test ? yes : no;
                 };
 
@@ -1052,58 +1103,221 @@ export namespace Directives
                 }
                 catch(error)
                 {
-                    Debug.warn
-                    (
-                        'DIRECTIVE_EXPRESSION',
-                        { Expression: expr, Error: error }
-                    );
+                    Debug.warn('DIRECTIVE_EXPRESSION', { Expression: expr, Error: error });
                     return undefined;
                 }
             }
 
-            // Process {{ }} template literals on all text nodes
-            root.querySelectorAll('[a-template],[data-template]').forEach(el => {
-                Directive.Template(el, ctx);
-            });
+            const interpolate =
+            (
+                text  : string,
+                scope : Record<string, unknown>
+            ): string =>
+                text.replace
+                (
+                    /\{\{\s*([^}]+?)\s*\}\}/g,
+                    (_match, expression: string) =>
+                    {
+                        const value = evalExpr(expression, scope);
+                        return value == null ? '' : String(value);
+                    }
+                );
 
-            // a-if
-            root.querySelectorAll('[a-if]').forEach(el => {
-                const expr = el.getAttribute('a-if') ?? 'false';
-                Directive.If(el.parentElement ?? root, () => Boolean(evalExpr(expr)), el as Element);
-            });
+            const renderClone =
+            (
+                template : Element,
+                scope    : Record<string, unknown>,
+                remove   : string
+            ): Element =>
+            {
+                const clone = template.cloneNode(true) as Element;
+                clone.removeAttribute(remove);
+                Reals.Real.Html(clone, interpolate(clone.innerHTML, scope));
 
-            // a-show
-            root.querySelectorAll('[a-show]').forEach(el => {
-                const expr = el.getAttribute('a-show') ?? 'false';
-                Directive.Show(el as HTMLElement, () => Boolean(evalExpr(expr)));
-            });
+                for(const node of [clone, ...Array.from(clone.querySelectorAll('*'))])
+                {
+                    for(const attribute of Array.from(node.attributes))
+                    {
+                        if(attribute.value.includes('{{'))
+                            Reals.Real.Attribute(node, attribute.name, interpolate(attribute.value, scope));
+                    }
+                }
+                return clone;
+            };
 
-            // a-model
-            root.querySelectorAll('[a-model]').forEach(el => {
-                const path = el.getAttribute('a-model') ?? '';
+            /* a-for="item, i in items" */
+            for(const template of Array.from(root.querySelectorAll('[a-for]')))
+            {
+                const specification = template.getAttribute('a-for') ?? '';
+                const match = specification.match(/^\s*(?:let\s+|const\s+|var\s+)?([A-Za-z_$][\w$]*)(?:\s*,\s*([A-Za-z_$][\w$]*))?\s+in\s+(.+?)\s*$/);
+                if(!match || !template.parentNode) continue;
+
+                const [, itemName, indexName, expression] = match;
+                const parent = template.parentNode;
+                const anchor = Reals.Real.CreateComment(' a:for ');
+                Reals.Real.Before(parent, anchor, template);
+                Reals.Real.Remove(template);
+                let rendered: Node[] = [];
+
+                reactive(() =>
+                {
+                    rendered.forEach(node => node.parentNode && Reals.Real.Remove(node));
+                    rendered = [];
+                    const source = evalExpr(expression);
+                    if(!Array.isArray(source)) return;
+
+                    source.forEach((value, index) =>
+                    {
+                        const local = { ...ctx, [itemName]: value, $index: index };
+                        if(indexName) local[indexName] = index;
+                        const clone = renderClone(template, local, 'a-for');
+                        Reals.Real.Before(parent, clone, anchor);
+                        rendered.push(clone);
+                    });
+                });
+            }
+
+            /* a-foreach="value, key in object" */
+            for(const template of Array.from(root.querySelectorAll('[a-foreach]')))
+            {
+                const specification = template.getAttribute('a-foreach') ?? '';
+                const match = specification.match(/^\s*(?:let\s+|const\s+|var\s+)?([A-Za-z_$][\w$]*)(?:\s*,\s*([A-Za-z_$][\w$]*))?\s+in\s+(.+?)\s*$/);
+                if(!match || !template.parentNode) continue;
+
+                const [, valueName, keyName, expression] = match;
+                const parent = template.parentNode;
+                const anchor = Reals.Real.CreateComment(' a:foreach ');
+                Reals.Real.Before(parent, anchor, template);
+                Reals.Real.Remove(template);
+                let rendered: Node[] = [];
+
+                reactive(() =>
+                {
+                    rendered.forEach(node => node.parentNode && Reals.Real.Remove(node));
+                    rendered = [];
+                    const source = evalExpr(expression);
+                    if(source == null || typeof source !== 'object') return;
+
+                    Object.entries(source as Record<string, unknown>).forEach(([key, value], index) =>
+                    {
+                        const local = { ...ctx, [valueName]: value, $key: key, $index: index };
+                        if(keyName) local[keyName] = key;
+                        const clone = renderClone(template, local, 'a-foreach');
+                        Reals.Real.Before(parent, clone, anchor);
+                        rendered.push(clone);
+                    });
+                });
+            }
+
+            /* a-while="count" — declarative repeated template; numeric expressions repeat N times. */
+            for(const template of Array.from(root.querySelectorAll('[a-while]')))
+            {
+                const expression = template.getAttribute('a-while') ?? '0';
+                if(!template.parentNode) continue;
+
+                const parent = template.parentNode;
+                const anchor = Reals.Real.CreateComment(' a:while ');
+                Reals.Real.Before(parent, anchor, template);
+                Reals.Real.Remove(template);
+                let rendered: Node[] = [];
+
+                reactive(() =>
+                {
+                    rendered.forEach(node => node.parentNode && Reals.Real.Remove(node));
+                    rendered = [];
+                    const value = evalExpr(expression);
+                    const count = Math.max(0, Math.min(10000, Math.floor(Number(value) || 0)));
+
+                    for(let index = 0; index < count; index++)
+                    {
+                        const local = { ...ctx, index, $index: index };
+                        const clone = renderClone(template, local, 'a-while');
+                        Reals.Real.Before(parent, clone, anchor);
+                        rendered.push(clone);
+                    }
+                });
+            }
+
+            /* a-switch="value" with child a-case="..."; a-case="default" is fallback. */
+            for(const switchElement of Array.from(root.querySelectorAll('[a-switch]')))
+            {
+                const expression = switchElement.getAttribute('a-switch') ?? '';
+                const cases = Array.from(switchElement.querySelectorAll(':scope > [a-case]')) as HTMLElement[];
+
+                reactive(() =>
+                {
+                    const selected = String(evalExpr(expression) ?? '');
+                    let matched = false;
+                    for(const branch of cases)
+                    {
+                        const name = branch.getAttribute('a-case') ?? '';
+                        const show = name !== 'default' && name === selected;
+                        branch.hidden = !show;
+                        if(show) matched = true;
+                    }
+                    const fallback = cases.find(branch => branch.getAttribute('a-case') === 'default');
+                    if(fallback) fallback.hidden = matched;
+                });
+            }
+
+            /* Explicit reactive template text. */
+            for(const element of Array.from(root.querySelectorAll('[a-template],[data-template]')))
+            {
+                const raw = element.innerHTML;
+                reactive(() => Reals.Real.Html(element, interpolate(raw, ctx)));
+            }
+
+            /* a-if */
+            for(const element of Array.from(root.querySelectorAll('[a-if]')))
+            {
+                const expression = element.getAttribute('a-if') ?? 'false';
+                const update = Directive.If(element.parentElement ?? root, () => Boolean(evalExpr(expression)), element as Element);
+                reactive(update);
+            }
+
+            /* a-show */
+            for(const element of Array.from(root.querySelectorAll('[a-show]')))
+            {
+                const expression = element.getAttribute('a-show') ?? 'false';
+                const update = Directive.Show(element as HTMLElement, () => Boolean(evalExpr(expression)));
+                reactive(update);
+            }
+
+            /* a-model — canonical State binding remains supported. */
+            for(const element of Array.from(root.querySelectorAll('[a-model]')))
+            {
+                const path = element.getAttribute('a-model') ?? '';
                 const [stateKey, propKey] = path.split('.');
                 const state = ctx[stateKey] as { State: Record<string, unknown>; on(t: string, cb: (e: unknown) => void): void };
-                if (state && propKey) Directive.Model(el as HTMLInputElement, state, propKey);
-            });
+                if(state && propKey) Directive.Model(element as HTMLInputElement, state, propKey);
+            }
 
-            // a-on
-            root.querySelectorAll('[a-on]').forEach(el => {
-                const spec = el.getAttribute('a-on') ?? '';
-                const [type, fnName] = spec.split(':').map(s => s.trim());
-                if (type && fnName)
-                {
-                    const handler = ctx[fnName];
-                    if (typeof handler === 'function')
-                        Directive.On(el, type, handler as EventListener);
-                }
-            });
+            /* a-on="click:handler" */
+            for(const element of Array.from(root.querySelectorAll('[a-on]')))
+            {
+                const specification = element.getAttribute('a-on') ?? '';
+                const [type, expression] = specification.split(':').map(value => value.trim());
+                if(!type || !expression) continue;
+                const handler = evalExpr(expression);
+                if(typeof handler === 'function') Directive.On(element, type, handler as EventListener);
+            }
 
-            // a-bind
-            root.querySelectorAll('[a-bind]').forEach(el => {
-                const spec = el.getAttribute('a-bind') ?? '';
-                const [prop, expr] = spec.split(':').map(s => s.trim());
-                if (prop && expr) Directive.Bind(el, prop, () => evalExpr(expr));
-            });
+            /* a-bind="property:expression" */
+            for(const element of Array.from(root.querySelectorAll('[a-bind]')))
+            {
+                const specification = element.getAttribute('a-bind') ?? '';
+                const separator = specification.indexOf(':');
+                if(separator < 1) continue;
+                const property = specification.slice(0, separator).trim();
+                const expression = specification.slice(separator + 1).trim();
+                const update = Directive.Bind(element, property, () => evalExpr(expression));
+                reactive(update);
+            }
+
+            return () =>
+            {
+                while(disposers.length) disposers.pop()?.();
+            };
         }
 
         // ────────────────────────────────────────────────────────────────────────────

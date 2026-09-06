@@ -1,741 +1,380 @@
 /**
- * @module    components/animations/OnionStage
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA OnionStage component module.
+ * @module components/animations/OnionStage
+ * @version 2.0.0
  */
+import { Component, Css, Templates } from '../../core/index.ts';
 
-import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
-
-/** @name        html
- *  @public
- *  @type        {inferred}
- *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
 
-/** @namespace   OnionStage
- *  @public
- *  @description Namespace containing OnionStage contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 export namespace OnionStage
 {
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Types
     {
-        /** @name        Signal
-         *  @public
-         *  @type        {SchemaInterfaces.Reactivity.Signal<T>}
-         *  @description Type alias for Signal.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
-
-        /** @name        Rule
-         *  @public
-         *  @type        {Css.Rule}
-         *  @description Type alias for Rule.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Rule = Css.Rule;
-
-        /** @name        Stylesheet
-         *  @public
-         *  @type        {Css.Stylesheet}
-         *  @description Type alias for Stylesheet.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Stylesheet = Css.Stylesheet;
-
-        /** @name        SnapshotProvider
-         *  @public
-         *  @type        {(frame: number) => HTMLElement | SVGElement | null}
-         *  @description Type alias for SnapshotProvider.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         export type SnapshotProvider = (frame: number) => HTMLElement | SVGElement | null;
     }
 
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Interfaces
     {
-        /** @interface   OnionStageOptions
-         *  @public
-         *  @description OnionStageOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         export interface OnionStageOptions
         {
-            /** @name        before
-             *  @public
-             *  @type        {number}
-             *  @description Component member for before.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            before?: number; // ghost frames before the playhead
-            /** @name        after
-             *  @public
-             *  @type        {number}
-             *  @description Component member for after.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            after?: number; // ghost frames after
-            /** @name        step
-             *  @public
-             *  @type        {number}
-             *  @description Component member for step.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            step?: number; // distance (in frames) between ghosts (default 1)
-            /** @name        width
-             *  @public
-             *  @type        {number}
-             *  @description Component member for width.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
+            before?: number;
+            after?: number;
+            step?: number;
             width?: number;
-
-            /** @name        height
-             *  @public
-             *  @type        {number}
-             *  @description Component member for height.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             height?: number;
+            opacity?: number;
+            pastColor?: string;
+            futureColor?: string;
         }
     }
-    /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
-       members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
-       `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
-       not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
-       returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
-       Map, Effect" with the same name printed twice. */
-    /** @name        signal
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned signal value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
 
-    /** @name        effect
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned effect value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const effect = (fn: () => void): (() => void) => {
-        /** @name        e
-         *  @public
-         *  @type        {inferred}
-         *  @description Namespace-owned e value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        const e = Reactivity.CreateEffect(fn);
-        return () => e.Stop();
-    };
+    export const Styles = new Css.Stylesheet([
+        new Css.Rule('.OnionStage', {
+            Background: '#181b1e', Border: '1px solid #15181a', BorderRadius: '8px',
+            BoxSizing: 'border-box', Color: '#dde1e4', Display: 'block', MinHeight: '270px',
+            MinWidth: '0', Overflow: 'hidden', Width: '100%'
+        }),
+        new Css.Rule('.OnionStage-Toolbar', {
+            AlignItems: 'center', Background: 'linear-gradient(180deg,#363b40 0%,#25292d 100%)',
+            BorderBottom: '1px solid #0f1113', Display: 'flex', Gap: '8px', Height: '38px',
+            Padding: '5px 8px'
+        }),
+        new Css.Rule('.OnionStage-Control', {
+            AlignItems: 'center', Color: '#dce0e3', Display: 'inline-flex', Font: '11px/1 var(--arianna-font, system-ui, sans-serif)', Gap: '5px'
+        }),
+        new Css.Rule('.OnionStage-Input', {
+            Appearance: 'textfield', Background: '#171a1d', Border: '1px solid #15181a', BorderRadius: '4px',
+            Color: '#ffffff', Font: '11px/1 var(--arianna-font, system-ui, sans-serif)', Height: '26px',
+            Outline: 'none', Padding: '0 6px', TextAlign: 'center', Width: '42px'
+        }),
+        new Css.Rule('.OnionStage-Legend', {
+            AlignItems: 'center', Color: '#dce0e3', Display: 'inline-flex', Font: '11px/1 var(--arianna-font, system-ui, sans-serif)', Gap: '5px', MarginLeft: 'auto'
+        }),
+        new Css.Rule('.OnionStage-Swatch', {
+            Border: '1px solid rgba(255,255,255,.25)', Height: '15px', Width: '15px'
+        }),
+        new Css.Rule('.OnionStage-Swatch[data-kind="past"]', { Background: 'var(--OnionStage-PastColor, #4b9ee9)' }),
+        new Css.Rule('.OnionStage-Swatch[data-kind="future"]', { Background: 'var(--OnionStage-FutureColor, #e69a45)' }),
+        new Css.Rule('.OnionStage-Scene', {
+            Background: 'radial-gradient(circle at 50% 30%, #24282c 0%, #202428 47%, #0b0d0f 100%)',
+            Height: 'calc(100% - 38px)', MinHeight: '232px', Overflow: 'hidden', Position: 'relative'
+        }),
+        new Css.Rule('.OnionStage-Ground', {
+            BackgroundImage: 'linear-gradient(rgba(115,124,133,.18) 1px, transparent 1px), linear-gradient(90deg, rgba(115,124,133,.18) 1px, transparent 1px)',
+            BackgroundSize: '28px 28px', Bottom: '-55px', Height: '150px', Left: '-12%',
+            Position: 'absolute', Right: '-12%', Transform: 'perspective(260px) rotateX(58deg)',
+            TransformOrigin: '50% 100%'
+        }),
+        new Css.Rule('.OnionStage-Ghost', {
+            Bottom: '34px', Color: '#ffffff', Height: '122px', Left: '50%', PointerEvents: 'none',
+            Position: 'absolute', Transform: 'translateX(-50%)', TransformOrigin: '50% 100%', Width: '72px'
+        }),
+        new Css.Rule('.OnionStage-Ghost[data-kind="past"]', { Color: 'var(--OnionStage-PastColor, #4b9ee9)' }),
+        new Css.Rule('.OnionStage-Ghost[data-kind="future"]', { Color: 'var(--OnionStage-FutureColor, #e69a45)' }),
+        new Css.Rule('.OnionStage-Ghost[data-kind="live"]', {
+            Color: 'var(--OnionStage-LiveColor, #5aa8f7)', Filter: 'drop-shadow(0 0 8px rgba(75,158,233,.35))', ZIndex: '4'
+        }),
+        new Css.Rule('.OnionStage-Ghost > *', { MaxHeight: '100%', MaxWidth: '100%' }),
 
-    /** @name        { Rule, Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Rule, Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const { Rule, Stylesheet } = Css;
+        /* Lightweight fallback figure used when no snapshot provider is supplied. */
+        new Css.Rule('.OnionStage-Figure', { Height: '118px', Left: '50%', Position: 'absolute', Top: '2px', Transform: 'translateX(-50%)', Width: '58px' }),
+        new Css.Rule('.OnionStage-FigureHead', { Background: 'currentColor', BorderRadius: '50%', Height: '22px', Left: '18px', Position: 'absolute', Top: '0', Width: '22px' }),
+        new Css.Rule('.OnionStage-FigureBody', { Background: 'currentColor', BorderRadius: '12px 12px 8px 8px', Height: '50px', Left: '19px', Position: 'absolute', Top: '20px', Transform: 'rotate(var(--OnionStage-BodyAngle, 0deg))', TransformOrigin: '50% 10%', Width: '20px' }),
+        new Css.Rule('.OnionStage-FigureArm, .OnionStage-FigureLeg', { Background: 'currentColor', BorderRadius: '8px', Position: 'absolute', TransformOrigin: '50% 4px' }),
+        new Css.Rule('.OnionStage-FigureArm', { Height: '45px', Top: '28px', Width: '9px' }),
+        new Css.Rule('.OnionStage-FigureArm[data-side="left"]', { Left: '15px', Transform: 'rotate(var(--OnionStage-ArmLeft, 28deg))' }),
+        new Css.Rule('.OnionStage-FigureArm[data-side="right"]', { Left: '34px', Transform: 'rotate(var(--OnionStage-ArmRight, -28deg))' }),
+        new Css.Rule('.OnionStage-FigureLeg', { Height: '53px', Top: '65px', Width: '11px' }),
+        new Css.Rule('.OnionStage-FigureLeg[data-side="left"]', { Left: '19px', Transform: 'rotate(var(--OnionStage-LegLeft, 20deg))' }),
+        new Css.Rule('.OnionStage-FigureLeg[data-side="right"]', { Left: '29px', Transform: 'rotate(var(--OnionStage-LegRight, -20deg))' }),
 
-    /** @class       OnionStage
-     *  @public
-     *  @description AriannA OnionStage component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-onion-stage', {}, {
-        Attributes: ['before', 'after', 'step', 'width', 'height'],
+        new Css.Rule('.OnionStage[theme="light"]', { Background: '#eef0f2', BorderColor: '#b9bec3', Color: '#25292d' }),
+        new Css.Rule('.OnionStage[theme="light"] .OnionStage-Toolbar', { Background: 'linear-gradient(180deg,#f9fafb,#dfe3e6)', BorderBottomColor: '#b9bec3' }),
+        new Css.Rule('.OnionStage[theme="light"] .OnionStage-Control, .OnionStage[theme="light"] .OnionStage-Legend', { Color: '#5f666d' }),
+        new Css.Rule('.OnionStage[theme="light"] .OnionStage-Input', { Background: '#fff', BorderColor: '#c1c6cb', Color: '#30363b' }),
+        new Css.Rule('.OnionStage[theme="light"] .OnionStage-Swatch', { BorderColor: 'rgba(0,0,0,.14)' }),
+        new Css.Rule('.OnionStage[theme="light"] .OnionStage-Scene', { Background: 'radial-gradient(circle at 50% 30%,#fff 0%,#f2f3f4 47%,#e4e7e9 100%)' }),
+        new Css.Rule('.OnionStage[theme="light"] .OnionStage-Ground', { BackgroundImage: 'linear-gradient(#dedfe1 1px,transparent 1px),linear-gradient(90deg,#dedfe1 1px,transparent 1px)' }),
+    ]);
+
+    @Component('arianna-onion-stage', Styles, {
+        Shadow: false,
+        Attributes: ['before', 'after', 'step', 'width', 'height', 'opacity', 'past-color', 'future-color']
     })
-    export class OnionStage extends HTMLElement
+    export class OnionStage extends HTMLDivElement
     {
-        /** @name        template
-         *  @public
-         *  @type        {unknown}
-         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
-         *               or behavior-only rendering logic while participating in the compiled Template fast path.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        template = html``;
+        public static readonly Styles = Styles;
+        public template = html``;
 
-        /** @name        frame$
-         *  @public
-         *  @readonly
-         *  @type        {OnionStage.Types.Signal<number>}
-         *  @description Component member for frame$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly frame$: Types.Signal<number> = signal(0);
+        private _provider?: Types.SnapshotProvider;
+        private _frame?: number;
+        private _scene?: HTMLElement;
+        private _bound?: boolean;
 
-        /** @name        #provider
-         *  @public
-         *  @type        {OnionStage.Types.SnapshotProvider}
-         *  @description Component member for provider.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #provider?: Types.SnapshotProvider;
-
-        /** @name        #host
-         *  @public
-         *  @type        {HTMLDivElement}
-         *  @description Component member for host.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #host?: HTMLDivElement;
-
-        /** @name        constructor
-         *  @public
-         *  @type        {constructor}
-         *  @description Constructs the component for constructor.
-         *  @param       {OnionStage.Interfaces.OnionStageOptions} opts Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        constructor(opts: Interfaces.OnionStageOptions = {})
+        constructor(options: Interfaces.OnionStageOptions = {})
         {
             super();
-
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-            };
-
-            /** @name        el
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned el value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const el = self.render();
-            if (opts.before != null)
-                el.setAttribute('before', String(opts.before));
-            if (opts.after != null)
-                el.setAttribute('after', String(opts.after));
-            if (opts.step != null)
-                el.setAttribute('step', String(opts.step));
-            if (opts.width != null)
-                el.setAttribute('width', String(opts.width));
-            if (opts.height != null)
-                el.setAttribute('height', String(opts.height));
+            this.EnsureState();
+            if(options.before != null) this.setAttribute('before', String(options.before));
+            if(options.after != null) this.setAttribute('after', String(options.after));
+            if(options.step != null) this.setAttribute('step', String(options.step));
+            if(options.width != null) this.setAttribute('width', String(options.width));
+            if(options.height != null) this.setAttribute('height', String(options.height));
+            if(options.opacity != null) this.setAttribute('opacity', String(options.opacity));
+            if(options.pastColor) this.setAttribute('past-color', options.pastColor);
+            if(options.futureColor) this.setAttribute('future-color', options.futureColor);
         }
 
-        /** @name        onConnected
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Connected.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onConnected(): void
+        public get ghostCount(): number
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-
-                /** @name        signal
-                 *  @public
-                 *  @type        {{
-                    attribute(name: string): OnionStage.Types.Signal<string | null>;
-                }}
-                 *  @description Component member for signal.
-                 *  @returns     {{
-                    attribute(name: string): OnionStage.Types.Signal<string | null>;
-                }} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                signal():
-                {
-                    /** @name        attribute
-                     *  @public
-                     *  @type        {OnionStage.Types.Signal<string | null>}
-                     *  @description Component member for attribute.
-                     *  @param       {string} name Parameter.
-                     *  @returns     {OnionStage.Types.Signal<string | null>} Result.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    attribute(name: string): Types.Signal<string | null>;
-                };
-
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {OnionStage.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            };
-
-            /** @name        root
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned root value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const root = self.render();
-            if (root.querySelector('.os-host'))
-                return;
-
-            /** @name        sW
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned sW value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const sW = self.signal().attribute('width');
-
-            /** @name        sH
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned sH value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const sH = self.signal().attribute('height');
-
-            /** @name        w
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned w value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const w = parseInt(sW?.Peek() ?? '420', 10) || 420;
-
-            /** @name        h
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned h value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const h = parseInt(sH?.Peek() ?? '300', 10) || 300;
-            root.style.width = w + 'px';
-            root.style.height = h + 'px';
-
-            /** @name        host
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned host value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const host = document.createElement('div');
-            host.className = 'os-host';
-            this.#host = host;
-            root.appendChild(host);
-            // Re-render whenever frame or provider change
-            effect(() => { this.frame$.Get(); this.#repaint(); });
-            self.Sheet = OnionStage.DefaultSheet();
+            return this.Before() + this.After();
         }
 
-        /** Provider must return a fresh DOM/SVG snapshot for the given frame. */
-        setSnapshotProvider(fn: Types.SnapshotProvider): this
+        public onConnected(): void
         {
-            this.#provider = fn;
-            this.#repaint();
+            this.EnsureState();
+            this.classList.add('OnionStage');
+            if(!this.hasAttribute('before')) this.setAttribute('before', '3');
+            if(!this.hasAttribute('after')) this.setAttribute('after', '3');
+            if(!this.hasAttribute('step')) this.setAttribute('step', '1');
+            if(!this.hasAttribute('opacity')) this.setAttribute('opacity', '.4');
+            if(!this.hasAttribute('past-color')) this.setAttribute('past-color', '#4b9ee9');
+            if(!this.hasAttribute('future-color')) this.setAttribute('future-color', '#e69a45');
+            if(!this.hasAttribute('height')) this.setAttribute('height', '300');
+            this.Render();
+        }
+
+        public onCreated(): void
+        {
+            requestAnimationFrame(() => { if(this.isConnected) this.onConnected(); });
+        }
+
+        public setSnapshotProvider(provider: Types.SnapshotProvider): this
+        {
+            this.EnsureState();
+            this._provider = provider;
+            this.Repaint();
             return this;
         }
 
-        /** Update the live playhead frame. */
-        setFrame(f: number): this
+        public setFrame(frame: number): this
         {
-            this.frame$.Set(f);
+            this.EnsureState();
+            this._frame = Math.round(frame);
+            this.Repaint();
+            this.dispatchEvent(new CustomEvent('arianna:onion-frame', {
+                bubbles: true, composed: true, detail: { frame: this._frame, source: this }
+            }));
             return this;
         }
 
-        /** Public: total ghost count (before + after). */
-        get ghostCount(): number
+        public onAttributeChanged(name: string): void
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        signal
-                 *  @public
-                 *  @type        {{
-                    attribute(name: string): OnionStage.Types.Signal<string | null>;
-                }}
-                 *  @description Component member for signal.
-                 *  @returns     {{
-                    attribute(name: string): OnionStage.Types.Signal<string | null>;
-                }} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                signal():
-                {
-                    /** @name        attribute
-                     *  @public
-                     *  @type        {OnionStage.Types.Signal<string | null>}
-                     *  @description Component member for attribute.
-                     *  @param       {string} name Parameter.
-                     *  @returns     {OnionStage.Types.Signal<string | null>} Result.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    attribute(name: string): Types.Signal<string | null>;
-                };
-            };
-
-            /** @name        b
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned b value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const b = parseInt(self.signal().attribute('before')?.Peek() ?? '2', 10) || 0;
-
-            /** @name        a
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned a value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const a = parseInt(self.signal().attribute('after')?.Peek() ?? '2', 10) || 0;
-            return b + a;
-        }
-
-        /** @name        #repaint
-         *  @public
-         *  @type        {void}
-         *  @description Component member for repaint.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #repaint(): void
-        {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        signal
-                 *  @public
-                 *  @type        {{
-                    attribute(name: string): OnionStage.Types.Signal<string | null>;
-                }}
-                 *  @description Component member for signal.
-                 *  @returns     {{
-                    attribute(name: string): OnionStage.Types.Signal<string | null>;
-                }} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                signal():
-                {
-                    /** @name        attribute
-                     *  @public
-                     *  @type        {OnionStage.Types.Signal<string | null>}
-                     *  @description Component member for attribute.
-                     *  @param       {string} name Parameter.
-                     *  @returns     {OnionStage.Types.Signal<string | null>} Result.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    attribute(name: string): Types.Signal<string | null>;
-                };
-            };
-
-            /** @name        host
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned host value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const host = this.#host;
-            if (!host || !this.#provider)
+            if(!this.isConnected) return;
+            if(name === 'width' || name === 'height' || name === 'past-color' || name === 'future-color')
+            {
+                this.Render();
                 return;
-            while (host.firstChild)
-                host.removeChild(host.firstChild);
-
-            /** @name        before
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned before value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const before = parseInt(self.signal().attribute('before')?.Peek() ?? '2', 10) || 0;
-
-            /** @name        after
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned after value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const after = parseInt(self.signal().attribute('after')?.Peek() ?? '2', 10) || 0;
-
-            /** @name        step
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned step value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const step = parseInt(self.signal().attribute('step')?.Peek() ?? '1', 10) || 1;
-
-            /** @name        live
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned live value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const live = this.frame$.Peek();
-            // Past ghosts (deepest first so live ends up on top)
-            for (let i = before; i >= 1; i--)
-            {
-                /** @name        f
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned f value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const f = live - i * step;
-
-                /** @name        snap
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned snap value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const snap = this.#provider(f);
-                if (snap)
-                {
-                    /** @name        ghost
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned ghost value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const ghost = this.#wrapGhost(snap, i / Math.max(1, before), 'past');
-                    host.appendChild(ghost);
-                }
             }
-            // Future ghosts
-            for (let i = after; i >= 1; i--)
-            {
-                /** @name        f
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned f value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const f = live + i * step;
-
-                /** @name        snap
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned snap value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const snap = this.#provider(f);
-                if (snap)
-                {
-                    /** @name        ghost
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned ghost value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const ghost = this.#wrapGhost(snap, i / Math.max(1, after), 'future');
-                    host.appendChild(ghost);
-                }
-            }
-            // Live frame on top, full opacity
-            /** @name        liveSnap
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned liveSnap value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const liveSnap = this.#provider(live);
-            if (liveSnap)
-            {
-                /** @name        w
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned w value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const w = document.createElement('div');
-                w.className = 'os-live';
-                w.appendChild(liveSnap);
-                host.appendChild(w);
-            }
+            if(name === 'before' || name === 'after' || name === 'step' || name === 'opacity') this.Repaint();
         }
 
-        /** @name        #wrapGhost
-         *  @public
-         *  @type        {HTMLDivElement}
-         *  @description Component member for wrap Ghost.
-         *  @param       {HTMLElement | SVGElement} snap Parameter.
-         *  @param       {number} distRatio Parameter.
-         *  @param       {'past' | 'future'} kind Parameter.
-         *  @returns     {HTMLDivElement} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #wrapGhost(snap: HTMLElement | SVGElement, distRatio: number, kind: 'past' | 'future'): HTMLDivElement
+        private Render(): void
         {
-            // distRatio: 1 = furthest (most faded), 0 = closest to live
-            /** @name        opacity
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned opacity value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const opacity = 0.45 * (1 - distRatio * 0.7);
+            const past = this.getAttribute('past-color') ?? '#4b9ee9';
+            const future = this.getAttribute('future-color') ?? '#e69a45';
+            this.style.setProperty('--OnionStage-PastColor', past);
+            this.style.setProperty('--OnionStage-FutureColor', future);
+            if(this.hasAttribute('width')) this.style.width = `${Number(this.getAttribute('width')) || 0}px`;
+            this.style.height = `${Number(this.getAttribute('height') ?? 300) || 300}px`;
 
-            /** @name        wrap
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned wrap value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const wrap = document.createElement('div');
-            wrap.className = `os-ghost os-ghost-${kind}`;
-            wrap.style.opacity = String(opacity);
-            wrap.appendChild(snap);
-            return wrap;
+            const toolbar = document.createElement('div');
+            toolbar.className = 'OnionStage-Toolbar';
+            const before = this.Control('Before', this.Before(), value => { this.setAttribute('before', String(value)); this.Repaint(); });
+            const after = this.Control('After', this.After(), value => { this.setAttribute('after', String(value)); this.Repaint(); });
+            const opacity = this.Control('Opacity', this.Opacity(), value => { this.setAttribute('opacity', String(Math.max(0, Math.min(1, value)))); this.Repaint(); }, .1);
+
+            const legend = document.createElement('span');
+            legend.className = 'OnionStage-Legend';
+            const pastSwatch = document.createElement('span');
+            pastSwatch.className = 'OnionStage-Swatch'; pastSwatch.dataset.kind = 'past';
+            const pastText = document.createElement('span'); pastText.textContent = 'Past';
+            const futureSwatch = document.createElement('span');
+            futureSwatch.className = 'OnionStage-Swatch'; futureSwatch.dataset.kind = 'future';
+            const futureText = document.createElement('span'); futureText.textContent = 'Future';
+            legend.append(pastSwatch, pastText, futureSwatch, futureText);
+            toolbar.append(before, after, opacity, legend);
+
+            const scene = document.createElement('div');
+            scene.className = 'OnionStage-Scene';
+            const ground = document.createElement('div');
+            ground.className = 'OnionStage-Ground';
+            scene.append(ground);
+            this._scene = scene;
+
+            this.replaceChildren(toolbar, scene);
+
+            if(!this._bound)
+            {
+                this._bound = true;
+                this.addEventListener('keydown', event =>
+                {
+                    if((event.target as HTMLElement | null)?.matches('input')) return;
+                    if(event.key === 'ArrowLeft') { event.preventDefault(); this.setFrame((this._frame ?? 24) - this.Step()); }
+                    else if(event.key === 'ArrowRight') { event.preventDefault(); this.setFrame((this._frame ?? 24) + this.Step()); }
+                });
+            }
+            if(!this.hasAttribute('tabindex')) this.tabIndex = 0;
+
+            let dragX: number | null = null;
+            let dragFrame = this._frame ?? 24;
+            scene.addEventListener('pointerdown', event =>
+            {
+                dragX = event.clientX;
+                dragFrame = this._frame ?? 24;
+                scene.setPointerCapture?.(event.pointerId);
+                this.focus();
+            });
+            scene.addEventListener('pointermove', event =>
+            {
+                if(dragX == null) return;
+                const delta = event.clientX - dragX;
+                const frames = Math.round(delta / 24) * this.Step();
+                if(frames !== 0) this.setFrame(dragFrame + frames);
+            });
+            const finish = (event: PointerEvent) =>
+            {
+                if(dragX == null) return;
+                dragX = null;
+                try { scene.releasePointerCapture?.(event.pointerId); } catch { /* no-op */ }
+            };
+            scene.addEventListener('pointerup', finish);
+            scene.addEventListener('pointercancel', finish);
+            scene.addEventListener('wheel', event =>
+            {
+                event.preventDefault();
+                this.setFrame((this._frame ?? 24) + (event.deltaY > 0 ? this.Step() : -this.Step()));
+            }, { passive: false });
+
+            this.Repaint();
         }
 
-        /** @name        DefaultSheet
-         *  @public
-         *  @static
-         *  @type        {OnionStage.Types.Stylesheet}
-         *  @description Component member for Default Sheet.
-         *  @returns     {OnionStage.Types.Stylesheet} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
+        private Repaint(): void
         {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--ar-bg2, #161616)',
-                    border: '1px solid var(--ar-border, #2a2a2a)',
-                    borderRadius: 'var(--ar-radius, 5px)',
-                    display: 'inline-block',
-                    overflow: 'hidden',
-                    position: 'relative',
-                }),
-                new Rule(':host .os-host', {
-                    height: '100%',
-                    position: 'relative',
-                    width: '100%',
-                }),
-                new Rule(':host .os-host > *', {
-                    inset: '0',
-                    pointerEvents: 'none',
-                    position: 'absolute',
-                }),
-                new Rule(':host .os-ghost-past', { filter: 'grayscale(0.35) sepia(0.1) hue-rotate(190deg)', mixBlendMode: 'screen' }),
-                new Rule(':host .os-ghost-future', { filter: 'grayscale(0.35) sepia(0.4) hue-rotate(330deg)', mixBlendMode: 'screen' }),
-                new Rule(':host .os-live', { pointerEvents: 'auto', opacity: '1' }),
-            ]);
+            this.EnsureState();
+            const scene = this._scene;
+            if(!scene) return;
+            scene.querySelectorAll(':scope > .OnionStage-Ghost').forEach(node => node.remove());
+
+            const before = this.Before();
+            const after = this.After();
+            const step = this.Step();
+            const baseOpacity = this.Opacity();
+
+            for(let distance = before; distance >= 1; distance--)
+            {
+                const frame = (this._frame ?? 24) - distance * step;
+                const ghost = this.Ghost(frame, 'past', distance / Math.max(1, before), baseOpacity);
+                scene.append(ghost);
+            }
+
+            for(let distance = after; distance >= 1; distance--)
+            {
+                const frame = (this._frame ?? 24) + distance * step;
+                const ghost = this.Ghost(frame, 'future', distance / Math.max(1, after), baseOpacity);
+                scene.append(ghost);
+            }
+
+            scene.append(this.Ghost(this._frame ?? 24, 'live', 0, 1));
+        }
+
+        private Ghost(frame: number, kind: 'past' | 'future' | 'live', distance: number, opacity: number): HTMLDivElement
+        {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'OnionStage-Ghost';
+            wrapper.dataset.kind = kind;
+            const offset = frame - (this._frame ?? 24);
+            const scale = kind === 'live' ? 1 : .82 + (1 - distance) * .14;
+            wrapper.style.transform = `translateX(calc(-50% + ${offset * 24}px)) scale(${scale})`;
+            wrapper.style.opacity = String(kind === 'live' ? 1 : (opacity <= 0 ? 0 : Math.max(.02, opacity * (1 - distance * .62))));
+
+            const snapshot = this._provider?.(frame) ?? this.Figure(frame);
+            wrapper.append(snapshot.cloneNode(true));
+            return wrapper;
+        }
+
+        private Figure(frame: number): HTMLElement
+        {
+            const figure = document.createElement('div');
+            figure.className = 'OnionStage-Figure';
+            const phase = frame * .72;
+            const swing = Math.sin(phase) * 28;
+            const body = Math.sin(phase * .5) * 4;
+            figure.style.setProperty('--OnionStage-BodyAngle', `${body}deg`);
+            figure.style.setProperty('--OnionStage-ArmLeft', `${swing}deg`);
+            figure.style.setProperty('--OnionStage-ArmRight', `${-swing}deg`);
+            figure.style.setProperty('--OnionStage-LegLeft', `${-swing * .72}deg`);
+            figure.style.setProperty('--OnionStage-LegRight', `${swing * .72}deg`);
+
+            const head = document.createElement('span'); head.className = 'OnionStage-FigureHead';
+            const torso = document.createElement('span'); torso.className = 'OnionStage-FigureBody';
+            const armLeft = document.createElement('span'); armLeft.className = 'OnionStage-FigureArm'; armLeft.dataset.side = 'left';
+            const armRight = document.createElement('span'); armRight.className = 'OnionStage-FigureArm'; armRight.dataset.side = 'right';
+            const legLeft = document.createElement('span'); legLeft.className = 'OnionStage-FigureLeg'; legLeft.dataset.side = 'left';
+            const legRight = document.createElement('span'); legRight.className = 'OnionStage-FigureLeg'; legRight.dataset.side = 'right';
+            figure.append(head, torso, armLeft, armRight, legLeft, legRight);
+            return figure;
+        }
+
+        private Control(label: string, value: number, change: (value: number) => void, step = 1): HTMLElement
+        {
+            const control = document.createElement('label');
+            control.className = 'OnionStage-Control';
+            const text = document.createElement('span'); text.textContent = label;
+            const input = document.createElement('input');
+            input.className = 'OnionStage-Input'; input.type = 'number'; input.value = String(value); input.step = String(step);
+            if(label === 'Before' || label === 'After') input.min = '0';
+            if(label === 'Opacity') { input.min = '0'; input.max = '1'; }
+            const update = () =>
+            {
+                const parsed = Number(input.value);
+                change(Number.isFinite(parsed) ? parsed : 0);
+            };
+            input.addEventListener('input', update);
+            input.addEventListener('change', update);
+            control.append(text, input);
+            return control;
+        }
+
+        private EnsureState(): void
+        {
+            if(typeof this._frame !== 'number' || !Number.isFinite(this._frame)) this._frame = 24;
+            if(typeof this._bound !== 'boolean') this._bound = false;
+        }
+
+        private Before(): number
+        {
+            const value = Number(this.getAttribute('before') ?? 3);
+            return Math.max(0, Number.isFinite(value) ? Math.round(value) : 3);
+        }
+        private After(): number
+        {
+            const value = Number(this.getAttribute('after') ?? 3);
+            return Math.max(0, Number.isFinite(value) ? Math.round(value) : 3);
+        }
+        private Step(): number
+        {
+            const value = Number(this.getAttribute('step') ?? 1);
+            return Math.max(1, Number.isFinite(value) ? value : 1);
+        }
+        private Opacity(): number
+        {
+            const value = Number(this.getAttribute('opacity') ?? .4);
+            return Math.max(0, Math.min(1, Number.isFinite(value) ? value : .4));
         }
     }
 }
-export default OnionStage;
 
 export type OnionStageOptions = OnionStage.Interfaces.OnionStageOptions;
 export type SnapshotProvider = OnionStage.Types.SnapshotProvider;
+export default OnionStage.OnionStage;

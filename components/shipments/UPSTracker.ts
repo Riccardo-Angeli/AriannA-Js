@@ -8,8 +8,13 @@
  * @description AriannA UPSTracker component module.
  */
 
-import { Component, Templates } from '../../core/index.ts';
+
 import { Tracker, type CarrierConfig, type TrackingEvent } from './Tracker.ts';
+
+import { MountShipmentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Templates: any;
+
 
 /** @namespace   UPSTracker
  *  @public
@@ -86,7 +91,7 @@ export namespace UPSTracker
         color: '#644117',
         publicUrl: 'https://www.ups.com/track?tracknum={n}',
         pattern: /^1Z[0-9A-Z]{16}$/i,
-        logo: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 22"><rect width="64" height="22" rx="3" fill="#644117"/><text x="32" y="16" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="900" fill="#ffcc00" letter-spacing="1">UPS</text></svg>`,
+        logo: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 74 38" role="img" aria-label="UPS"><path d="M19 3h36v17c0 8-7 13-18 16C26 33 19 28 19 20V3z" fill="#351C15" stroke="#FFB500" stroke-width="2"/><path d="M22 6h30v6H22z" fill="#FFB500"/><text x="37" y="27" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="700" fill="#FFB500">ups</text></svg>`,
     };
 
     /** @class       UPSTracker
@@ -96,21 +101,45 @@ export namespace UPSTracker
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-ups-tracker', {}, {
+        shadow: false,
         Attributes: ['tracking-number', 'locale'],
     })
-    export class UPSTracker extends HTMLElement
+    export class UPSTracker extends HTMLDivElement
     {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'UPSTracker';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(this._inner === undefined) this._inner = null;
+        }
+
         /** Compiler-visible template slot installed by @Component. */
         declare template: unknown;
 
-        /** @name        #inner
+        /** @name        _inner
          *  @public
          *  @type        {Tracker | null}
          *  @description Component member for inner.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #inner: Tracker.Tracker | null = null;
+        declare _inner: Tracker.Tracker | null;
 
         /** @name        onConnected
          *  @public
@@ -123,7 +152,11 @@ export namespace UPSTracker
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.UPSTrackerOptions = {})
         {
+            if(this._inner === undefined) this._inner = null;
+            if(this.dataset.ariannaFolderReady === 'true') return;
             this.template = html `<div class="ar-carrier-host" data-r="host"></div>`;
+            MountShipmentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
         }
 
         /** @name        carrier
@@ -159,8 +192,8 @@ export namespace UPSTracker
         setTrackingNumber(n: string): this
         {
             this.setAttribute('tracking-number', n);
-            if (this.#inner)
-                this.#inner.setTrackingNumber(n);
+            if (this._inner)
+                this._inner.setTrackingNumber(n);
             return this;
         }
 
@@ -185,8 +218,8 @@ export namespace UPSTracker
          *  @license     MIT / Commercial (dual license) */
         setEvents(events: TrackingEvent[]): this
         {
-            if (this.#inner)
-                this.#inner.setEvents(events);
+            if (this._inner)
+                this._inner.setEvents(events);
             return this;
         }
 
@@ -198,7 +231,7 @@ export namespace UPSTracker
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        getEvents(): TrackingEvent[] { return this.#inner?.getEvents() ?? []; }
+        getEvents(): TrackingEvent[] { return this._inner?.getEvents() ?? []; }
 
         /** @name        validateNumber
          *  @public
@@ -287,7 +320,7 @@ export namespace UPSTracker
             if (loc)
                 inner.setAttribute('locale', loc);
             host.appendChild(inner);
-            this.#inner = inner;
+            this._inner = inner;
         }
 
         /** @name        onBeforeUpdate
@@ -328,7 +361,7 @@ export namespace UPSTracker
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        onUnmount() { this.#inner = null; }
+        onUnmount() { this._inner = null; }
     }
 }
 export default UPSTracker;

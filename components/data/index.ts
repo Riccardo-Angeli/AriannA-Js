@@ -1,20 +1,26 @@
 /**
- * @module    components/data
- * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026
- * @license   MIT / Commercial (dual license)
- *
- * Barrel — data-shaped widgets: surfaces that present collections of records.
- *   • Table     — tabular data (re-exports the canonical layout/Table)
- *   • TreeView  — hierarchical data
- *
- * Importing this module side-effect-registers `arianna-tree-view`
- * (the layout barrel already registers `arianna-table`).
- *
- * Tags registered:
- *   arianna-tree-view, (arianna-table via layout/Table re-export)
+ * @module components/data
+ * @description Canonical AriannA Data barrel. TreeView is implemented here;
+ *              Table is exposed through its Data compatibility surface while
+ *              the implementation remains canonical in Layout.
  */
-export { Table } from './Table.ts';
 export { TreeView } from './TreeView.ts';
-export type { Row, SortDir, SortState, SelectMode, TableColumn, TableOptions, } from './Table.ts';
-export type { TreeNode, TreeViewOptions, } from './TreeView.ts';
+export type { TreeNode, TreeViewOptions } from './TreeView.ts';
+export { Table, TableClass } from './Table.ts';
+export type {
+    Row,
+    SortDir,
+    SortState,
+    SelectMode,
+    TableColumn,
+    TableOptions,
+    FetchParams,
+    FetchResult,
+    WasmProcessor,
+} from './Table.ts';
+
+import TreeView from './TreeView.ts';
+import Table from './Table.ts';
+
+export const DataComponents = { TreeView, Table };
+export default DataComponents;

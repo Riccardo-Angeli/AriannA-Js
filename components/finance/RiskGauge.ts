@@ -8,8 +8,12 @@
  * @description AriannA RiskGauge component module.
  */
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
+
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _fmt, _esc } from './helpers.ts';
+
+import { MountFinanceTemplate } from './Base.ts';
+
 
 /** @namespace   RiskGauge
  *  @public
@@ -133,11 +137,91 @@ export namespace RiskGauge
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-risk-gauge', {}, {
-        Attributes: ['value', 'min', 'max', 'label', 'size'],
-    })
-    export class RiskGauge extends HTMLElement
+    export const Styles: Types.Stylesheet = (() =>
     {
+            return new Stylesheet([
+            new Rule('.RiskGauge', {
+                '--arianna-bg': '#17181c',
+                '--arianna-bg-2': '#1d1e23',
+                '--arianna-bg-3': '#24262b',
+                '--arianna-text': '#e6e8eb',
+                '--arianna-muted': '#9aa0aa',
+                '--arianna-dim': '#6f7580',
+                '--arianna-border': '#303238',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#26a69a',
+                '--arianna-warning': '#f5a623',
+                '--arianna-danger': '#ef5350',
+                '--bg': '#17181c',
+                '--bg3': '#24262b',
+                '--text': '#e6e8eb',
+                '--muted': '#9aa0aa',
+                '--border': '#303238',
+                '--accent': '#e40c88',
+            }),
+            new Rule('.RiskGauge[theme="light"]', {
+                '--arianna-bg': '#ffffff',
+                '--arianna-bg-2': '#fbfbfc',
+                '--arianna-bg-3': '#f3f3f5',
+                '--arianna-text': '#1c1e21',
+                '--arianna-muted': '#626873',
+                '--arianna-dim': '#8a8f98',
+                '--arianna-border': '#e2e2e6',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#168a78',
+                '--arianna-warning': '#b66c00',
+                '--arianna-danger': '#c93645',
+                '--bg': '#ffffff',
+                '--bg3': '#f3f3f5',
+                '--text': '#1c1e21',
+                '--muted': '#626873',
+                '--border': '#e2e2e6',
+                '--accent': '#e40c88',
+            }),
+                new Rule('.RiskGauge', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    display: 'inline-block',
+                    padding: '8px',
+                }),
+                new Rule('.RiskGauge svg', { display: 'block' }),
+            ]);
+        
+    })();
+
+    @Component('arianna-risk-gauge', Styles, {
+        Shadow: false,
+        Attributes: ['value', 'min', 'max', 'label', 'size', 'theme'],
+    })
+    export class RiskGauge extends HTMLDivElement
+    {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'RiskGauge';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('RiskGauge');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -155,6 +239,10 @@ export namespace RiskGauge
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.RiskGaugeOptions = {})
         {
+            this.classList.add('RiskGauge');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            this.dataset.ariannaFolderReady = 'true';
             /** @name        value
              *  @public
              *  @type        {inferred}
@@ -364,15 +452,16 @@ export namespace RiskGauge
                  *  @license     MIT / Commercial (dual license) */
                 const ny = aY(endA) * 0.85 + cy * 0.15;
                 return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s * 0.7}" viewBox="0 0 ${s} ${s * 0.7}">`
-                    + `<path d="${bgPath}" fill="none" stroke="var(--arianna-bg-4, #2a2e39)" stroke-width="${sw}" stroke-linecap="round"/>`
+                    + `<path d="${bgPath}" fill="none" stroke="var(--arianna-bg-4, var(--bg3, #2a2e39))" stroke-width="${sw}" stroke-linecap="round"/>`
                     + `<path d="${fgPath}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round"/>`
-                    + `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="var(--arianna-text, #1f2328)" stroke-width="2"/>`
-                    + `<circle cx="${cx}" cy="${cy}" r="4" fill="var(--arianna-text, #1f2328)"/>`
+                    + `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="var(--arianna-text, var(--text, #1c1e21))" stroke-width="2"/>`
+                    + `<circle cx="${cx}" cy="${cy}" r="4" fill="var(--arianna-text, var(--text, #1c1e21))"/>`
                     + `<text x="${cx}" y="${cy - 10}" fill="${color}" font-size="16" font-weight="700" text-anchor="middle">${_fmt(v)}</text>`
-                    + `<text x="${cx}" y="${cy + 8}" fill="var(--arianna-muted, #787b86)" font-size="11" text-anchor="middle">${_esc(lbl)}</text>`
+                    + `<text x="${cx}" y="${cy + 8}" fill="var(--arianna-muted, var(--muted, #787b86))" font-size="11" text-anchor="middle">${_esc(lbl)}</text>`
                     + `</svg>`;
             };
-            this.template = html `<div class="ar-gauge" a-html="this.svgHtml()"></div>`;
+            this.template = html `<div class="RiskGauge-Canvas" a-html="this.svgHtml()"></div>`;
+            MountFinanceTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -382,7 +471,7 @@ export namespace RiskGauge
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 Sheet: Types.Stylesheet | null;
-            }).Sheet = RiskGauge.DefaultSheet();
+            }).Sheet = Styles;
         }
 
         /** Convenience: set min and max together. */
@@ -521,19 +610,8 @@ export namespace RiskGauge
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    display: 'inline-block',
-                    padding: '8px',
-                }),
-                new Rule(':host svg', { display: 'block' }),
-            ]);
-        }
+        public static readonly Styles = Styles;
+        static DefaultSheet(): Types.Stylesheet { return Styles; }
     }
 }
 export default RiskGauge;

@@ -8,8 +8,17 @@
  * @description AriannA PayPal component module.
  */
 
-import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
+
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountPaymentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Reactivity: any;
+declare namespace Reactivity { type Signal<T> = any; type Effect = any; }
+declare const Templates: any;
+
 
 /** @namespace   PayPal
  *  @public
@@ -166,7 +175,7 @@ export namespace PayPal
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -279,11 +288,41 @@ export namespace PayPal
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
+    export const PAYPAL_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 106 30" role="img" aria-label="PayPal"><path d="M7 4h13c8 0 10 5 8 11-2 6-7 8-14 8H9L7 28H1L7 4z" fill="#003087"/><path d="M12 8h10c5 0 6 3 5 6-1 4-4 5-9 5h-7z" fill="#009CDE"/><text x="34" y="22" font-family="Arial,sans-serif" font-size="18" font-weight="800" font-style="italic" fill="#003087">Pay</text><text x="66" y="22" font-family="Arial,sans-serif" font-size="18" font-weight="800" font-style="italic" fill="#009CDE">Pal</text></svg>`;
+
     @Component('arianna-paypal', {}, {
+        shadow: false,
         Attributes: ['client-id', 'amount', 'currency', 'intent', 'redirect-url', 'button-style', 'button-color', 'button-shape'],
     })
-    export class PayPal extends HTMLElement
+    export class PayPal extends HTMLDivElement
     {
+        public static readonly Styles = PayPal.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'PayPal';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(!this.sdkLoaded$) this.sdkLoaded$ = signal<boolean>(false);
+            if(!this.sdkError$) this.sdkError$ = signal<string | null>(null);
+            if(!this.busy$) this.busy$ = signal<boolean>(false);
+            this.classList.add('PayPal');
+        }
+
         /** Compiler-visible template slot installed by the Component decorator. */
         declare template: unknown;
 
@@ -294,7 +333,7 @@ export namespace PayPal
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        sdkLoaded$: Types.Signal<boolean> = signal<boolean>(false);
+        declare sdkLoaded$: Types.Signal<boolean>;
 
         /** @name        sdkError$
          *  @public
@@ -303,7 +342,7 @@ export namespace PayPal
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        sdkError$: Types.Signal<string | null> = signal<string | null>(null);
+        declare sdkError$: Types.Signal<string | null>;
 
         /** @name        busy$
          *  @public
@@ -312,7 +351,7 @@ export namespace PayPal
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        busy$: Types.Signal<boolean> = signal<boolean>(false);
+        declare busy$: Types.Signal<boolean>;
 
         /** @name        onConnected
          *  @public
@@ -325,6 +364,11 @@ export namespace PayPal
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.PayPalOptions = {} as Interfaces.PayPalOptions)
         {
+            if(!this.sdkLoaded$) this.sdkLoaded$ = signal<boolean>(false);
+            if(!this.sdkError$) this.sdkError$ = signal<string | null>(null);
+            if(!this.busy$) this.busy$ = signal<boolean>(false);
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            (this as any).PAYPAL_LOGO = PAYPAL_LOGO;
             this.fallbackVisible = () => !this.sdkLoaded$.Get();
             this.fallbackLabel = () => this.sdkError$.Get()
                 ? 'Open PayPal'
@@ -349,11 +393,13 @@ export namespace PayPal
                 <button type="button" class="ar-pp__fallback"
                         a-if="this.fallbackVisible()"
                         @click="this.onFallback">
-                    <span class="ar-pp__logo">PayPal</span>
+                    <span class="ar-pp__logo" a-html="this.PAYPAL_LOGO"></span>
                     <span>{{ this.fallbackLabel() }}</span>
                 </button>
             </div>
         `;
+            MountPaymentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -410,7 +456,7 @@ export namespace PayPal
             }
         }
 
-        /** @name        #mountSDKButtons
+        /** @name        _mountSDKButtons
          *  @public
          *  @type        {Promise<void>}
          *  @description Component member for mount SDKButtons.
@@ -418,7 +464,7 @@ export namespace PayPal
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        async #mountSDKButtons(): Promise<void>
+        async _mountSDKButtons(): Promise<void>
         {
             /** @name        clientId
              *  @public
@@ -687,7 +733,7 @@ export namespace PayPal
          *  @license     MIT / Commercial (dual license) */
         async onMount()
         {
-            await this.#mountSDKButtons();
+            await this._mountSDKButtons();
         }
 
         /** @name        onBeforeUpdate
@@ -769,7 +815,10 @@ export namespace PayPal
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'inline-block', minWidth: '200px' }),
+                new Rule('.PayPal', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0', display: 'inline-block', minWidth: '200px' }),
                 new Rule('.ar-pp__mount', { display: 'block' }),
                 new Rule('.ar-pp__fallback', {
                     display: 'inline-flex',

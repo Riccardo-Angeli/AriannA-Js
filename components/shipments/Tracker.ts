@@ -8,8 +8,19 @@
  * @description AriannA Tracker component module.
  */
 
-import { Component, Css, Reactivity, Templates, Components } from '../../core/index.ts';
+
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountShipmentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Reactivity: any;
+declare namespace Reactivity { type Signal<T> = any; type Effect = any; }
+declare const Templates: any;
+
 
 /** @namespace   Tracker
  *  @public
@@ -169,7 +180,7 @@ export namespace Tracker
        not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
        returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
        Map, Effect" with the same name printed twice. */
-    const signal = Reactivity.CreateSignal;
+    const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -406,10 +417,37 @@ export namespace Tracker
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-tracker', {}, {
+        shadow: false,
         Attributes: ['tracking-number', 'carrier', 'locale'],
     })
-    export class Tracker extends HTMLElement
+    export class Tracker extends HTMLDivElement
     {
+        public static readonly Styles = Tracker.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'Tracker';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(!this.events$) this.events$ = signal<TrackingEvent[]>([]);
+            if(!this.carrier$) this.carrier$ = signal<CarrierConfig | null>(null);
+            this.classList.add('Tracker');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -423,7 +461,7 @@ export namespace Tracker
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        events$: Types.Signal<TrackingEvent[]> = signal<TrackingEvent[]>([]);
+        declare events$: Types.Signal<TrackingEvent[]>;
 
         /** @name        carrier$
          *  @public
@@ -432,7 +470,7 @@ export namespace Tracker
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        carrier$: Types.Signal<CarrierConfig | null> = signal<CarrierConfig | null>(null);
+        declare carrier$: Types.Signal<CarrierConfig | null>;
 
         /** @name        onConnected
          *  @public
@@ -445,6 +483,9 @@ export namespace Tracker
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: TrackerOptions = {})
         {
+            if(!this.events$) this.events$ = signal<TrackingEvent[]>([]);
+            if(!this.carrier$) this.carrier$ = signal<CarrierConfig | null>(null);
+            if(this.dataset.ariannaFolderReady === 'true') return;
             /** @name        numberAttr
              *  @public
              *  @type        {inferred}
@@ -677,6 +718,8 @@ export namespace Tracker
                         @click="this.onPortalClick">{{ this.portalLabel() }}</button>
             </div>
         `;
+            MountShipmentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -1027,24 +1070,27 @@ export namespace Tracker
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', {
+                new Rule('.Tracker', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
                     display: 'block',
                     fontFamily: '-apple-system, system-ui, sans-serif',
                     fontSize: '13px',
-                    color: 'var(--arianna-text, #1f2328)',
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
                     maxWidth: '480px',
                 }),
                 new Rule('.ar-trk', {
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                     borderRadius: 'var(--arianna-radius, 8px)',
                     overflow: 'hidden',
                 }),
                 new Rule('.ar-trk__header', {
                     display: 'flex', alignItems: 'center', gap: '10px',
                     padding: '12px 16px',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg-3, var(--bg3, #f6f7f9))',
+                    borderBottom: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                 }),
                 new Rule('.ar-trk__logo', { display: 'inline-flex', alignItems: 'center' }),
                 new Rule('.ar-trk__logo svg', { height: '20px' }),
@@ -1062,16 +1108,16 @@ export namespace Tracker
                     position: 'absolute',
                     left: '8px', top: '20px', bottom: '-14px',
                     width: '1px',
-                    background: 'var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-border, var(--border, #e6e8eb))',
                 }),
                 new Rule('.ar-trk__icon', {
                     width: '18px', height: '18px',
                     display: 'inline-flex',
                     alignItems: 'center', justifyContent: 'center',
                     fontSize: '14px',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
                     flexShrink: '0',
-                    background: 'var(--arianna-bg, #fff)',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
                     position: 'relative',
                     zIndex: '1',
                 }),
@@ -1079,7 +1125,7 @@ export namespace Tracker
                     color: 'var(--arianna-bull, #1f883d)',
                 }),
                 new Rule('.ar-trk__event--failed .ar-trk__icon, .ar-trk__event--exception .ar-trk__icon', {
-                    color: 'var(--arianna-danger, #cf222e)',
+                    color: 'var(--arianna-danger, #ef5350)',
                 }),
                 new Rule('.ar-trk__body', { flex: '1', minWidth: '0' }),
                 new Rule('.ar-trk__label', { fontWeight: '600', fontSize: '13px' }),
@@ -1087,13 +1133,13 @@ export namespace Tracker
                     display: 'flex',
                     gap: '8px',
                     fontSize: '11px',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
                     marginTop: '2px',
                 }),
                 new Rule('.ar-trk__date', { fontFamily: 'ui-monospace, monospace' }),
                 new Rule('.ar-trk__raw', {
                     fontSize: '11px',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
                     marginTop: '4px',
                     fontStyle: 'italic',
                 }),
@@ -1101,21 +1147,21 @@ export namespace Tracker
                     padding: '24px 16px',
                     textAlign: 'center',
                     fontSize: '12px',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
                 }),
                 new Rule('.ar-trk__portal', {
                     width: '100%',
                     padding: '11px',
                     background: 'transparent',
-                    color: 'var(--arianna-text, #1f2328)',
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
                     border: 'none',
-                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderTop: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                     fontSize: '13px',
                     fontWeight: '600',
                     cursor: 'pointer',
                     transition: 'background 0.1s',
                 }),
-                new Rule('.ar-trk__portal:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
+                new Rule('.ar-trk__portal:hover', { background: 'var(--arianna-bg-3, var(--bg3, #f6f7f9))' }),
             ]);
         }
     }

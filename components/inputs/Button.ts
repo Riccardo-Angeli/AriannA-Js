@@ -9,6 +9,7 @@
  */
 
 import { Component, Components, Css, Templates } from '../../core/index.ts';
+import { MountInputTemplate } from './Base.ts';
 
 /** @namespace   Button
  *  @public
@@ -143,7 +144,7 @@ export namespace Button
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     export const ButtonStyleMap = Object.freeze({
-        self: ':host',
+        self: 'arianna-button',
         button: '.ar-btn__native',
         native: '.ar-btn__native',
         label: '.ar-btn__label',
@@ -153,7 +154,7 @@ export namespace Button
     });
     export function ButtonDefaultSheet(): Types.Stylesheet {
         return new Stylesheet([
-            new Rule(':host', {
+            new Rule('arianna-button', {
                 alignItems: 'center',
                 display: 'inline-flex',
                 verticalAlign: 'middle',
@@ -185,44 +186,44 @@ export namespace Button
             new Rule('.ar-btn__native:focus-visible', {
                 boxShadow: '0 0 0 3px var(--arianna-focus-ring, rgba(31, 111, 235, 0.25))',
             }),
-            new Rule(':host([variant="primary"]) .ar-btn__native', {
+            new Rule('arianna-button[variant="primary"] .ar-btn__native', {
                 background: 'var(--arianna-button-primary-bg, var(--arianna-primary, #1f6feb))',
                 border: 'var(--arianna-button-primary-border, 1px solid var(--arianna-primary, #1f6feb))',
                 color: 'var(--arianna-button-primary-color, #fff)',
             }),
-            new Rule(':host([variant="danger"]) .ar-btn__native', {
+            new Rule('arianna-button[variant="danger"] .ar-btn__native', {
                 background: 'var(--arianna-button-danger-bg, var(--arianna-danger, #cf222e))',
                 border: 'var(--arianna-button-danger-border, 1px solid var(--arianna-danger, #cf222e))',
                 color: 'var(--arianna-button-danger-color, #fff)',
             }),
-            new Rule(':host([variant="ghost"]) .ar-btn__native', {
+            new Rule('arianna-button[variant="ghost"] .ar-btn__native', {
                 background: 'transparent',
                 border: '1px solid transparent',
                 color: 'var(--arianna-button-ghost-color, var(--arianna-text, #1f2328))',
             }),
-            new Rule(':host([variant="link"]) .ar-btn__native', {
+            new Rule('arianna-button[variant="link"] .ar-btn__native', {
                 background: 'transparent',
                 border: 'none',
                 color: 'var(--arianna-button-link-color, var(--arianna-primary, #1f6feb))',
                 paddingLeft: '0',
                 paddingRight: '0',
             }),
-            new Rule(':host([size="sm"]) .ar-btn__native', {
+            new Rule('arianna-button[size="sm"] .ar-btn__native', {
                 fontSize: '0.75rem',
                 padding: 'var(--arianna-button-padding-sm, 3px 10px)',
             }),
-            new Rule(':host([size="md"]) .ar-btn__native', {
+            new Rule('arianna-button[size="md"] .ar-btn__native', {
                 fontSize: '0.82rem',
                 padding: 'var(--arianna-button-padding-md, 5px 14px)',
             }),
-            new Rule(':host([size="lg"]) .ar-btn__native', {
+            new Rule('arianna-button[size="lg"] .ar-btn__native', {
                 fontSize: '0.90rem',
                 padding: 'var(--arianna-button-padding-lg, 8px 20px)',
             }),
-            new Rule(':host(:not([size])) .ar-btn__native', {
+            new Rule('arianna-button:not([size]) .ar-btn__native', {
                 fontSize: '0.82rem',
             }),
-            new Rule(':host([disabled]) .ar-btn__native, .ar-btn__native:disabled', {
+            new Rule('arianna-button[disabled] .ar-btn__native, .ar-btn__native:disabled', {
                 cursor: 'not-allowed',
                 opacity: '0.45',
             }),
@@ -247,7 +248,7 @@ export namespace Button
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-button', ButtonDefaultSheet(), {
         Attributes: ['variant', 'size', 'disabled', 'icon', 'icon-right', 'label'],
-        shadow: 'closed',
+        shadow: false,
     })
     export class Button extends HTMLElement
     {
@@ -352,6 +353,7 @@ export namespace Button
                 <slot name="trailing"></slot>
             </button>
         `;
+            MountInputTemplate(this);
         }
 
         /** @name        onCreated

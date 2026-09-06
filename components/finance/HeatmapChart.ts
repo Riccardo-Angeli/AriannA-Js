@@ -8,9 +8,13 @@
  * @description AriannA HeatmapChart component module.
  */
 
+
 import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _svg, _fmt, _esc } from './helpers.ts';
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountFinanceTemplate } from './Base.ts';
+
 
 /** @namespace   HeatmapChart
  *  @public
@@ -122,7 +126,7 @@ export namespace HeatmapChart
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -148,11 +152,92 @@ export namespace HeatmapChart
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-heatmap-chart', {}, {
-        Attributes: ['width', 'height'],
-    })
-    export class HeatmapChart extends HTMLElement
+    export const Styles: Types.Stylesheet = (() =>
     {
+            return new Stylesheet([
+            new Rule('.HeatmapChart', {
+                '--arianna-bg': '#17181c',
+                '--arianna-bg-2': '#1d1e23',
+                '--arianna-bg-3': '#24262b',
+                '--arianna-text': '#e6e8eb',
+                '--arianna-muted': '#9aa0aa',
+                '--arianna-dim': '#6f7580',
+                '--arianna-border': '#303238',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#26a69a',
+                '--arianna-warning': '#f5a623',
+                '--arianna-danger': '#ef5350',
+                '--bg': '#17181c',
+                '--bg3': '#24262b',
+                '--text': '#e6e8eb',
+                '--muted': '#9aa0aa',
+                '--border': '#303238',
+                '--accent': '#e40c88',
+            }),
+            new Rule('.HeatmapChart[theme="light"]', {
+                '--arianna-bg': '#ffffff',
+                '--arianna-bg-2': '#fbfbfc',
+                '--arianna-bg-3': '#f3f3f5',
+                '--arianna-text': '#1c1e21',
+                '--arianna-muted': '#626873',
+                '--arianna-dim': '#8a8f98',
+                '--arianna-border': '#e2e2e6',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#168a78',
+                '--arianna-warning': '#b66c00',
+                '--arianna-danger': '#c93645',
+                '--bg': '#ffffff',
+                '--bg3': '#f3f3f5',
+                '--text': '#1c1e21',
+                '--muted': '#626873',
+                '--border': '#e2e2e6',
+                '--accent': '#e40c88',
+            }),
+                new Rule('.HeatmapChart', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    display: 'inline-block',
+                    padding: '4px',
+                }),
+                new Rule('.HeatmapChart svg', { display: 'block' }),
+            ]);
+        
+    })();
+
+    @Component('arianna-heatmap-chart', Styles, {
+        Shadow: false,
+        Attributes: ['width', 'height', 'theme', 'labels', 'matrix'],
+        Properties: ['labels', 'matrix'],
+    })
+    export class HeatmapChart extends HTMLDivElement
+    {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'HeatmapChart';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('HeatmapChart');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -166,8 +251,12 @@ export namespace HeatmapChart
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        labels$: Types.Signal<string[]> = signal<string[]>([]);
-
+        private _labelsSignal?: Types.Signal<string[]>;
+        public get labels$(): Types.Signal<string[]>
+        {
+            this._labelsSignal ??= signal<string[]>([]);
+            return this._labelsSignal;
+        }
         /** @name        matrix$
          *  @public
          *  @type        {HeatmapChart.Types.Signal<number[][]>}
@@ -175,8 +264,12 @@ export namespace HeatmapChart
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        matrix$: Types.Signal<number[][]> = signal<number[][]>([]);
-
+        private _matrixSignal?: Types.Signal<number[][]>;
+        public get matrix$(): Types.Signal<number[][]>
+        {
+            this._matrixSignal ??= signal<number[][]>([]);
+            return this._matrixSignal;
+        }
         /** @name        onConnected
          *  @public
          *  @type        {void}
@@ -188,6 +281,10 @@ export namespace HeatmapChart
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.HeatmapChartOptions = {})
         {
+            this.classList.add('HeatmapChart');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            this.dataset.ariannaFolderReady = 'true';
             /** @name        wAttr
              *  @public
              *  @type        {inferred}
@@ -358,7 +455,7 @@ export namespace HeatmapChart
                         cells += _svg('rect', {
                             x, y, width: cellW, height: cellH,
                             fill: `rgb(${r},${g},${b})`,
-                            stroke: 'var(--arianna-bg, #fff)',
+                            stroke: 'var(--arianna-bg, var(--bg, #fff))',
                             'stroke-width': 1,
                         });
                         // Pick text color based on cell luminance (rough heuristic)
@@ -390,14 +487,14 @@ export namespace HeatmapChart
                     axes += _svg('text', {
                         x: pad + i * cellW + cellW / 2,
                         y: pad - 6,
-                        fill: 'var(--arianna-muted, #787b86)',
+                        fill: 'var(--arianna-muted, var(--muted, #787b86))',
                         'font-size': 11,
                         'text-anchor': 'middle',
                     }, _esc(labels[i] ?? ''));
                     axes += _svg('text', {
                         x: pad - 6,
                         y: pad + i * cellH + cellH / 2 + 4,
-                        fill: 'var(--arianna-muted, #787b86)',
+                        fill: 'var(--arianna-muted, var(--muted, #787b86))',
                         'font-size': 11,
                         'text-anchor': 'end',
                     }, _esc(labels[i] ?? ''));
@@ -406,7 +503,8 @@ export namespace HeatmapChart
                     + axes + cells
                     + `</svg>`;
             };
-            this.template = html `<div class="ar-heatmap" a-html="this.svgHtml()"></div>`;
+            this.template = html `<div class="HeatmapChart-Canvas" a-html="this.svgHtml()"></div>`;
+            MountFinanceTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -416,7 +514,7 @@ export namespace HeatmapChart
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 Sheet: Types.Stylesheet | null;
-            }).Sheet = HeatmapChart.DefaultSheet();
+            }).Sheet = Styles;
         }
 
         /** Convenience: set labels and matrix together. */
@@ -555,19 +653,8 @@ export namespace HeatmapChart
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    display: 'inline-block',
-                    padding: '4px',
-                }),
-                new Rule(':host svg', { display: 'block' }),
-            ]);
-        }
+        public static readonly Styles = Styles;
+        static DefaultSheet(): Types.Stylesheet { return Styles; }
     }
 }
 export default HeatmapChart;

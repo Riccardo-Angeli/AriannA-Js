@@ -1,335 +1,295 @@
 /**
- * @module    components/modifiers/2D/Rotator
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA Rotator component module.
+ * @module components/modifiers/2D/Rotator
  */
 
 import { Component, Templates } from '../../../core/index.ts';
-import { Modifier2D } from './Base.ts';
+import * as Base from './Base.ts';
 
-/** @name        html
- *  @public
- *  @type        {inferred}
- *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
-const html = Templates.Template.Html;
-
-/** @namespace   Rotator
- *  @public
- *  @description Namespace containing Rotator contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 export namespace Rotator
 {
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Interfaces
     {
-        /** @interface   RotatorOptions
-         *  @public
-         *  @description RotatorOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         export interface RotatorOptions
         {
-            /** @name        handleOffset
-             *  @public
-             *  @type        {number}
-             *  @description Component member for handle Offset.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             handleOffset?: number;
-
-            /** @name        handleColor
-             *  @public
-             *  @type        {string}
-             *  @description Component member for handle Color.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             handleColor?: string;
-
-            /** @name        handleSize
-             *  @public
-             *  @type        {number}
-             *  @description Component member for handle Size.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             handleSize?: number;
-
-            /** @name        snap
-             *  @public
-             *  @type        {number}
-             *  @description Component member for snap.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             snap?: number;
+            disabled?: boolean;
         }
     }
 
-    /** @class       Rotator
-     *  @public
-     *  @description AriannA Rotator component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-rotator', {}, {
-        Attributes: ['handle-offset', 'handle-color', 'handle-size', 'snap', 'disabled'],
-    })
-    export class Rotator extends Modifier2D.Modifier2D
-    {
-        /** @name        template
-         *  @public
-         *  @type        {unknown}
-         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
-         *               or behavior-only rendering logic while participating in the compiled Template fast path.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        template = html``;
+    const html = Templates.Template.Html;
 
-        /** @name        #angle
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for angle.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+    @Component('arianna-rotator', {}, {
+        Shadow: false,
+        Attributes: [
+            'handle-offset',
+            'handle-color',
+            'handle-size',
+            'snap',
+            'disabled',
+        ],
+    })
+    export class Rotator
+        extends Base.Modifier2D.Modifier2D
+    {
+        public template = html``;
+        protected EventName = 'rotate';
+
         #angle = 0;
 
-        /** @name        applyTo
-         *  @protected
-         *  @type        {void}
-         *  @description Component member for apply To.
-         *  @param       {HTMLElement} target Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         protected applyTo(target: HTMLElement): void
         {
-            if (getComputedStyle(target).position === 'static')
+            if(getComputedStyle(target).position === 'static')
                 target.style.position = 'relative';
 
-            /** @name        ho
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned ho value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const ho = parseInt(this.getAttribute('handle-offset') ?? '24', 10) || 24;
+            const offset =
+                Number.parseInt(
+                    this.getAttribute('handle-offset') ?? '24',
+                    10
+                ) || 24;
 
-            /** @name        hs
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned hs value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const hs = parseInt(this.getAttribute('handle-size') ?? '10', 10) || 10;
+            const size =
+                Number.parseInt(
+                    this.getAttribute('handle-size') ?? '10',
+                    10
+                ) || 10;
 
-            /** @name        hc
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned hc value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const hc = this.getAttribute('handle-color') ?? 'var(--arianna-primary, #1f6feb)';
+            const color =
+                this.getAttribute('handle-color') ??
+                'var(--arianna-primary, #1f6feb)';
 
-            /** @name        snap
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned snap value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const snap = parseFloat(this.getAttribute('snap') ?? '0') || 0;
-            // Visual connector line
-            /** @name        line
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned line value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const line = document.createElement('div');
-            line.className = 'ar-rotator-line';
+            const snap =
+                Number.parseFloat(
+                    this.getAttribute('snap') ?? '0'
+                ) || 0;
+
+            const line =
+                document.createElement('div');
+
+            line.className =
+                'ar-rotator-line';
+
             line.style.cssText =
-                `position:absolute;top:-${ho}px;left:50%;width:1px;height:${ho}px;` +
-                    `background:${hc};transform-origin:bottom;pointer-events:none;z-index:9998;`;
+                `position:absolute;top:-${offset}px;left:50%;width:1px;height:${offset}px;background:${color};transform-origin:bottom;pointer-events:none;z-index:9998;`;
+
             target.appendChild(line);
-            // Draggable dot
-            /** @name        dot
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned dot value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const dot = document.createElement('div');
-            dot.className = 'ar-rotator-handle';
-            dot.style.cssText =
-                `position:absolute;top:-${ho + hs}px;left:50%;transform:translateX(-50%);` +
-                    `width:${hs}px;height:${hs}px;background:${hc};border-radius:50%;` +
-                    `cursor:grab;z-index:9999;touch-action:none;`;
-            target.appendChild(dot);
 
-            /** @name        onDown
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned onDown value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const onDown = (e: PointerEvent) => {
-                if (!this.isEnabled)
+            const handle =
+                document.createElement('div');
+
+            handle.className =
+                'ar-rotator-handle';
+
+            handle.style.cssText =
+                `position:absolute;top:-${offset + size}px;left:50%;transform:translateX(-50%);width:${size}px;height:${size}px;background:${color};border-radius:50%;cursor:grab;z-index:9999;touch-action:none;`;
+
+            target.appendChild(handle);
+
+            let pointerId = -1;
+
+            const onDown =
+                (event: PointerEvent): void =>
+            {
+                if(
+                    !this.isEnabled ||
+                    event.button !== 0
+                )
                     return;
-                if (e.button !== 0)
-                    return;
-                e.preventDefault();
-                e.stopPropagation();
 
-                /** @name        rect
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned rect value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const rect = target.getBoundingClientRect();
+                event.preventDefault();
+                event.stopPropagation();
 
-                /** @name        cx
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned cx value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const cx = rect.left + rect.width / 2;
+                pointerId =
+                    event.pointerId;
 
-                /** @name        cy
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned cy value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const cy = rect.top + rect.height / 2;
+                const rect =
+                    target.getBoundingClientRect();
 
-                /** @name        startAngle
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned startAngle value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const startAngle = this.#angle;
+                const centerX =
+                    rect.left +
+                    rect.width / 2;
 
-                /** @name        startMouse
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned startMouse value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const startMouse = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
+                const centerY =
+                    rect.top +
+                    rect.height / 2;
+
+                const startAngle =
+                    this.#angle;
+
+                const startMouse =
+                    Math.atan2(
+                        event.clientY - centerY,
+                        event.clientX - centerX
+                    ) *
+                    180 /
+                    Math.PI;
+
+                this.Start({
+                    angle: startAngle,
+                    pointerId,
+                });
+
+                const onMove =
+                    (
+                        moveEvent: PointerEvent
+                    ): void =>
+                {
+                    if(
+                        moveEvent.pointerId !==
+                        pointerId
+                    )
+                        return;
+
+                    const current =
+                        Math.atan2(
+                            moveEvent.clientY -
+                                centerY,
+                            moveEvent.clientX -
+                                centerX
+                        ) *
+                        180 /
+                        Math.PI;
+
+                    let angle =
+                        startAngle +
+                        current -
+                        startMouse;
+
+                    if(snap > 0)
+                        angle =
+                            Math.round(
+                                angle / snap
+                            ) *
+                            snap;
+
+                    this.#angle =
+                        angle;
+
+                    target.style.transform =
+                        `rotate(${angle}deg)`;
+
+                    this.Change({
+                        angle,
+                        pointerId,
+                    });
+                };
+
+                const onUp =
+                    (
+                        upEvent: PointerEvent
+                    ): void =>
+                {
+                    if(
+                        upEvent.pointerId !==
+                        pointerId
+                    )
+                        return;
+
+                    handle.removeEventListener(
+                        'pointermove',
+                        onMove
+                    );
+
+                    handle.removeEventListener(
+                        'pointerup',
+                        onUp
+                    );
+
+                    handle.removeEventListener(
+                        'pointercancel',
+                        onUp
+                    );
+
+                    this.End({
+                        angle: this.#angle,
+                        pointerId,
+                    });
+
+                    pointerId = -1;
+                };
+
                 try
                 {
-                    dot.setPointerCapture(e.pointerId);
+                    handle.setPointerCapture(
+                        pointerId
+                    );
                 }
-                catch { /* ignore */ }
+                catch
+                {
+                }
 
-                /** @name        onMove
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned onMove value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const onMove = (ev: PointerEvent) => {
-                    /** @name        cur
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned cur value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const cur = Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI;
+                handle.addEventListener(
+                    'pointermove',
+                    onMove
+                );
 
-                    /** @name        angle
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned angle value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    let angle = startAngle + (cur - startMouse);
-                    if (snap > 0)
-                        angle = Math.round(angle / snap) * snap;
-                    this.#angle = angle;
-                    target.style.transform = `rotate(${angle}deg)`;
-                    target.dispatchEvent(new CustomEvent('arianna:rotate', {
-                        bubbles: true, detail: { angle, target },
-                    }));
-                };
+                handle.addEventListener(
+                    'pointerup',
+                    onUp
+                );
 
-                /** @name        onUp
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned onUp value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const onUp = () => {
-                    dot.removeEventListener('pointermove', onMove);
-                    dot.removeEventListener('pointerup', onUp);
-                    dot.removeEventListener('pointercancel', onUp);
-                };
-                dot.addEventListener('pointermove', onMove);
-                dot.addEventListener('pointerup', onUp);
-                dot.addEventListener('pointercancel', onUp);
+                handle.addEventListener(
+                    'pointercancel',
+                    onUp
+                );
             };
-            dot.addEventListener('pointerdown', onDown);
-            this.cleanups.push(() => {
-                dot.removeEventListener('pointerdown', onDown);
-                dot.remove();
-                line.remove();
-            });
+
+            handle.addEventListener(
+                'pointerdown',
+                onDown
+            );
+
+            this.cleanups.push(
+                () =>
+                {
+                    handle.removeEventListener(
+                        'pointerdown',
+                        onDown
+                    );
+
+                    handle.remove();
+                    line.remove();
+                }
+            );
         }
 
-        /** Programmatically set the rotation angle. */
-        setAngle(angle: number): this
+        public setAngle(angle: number): this
         {
-            if (this.target)
+            if(this.target)
             {
+                this.Start({
+                    angle: this.#angle,
+                    programmatic: true,
+                });
+
                 this.#angle = angle;
-                this.target.style.transform = `rotate(${angle}deg)`;
-                this.target.dispatchEvent(new CustomEvent('arianna:rotate', {
-                    bubbles: true, detail: { angle, target: this.target },
-                }));
+
+                this.target.style.transform =
+                    `rotate(${angle}deg)`;
+
+                this.Change({
+                    angle,
+                    programmatic: true,
+                });
+
+                this.End({
+                    angle,
+                    programmatic: true,
+                });
             }
+
             return this;
         }
 
-        /** Read the current rotation angle. */
-        getAngle(): number { return this.#angle; }
+        public getAngle(): number
+        {
+            return this.#angle;
+        }
     }
 }
-export default Rotator;
+
+export type RotatorOptions = Rotator.Interfaces.RotatorOptions;
+
+export default Rotator.Rotator;

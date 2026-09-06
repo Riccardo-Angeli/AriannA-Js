@@ -1,561 +1,834 @@
 /**
- * @module    components/layout/Splitter
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA Splitter component module.
+ * @module components/layout/Splitter
+ * @version 2.0.0
  */
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
+import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
 
-/** @namespace   Splitter
- *  @public
- *  @description Namespace containing Splitter contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
+const html = Templates.Template.Html;
+
 export namespace Splitter
 {
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Types
     {
-        /** @name        Rule
-         *  @public
-         *  @type        {Css.Rule}
-         *  @description Type alias for Rule.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Rule = Css.Rule;
-
-        /** @name        Stylesheet
-         *  @public
-         *  @type        {Css.Stylesheet}
-         *  @description Type alias for Stylesheet.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Stylesheet = Css.Stylesheet;
+        export type Direction = 'horizontal' | 'vertical';
     }
 
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Interfaces
     {
-        /** @interface   SplitterOptions
-         *  @public
-         *  @description SplitterOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         export interface SplitterOptions
         {
-            /** @name        direction
-             *  @public
-             *  @type        {'horizontal' | 'vertical'}
-             *  @description Component member for direction.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            direction?: 'horizontal' | 'vertical';
-
-            /** @name        ratio
-             *  @public
-             *  @type        {number}
-             *  @description Component member for ratio.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
+            direction?: Types.Direction;
             ratio?: number;
-
-            /** @name        minA
-             *  @public
-             *  @type        {number}
-             *  @description Component member for min A.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             minA?: number;
-
-            /** @name        minB
-             *  @public
-             *  @type        {number}
-             *  @description Component member for min B.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             minB?: number;
+        }
+
+        export interface SplitterResizeDetail
+        {
+            ratio: number;
+            direction: Types.Direction;
+            sizeA: number;
+            sizeB: number;
+            splitter: Splitter;
         }
     }
 
-    /** @name        html
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned html value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const html = Templates.Template.Html;
+    export const Styles =
+        new Css.Stylesheet([
+            new Css.Rule('.Splitter', {
+                AlignItems: 'stretch',
+                BoxSizing: 'border-box',
+                Display: 'flex',
+                Height: '100%',
+                MaxHeight: '100%',
+                MaxWidth: '100%',
+                MinHeight: '0',
+                MinWidth: '0',
+                Overflow: 'hidden',
+                Position: 'relative',
+                Width: '100%',
+            }),
 
-    /** @name        { Rule, Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Rule, Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const { Rule, Stylesheet } = Css;
+            new Css.Rule('.Splitter:not([direction]), .Splitter[direction="horizontal"]', {
+                FlexDirection: 'row',
+            }),
 
-    /** @class       Splitter
-     *  @public
-     *  @description AriannA Splitter component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-splitter', {}, {
+            new Css.Rule('.Splitter[direction="vertical"]', {
+                FlexDirection: 'column',
+            }),
+
+            new Css.Rule('.Splitter-Pane', {
+                BoxSizing: 'border-box',
+                FlexGrow: '0',
+                FlexShrink: '0',
+                MinHeight: '0',
+                MinWidth: '0',
+                Overflow: 'auto',
+                Position: 'relative',
+            }),
+
+            new Css.Rule('.Splitter-PaneB', {
+                Flex: '1 1 0',
+            }),
+
+            new Css.Rule('.Splitter-Handle', {
+                AlignItems: 'center',
+                Background: 'transparent',
+                Display: 'flex',
+                Flex: '0 0 auto',
+                JustifyContent: 'center',
+                Outline: 'none',
+                TouchAction: 'none',
+                UserSelect: 'none',
+                ZIndex: '5',
+            }),
+
+            new Css.Rule('.Splitter:not([direction]) > .Splitter-Handle, .Splitter[direction="horizontal"] > .Splitter-Handle', {
+                Cursor: 'col-resize',
+                Height: '100%',
+                MinWidth: '10px',
+                Width: '10px',
+            }),
+
+            new Css.Rule('.Splitter[direction="vertical"] > .Splitter-Handle', {
+                Cursor: 'row-resize',
+                Height: '10px',
+                MinHeight: '10px',
+                Width: '100%',
+            }),
+
+            new Css.Rule('.Splitter-Grip', {
+                Background: '#454850',
+                BorderRadius: '999px',
+                Display: 'block',
+                Transition: 'background .12s ease, box-shadow .12s ease',
+            }),
+
+            new Css.Rule('.Splitter:not([direction]) > .Splitter-Handle > .Splitter-Grip, .Splitter[direction="horizontal"] > .Splitter-Handle > .Splitter-Grip', {
+                Height: '48%',
+                Width: '3px',
+            }),
+
+            new Css.Rule('.Splitter[direction="vertical"] > .Splitter-Handle > .Splitter-Grip', {
+                Height: '3px',
+                Width: '48%',
+            }),
+
+            new Css.Rule('.Splitter-Handle:hover > .Splitter-Grip, .Splitter-Handle[data-active="true"] > .Splitter-Grip, .Splitter-Handle:focus-visible > .Splitter-Grip', {
+                Background: '#e40c88',
+                BoxShadow: '0 0 0 3px rgba(228,12,136,.18)',
+            }),
+        ]);
+
+    @Component('arianna-splitter', Styles, {
+        Shadow: false,
         Attributes: ['direction', 'ratio', 'min-a', 'min-b'],
     })
     export class Splitter extends HTMLElement
     {
-        /** Compiler-visible AriannA binding factory installed by @Component. */
-        declare signal: <T>(initial?: T) => Components.Binding<T>;
+        public static readonly Styles = Styles;
+        public template = html``;
 
-        /** Compiler-visible AriannA template slot installed by @Component. */
-        declare template: unknown;
+        private _ratioSignal?: ReturnType<typeof Reactivity.CreateSignal<number>>;
+        private PaneA?: HTMLElement;
+        private PaneB?: HTMLElement;
+        private Handle?: HTMLDivElement;
+        private Observer?: ResizeObserver;
+        private Bound = false;
 
-        /** @name        onConnected
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Connected.
-         *  @param       {Splitter.Interfaces.SplitterOptions} _opts Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onConnected(_opts: Interfaces.SplitterOptions = {})
+        constructor(options: Interfaces.SplitterOptions = {})
         {
-            /** @name        direction
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned direction value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const direction = this.signal().attribute('direction');
+            super();
 
-            /** @name        ratio
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned ratio value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const ratio = this.signal().attribute('ratio');
+            if(options.direction)
+                this.direction = options.direction;
 
-            /** @name        clampedRatio
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned clampedRatio value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const clampedRatio = (): number => {
-                /** @name        r
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned r value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const r = parseFloat(ratio.Get() ?? '0.5');
-                return Math.max(0.05, Math.min(0.95, Number.isFinite(r) ? r : 0.5));
-            };
-            this.paneAStyle = (): Record<string, string> => {
-                /** @name        r
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned r value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const r = clampedRatio() * 100;
+            if(options.ratio != null)
+                this.ratio = options.ratio;
 
-                /** @name        dir
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned dir value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const dir = direction.Get() ?? 'horizontal';
-                return dir === 'horizontal' ? { width: r + '%' } : { height: r + '%' };
-            };
-            this.paneBStyle = (): Record<string, string> => {
-                /** @name        r
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned r value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const r = (1 - clampedRatio()) * 100;
+            if(options.minA != null)
+                this.minA = options.minA;
 
-                /** @name        dir
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned dir value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const dir = direction.Get() ?? 'horizontal';
-                return dir === 'horizontal' ? { width: r + '%' } : { height: r + '%' };
-            };
-            this.onHandleDown = (e: MouseEvent) => {
-                e.preventDefault();
-
-                /** @name        isH
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned isH value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const isH = (direction.Get() ?? 'horizontal') === 'horizontal';
-
-                /** @name        rect
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned rect value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const rect = this.getBoundingClientRect();
-
-                /** @name        minA
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned minA value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const minA = parseInt(this.getAttribute('min-a') ?? '60', 10) || 60;
-
-                /** @name        minB
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned minB value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const minB = parseInt(this.getAttribute('min-b') ?? '60', 10) || 60;
-
-                /** @name        move
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned move value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const move = (e2: MouseEvent) => {
-                    /** @name        total
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned total value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const total = isH ? rect.width : rect.height;
-
-                    /** @name        offset
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned offset value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const offset = isH ? e2.clientX - rect.left : e2.clientY - rect.top;
-
-                    /** @name        newR
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned newR value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const newR = Math.max(minA / total, Math.min(1 - minB / total, offset / total));
-                    this.setAttribute('ratio', String(newR));
-                    this.dispatchEvent(new CustomEvent('arianna:resize', {
-                        bubbles: true, detail: { ratio: newR },
-                    }));
-                };
-
-                /** @name        up
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned up value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const up = () => {
-                    document.removeEventListener('mousemove', move);
-                    document.removeEventListener('mouseup', up);
-                };
-                document.addEventListener('mousemove', move);
-                document.addEventListener('mouseup', up);
-            };
-            this.template = html `
-            <div class="ar-splitter__pane ar-splitter__pane--a" :style="this.paneAStyle()">
-                <slot name="pane-a"></slot>
-            </div>
-            <div class="ar-splitter__handle" @mousedown="this.onHandleDown"></div>
-            <div class="ar-splitter__pane ar-splitter__pane--b" :style="this.paneBStyle()">
-                <slot name="pane-b"></slot>
-            </div>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Splitter.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = Splitter.DefaultSheet();
+            if(options.minB != null)
+                this.minB = options.minB;
         }
 
-        /** @name        onCreated
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Created.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onCreated() { }
-
-        /** @name        onBeforeMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeMount() { }
-
-        /** @name        onMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onMount() { }
-
-        /** @name        onBeforeUpdate
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Update.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeUpdate() { }
-
-        /** @name        onUpdate
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Update.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUpdate() { }
-
-        /** @name        onBeforeUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeUnmount() { }
-
-        /** @name        onUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUnmount() { }
-
-        /** @name        direction
-         *  @public
-         *  @type        {'horizontal' | 'vertical'}
-         *  @description Component member for direction.
-         *  @returns     {'horizontal' | 'vertical'} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get direction(): 'horizontal' | 'vertical' { return (this.getAttribute('direction') ?? 'horizontal') as never; }
-
-        /** @name        direction
-         *  @public
-         *  @type        {void}
-         *  @description Component member for direction.
-         *  @param       {'horizontal' | 'vertical'} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set direction(v: 'horizontal' | 'vertical') { this.setAttribute('direction', v); }
-
-        /** @name        ratio
-         *  @public
-         *  @type        {number}
-         *  @description Component member for ratio.
-         *  @returns     {number} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get ratio(): number { return parseFloat(this.getAttribute('ratio') ?? '0.5'); }
-
-        /** @name        ratio
-         *  @public
-         *  @type        {void}
-         *  @description Component member for ratio.
-         *  @param       {number} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set ratio(v: number) { this.setAttribute('ratio', String(Math.max(0.05, Math.min(0.95, v)))); }
-
-        /** @name        minA
-         *  @public
-         *  @type        {number}
-         *  @description Component member for min A.
-         *  @returns     {number} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get minA(): number { return parseInt(this.getAttribute('min-a') ?? '60', 10); }
-
-        /** @name        minA
-         *  @public
-         *  @type        {void}
-         *  @description Component member for min A.
-         *  @param       {number} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set minA(v: number) { this.setAttribute('min-a', String(v)); }
-
-        /** @name        minB
-         *  @public
-         *  @type        {number}
-         *  @description Component member for min B.
-         *  @returns     {number} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get minB(): number { return parseInt(this.getAttribute('min-b') ?? '60', 10); }
-
-        /** @name        minB
-         *  @public
-         *  @type        {void}
-         *  @description Component member for min B.
-         *  @param       {number} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set minB(v: number) { this.setAttribute('min-b', String(v)); }
-
-        /** @name        paneAStyle
-         *  @private
-         *  @type        {() => Record<string, string>}
-         *  @description Component member for pane AStyle.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private paneAStyle: () => Record<string, string> = () => ({});
-
-        /** @name        paneBStyle
-         *  @private
-         *  @type        {() => Record<string, string>}
-         *  @description Component member for pane BStyle.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private paneBStyle: () => Record<string, string> = () => ({});
-
-        /** @name        onHandleDown
-         *  @private
-         *  @type        {(e: MouseEvent) => void}
-         *  @description Component member for on Handle Down.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        private onHandleDown: (e: MouseEvent) => void = () => { };
-
-        /** @name        DefaultSheet
-         *  @public
-         *  @static
-         *  @type        {Splitter.Types.Stylesheet}
-         *  @description Component member for Default Sheet.
-         *  @returns     {Splitter.Types.Stylesheet} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
+        public get ratio$(): ReturnType<typeof Reactivity.CreateSignal<number>>
         {
-            return new Stylesheet([
-                new Rule(':host', {
-                    display: 'flex',
-                    width: '100%',
-                    height: '100%',
-                    overflow: 'hidden',
-                }),
-                new Rule(':host([direction="vertical"])', { flexDirection: 'column' }),
-                new Rule(':host(:not([direction]))', { flexDirection: 'row' }),
-                new Rule('.ar-splitter__pane', {
-                    overflow: 'auto',
-                    flexShrink: '0',
-                    flexGrow: '0',
-                    minWidth: '0',
-                    minHeight: '0',
-                    boxSizing: 'border-box',
-                    position: 'relative',
-                }),
-                new Rule('.ar-splitter__handle', {
-                    background: 'var(--arianna-border, #d8d8d8)',
-                    flexShrink: '0',
-                    transition: 'background 0.18s ease',
-                }),
-                new Rule('.ar-splitter__handle:hover, .ar-splitter__handle:active', {
-                    background: 'var(--arianna-primary, #1f6feb)',
-                }),
-                new Rule(':host([direction="horizontal"]) .ar-splitter__handle', { cursor: 'col-resize', width: '4px' }),
-                new Rule(':host(:not([direction])) .ar-splitter__handle', { cursor: 'col-resize', width: '4px' }),
-                new Rule(':host([direction="vertical"]) .ar-splitter__handle', { cursor: 'row-resize', height: '4px' }),
-            ]);
+            this._ratioSignal ??=
+                Reactivity.CreateSignal<number>(
+                    this.NormalizeRatio(
+                        Number(
+                            this.getAttribute('ratio') ?? 0.5
+                        )
+                    )
+                );
+
+            return this._ratioSignal;
+        }
+
+        public get direction(): Types.Direction
+        {
+            return this.getAttribute('direction') === 'vertical'
+                ? 'vertical'
+                : 'horizontal';
+        }
+
+        public set direction(value: Types.Direction)
+        {
+            this.setAttribute('direction', value);
+
+            if(this.isConnected)
+            {
+                this.ConfigureHandle();
+                this.Apply();
+            }
+        }
+
+        public get ratio(): number
+        {
+            return this.NormalizeRatio(
+                Number(
+                    this.getAttribute('ratio') ??
+                    this.ratio$.Get()
+                )
+            );
+        }
+
+        public set ratio(value: number)
+        {
+            const normalized =
+                this.NormalizeRatio(value);
+
+            this.ratio$.Set(normalized);
+            this.setAttribute('ratio', String(normalized));
+
+            if(this.isConnected)
+                this.Apply();
+        }
+
+        public get minA(): number
+        {
+            return this.NumberAttribute('min-a', 60);
+        }
+
+        public set minA(value: number)
+        {
+            this.setAttribute('min-a', String(Math.max(0, value)));
+
+            if(this.isConnected)
+                this.Apply();
+        }
+
+        public get minB(): number
+        {
+            return this.NumberAttribute('min-b', 60);
+        }
+
+        public set minB(value: number)
+        {
+            this.setAttribute('min-b', String(Math.max(0, value)));
+
+            if(this.isConnected)
+                this.Apply();
+        }
+
+        public onConnected(): void
+        {
+            this.classList.add('Splitter');
+
+            this.Build();
+            this.Apply();
+
+            if(!this.Observer)
+            {
+                this.Observer =
+                    new ResizeObserver(
+                        () => this.Apply()
+                    );
+
+                this.Observer.observe(this);
+            }
+        }
+
+        public onDisconnected(): void
+        {
+            this.Observer?.disconnect();
+            this.Observer = undefined;
+        }
+
+        public onAttributeChanged(name: string): void
+        {
+            if(!this.isConnected)
+                return;
+
+            if(
+                name === 'direction' ||
+                name === 'ratio' ||
+                name === 'min-a' ||
+                name === 'min-b'
+            )
+            {
+                this.ConfigureHandle();
+                this.Apply();
+            }
+        }
+
+        private Build(): void
+        {
+            const panes =
+                Array.from(this.children)
+                    .filter(
+                        element =>
+                            !element.classList.contains(
+                                'Splitter-Handle'
+                            )
+                    ) as HTMLElement[];
+
+            if(panes.length < 2)
+                return;
+
+            this.PaneA = panes[0];
+            this.PaneB = panes[1];
+
+            this.PaneA.classList.add(
+                'Splitter-Pane',
+                'Splitter-PaneA'
+            );
+
+            this.PaneB.classList.add(
+                'Splitter-Pane',
+                'Splitter-PaneB'
+            );
+
+            let handle =
+                Array.from(this.children)
+                    .find(
+                        element =>
+                            element.classList.contains(
+                                'Splitter-Handle'
+                            )
+                    ) as HTMLDivElement | undefined;
+
+            if(!handle)
+            {
+                handle =
+                    document.createElement('div');
+
+                handle.className =
+                    'Splitter-Handle';
+
+                handle.tabIndex =
+                    0;
+
+                handle.setAttribute(
+                    'role',
+                    'separator'
+                );
+
+                const grip =
+                    document.createElement('span');
+
+                grip.className =
+                    'Splitter-Grip';
+
+                grip.setAttribute(
+                    'aria-hidden',
+                    'true'
+                );
+
+                handle.append(grip);
+                this.PaneA.after(handle);
+            }
+
+            this.Handle = handle;
+            this.ConfigureHandle();
+
+            /*
+             * Parser-created AriannA hosts do not necessarily execute class-field
+             * initializers. Listeners are therefore closures created HERE, not
+             * arrow-function fields.
+             */
+            if(!this.Bound)
+            {
+                handle.addEventListener(
+                    'pointerdown',
+                    event =>
+                        this.PointerDown(event)
+                );
+
+                handle.addEventListener(
+                    'keydown',
+                    event =>
+                        this.KeyDown(event)
+                );
+
+                this.Bound = true;
+            }
+        }
+
+        private ConfigureHandle(): void
+        {
+            if(!this.Handle)
+                return;
+
+            this.Handle.setAttribute(
+                'aria-orientation',
+                this.direction === 'vertical'
+                    ? 'horizontal'
+                    : 'vertical'
+            );
+
+            this.Handle.setAttribute(
+                'aria-valuemin',
+                '0'
+            );
+
+            this.Handle.setAttribute(
+                'aria-valuemax',
+                '100'
+            );
+
+            this.Handle.setAttribute(
+                'aria-valuenow',
+                String(
+                    Math.round(
+                        this.ratio * 100
+                    )
+                )
+            );
+        }
+
+        private Apply(): void
+        {
+            if(
+                !this.PaneA ||
+                !this.PaneB ||
+                !this.Handle
+            )
+                return;
+
+            const vertical =
+                this.direction === 'vertical';
+
+            const total =
+                vertical
+                    ? this.clientHeight
+                    : this.clientWidth;
+
+            const handleSize =
+                vertical
+                    ? this.Handle.offsetHeight
+                    : this.Handle.offsetWidth;
+
+            const available =
+                Math.max(
+                    0,
+                    total - handleSize
+                );
+
+            if(available <= 0)
+                return;
+
+            const minA =
+                Math.min(
+                    this.minA,
+                    available
+                );
+
+            const minB =
+                Math.min(
+                    this.minB,
+                    available
+                );
+
+            const wanted =
+                available *
+                this.ratio;
+
+            const maximum =
+                Math.max(
+                    minA,
+                    available - minB
+                );
+
+            const position =
+                Math.max(
+                    minA,
+                    Math.min(
+                        maximum,
+                        wanted
+                    )
+                );
+
+            const actualRatio =
+                position /
+                available;
+
+            this.ratio$.Set(actualRatio);
+
+            this.PaneA.style.flex =
+                `0 0 ${position}px`;
+
+            this.PaneB.style.flex =
+                '1 1 0';
+
+            if(vertical)
+            {
+                this.PaneA.style.width = '100%';
+                this.PaneA.style.height = 'auto';
+
+                this.PaneB.style.width = '100%';
+                this.PaneB.style.height = 'auto';
+            }
+            else
+            {
+                this.PaneA.style.height = '100%';
+                this.PaneA.style.width = 'auto';
+
+                this.PaneB.style.height = '100%';
+                this.PaneB.style.width = 'auto';
+            }
+
+            this.Handle.setAttribute(
+                'aria-valuenow',
+                String(
+                    Math.round(
+                        actualRatio * 100
+                    )
+                )
+            );
+        }
+
+        private PointerDown(
+            event: PointerEvent
+        ): void
+        {
+            if(
+                event.button !== 0 ||
+                !this.Handle
+            )
+                return;
+
+            event.preventDefault();
+
+            const pointerId =
+                event.pointerId;
+
+            this.Handle.dataset.active =
+                'true';
+
+            this.Emit(
+                'arianna:resize-start'
+            );
+
+            this.SetFromPointer(
+                event.clientX,
+                event.clientY,
+                true
+            );
+
+            const move =
+                (
+                    moveEvent: PointerEvent
+                ): void =>
+            {
+                if(
+                    moveEvent.pointerId !==
+                    pointerId
+                )
+                    return;
+
+                moveEvent.preventDefault();
+
+                this.SetFromPointer(
+                    moveEvent.clientX,
+                    moveEvent.clientY,
+                    true
+                );
+            };
+
+            const end =
+                (
+                    endEvent: PointerEvent
+                ): void =>
+            {
+                if(
+                    endEvent.pointerId !==
+                    pointerId
+                )
+                    return;
+
+                window.removeEventListener(
+                    'pointermove',
+                    move,
+                    true
+                );
+
+                window.removeEventListener(
+                    'pointerup',
+                    end,
+                    true
+                );
+
+                window.removeEventListener(
+                    'pointercancel',
+                    end,
+                    true
+                );
+
+                if(this.Handle)
+                    delete this.Handle.dataset.active;
+
+                this.Emit(
+                    'arianna:resize-end'
+                );
+            };
+
+            window.addEventListener(
+                'pointermove',
+                move,
+                true
+            );
+
+            window.addEventListener(
+                'pointerup',
+                end,
+                true
+            );
+
+            window.addEventListener(
+                'pointercancel',
+                end,
+                true
+            );
+        }
+
+        private SetFromPointer(
+            clientX: number,
+            clientY: number,
+            emit: boolean
+        ): void
+        {
+            if(!this.Handle)
+                return;
+
+            const bounds =
+                this.getBoundingClientRect();
+
+            const vertical =
+                this.direction === 'vertical';
+
+            const handleSize =
+                vertical
+                    ? this.Handle.offsetHeight
+                    : this.Handle.offsetWidth;
+
+            const available =
+                Math.max(
+                    0,
+                    (
+                        vertical
+                            ? bounds.height
+                            : bounds.width
+                    ) -
+                    handleSize
+                );
+
+            if(available <= 0)
+                return;
+
+            const raw =
+                vertical
+                    ? clientY -
+                        bounds.top -
+                        handleSize / 2
+                    : clientX -
+                        bounds.left -
+                        handleSize / 2;
+
+            const minA =
+                Math.min(
+                    this.minA,
+                    available
+                );
+
+            const minB =
+                Math.min(
+                    this.minB,
+                    available
+                );
+
+            const position =
+                Math.max(
+                    minA,
+                    Math.min(
+                        available - minB,
+                        raw
+                    )
+                );
+
+            const ratio =
+                position /
+                available;
+
+            this.ratio$.Set(ratio);
+
+            /*
+             * Write the attribute directly and apply immediately. The component
+             * does not depend on attribute-observer timing while dragging.
+             */
+            this.setAttribute(
+                'ratio',
+                String(ratio)
+            );
+
+            this.Apply();
+
+            if(emit)
+                this.Emit(
+                    'arianna:resize'
+                );
+        }
+
+        private KeyDown(
+            event: KeyboardEvent
+        ): void
+        {
+            const vertical =
+                this.direction === 'vertical';
+
+            const minus =
+                vertical
+                    ? event.key === 'ArrowUp'
+                    : event.key === 'ArrowLeft';
+
+            const plus =
+                vertical
+                    ? event.key === 'ArrowDown'
+                    : event.key === 'ArrowRight';
+
+            if(
+                !minus &&
+                !plus &&
+                event.key !== 'Home' &&
+                event.key !== 'End'
+            )
+                return;
+
+            event.preventDefault();
+
+            const step =
+                event.shiftKey
+                    ? 0.10
+                    : 0.02;
+
+            let next =
+                this.ratio;
+
+            if(minus)
+                next -= step;
+            else if(plus)
+                next += step;
+            else if(event.key === 'Home')
+                next = 0;
+            else if(event.key === 'End')
+                next = 1;
+
+            this.Emit(
+                'arianna:resize-start'
+            );
+
+            this.ratio =
+                next;
+
+            this.Emit(
+                'arianna:resize'
+            );
+
+            this.Emit(
+                'arianna:resize-end'
+            );
+        }
+
+        private Emit(
+            type: string
+        ): void
+        {
+            if(
+                !this.PaneA ||
+                !this.PaneB
+            )
+                return;
+
+            const detail:
+                Interfaces.SplitterResizeDetail =
+            {
+                ratio: this.ratio,
+                direction: this.direction,
+                sizeA:
+                    this.direction === 'vertical'
+                        ? this.PaneA.offsetHeight
+                        : this.PaneA.offsetWidth,
+                sizeB:
+                    this.direction === 'vertical'
+                        ? this.PaneB.offsetHeight
+                        : this.PaneB.offsetWidth,
+                splitter: this,
+            };
+
+            this.dispatchEvent(
+                new CustomEvent(
+                    type,
+                    {
+                        bubbles: true,
+                        composed: true,
+                        detail,
+                    }
+                )
+            );
+        }
+
+        private NormalizeRatio(
+            value: number
+        ): number
+        {
+            if(!Number.isFinite(value))
+                return 0.5;
+
+            const ratio =
+                value > 1
+                    ? value / 100
+                    : value;
+
+            return Math.max(
+                0,
+                Math.min(
+                    1,
+                    ratio
+                )
+            );
+        }
+
+        private NumberAttribute(
+            name: string,
+            fallback: number
+        ): number
+        {
+            const value =
+                Number(
+                    this.getAttribute(name)
+                );
+
+            return Number.isFinite(value)
+                ? Math.max(0, value)
+                : fallback;
         }
     }
 }
-export default Splitter;
 
 export type SplitterOptions = Splitter.Interfaces.SplitterOptions;
+export type SplitterDirection = Splitter.Types.Direction;
+export type SplitterResizeDetail = Splitter.Interfaces.SplitterResizeDetail;
+export default Splitter.Splitter;

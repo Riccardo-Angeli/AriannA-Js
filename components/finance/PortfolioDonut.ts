@@ -8,9 +8,13 @@
  * @description AriannA PortfolioDonut component module.
  */
 
+
 import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _fmt, _esc } from './helpers.ts';
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountFinanceTemplate } from './Base.ts';
+
 
 /** @namespace   PortfolioDonut
  *  @public
@@ -140,7 +144,7 @@ export namespace PortfolioDonut
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -168,7 +172,7 @@ export namespace PortfolioDonut
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     export const PALETTE = [
-        'var(--arianna-primary, #1f6feb)',
+        'var(--arianna-primary, var(--accent, #e40c88))',
         'var(--arianna-bull,    #26a69a)',
         '#7b9ef9',
         'var(--arianna-warning, #f4c842)',
@@ -184,11 +188,92 @@ export namespace PortfolioDonut
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-portfolio-donut', {}, {
-        Attributes: ['size'],
-    })
-    export class PortfolioDonut extends HTMLElement
+    export const Styles: Types.Stylesheet = (() =>
     {
+            return new Stylesheet([
+            new Rule('.PortfolioDonut', {
+                '--arianna-bg': '#17181c',
+                '--arianna-bg-2': '#1d1e23',
+                '--arianna-bg-3': '#24262b',
+                '--arianna-text': '#e6e8eb',
+                '--arianna-muted': '#9aa0aa',
+                '--arianna-dim': '#6f7580',
+                '--arianna-border': '#303238',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#26a69a',
+                '--arianna-warning': '#f5a623',
+                '--arianna-danger': '#ef5350',
+                '--bg': '#17181c',
+                '--bg3': '#24262b',
+                '--text': '#e6e8eb',
+                '--muted': '#9aa0aa',
+                '--border': '#303238',
+                '--accent': '#e40c88',
+            }),
+            new Rule('.PortfolioDonut[theme="light"]', {
+                '--arianna-bg': '#ffffff',
+                '--arianna-bg-2': '#fbfbfc',
+                '--arianna-bg-3': '#f3f3f5',
+                '--arianna-text': '#1c1e21',
+                '--arianna-muted': '#626873',
+                '--arianna-dim': '#8a8f98',
+                '--arianna-border': '#e2e2e6',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#168a78',
+                '--arianna-warning': '#b66c00',
+                '--arianna-danger': '#c93645',
+                '--bg': '#ffffff',
+                '--bg3': '#f3f3f5',
+                '--text': '#1c1e21',
+                '--muted': '#626873',
+                '--border': '#e2e2e6',
+                '--accent': '#e40c88',
+            }),
+                new Rule('.PortfolioDonut', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    display: 'inline-block',
+                    padding: '8px',
+                }),
+                new Rule('.PortfolioDonut svg', { display: 'block' }),
+            ]);
+        
+    })();
+
+    @Component('arianna-portfolio-donut', Styles, {
+        Shadow: false,
+        Attributes: ['size', 'theme', 'segments'],
+        Properties: ['segments'],
+    })
+    export class PortfolioDonut extends HTMLDivElement
+    {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'PortfolioDonut';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('PortfolioDonut');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -202,8 +287,12 @@ export namespace PortfolioDonut
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        segments$: Types.Signal<Interfaces.DonutSegment[]> = signal<Interfaces.DonutSegment[]>([]);
-
+        private _segmentsSignal?: Types.Signal<Interfaces.DonutSegment[]>;
+        public get segments$(): Types.Signal<Interfaces.DonutSegment[]>
+        {
+            this._segmentsSignal ??= signal<Interfaces.DonutSegment[]>([]);
+            return this._segmentsSignal;
+        }
         /** @name        onConnected
          *  @public
          *  @type        {void}
@@ -215,6 +304,10 @@ export namespace PortfolioDonut
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.PortfolioDonutOptions = {})
         {
+            this.classList.add('PortfolioDonut');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            this.dataset.ariannaFolderReady = 'true';
             /** @name        sizeAttr
              *  @public
              *  @type        {inferred}
@@ -453,13 +546,14 @@ export namespace PortfolioDonut
                      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                      *  @license     MIT / Commercial (dual license) */
                     const pct = _fmt((seg.value / total) * 100);
-                    labels += `<text x="${lx}" y="${ly - 4}" fill="var(--arianna-text, #1f2328)" font-size="11" font-weight="600" text-anchor="middle">${pct}%</text>`;
-                    labels += `<text x="${lx}" y="${ly + 10}" fill="var(--arianna-muted, #787b86)" font-size="10" text-anchor="middle">${_esc(seg.label)}</text>`;
+                    labels += `<text x="${lx}" y="${ly - 4}" fill="var(--arianna-text, var(--text, #1c1e21))" font-size="11" font-weight="600" text-anchor="middle">${pct}%</text>`;
+                    labels += `<text x="${lx}" y="${ly + 10}" fill="var(--arianna-muted, var(--muted, #787b86))" font-size="10" text-anchor="middle">${_esc(seg.label)}</text>`;
                     angle += slice;
                 });
                 return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">${arcs}${labels}</svg>`;
             };
-            this.template = html `<div class="ar-donut" a-html="this.svgHtml()"></div>`;
+            this.template = html `<div class="PortfolioDonut-Canvas" a-html="this.svgHtml()"></div>`;
+            MountFinanceTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -469,7 +563,7 @@ export namespace PortfolioDonut
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 Sheet: Types.Stylesheet | null;
-            }).Sheet = PortfolioDonut.DefaultSheet();
+            }).Sheet = Styles;
         }
 
         /** @name        segments
@@ -600,19 +694,8 @@ export namespace PortfolioDonut
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    display: 'inline-block',
-                    padding: '8px',
-                }),
-                new Rule(':host svg', { display: 'block' }),
-            ]);
-        }
+        public static readonly Styles = Styles;
+        static DefaultSheet(): Types.Stylesheet { return Styles; }
     }
 }
 export default PortfolioDonut;

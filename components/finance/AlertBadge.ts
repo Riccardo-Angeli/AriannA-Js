@@ -1,3 +1,5 @@
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
+import { MountFinanceTemplate } from './Base.ts';
 /**
  * @module    components/finance/AlertBadge
  * @author    Riccardo Angeli
@@ -8,7 +10,8 @@
  * @description AriannA AlertBadge component module.
  */
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
+
+
 
 /** @namespace   AlertBadge
  *  @public
@@ -123,11 +126,126 @@ export namespace AlertBadge
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-alert-badge', {}, {
-        Attributes: ['text', 'sublabel', 'level'],
-    })
-    export class AlertBadge extends HTMLElement
+    export const Styles: Types.Stylesheet = (() =>
     {
+            return new Stylesheet([
+            new Rule('.AlertBadge', {
+                '--arianna-bg': '#17181c',
+                '--arianna-bg-2': '#1d1e23',
+                '--arianna-bg-3': '#24262b',
+                '--arianna-text': '#e6e8eb',
+                '--arianna-muted': '#9aa0aa',
+                '--arianna-dim': '#6f7580',
+                '--arianna-border': '#303238',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#26a69a',
+                '--arianna-warning': '#f5a623',
+                '--arianna-danger': '#ef5350',
+                '--bg': '#17181c',
+                '--bg3': '#24262b',
+                '--text': '#e6e8eb',
+                '--muted': '#9aa0aa',
+                '--border': '#303238',
+                '--accent': '#e40c88',
+            }),
+            new Rule('.AlertBadge[theme="light"]', {
+                '--arianna-bg': '#ffffff',
+                '--arianna-bg-2': '#fbfbfc',
+                '--arianna-bg-3': '#f3f3f5',
+                '--arianna-text': '#1c1e21',
+                '--arianna-muted': '#626873',
+                '--arianna-dim': '#8a8f98',
+                '--arianna-border': '#e2e2e6',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#168a78',
+                '--arianna-warning': '#b66c00',
+                '--arianna-danger': '#c93645',
+                '--bg': '#ffffff',
+                '--bg3': '#f3f3f5',
+                '--text': '#1c1e21',
+                '--muted': '#626873',
+                '--border': '#e2e2e6',
+                '--accent': '#e40c88',
+            }),
+                new Rule('.AlertBadge', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
+                    alignItems: 'center',
+                    background: 'var(--arianna-bg-3, var(--bg3, #f6f7f9))',
+                    borderRadius: '4px',
+                    display: 'inline-flex',
+                    fontFamily: 'inherit',
+                    gap: '6px',
+                    padding: '4px 10px',
+                }),
+                new Rule('.AlertBadge .AlertBadge-Main', {
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                }),
+                new Rule('.AlertBadge .AlertBadge-Sub', {
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
+                    fontSize: '11px',
+                }),
+                // ── Level palettes ──────────────────────────────────────────
+                new Rule('.AlertBadge[level="neutral"]', {
+                    background: 'var(--arianna-bg-3, var(--bg3, #f6f7f9))',
+                }),
+                new Rule('.AlertBadge[level="neutral"] .AlertBadge-Main', {
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
+                }),
+                new Rule('.AlertBadge[level="info"]', {
+                    background: 'rgba(31,111,235,0.10)',
+                }),
+                new Rule('.AlertBadge[level="info"] .AlertBadge-Main', {
+                    color: 'var(--arianna-primary, var(--accent, #e40c88))',
+                }),
+                new Rule('.AlertBadge[level="warning"]', {
+                    background: 'rgba(245,166,35,0.15)',
+                }),
+                new Rule('.AlertBadge[level="warning"] .AlertBadge-Main', {
+                    color: 'var(--arianna-warning, #f5a623)',
+                }),
+                new Rule('.AlertBadge[level="danger"]', {
+                    background: 'rgba(207,34,46,0.12)',
+                }),
+                new Rule('.AlertBadge[level="danger"] .AlertBadge-Main', {
+                    color: 'var(--arianna-danger, #ef5350)',
+                }),
+            ]);
+        
+    })();
+
+    @Component('arianna-alert-badge', Styles, {
+        Shadow: false,
+        Attributes: ['text', 'sublabel', 'level', 'theme'],
+    })
+    export class AlertBadge extends HTMLDivElement
+    {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'AlertBadge';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('AlertBadge');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -145,6 +263,10 @@ export namespace AlertBadge
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.AlertBadgeOptions = {})
         {
+            this.classList.add('AlertBadge');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            this.dataset.ariannaFolderReady = 'true';
             /** @name        text
              *  @public
              *  @type        {inferred}
@@ -166,9 +288,10 @@ export namespace AlertBadge
             this.subVal = () => sublabel.Get() ?? '';
             this.hasSub = () => !!sublabel.Get();
             this.template = html `
-            <span class="ar-alert__main">{{ this.textVal() }}</span>
-            <span class="ar-alert__sub" a-if="this.hasSub()">{{ this.subVal() }}</span>
+            <span class="AlertBadge-Main">{{ this.textVal() }}</span>
+            <span class="AlertBadge-Sub" a-if="this.hasSub()">{{ this.subVal() }}</span>
         `;
+            MountFinanceTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -178,7 +301,7 @@ export namespace AlertBadge
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 Sheet: Types.Stylesheet | null;
-            }).Sheet = AlertBadge.DefaultSheet();
+            }).Sheet = Styles;
         }
 
         /** @name        onCreated
@@ -327,54 +450,8 @@ export namespace AlertBadge
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    alignItems: 'center',
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                    borderRadius: '4px',
-                    display: 'inline-flex',
-                    fontFamily: 'inherit',
-                    gap: '6px',
-                    padding: '4px 10px',
-                }),
-                new Rule(':host .ar-alert__main', {
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                }),
-                new Rule(':host .ar-alert__sub', {
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    fontSize: '11px',
-                }),
-                // ── Level palettes ──────────────────────────────────────────
-                new Rule(':host([level="neutral"])', {
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                }),
-                new Rule(':host([level="neutral"]) .ar-alert__main', {
-                    color: 'var(--arianna-muted, #6e6b62)',
-                }),
-                new Rule(':host([level="info"])', {
-                    background: 'rgba(31,111,235,0.10)',
-                }),
-                new Rule(':host([level="info"]) .ar-alert__main', {
-                    color: 'var(--arianna-primary, #1f6feb)',
-                }),
-                new Rule(':host([level="warning"])', {
-                    background: 'rgba(245,166,35,0.15)',
-                }),
-                new Rule(':host([level="warning"]) .ar-alert__main', {
-                    color: 'var(--arianna-warning, #f5a623)',
-                }),
-                new Rule(':host([level="danger"])', {
-                    background: 'rgba(207,34,46,0.12)',
-                }),
-                new Rule(':host([level="danger"]) .ar-alert__main', {
-                    color: 'var(--arianna-danger, #cf222e)',
-                }),
-            ]);
-        }
+        public static readonly Styles = Styles;
+        static DefaultSheet(): Types.Stylesheet { return Styles; }
     }
 }
 export default AlertBadge;

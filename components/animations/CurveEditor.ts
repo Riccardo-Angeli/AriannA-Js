@@ -1,1015 +1,640 @@
 /**
- * @module    components/animations/CurveEditor
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA CurveEditor component module.
+ * @module components/animations/CurveEditor
+ * @version 2.0.0
  */
+import { Component, Css, Templates } from '../../core/index.ts';
 
-import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
-
-/** @name        html
- *  @public
- *  @type        {inferred}
- *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** @namespace   CurveEditor
- *  @public
- *  @description Namespace containing CurveEditor contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 export namespace CurveEditor
 {
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export namespace Types
-    {
-        /** @name        Signal
-         *  @public
-         *  @type        {SchemaInterfaces.Reactivity.Signal<T>}
-         *  @description Type alias for Signal.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
-
-        /** @name        Rule
-         *  @public
-         *  @type        {Css.Rule}
-         *  @description Type alias for Rule.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Rule = Css.Rule;
-
-        /** @name        Stylesheet
-         *  @public
-         *  @type        {Css.Stylesheet}
-         *  @description Type alias for Stylesheet.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Stylesheet = Css.Stylesheet;
-    }
-
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Interfaces
     {
-        /** @interface   CurveEditorOptions
-         *  @public
-         *  @description CurveEditorOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface CurveEditorOptions
+        export interface CurvePoint
         {
-            /** @name        width
-             *  @public
-             *  @type        {number}
-             *  @description Component member for width.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            width?: number;
-
-            /** @name        height
-             *  @public
-             *  @type        {number}
-             *  @description Component member for height.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            height?: number;
+            frame: number;
+            value: number;
+            selected?: boolean;
+            interp?: 'constant' | 'linear' | 'bezier' | string;
+            hIn?: [number, number];
+            hOut?: [number, number];
         }
 
-        /** @interface   CurveSample
-         *  @public
-         *  @description CurveSample contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         export interface CurveSample
         {
-            /** @name        track
-             *  @public
-             *  @type        {Element}
-             *  @description Component member for track.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            track: Element;
+            track?: Element;
+            channel?: string;
+            group?: string;
+            points: CurvePoint[];
+        }
 
-            /** @name        group
-             *  @public
-             *  @type        {string}
-             *  @description Component member for group.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            group: string;
-
-            /** @name        points
-             *  @public
-             *  @type        {Array<{
-                frame: number;
-                value: number;
-                selected: boolean;
-                interp: string;
-                hIn: [
-                    number,
-                    number
-                ];
-                hOut: [
-                    number,
-                    number
-                ];
-            }>}
-             *  @description Component member for points.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            points: Array<{
-                /** @name        frame
-                 *  @public
-                 *  @type        {number}
-                 *  @description Component member for frame.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                frame: number;
-
-                /** @name        value
-                 *  @public
-                 *  @type        {number}
-                 *  @description Component member for value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                value: number;
-
-                /** @name        selected
-                 *  @public
-                 *  @type        {boolean}
-                 *  @description Component member for selected.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                selected: boolean;
-
-                /** @name        interp
-                 *  @public
-                 *  @type        {string}
-                 *  @description Component member for interp.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                interp: string;
-
-                /** @name        hIn
-                 *  @public
-                 *  @type        {[
-                    number,
-                    number
-                ]}
-                 *  @description Component member for h In.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                hIn: [
-                    number,
-                    number
-                ];
-
-                /** @name        hOut
-                 *  @public
-                 *  @type        {[
-                    number,
-                    number
-                ]}
-                 *  @description Component member for h Out.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                hOut: [
-                    number,
-                    number
-                ];
-            }>;
+        export interface CurveEditorOptions
+        {
+            width?: number;
+            height?: number;
+            channel?: string;
+            samples?: CurveSample[];
         }
     }
 
-    /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
-       members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
-       `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
-       not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
-       returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
-       Map, Effect" with the same name printed twice. */
-    /** @name        signal
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned signal value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const Styles = new Css.Stylesheet([
+        new Css.Rule('.CurveEditor', {
+            Background: '#181b1e', Border: '1px solid #15181a', BorderRadius: '8px',
+            BoxSizing: 'border-box', Color: '#dde1e4', Display: 'block', MinHeight: '260px',
+            MinWidth: '0', Overflow: 'hidden', Width: '100%'
+        }),
+        new Css.Rule('.CurveEditor-Toolbar', {
+            AlignItems: 'center', Background: 'linear-gradient(180deg,#363b40 0%,#25292d 100%)',
+            BorderBottom: '1px solid #0f1113', Display: 'flex', Gap: '7px', Height: '38px',
+            Padding: '5px 8px'
+        }),
+        new Css.Rule('.CurveEditor-Button, .CurveEditor-Select', {
+            Appearance: 'none', Background: '#303439', Border: '1px solid #15181a', BorderRadius: '4px',
+            Color: '#dde1e4', Font: '11px/1 var(--arianna-font, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)',
+            Height: '26px', Outline: 'none'
+        }),
+        new Css.Rule('.CurveEditor-Button', { Cursor: 'pointer', MinWidth: '28px', Padding: '0 7px' }),
+        new Css.Rule('.CurveEditor-Select', { Cursor: 'pointer', MinWidth: '94px', Padding: '0 24px 0 8px' }),
+        new Css.Rule('.CurveEditor-Color', {
+            Border: '1px solid rgba(255,255,255,.25)', BorderRadius: '50%', Height: '12px', Width: '12px'
+        }),
+        new Css.Rule('.CurveEditor-Color[data-group="position"]', { Background: '#4b9ee9' }),
+        new Css.Rule('.CurveEditor-Color[data-group="rotation"]', { Background: '#e69a45' }),
+        new Css.Rule('.CurveEditor-Color[data-group="scale"]', { Background: '#42bd50' }),
+        new Css.Rule('.CurveEditor-Canvas', { Background: '#202428', Display: 'block', Height: 'calc(100% - 38px)', MinHeight: '220px' }),
+        new Css.Rule('.CurveEditor-Svg', { Display: 'block', Height: '100%', Overflow: 'visible', Width: '100%' }),
+        new Css.Rule('.CurveEditor-Grid', { Stroke: '#383d42', StrokeWidth: '1' }),
+        new Css.Rule('.CurveEditor-Axis', { Stroke: '#737b83', StrokeWidth: '1' }),
+        new Css.Rule('.CurveEditor-Label', {
+            Fill: '#9ca4ab', FontFamily: 'var(--arianna-font, system-ui, sans-serif)', FontSize: '10px'
+        }),
+        new Css.Rule('.CurveEditor-Curve', { Fill: 'none', StrokeWidth: '2' }),
+        new Css.Rule('.CurveEditor-Key', {
+            Cursor: 'pointer', Stroke: '#dfe3e7', StrokeWidth: '1.2'
+        }),
+        new Css.Rule('.CurveEditor-Key[data-selected="true"]', { Stroke: '#ef8d2f', StrokeWidth: '2.4' }),
+        new Css.Rule('.CurveEditor-HandleLine', { Opacity: '.55', StrokeWidth: '1' }),
+        new Css.Rule('.CurveEditor-Handle', { Stroke: '#ffffff', StrokeWidth: '1' }),
+        new Css.Rule('.CurveEditor-Playhead', { Stroke: '#e24d47', StrokeWidth: '1.8' }),
 
-    /** @name        effect
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned effect value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const effect = (fn: () => void): (() => void) => {
-        /** @name        e
-         *  @public
-         *  @type        {inferred}
-         *  @description Namespace-owned e value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        const e = Reactivity.CreateEffect(fn);
-        return () => e.Stop();
-    };
+        new Css.Rule('.CurveEditor[theme="light"]', { Background: '#eef0f2', BorderColor: '#b9bec3', Color: '#25292d' }),
+        new Css.Rule('.CurveEditor[theme="light"] .CurveEditor-Toolbar', { Background: 'linear-gradient(180deg,#f9fafb,#dfe3e6)', BorderBottomColor: '#b9bec3' }),
+        new Css.Rule('.CurveEditor[theme="light"] .CurveEditor-Button, .CurveEditor[theme="light"] .CurveEditor-Select', { Background: '#fff', BorderColor: '#b9bec3', Color: '#383e43' }),
+        new Css.Rule('.CurveEditor[theme="light"] .CurveEditor-Color', { BorderColor: 'rgba(0,0,0,.14)' }),
+        new Css.Rule('.CurveEditor[theme="light"] .CurveEditor-Canvas', { Background: '#fafafa' }),
+        new Css.Rule('.CurveEditor[theme="light"] .CurveEditor-Grid', { Stroke: '#dedfe1' }),
+        new Css.Rule('.CurveEditor[theme="light"] .CurveEditor-Axis', { Stroke: '#c8ccd0' }),
+        new Css.Rule('.CurveEditor[theme="light"] .CurveEditor-Label', { Fill: '#697077' }),
+        new Css.Rule('.CurveEditor[theme="light"] .CurveEditor-Key', { Stroke: '#4a5158' }),
+        new Css.Rule('.CurveEditor[theme="light"] .CurveEditor-Handle', { Stroke: '#383e43' }),
+    ]);
 
-    /** @name        { Rule, Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Rule, Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const { Rule, Stylesheet } = Css;
-
-    /** @name        SVG_NS
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned SVG_NS value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const SVG_NS = 'http://www.w3.org/2000/svg';
-
-    /** @class       CurveEditor
-     *  @public
-     *  @description AriannA CurveEditor component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-curve-editor', {}, {
-        Attributes: ['width', 'height'],
+    @Component('arianna-curve-editor', Styles, {
+        Shadow: false,
+        Attributes: ['width', 'height', 'channel'],
+        Properties: ['samples']
     })
     export class CurveEditor extends HTMLElement
     {
-        /** @name        template
-         *  @public
-         *  @type        {unknown}
-         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
-         *               or behavior-only rendering logic while participating in the compiled Template fast path.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        template = html``;
+        public static readonly Styles = Styles;
+        public template = html``;
 
-        /** @name        samples$
-         *  @public
-         *  @readonly
-         *  @type        {CurveEditor.Types.Signal<CurveEditor.Interfaces.CurveSample[]>}
-         *  @description Component member for samples$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly samples$: Types.Signal<Interfaces.CurveSample[]> = signal<Interfaces.CurveSample[]>([]);
+        private _samples?: Interfaces.CurveSample[];
+        private _bound?: Element;
+        private _playhead?: number;
+        private _svg?: SVGSVGElement;
+        private _resize?: ResizeObserver;
+        private _showHandles?: boolean;
+        private _drag?: { sample: number; point: number; kind: 'point' | 'hIn' | 'hOut'; pointerId: number } | null;
+        private _view?: {
+            left: number; top: number; plotW: number; plotH: number;
+            fMin: number; fMax: number; vMin: number; vMax: number;
+        };
 
-        /** @name        playhead$
-         *  @public
-         *  @readonly
-         *  @type        {CurveEditor.Types.Signal<number>}
-         *  @description Component member for playhead$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly playhead$: Types.Signal<number> = signal(0);
-
-        /** @name        #svg
-         *  @public
-         *  @type        {SVGSVGElement}
-         *  @description Component member for svg.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #svg?: SVGSVGElement;
-
-        /** @name        #bound
-         *  @public
-         *  @type        {Element}
-         *  @description Component member for bound.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #bound?: Element; // bound KeyframeEditor instance
-        /** @name        constructor
-         *  @public
-         *  @type        {constructor}
-         *  @description Constructs the component for constructor.
-         *  @param       {CurveEditor.Interfaces.CurveEditorOptions} opts Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        constructor(opts: Interfaces.CurveEditorOptions = {})
+        constructor(options: Interfaces.CurveEditorOptions = {})
         {
             super();
-
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-            };
-
-            /** @name        el
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned el value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const el = self.render();
-            if (opts.width != null)
-                el.setAttribute('width', String(opts.width));
-            if (opts.height != null)
-                el.setAttribute('height', String(opts.height));
+            this.EnsureState();
+            if(options.width != null) this.setAttribute('width', String(options.width));
+            if(options.height != null) this.setAttribute('height', String(options.height));
+            if(options.channel) this.setAttribute('channel', options.channel);
+            if(options.samples) this._samples = options.samples;
         }
 
-        /** @name        onConnected
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Connected.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onConnected(): void
+        public get samples(): Interfaces.CurveSample[]
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
+            this.EnsureState();
+            return this._samples ?? [];
+        }
 
-                /** @name        signal
-                 *  @public
-                 *  @type        {{
-                    attribute(name: string): CurveEditor.Types.Signal<string | null>;
-                }}
-                 *  @description Component member for signal.
-                 *  @returns     {{
-                    attribute(name: string): CurveEditor.Types.Signal<string | null>;
-                }} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                signal():
+        public set samples(value: Interfaces.CurveSample[])
+        {
+            this.EnsureState();
+            this._samples = Array.isArray(value) ? value : [];
+            if(this.isConnected) this.Redraw();
+        }
+
+        public onConnected(): void
+        {
+            this.EnsureState();
+            this.classList.add('CurveEditor');
+            if(!this.hasAttribute('channel')) this.setAttribute('channel', 'X Location');
+            if(!this.hasAttribute('height')) this.setAttribute('height', '300');
+            if(!this.hasAttribute('tabindex')) this.tabIndex = 0;
+            this.Render();
+        }
+
+        public onCreated(): void
+        {
+            requestAnimationFrame(() => { if(this.isConnected) this.onConnected(); });
+        }
+
+        public onUnmount(): void { this._resize?.disconnect(); }
+
+        public bindEditor(editor: Element): this
+        {
+            this.EnsureState();
+            this._bound = editor;
+            editor.addEventListener('arianna:keyframe-editor-update', () => this.Refresh());
+            editor.addEventListener('arianna:keyframe-editor-playhead', event =>
+            {
+                const frame = (event as CustomEvent<{ frame: number }>).detail?.frame;
+                if(Number.isFinite(frame))
                 {
-                    /** @name        attribute
-                     *  @public
-                     *  @type        {CurveEditor.Types.Signal<string | null>}
-                     *  @description Component member for attribute.
-                     *  @param       {string} name Parameter.
-                     *  @returns     {CurveEditor.Types.Signal<string | null>} Result.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    attribute(name: string): Types.Signal<string | null>;
-                };
-
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {CurveEditor.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            };
-
-            /** @name        root
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned root value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const root = self.render();
-            if (root.querySelector('svg'))
-                return;
-
-            /** @name        w
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned w value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const w = parseInt(self.signal().attribute('width')?.Peek() ?? '720', 10) || 720;
-
-            /** @name        h
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned h value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const h = parseInt(self.signal().attribute('height')?.Peek() ?? '260', 10) || 260;
-
-            /** @name        svg
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned svg value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
-            svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-            svg.setAttribute('width', String(w));
-            svg.setAttribute('height', String(h));
-            svg.setAttribute('class', 'ce-svg');
-            this.#svg = svg;
-            root.appendChild(svg);
-            effect(() => { this.samples$.Get(); this.playhead$.Get(); this.#redraw(); });
-            self.Sheet = CurveEditor.DefaultSheet();
-        }
-
-        /** Bind to a KeyframeEditor element. The CurveEditor will read its
-         *  tracks + keyframes on each update event. */
-        bindEditor(editor: Element): this
-        {
-            this.#bound = editor;
-            editor.addEventListener('arianna:keyframe-editor-update', () => this.#refresh());
-            editor.addEventListener('arianna:keyframe-editor-playhead', (e: Event) => {
-                /** @name        d
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned d value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const d = (e as CustomEvent<{
-                    /** @name        frame
-                     *  @public
-                     *  @type        {number}
-                     *  @description Component member for frame.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    frame: number;
-                }>).detail;
-                this.playhead$.Set(d.frame);
+                    this._playhead = frame;
+                    this.Redraw();
+                }
             });
-            this.#refresh();
+            this.Refresh();
             return this;
         }
 
-        /** @name        #refresh
-         *  @public
-         *  @type        {void}
-         *  @description Component member for refresh.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #refresh(): void
+        private EnsureState(): void
         {
-            if (!this.#bound)
-            {
-                this.samples$.Set([]);
-                return;
-            }
-
-            /** @name        tracks
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned tracks value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const tracks = Array.from(this.#bound.querySelectorAll('arianna-anim-track'));
-
-            /** @name        samples
-             *  @public
-             *  @type        {CurveEditor.Interfaces.CurveSample[]}
-             *  @description Namespace-owned samples value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const samples: Interfaces.CurveSample[] = tracks.map(t => {
-                if (t.hasAttribute('hidden'))
-                {
-                    return { track: t, group: t.getAttribute('group') ?? 'custom', points: [] };
-                }
-
-                /** @name        kfs
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned kfs value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const kfs = Array.from(t.querySelectorAll('arianna-keyframe'));
-
-                /** @name        points
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned points value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const points = kfs.map(k => ({
-                    frame: parseFloat(k.getAttribute('frame') ?? '0') || 0,
-                    value: parseFloat(k.getAttribute('value') ?? '0') || 0,
-                    selected: k.hasAttribute('selected'),
-                    interp: k.getAttribute('interpolation') ?? 'bezier',
-                    hIn: [-1, 0] as [
-                        number,
-                        number
-                    ],
-                    hOut: [1, 0] as [
-                        number,
-                        number
-                    ],
-                }));
-                points.sort((a, b) => a.frame - b.frame);
-                return { track: t, group: t.getAttribute('group') ?? 'custom', points };
-            });
-            this.samples$.Set(samples);
+            if(!Array.isArray(this._samples)) this._samples = [];
+            if(typeof this._playhead !== 'number' || !Number.isFinite(this._playhead)) this._playhead = 24;
+            if(typeof this._showHandles !== 'boolean') this._showHandles = true;
+            if(this._drag === undefined) this._drag = null;
         }
 
-        /** @name        #redraw
-         *  @public
-         *  @type        {void}
-         *  @description Component member for redraw.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #redraw(): void
+        private Render(): void
         {
-            /** @name        svg
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned svg value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const svg = this.#svg;
-            if (!svg)
-                return;
-            while (svg.firstChild)
-                svg.removeChild(svg.firstChild);
+            this.EnsureState();
 
-            /** @name        w
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned w value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const w = parseInt(svg.getAttribute('width') ?? '720', 10);
+            const toolbar = document.createElement('div');
+            toolbar.className = 'CurveEditor-Toolbar';
 
-            /** @name        h
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned h value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const h = parseInt(svg.getAttribute('height') ?? '260', 10);
+            const menu = document.createElement('button');
+            menu.type = 'button';
+            menu.className = 'CurveEditor-Button';
+            menu.textContent = '◧';
+            menu.title = 'Channels';
 
-            /** @name        samples
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned samples value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const samples = this.samples$.Peek();
-            if (!samples.length)
-                return;
+            const channel = document.createElement('select');
+            channel.className = 'CurveEditor-Select';
+            channel.dataset.role = 'channel';
 
-            /** @name        padL
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned padL value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const padL = 40, padR = 12, padT = 12, padB = 24;
+            for(const group of ['position', 'rotation', 'scale'])
+            {
+                const dot = document.createElement('span');
+                dot.className = 'CurveEditor-Color';
+                dot.dataset.group = group;
+                toolbar.append(dot);
+            }
 
-            /** @name        plotW
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned plotW value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const plotW = w - padL - padR;
+            const interpolation = document.createElement('select');
+            interpolation.className = 'CurveEditor-Select';
+            interpolation.dataset.role = 'interpolation';
+            ['Auto', 'Bezier', 'Linear', 'Constant'].forEach(label =>
+            {
+                const item = document.createElement('option');
+                item.textContent = label;
+                item.value = label.toLowerCase();
+                interpolation.append(item);
+            });
 
-            /** @name        plotH
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned plotH value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const plotH = h - padT - padB;
-            // Compute domain
-            /** @name        fMin
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned fMin value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            let fMin = 0, fMax = 0, vMin = 0, vMax = 0;
-            for (const s of samples)
-                for (const p of s.points)
+            const handles = document.createElement('button');
+            handles.type = 'button';
+            handles.className = 'CurveEditor-Button';
+            handles.textContent = '⑂';
+            handles.title = 'Bezier handles';
+            handles.dataset.active = String(this._showHandles);
+
+            toolbar.insertBefore(menu, toolbar.firstChild);
+            toolbar.insertBefore(channel, toolbar.children[1] ?? null);
+            toolbar.append(interpolation, handles);
+
+            const canvas = document.createElement('div');
+            canvas.className = 'CurveEditor-Canvas';
+            const svg = document.createElementNS(SVG_NS, 'svg');
+            svg.classList.add('CurveEditor-Svg');
+            canvas.append(svg);
+            this._svg = svg;
+
+            this.replaceChildren(toolbar, canvas);
+            this.RefreshChannelOptions();
+
+            channel.addEventListener('change', () =>
+            {
+                this.setAttribute('channel', channel.value);
+                this.Redraw();
+            });
+
+            interpolation.addEventListener('change', () =>
+            {
+                const value = interpolation.value === 'auto' ? 'bezier' : interpolation.value;
+                for(const sample of this._samples ?? [])
                 {
-                    if (p.frame < fMin)
-                        fMin = p.frame;
-                    if (p.frame > fMax)
-                        fMax = p.frame;
-                    if (p.value < vMin)
-                        vMin = p.value;
-                    if (p.value > vMax)
-                        vMax = p.value;
+                    for(const point of sample.points)
+                    {
+                        if(!point.selected) continue;
+                        point.interp = value;
+                        const source = (point as Interfaces.CurvePoint & { source?: Element }).source;
+                        source?.setAttribute('interpolation', value);
+                    }
                 }
-            if (fMin === fMax)
-                fMax = fMin + 1;
-            if (vMin === vMax)
+                this.EmitChange('interpolation');
+                this.Redraw();
+            });
+
+            handles.addEventListener('click', () =>
             {
-                vMin -= 0.5;
-                vMax += 0.5;
+                this._showHandles = !this._showHandles;
+                handles.dataset.active = String(this._showHandles);
+                this.Redraw();
+            });
+
+            svg.addEventListener('pointerdown', event => this.PointerDown(event));
+            svg.addEventListener('pointermove', event => this.PointerMove(event));
+            svg.addEventListener('pointerup', event => this.PointerUp(event));
+            svg.addEventListener('pointercancel', event => this.PointerUp(event));
+            svg.addEventListener('dblclick', event => this.AddPointAt(event));
+
+            this._resize?.disconnect();
+            if(typeof ResizeObserver !== 'undefined')
+            {
+                this._resize = new ResizeObserver(() => this.Redraw());
+                this._resize.observe(canvas);
             }
+            requestAnimationFrame(() => this.Redraw());
+        }
 
-            /** @name        fR
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned fR value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const fR = fMax - fMin, vR = vMax - vMin;
-
-            /** @name        xOf
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned xOf value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const xOf = (f: number) => padL + ((f - fMin) / fR) * plotW;
-
-            /** @name        yOf
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned yOf value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const yOf = (v: number) => padT + plotH - ((v - vMin) / vR) * plotH;
-            // Grid
-            for (let i = 0; i <= 4; i++)
+        private RefreshChannelOptions(): void
+        {
+            const select = this.querySelector<HTMLSelectElement>('.CurveEditor-Select[data-role="channel"]');
+            if(!select) return;
+            const current = this.getAttribute('channel') ?? '';
+            const channels = Array.from(new Set((this._samples ?? []).map(sample => sample.channel).filter((value): value is string => Boolean(value))));
+            if(!channels.length) channels.push(current || 'X Location');
+            select.replaceChildren(...channels.map(name =>
             {
-                /** @name        y
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned y value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const y = padT + (plotH * i / 4);
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                option.selected = name === current || (!current && name === channels[0]);
+                return option;
+            }));
+            if(!select.value && channels[0]) select.value = channels[0];
+        }
 
-                /** @name        line
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned line value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const line = document.createElementNS(SVG_NS, 'line');
-                line.setAttribute('x1', String(padL));
-                line.setAttribute('x2', String(w - padR));
-                line.setAttribute('y1', String(y));
-                line.setAttribute('y2', String(y));
-                line.setAttribute('class', 'ce-grid');
-                svg.appendChild(line);
+        private Refresh(): void
+        {
+            this.EnsureState();
+            if(!this._bound) return;
+            const samples: Interfaces.CurveSample[] = [];
+            for(const track of Array.from(this._bound.querySelectorAll('arianna-anim-track, .AnimTrack')))
+            {
+                if(track.hasAttribute('hidden')) continue;
+                const points = Array.from(track.querySelectorAll('arianna-keyframe, .Keyframe')).map(keyframe =>
+                {
+                    const point: Interfaces.CurvePoint & { source?: Element } = {
+                        frame: Number(keyframe.getAttribute('frame') ?? 0) || 0,
+                        value: Number(keyframe.getAttribute('value') ?? 0) || 0,
+                        selected: keyframe.hasAttribute('selected'),
+                        interp: keyframe.getAttribute('interpolation') ?? 'bezier',
+                        hIn: [-16, 0],
+                        hOut: [16, 0],
+                        source: keyframe
+                    };
+                    return point;
+                }).sort((a, b) => a.frame - b.frame);
+                if(points.length) samples.push({
+                    track,
+                    channel: track.getAttribute('name') ?? undefined,
+                    group: track.getAttribute('group') ?? 'custom',
+                    points
+                });
             }
-            // Curves
-            for (const s of samples)
+            this._samples = samples;
+            this.RefreshChannelOptions();
+            this.Redraw();
+        }
+
+        private ActiveSamples(): Interfaces.CurveSample[]
+        {
+            const selected = this.getAttribute('channel');
+            const all = this._samples ?? [];
+            const filtered = selected ? all.filter(sample => sample.channel === selected) : all;
+            return filtered.length ? filtered : all;
+        }
+
+        private Redraw(): void
+        {
+            this.EnsureState();
+            const svg = this._svg;
+            if(!svg) return;
+            svg.replaceChildren();
+
+            const canvas = svg.parentElement;
+            const width = Number(this.getAttribute('width') ?? 0) || canvas?.clientWidth || 640;
+            const height = Number(this.getAttribute('height') ?? 0) || canvas?.clientHeight || 300;
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+            const samples = this.ActiveSamples();
+            if(!samples.length) return;
+
+            const left = 46, right = 14, top = 14, bottom = 28;
+            const plotW = Math.max(1, width - left - right);
+            const plotH = Math.max(1, height - top - bottom);
+            const points = samples.flatMap(sample => sample.points);
+            let fMin = Math.min(...points.map(point => point.frame));
+            let fMax = Math.max(...points.map(point => point.frame));
+            let vMin = Math.min(...points.map(point => point.value));
+            let vMax = Math.max(...points.map(point => point.value));
+            if(fMin === fMax) { fMin -= 1; fMax += 1; }
+            if(vMin === vMax) { vMin -= 1; vMax += 1; }
+            const fPad = Math.max(1, (fMax - fMin) * .04);
+            const vPad = Math.max(1, (vMax - vMin) * .12);
+            fMin -= fPad; fMax += fPad; vMin -= vPad; vMax += vPad;
+            this._view = { left, top, plotW, plotH, fMin, fMax, vMin, vMax };
+
+            const x = (frame: number) => left + ((frame - fMin) / (fMax - fMin)) * plotW;
+            const y = (value: number) => top + plotH - ((value - vMin) / (vMax - vMin)) * plotH;
+
+            for(let i = 0; i <= 5; i++)
             {
-                if (s.points.length < 1)
-                    continue;
+                const gx = left + plotW * i / 5;
+                const gy = top + plotH * i / 5;
+                this.Line(svg, gx, top, gx, top + plotH, 'CurveEditor-Grid');
+                this.Line(svg, left, gy, left + plotW, gy, 'CurveEditor-Grid');
 
-                /** @name        groupVar
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned groupVar value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const groupVar = s.group === 'position' ? 'var(--arianna-curve-position, #4dd0e1)' :
-                    s.group === 'rotation' ? 'var(--arianna-curve-rotation, #ff9800)' :
-                        s.group === 'scale' ? 'var(--arianna-curve-scale, #7eb8f7)' :
-                            'var(--ar-muted, #888)';
+                const tx = this.Text(svg, gx, height - 8, String(Math.round(fMin + (fMax - fMin) * i / 5)));
+                tx.setAttribute('text-anchor', 'middle');
+                const ty = this.Text(svg, left - 9, gy + 3, this.Format(vMax - (vMax - vMin) * i / 5));
+                ty.setAttribute('text-anchor', 'end');
+            }
+            this.Line(svg, left, top + plotH, left + plotW, top + plotH, 'CurveEditor-Axis');
+            this.Line(svg, left, top, left, top + plotH, 'CurveEditor-Axis');
 
-                /** @name        path
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned path value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
+            for(const sample of samples)
+            {
+                const sourceSampleIndex = (this._samples ?? []).indexOf(sample);
+                if(!sample.points.length || sourceSampleIndex < 0) continue;
+                const color = this.Color(sample.group);
                 const path = document.createElementNS(SVG_NS, 'path');
-
-                /** @name        d
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned d value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
+                path.classList.add('CurveEditor-Curve');
+                path.setAttribute('stroke', color);
                 let d = '';
-                s.points.forEach((p: any, i: any) => {
-                    /** @name        x
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned x value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const x = xOf(p.frame);
-
-                    /** @name        y
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned y value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const y = yOf(p.value);
-                    if (i === 0)
-                        d += `M ${x} ${y}`;
+                sample.points.forEach((point, index) =>
+                {
+                    const px = x(point.frame), py = y(point.value);
+                    if(index === 0) d = `M ${px} ${py}`;
                     else
                     {
-                        /** @name        prev
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned prev value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const prev = s.points[i - 1]!;
-                        if (prev.interp === 'constant')
-                        {
-                            d += ` H ${x} V ${y}`;
-                        }
-                        else if (prev.interp === 'linear')
-                        {
-                            d += ` L ${x} ${y}`;
-                        }
+                        const previous = sample.points[index - 1];
+                        if((point.interp ?? 'bezier') === 'constant') d += ` H ${px} V ${py}`;
+                        else if((point.interp ?? 'bezier') === 'linear') d += ` L ${px} ${py}`;
                         else
                         {
-                            // Bezier — handles in (frames, value) units
-                            /** @name        c1x
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned c1x value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const c1x = xOf(prev.frame + Math.max(0.1, prev.hOut[0]));
-
-                            /** @name        c1y
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned c1y value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const c1y = yOf(prev.value + prev.hOut[1]);
-
-                            /** @name        c2x
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned c2x value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const c2x = xOf(p.frame - Math.max(0.1, -p.hIn[0]));
-
-                            /** @name        c2y
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned c2y value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const c2y = yOf(p.value + p.hIn[1]);
-                            d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${x} ${y}`;
+                            const h1 = previous.hOut ?? [16, 0];
+                            const h2 = point.hIn ?? [-16, 0];
+                            d += ` C ${x(previous.frame + h1[0])} ${y(previous.value + h1[1])} ${x(point.frame + h2[0])} ${y(point.value + h2[1])} ${px} ${py}`;
                         }
                     }
                 });
                 path.setAttribute('d', d);
-                path.setAttribute('fill', 'none');
-                path.setAttribute('stroke', groupVar);
-                path.setAttribute('class', 'ce-curve');
-                svg.appendChild(path);
-                // Keyframe dots
-                for (const p of s.points)
+                svg.append(path);
+
+                sample.points.forEach((point, pointIndex) =>
                 {
-                    /** @name        c
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned c value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const c = document.createElementNS(SVG_NS, 'circle');
-                    c.setAttribute('cx', String(xOf(p.frame)));
-                    c.setAttribute('cy', String(yOf(p.value)));
-                    c.setAttribute('r', p.selected ? '4' : '3');
-                    c.setAttribute('fill', groupVar);
-                    c.setAttribute('class', 'ce-key' + (p.selected ? ' ce-key-selected' : ''));
-                    svg.appendChild(c);
-                    // Bezier handles if selected
-                    if (p.selected && p.interp === 'bezier')
+                    if(this._showHandles && point.selected && (point.interp ?? 'bezier') === 'bezier')
                     {
-                        /** @name        drawHandle
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned drawHandle value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const drawHandle = (off: [
-                            number,
-                            number
-                        ]) => {
-                            /** @name        hx
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned hx value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const hx = xOf(p.frame + off[0]);
-
-                            /** @name        hy
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned hy value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const hy = yOf(p.value + off[1]);
-
-                            /** @name        line
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned line value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const line = document.createElementNS(SVG_NS, 'line');
-                            line.setAttribute('x1', String(xOf(p.frame)));
-                            line.setAttribute('y1', String(yOf(p.value)));
-                            line.setAttribute('x2', String(hx));
-                            line.setAttribute('y2', String(hy));
-                            line.setAttribute('class', 'ce-handle-line');
-                            line.setAttribute('stroke', groupVar);
-                            svg.appendChild(line);
-
-                            /** @name        hd
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned hd value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const hd = document.createElementNS(SVG_NS, 'rect');
-                            hd.setAttribute('x', String(hx - 3));
-                            hd.setAttribute('y', String(hy - 3));
-                            hd.setAttribute('width', '6');
-                            hd.setAttribute('height', '6');
-                            hd.setAttribute('class', 'ce-handle');
-                            hd.setAttribute('fill', groupVar);
-                            svg.appendChild(hd);
-                        };
-                        drawHandle(p.hIn);
-                        drawHandle(p.hOut);
+                        this.Handle(svg, x, y, point, point.hIn ?? [-16, 0], color, sourceSampleIndex, pointIndex, 'hIn');
+                        this.Handle(svg, x, y, point, point.hOut ?? [16, 0], color, sourceSampleIndex, pointIndex, 'hOut');
                     }
-                }
+                    const key = document.createElementNS(SVG_NS, 'circle');
+                    key.classList.add('CurveEditor-Key');
+                    key.dataset.selected = String(Boolean(point.selected));
+                    key.dataset.sample = String(sourceSampleIndex);
+                    key.dataset.point = String(pointIndex);
+                    key.dataset.kind = 'point';
+                    key.setAttribute('cx', String(x(point.frame)));
+                    key.setAttribute('cy', String(y(point.value)));
+                    key.setAttribute('r', point.selected ? '4.5' : '3.8');
+                    key.setAttribute('fill', color);
+                    svg.append(key);
+                });
             }
-            // Playhead
-            /** @name        ph
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned ph value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const ph = this.playhead$.Peek();
-            if (ph >= fMin && ph <= fMax)
-            {
-                /** @name        phLine
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned phLine value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const phLine = document.createElementNS(SVG_NS, 'line');
-                phLine.setAttribute('x1', String(xOf(ph)));
-                phLine.setAttribute('x2', String(xOf(ph)));
-                phLine.setAttribute('y1', String(padT));
-                phLine.setAttribute('y2', String(h - padB));
-                phLine.setAttribute('class', 'ce-playhead');
-                svg.appendChild(phLine);
-            }
+
+            if((this._playhead ?? 0) >= fMin && (this._playhead ?? 0) <= fMax)
+                this.Line(svg, x(this._playhead ?? 0), top, x(this._playhead ?? 0), top + plotH, 'CurveEditor-Playhead');
         }
 
-        /** @name        DefaultSheet
-         *  @public
-         *  @static
-         *  @type        {CurveEditor.Types.Stylesheet}
-         *  @description Component member for Default Sheet.
-         *  @returns     {CurveEditor.Types.Stylesheet} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
+        private PointerDown(event: PointerEvent): void
         {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--ar-bg, #0d0d0d)',
-                    border: '1px solid var(--ar-border, #2a2a2a)',
-                    borderRadius: 'var(--ar-radius, 5px)',
-                    display: 'inline-block',
-                    padding: '8px',
-                }),
-                new Rule(':host .ce-svg', { display: 'block' }),
-                new Rule(':host .ce-grid', { stroke: 'var(--ar-border, #2a2a2a)', strokeWidth: '1', strokeDasharray: '2 3' }),
-                new Rule(':host .ce-curve', { strokeWidth: '1.5', fill: 'none' }),
-                new Rule(':host .ce-key', { stroke: '#fff', strokeWidth: '1' }),
-                new Rule(':host .ce-key-selected', { stroke: 'var(--ar-warning, #ff9800)', strokeWidth: '2' }),
-                new Rule(':host .ce-handle-line', { strokeWidth: '1', strokeDasharray: '2 2', opacity: '0.6' }),
-                new Rule(':host .ce-handle', { stroke: '#fff', strokeWidth: '1', cursor: 'grab' }),
-                new Rule(':host .ce-playhead', { stroke: 'var(--ar-danger, #f44336)', strokeWidth: '1.5' }),
-            ]);
+            this.EnsureState();
+            const target = event.target as SVGElement | null;
+            const interactive = target?.closest('.CurveEditor-Key, .CurveEditor-Handle') as SVGElement | null;
+            if(!interactive)
+            {
+                const point = this.EventToData(event);
+                if(point)
+                {
+                    this._playhead = Math.round(point.frame);
+                    this.dispatchEvent(new CustomEvent('arianna:curve-playhead', {
+                        bubbles: true, composed: true, detail: { frame: this._playhead, source: this }
+                    }));
+                    this.Redraw();
+                }
+                return;
+            }
+
+            const sampleIndex = Number(interactive.dataset.sample);
+            const pointIndex = Number(interactive.dataset.point);
+            const kind = (interactive.dataset.kind ?? 'point') as 'point' | 'hIn' | 'hOut';
+            if(!Number.isInteger(sampleIndex) || !Number.isInteger(pointIndex)) return;
+            const sample = this._samples?.[sampleIndex];
+            const point = sample?.points[pointIndex];
+            if(!sample || !point) return;
+
+            if(kind === 'point')
+            {
+                for(const current of this._samples ?? [])
+                    for(const candidate of current.points)
+                        candidate.selected = candidate === point || (event.shiftKey && Boolean(candidate.selected));
+                const interpolation = this.querySelector<HTMLSelectElement>('.CurveEditor-Select[data-role="interpolation"]');
+                if(interpolation) interpolation.value = (point.interp ?? 'bezier') === 'bezier' ? 'bezier' : String(point.interp);
+            }
+
+            this._drag = { sample: sampleIndex, point: pointIndex, kind, pointerId: event.pointerId };
+            this._svg?.setPointerCapture?.(event.pointerId);
+            event.preventDefault();
+            this.focus();
+            this.Redraw();
+        }
+
+        private PointerMove(event: PointerEvent): void
+        {
+            const drag = this._drag;
+            if(!drag || drag.pointerId !== event.pointerId) return;
+            const sample = this._samples?.[drag.sample];
+            const point = sample?.points[drag.point];
+            const data = this.EventToData(event);
+            if(!sample || !point || !data) return;
+
+            if(drag.kind === 'point')
+            {
+                point.frame = Math.round(data.frame);
+                point.value = Math.round(data.value * 1000) / 1000;
+                const source = (point as Interfaces.CurvePoint & { source?: Element }).source;
+                source?.setAttribute('frame', String(point.frame));
+                source?.setAttribute('value', String(point.value));
+            }
+            else
+            {
+                const offset: [number, number] = [
+                    Math.round((data.frame - point.frame) * 100) / 100,
+                    Math.round((data.value - point.value) * 1000) / 1000
+                ];
+                if(drag.kind === 'hIn') point.hIn = offset;
+                else point.hOut = offset;
+            }
+            this.Redraw();
+            this.EmitChange('drag');
+        }
+
+        private PointerUp(event: PointerEvent): void
+        {
+            if(!this._drag || this._drag.pointerId !== event.pointerId) return;
+            try { this._svg?.releasePointerCapture?.(event.pointerId); } catch { /* no-op */ }
+            this._drag = null;
+            this.EmitChange('commit');
+        }
+
+        private AddPointAt(event: MouseEvent): void
+        {
+            if((event.target as Element | null)?.closest('.CurveEditor-Key, .CurveEditor-Handle')) return;
+            const data = this.EventToData(event);
+            const samples = this.ActiveSamples();
+            const sample = samples[0];
+            if(!data || !sample) return;
+            for(const current of this._samples ?? []) for(const point of current.points) point.selected = false;
+            const point: Interfaces.CurvePoint = {
+                frame: Math.round(data.frame),
+                value: Math.round(data.value * 1000) / 1000,
+                interp: 'bezier',
+                selected: true,
+                hIn: [-16, 0],
+                hOut: [16, 0]
+            };
+            sample.points.push(point);
+            sample.points.sort((a, b) => a.frame - b.frame);
+            this.EmitChange('add');
+            this.Redraw();
+        }
+
+        private EventToData(event: MouseEvent | PointerEvent): { frame: number; value: number } | null
+        {
+            const svg = this._svg;
+            const view = this._view;
+            if(!svg || !view) return null;
+            const rect = svg.getBoundingClientRect();
+            if(rect.width <= 0 || rect.height <= 0) return null;
+            const sx = (event.clientX - rect.left) * (svg.viewBox.baseVal.width / rect.width);
+            const sy = (event.clientY - rect.top) * (svg.viewBox.baseVal.height / rect.height);
+            const px = Math.max(view.left, Math.min(view.left + view.plotW, sx));
+            const py = Math.max(view.top, Math.min(view.top + view.plotH, sy));
+            const frame = view.fMin + ((px - view.left) / view.plotW) * (view.fMax - view.fMin);
+            const value = view.vMax - ((py - view.top) / view.plotH) * (view.vMax - view.vMin);
+            return { frame, value };
+        }
+
+        private EmitChange(kind: string): void
+        {
+            this.dispatchEvent(new CustomEvent('arianna:curve-change', {
+                bubbles: true, composed: true,
+                detail: { kind, samples: this._samples ?? [], source: this }
+            }));
+            this._bound?.dispatchEvent(new CustomEvent('arianna:keyframe-editor-update', {
+                bubbles: true, composed: true, detail: { source: this }
+            }));
+        }
+
+        private Handle(
+            svg: SVGSVGElement,
+            x: (frame: number) => number,
+            y: (value: number) => number,
+            point: Interfaces.CurvePoint,
+            offset: [number, number],
+            color: string,
+            sampleIndex: number,
+            pointIndex: number,
+            kind: 'hIn' | 'hOut'
+        ): void
+        {
+            const x1 = x(point.frame), y1 = y(point.value);
+            const x2 = x(point.frame + offset[0]), y2 = y(point.value + offset[1]);
+            const line = this.Line(svg, x1, y1, x2, y2, 'CurveEditor-HandleLine');
+            line.setAttribute('stroke', color);
+            const handle = document.createElementNS(SVG_NS, 'circle');
+            handle.classList.add('CurveEditor-Handle');
+            handle.dataset.sample = String(sampleIndex);
+            handle.dataset.point = String(pointIndex);
+            handle.dataset.kind = kind;
+            handle.setAttribute('cx', String(x2));
+            handle.setAttribute('cy', String(y2));
+            handle.setAttribute('r', '3');
+            handle.setAttribute('fill', color);
+            svg.append(handle);
+        }
+
+        private Line(svg: SVGSVGElement, x1: number, y1: number, x2: number, y2: number, cls: string): SVGLineElement
+        {
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.classList.add(cls);
+            line.setAttribute('x1', String(x1)); line.setAttribute('y1', String(y1));
+            line.setAttribute('x2', String(x2)); line.setAttribute('y2', String(y2));
+            svg.append(line);
+            return line;
+        }
+
+        private Text(svg: SVGSVGElement, x: number, y: number, value: string): SVGTextElement
+        {
+            const text = document.createElementNS(SVG_NS, 'text');
+            text.classList.add('CurveEditor-Label');
+            text.setAttribute('x', String(x)); text.setAttribute('y', String(y));
+            text.textContent = value;
+            svg.append(text);
+            return text;
+        }
+
+        private Color(group?: string): string
+        {
+            if(group === 'rotation') return '#e69a45';
+            if(group === 'scale') return '#42bd50';
+            if(group === 'position') return '#4b9ee9';
+            return '#9ca4ab';
+        }
+
+        private Format(value: number): string
+        {
+            return Math.abs(value) >= 10 ? String(Math.round(value)) : value.toFixed(1).replace('.0', '');
         }
     }
 }
-export default CurveEditor;
 
 export type CurveEditorOptions = CurveEditor.Interfaces.CurveEditorOptions;
+export type CurveSample = CurveEditor.Interfaces.CurveSample;
+export type CurvePoint = CurveEditor.Interfaces.CurvePoint;
+export default CurveEditor.CurveEditor;

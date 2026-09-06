@@ -8,8 +8,13 @@
  * @description AriannA DHLTracker component module.
  */
 
-import { Component, Templates } from '../../core/index.ts';
+
 import { Tracker, type CarrierConfig, type TrackingEvent } from './Tracker.ts';
+
+import { MountShipmentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Templates: any;
+
 
 /** @namespace   DHLTracker
  *  @public
@@ -86,7 +91,7 @@ export namespace DHLTracker
         color: '#ffcc00',
         publicUrl: 'https://www.dhl.com/global-en/home/tracking.html?tracking-id={n}',
         pattern: /^(\d{10,11}|[A-Z]{3}\d{7})$/i,
-        logo: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 22"><rect width="64" height="22" rx="3" fill="#ffcc00"/><text x="32" y="16" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="900" fill="#d40511" letter-spacing="1">DHL</text></svg>`,
+        logo: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 34" role="img" aria-label="DHL"><rect width="120" height="34" rx="3" fill="#FFCC00"/><g fill="#D40511"><path d="M8 9h34l-2.2 4H7.2L8 9zm-2 6h32.7l-2.2 4H5.2L6 15zm-2 6h31.4l-2.2 4H3.2L4 21z"/><text x="45" y="24" font-family="Arial Black,Arial,sans-serif" font-size="20" font-style="italic" font-weight="900">DHL</text></g></svg>`,
     };
 
     /** @class       DHLTracker
@@ -96,21 +101,45 @@ export namespace DHLTracker
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-dhl-tracker', {}, {
+        shadow: false,
         Attributes: ['tracking-number', 'locale'],
     })
-    export class DHLTracker extends HTMLElement
+    export class DHLTracker extends HTMLDivElement
     {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'DHLTracker';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(this._inner === undefined) this._inner = null;
+        }
+
         /** Compiler-visible AriannA template slot installed by @Component. */
         declare template: unknown;
 
-        /** @name        #inner
+        /** @name        _inner
          *  @public
          *  @type        {Tracker | null}
          *  @description Component member for inner.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #inner: Tracker.Tracker | null = null;
+        declare _inner: Tracker.Tracker | null;
 
         /** @name        onConnected
          *  @public
@@ -123,7 +152,11 @@ export namespace DHLTracker
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.DHLTrackerOptions = {})
         {
+            if(this._inner === undefined) this._inner = null;
+            if(this.dataset.ariannaFolderReady === 'true') return;
             this.template = html `<div class="ar-carrier-host" data-r="host"></div>`;
+            MountShipmentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
         }
 
         /** @name        carrier
@@ -159,8 +192,8 @@ export namespace DHLTracker
         setTrackingNumber(n: string): this
         {
             this.setAttribute('tracking-number', n);
-            if (this.#inner)
-                this.#inner.setTrackingNumber(n);
+            if (this._inner)
+                this._inner.setTrackingNumber(n);
             return this;
         }
 
@@ -185,8 +218,8 @@ export namespace DHLTracker
          *  @license     MIT / Commercial (dual license) */
         setEvents(events: TrackingEvent[]): this
         {
-            if (this.#inner)
-                this.#inner.setEvents(events);
+            if (this._inner)
+                this._inner.setEvents(events);
             return this;
         }
 
@@ -200,7 +233,7 @@ export namespace DHLTracker
          *  @license     MIT / Commercial (dual license) */
         getEvents(): TrackingEvent[]
         {
-            return this.#inner?.getEvents() ?? [];
+            return this._inner?.getEvents() ?? [];
         }
 
         /** @name        validateNumber
@@ -290,7 +323,7 @@ export namespace DHLTracker
             if (loc)
                 inner.setAttribute('locale', loc);
             host.appendChild(inner);
-            this.#inner = inner;
+            this._inner = inner;
         }
 
         /** @name        onBeforeUpdate
@@ -333,7 +366,7 @@ export namespace DHLTracker
          *  @license     MIT / Commercial (dual license) */
         onUnmount()
         {
-            this.#inner = null;
+            this._inner = null;
         }
     }
 }

@@ -8,8 +8,17 @@
  * @description AriannA Table component module.
  */
 
-import { Component, Css, Reactivity, SSR, Templates } from '../../core/index.ts';
+
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+declare const Component: any;
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Reactivity: any;
+declare namespace Reactivity { type Signal<T> = any; type Effect = any; }
+declare const Templates: any;
+declare const SSR: any;
+
 
 /** @namespace   Table
  *  @public
@@ -89,6 +98,9 @@ export namespace Table
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         export type Fetcher = (params: Interfaces.FetchParams) => Promise<Interfaces.FetchResult>;
+
+        /** Optional WASM-backed page processor. The adapter owns memory/ABI marshalling and returns an already paged result. */
+        export type WasmProcessor = (rows: Types.Row[], params: Interfaces.FetchParams) => Interfaces.FetchResult | Promise<Interfaces.FetchResult>;
     }
 
     /** @namespace   Interfaces
@@ -439,6 +451,9 @@ export namespace Table
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
             fetcher?: Types.Fetcher;
+
+            /** Optional WASM-backed client processor for filter/sort/paging. */
+            wasmProcessor?: Types.WasmProcessor;
         }
         // ── Internal types ──────────────────────────────────────────────────────────
         /** @interface   DisplayRow
@@ -719,7 +734,7 @@ export namespace Table
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -945,14 +960,531 @@ self.onmessage = (e) => {
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-table', {}, {
+    
+    /** Default class-driven light-DOM stylesheet; installed synchronously by @Component. */
+    export function TableDefaultSheet(): Types.Stylesheet
+    {
+            return new Stylesheet([
+                new Rule('arianna-table', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
+                    Display: 'flex',
+                    FlexDirection: 'column',
+                    Width: '100%',
+                    Overflow: 'hidden',
+                    Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                    Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                    Border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    BorderRadius: 'var(--arianna-radius, 6px)',
+                    FontSize: '0.85rem',
+                }),
+                // Toolbar
+                new Rule('.ar-table__toolbar', {
+                    AlignItems: 'center',
+                    Background: 'var(--arianna-bg-3, var(--bg3, #f8f9fa))',
+                    BorderBottom: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    Display: 'flex',
+                    Gap: '8px',
+                    Padding: '8px 12px',
+                }),
+                new Rule('.ar-table__search', {
+                    Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                    Border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    BorderRadius: 'var(--arianna-radius-sm, 4px)',
+                    Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                    Font: 'inherit',
+                    Padding: '5px 10px',
+                    Width: '240px',
+                    Outline: 'none',
+                }),
+                new Rule('.ar-table__search:focus', { borderColor: 'var(--arianna-primary, var(--accent, #e40c88))' }),
+                new Rule('.ar-table__total', {
+                    Color: 'var(--arianna-muted, var(--muted, #687079))',
+                    FontSize: '0.78rem',
+                }),
+                new Rule('.ar-table__spinner', {
+                    Animation: 'ar-table-spin 1s linear infinite',
+                    Color: 'var(--arianna-primary, var(--accent, #e40c88))',
+                    Display: 'inline-block',
+                }),
+                new Rule({
+                    Selector: { Type: '@keyframes', Name: 'ar-table-spin' },
+                    Contents: {
+                        From: { transform: 'rotate(0deg)' },
+                        To: { transform: 'rotate(360deg)' }
+                    }
+                }),
+                new Rule('.ar-table__spacer', { flex: '1' }),
+                // Column toggle menu
+                new Rule('.ar-table__col-toggle', { position: 'relative' }),
+                new Rule('.ar-table__col-toggle-btn, .ar-table__export-btn', {
+                    Background: 'none',
+                    Border: '1px solid transparent',
+                    BorderRadius: 'var(--arianna-radius-sm, 4px)',
+                    Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                    Cursor: 'pointer',
+                    Font: 'inherit',
+                    FontSize: '0.9rem',
+                    Padding: '4px 10px',
+                    Transition: 'background 0.14s ease',
+                }),
+                new Rule('.ar-table__col-toggle-btn:hover, .ar-table__export-btn:hover', {
+                    Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                    BorderColor: 'var(--arianna-border, var(--border, #e6e8eb))',
+                }),
+                new Rule('.ar-table__col-menu', {
+                    Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                    Border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    BorderRadius: 'var(--arianna-radius, 6px)',
+                    BoxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                    MinWidth: '160px',
+                    Padding: '6px 0',
+                    Position: 'absolute',
+                    Right: '0',
+                    Top: 'calc(100% + 4px)',
+                    ZIndex: '500',
+                }),
+                new Rule('.ar-table__col-menu-item', {
+                    AlignItems: 'center',
+                    Cursor: 'pointer',
+                    Display: 'flex',
+                    FontSize: '0.82rem',
+                    Gap: '8px',
+                    Padding: '5px 12px',
+                }),
+                new Rule('.ar-table__col-menu-item:hover', { background: 'var(--arianna-bg-3, var(--bg3, #f8f9fa))' }),
+                // Scroll wrapper + table
+                new Rule('.ar-table__scroll', {
+                    Flex: '1',
+                    Overflow: 'auto',
+                    MinHeight: '0',
+                }),
+                new Rule('.ar-table', {
+                    Width: '100%',
+                    BorderCollapse: 'collapse',
+                    TableLayout: 'fixed',
+                }),
+                new Rule('arianna-table[sticky-header] .ar-table__thead', {
+                    Position: 'sticky',
+                    Top: '0',
+                    ZIndex: '1',
+                }),
+                new Rule('.ar-table__thead', { background: 'var(--arianna-bg-3, var(--bg3, #f8f9fa))' }),
+                new Rule('.ar-table__th', {
+                    BorderBottom: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    Color: 'var(--arianna-muted, var(--muted, #687079))',
+                    FontSize: '0.72rem',
+                    FontWeight: '700',
+                    Padding: '10px 12px',
+                    Position: 'relative',
+                    TextAlign: 'left',
+                    TextTransform: 'uppercase',
+                    LetterSpacing: '0.04em',
+                    UserSelect: 'none',
+                    WhiteSpace: 'nowrap',
+                    Overflow: 'hidden',
+                    TextOverflow: 'ellipsis',
+                }),
+                new Rule('.ar-table__th--sortable', { cursor: 'pointer' }),
+                new Rule('.ar-table__th--sortable:hover', { color: 'var(--arianna-text, var(--text, #1c1e21))' }),
+                new Rule('.ar-table__th--sorted', { color: 'var(--arianna-text, var(--text, #1c1e21))' }),
+                new Rule('.ar-table__th-sort', { marginLeft: '6px', fontSize: '0.7rem' }),
+                new Rule('.ar-table__th-order', {
+                    Background: 'var(--arianna-primary, var(--accent, #e40c88))',
+                    BorderRadius: '8px',
+                    Color: '#ffffff',
+                    FontSize: '0.62rem',
+                    MarginLeft: '4px',
+                    Padding: '0 5px',
+                }),
+                new Rule('.ar-table__th-resize', {
+                    Bottom: '0',
+                    Cursor: 'col-resize',
+                    Height: '100%',
+                    Position: 'absolute',
+                    Right: '0',
+                    Top: '0',
+                    Width: '6px',
+                    Transition: 'background 0.14s ease',
+                }),
+                new Rule('.ar-table__th-resize:hover', {
+                    Background: 'var(--arianna-primary, var(--accent, #e40c88))',
+                }),
+                // Body
+                new Rule('.ar-table__row', {
+                    Transition: 'background 0.14s ease',
+                    Cursor: 'default',
+                }),
+                new Rule('.ar-table__row:hover', { background: 'var(--arianna-bg-3, var(--bg3, #f8f9fa))' }),
+                new Rule('.ar-table__row--selected', { background: 'rgba(31,111,235,0.08)' }),
+                new Rule('.ar-table__td', {
+                    BorderBottom: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    Padding: '10px 12px',
+                    Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                    WhiteSpace: 'nowrap',
+                    Overflow: 'hidden',
+                    TextOverflow: 'ellipsis',
+                }),
+                // Footer pagination
+                new Rule('.ar-table__footer', {
+                    Display: 'flex',
+                    AlignItems: 'center',
+                    Gap: '4px',
+                    Padding: '10px 12px',
+                    BorderTop: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    Background: 'var(--arianna-bg-3, var(--bg3, #f8f9fa))',
+                }),
+                new Rule('.ar-table__page', {
+                    Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                    Border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    BorderRadius: 'var(--arianna-radius-sm, 4px)',
+                    Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                    Cursor: 'pointer',
+                    Font: 'inherit',
+                    FontSize: '0.8rem',
+                    MinWidth: '32px',
+                    Padding: '4px 8px',
+                    Transition: 'border-color 0.14s ease',
+                }),
+                new Rule('.ar-table__page:hover:not(:disabled)', {
+                    BorderColor: 'var(--arianna-primary, var(--accent, #e40c88))',
+                }),
+                new Rule('.ar-table__page--active', {
+                    Background: 'var(--arianna-primary, var(--accent, #e40c88))',
+                    BorderColor: 'var(--arianna-primary, var(--accent, #e40c88))',
+                    Color: '#ffffff',
+                }),
+                new Rule('.ar-table__page--dots', {
+                    Background: 'none',
+                    Border: 'none',
+                    Cursor: 'default',
+                    Color: 'var(--arianna-muted, var(--muted, #687079))',
+                }),
+                new Rule('.ar-table__page:disabled', { opacity: '0.4', cursor: 'not-allowed' }),
+                new Rule('arianna-table:not([theme="light"])', {
+                    Background: '#15161a', BorderColor: '#303238', Color: '#e6e8eb'
+                }),
+                new Rule('arianna-table:not([theme="light"]) .ar-table__toolbar, arianna-table:not([theme="light"]) .ar-table__thead, arianna-table:not([theme="light"]) .ar-table__footer', {
+                    Background: '#1b1c20', BorderColor: '#303238'
+                }),
+                new Rule('arianna-table:not([theme="light"]) .ar-table__search, arianna-table:not([theme="light"]) .ar-table__page, arianna-table:not([theme="light"]) .ar-table__col-menu', {
+                    Background: '#17181c', BorderColor: '#34363d', Color: '#e6e8eb'
+                }),
+                new Rule('arianna-table:not([theme="light"]) .ar-table__col-toggle-btn, arianna-table:not([theme="light"]) .ar-table__export-btn', {
+                    Color: '#dfe2e7'
+                }),
+                new Rule('arianna-table:not([theme="light"]) .ar-table__col-toggle-btn:hover, arianna-table:not([theme="light"]) .ar-table__export-btn:hover, arianna-table:not([theme="light"]) .ar-table__col-menu-item:hover, arianna-table:not([theme="light"]) .ar-table__row:hover', {
+                    Background: '#22242a', BorderColor: '#3a3d45'
+                }),
+                new Rule('arianna-table:not([theme="light"]) .ar-table__th', {
+                    BorderBottomColor: '#35373e', Color: '#9da3ad'
+                }),
+                new Rule('arianna-table:not([theme="light"]) .ar-table__th--sortable:hover, arianna-table:not([theme="light"]) .ar-table__th--sorted, arianna-table:not([theme="light"]) .ar-table__td', {
+                    Color: '#e6e8eb'
+                }),
+                new Rule('arianna-table:not([theme="light"]) .ar-table__td', {
+                    BorderBottomColor: '#292b31'
+                }),
+                new Rule('arianna-table:not([theme="light"]) .ar-table__row--selected', {
+                    Background: 'rgba(228,12,136,.12)'
+                }),
+
+                new Rule('arianna-table:not([theme="light"]) .ar-table__footer button, arianna-table:not([theme="light"]) .ar-table__page', {
+                    Background: '#1b1c20',
+                    BorderColor: '#3a3d45',
+                    Color: '#b9bec7',
+                }),
+                new Rule('arianna-table:not([theme="light"]) .ar-table__footer button:hover:not(:disabled), arianna-table:not([theme="light"]) .ar-table__page:hover:not(:disabled)', {
+                    Background: 'rgba(228,12,136,.12)',
+                    BorderColor: '#e40c88',
+                    Color: '#f4f5f6',
+                }),
+                new Rule('arianna-table:not([theme="light"]) .ar-table__page--active', {
+                    Background: '#e40c88',
+                    BorderColor: '#e40c88',
+                    Color: '#ffffff',
+                })
+            ]);
+        }
+
+@Component('arianna-table', TableDefaultSheet(), {
         Attributes: [
             'page-size', 'selectable', 'searchable', 'sticky-header',
             'column-toggle', 'column-resize', 'worker', 'worker-threshold',
         ],
     })
-    export class Table extends HTMLElement
+    export class Table extends HTMLDivElement
     {
+        /** Embedded component icon used by WYSIWYG palettes and drag/drop panels. */
+        static readonly Icon = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 9h18M9 4v16M15 4v16" stroke="currentColor" stroke-width="1.5"/></svg>`;
+        /** Canonical named default styles. Use e.g. Component.Styles['Disabled']. */
+        static readonly Styles = Object.freeze
+        (
+            {
+                Default:
+                new Rule('arianna-table', {
+                BoxSizing: 'border-box',
+                MaxWidth: '100%',
+                MinWidth: '0',
+                Display: 'flex',
+                FlexDirection: 'column',
+                Width: '100%',
+                Overflow: 'hidden',
+                Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                Border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                BorderRadius: 'var(--arianna-radius, 6px)',
+                FontSize: '0.85rem',
+                }),
+                Toolbar:
+                // Toolbar
+                new Rule('.ar-table__toolbar', {
+                AlignItems: 'center',
+                Background: 'var(--arianna-bg-3, var(--bg3, #f8f9fa))',
+                BorderBottom: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                Display: 'flex',
+                Gap: '8px',
+                Padding: '8px 12px',
+                }),
+                Search:
+                new Rule('.ar-table__search', {
+                Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                Border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                BorderRadius: 'var(--arianna-radius-sm, 4px)',
+                Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                Font: 'inherit',
+                Padding: '5px 10px',
+                Width: '240px',
+                Outline: 'none',
+                }),
+                SearchFocus:
+                new Rule('.ar-table__search:focus', { borderColor: 'var(--arianna-primary, var(--accent, #e40c88))' }),
+                Total:
+                new Rule('.ar-table__total', {
+                Color: 'var(--arianna-muted, var(--muted, #687079))',
+                FontSize: '0.78rem',
+                }),
+                Spinner:
+                new Rule('.ar-table__spinner', {
+                Animation: 'ar-table-spin 1s linear infinite',
+                Color: 'var(--arianna-primary, var(--accent, #e40c88))',
+                Display: 'inline-block',
+                }),
+                KeyframesArTableSpin:
+                new Rule({
+                Selector: { Type: '@keyframes', Name: 'ar-table-spin' },
+                Contents: {
+                From: { transform: 'rotate(0deg)' },
+                To: { transform: 'rotate(360deg)' }
+                }
+                }),
+                Spacer:
+                new Rule('.ar-table__spacer', { flex: '1' }),
+                ColToggle:
+                // Column toggle menu
+                new Rule('.ar-table__col-toggle', { position: 'relative' }),
+                ColToggleBtnExportBtn:
+                new Rule('.ar-table__col-toggle-btn, .ar-table__export-btn', {
+                Background: 'none',
+                Border: '1px solid transparent',
+                BorderRadius: 'var(--arianna-radius-sm, 4px)',
+                Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                Cursor: 'pointer',
+                Font: 'inherit',
+                FontSize: '0.9rem',
+                Padding: '4px 10px',
+                Transition: 'background 0.14s ease',
+                }),
+                ColToggleBtnHoverExportBtnHover:
+                new Rule('.ar-table__col-toggle-btn:hover, .ar-table__export-btn:hover', {
+                Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                BorderColor: 'var(--arianna-border, var(--border, #e6e8eb))',
+                }),
+                ColMenu:
+                new Rule('.ar-table__col-menu', {
+                Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                Border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                BorderRadius: 'var(--arianna-radius, 6px)',
+                BoxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                MinWidth: '160px',
+                Padding: '6px 0',
+                Position: 'absolute',
+                Right: '0',
+                Top: 'calc(100% + 4px)',
+                ZIndex: '500',
+                }),
+                ColMenuItem:
+                new Rule('.ar-table__col-menu-item', {
+                AlignItems: 'center',
+                Cursor: 'pointer',
+                Display: 'flex',
+                FontSize: '0.82rem',
+                Gap: '8px',
+                Padding: '5px 12px',
+                }),
+                ColMenuItemHover:
+                new Rule('.ar-table__col-menu-item:hover', { background: 'var(--arianna-bg-3, var(--bg3, #f8f9fa))' }),
+                Scroll:
+                // Scroll wrapper + table
+                new Rule('.ar-table__scroll', {
+                Flex: '1',
+                Overflow: 'auto',
+                MinHeight: '0',
+                }),
+                Table:
+                new Rule('.ar-table', {
+                Width: '100%',
+                BorderCollapse: 'collapse',
+                TableLayout: 'fixed',
+                }),
+                StickyHeaderThead:
+                new Rule('arianna-table[sticky-header] .ar-table__thead', {
+                Position: 'sticky',
+                Top: '0',
+                ZIndex: '1',
+                }),
+                Thead:
+                new Rule('.ar-table__thead', { background: 'var(--arianna-bg-3, var(--bg3, #f8f9fa))' }),
+                Th:
+                new Rule('.ar-table__th', {
+                BorderBottom: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                Color: 'var(--arianna-muted, var(--muted, #687079))',
+                FontSize: '0.72rem',
+                FontWeight: '700',
+                Padding: '10px 12px',
+                Position: 'relative',
+                TextAlign: 'left',
+                TextTransform: 'uppercase',
+                LetterSpacing: '0.04em',
+                UserSelect: 'none',
+                WhiteSpace: 'nowrap',
+                Overflow: 'hidden',
+                TextOverflow: 'ellipsis',
+                }),
+                ThSortable:
+                new Rule('.ar-table__th--sortable', { cursor: 'pointer' }),
+                ThSortableHover:
+                new Rule('.ar-table__th--sortable:hover', { color: 'var(--arianna-text, var(--text, #1c1e21))' }),
+                ThSorted:
+                new Rule('.ar-table__th--sorted', { color: 'var(--arianna-text, var(--text, #1c1e21))' }),
+                ThSort:
+                new Rule('.ar-table__th-sort', { marginLeft: '6px', fontSize: '0.7rem' }),
+                ThOrder:
+                new Rule('.ar-table__th-order', {
+                Background: 'var(--arianna-primary, var(--accent, #e40c88))',
+                BorderRadius: '8px',
+                Color: '#ffffff',
+                FontSize: '0.62rem',
+                MarginLeft: '4px',
+                Padding: '0 5px',
+                }),
+                ThResize:
+                new Rule('.ar-table__th-resize', {
+                Bottom: '0',
+                Cursor: 'col-resize',
+                Height: '100%',
+                Position: 'absolute',
+                Right: '0',
+                Top: '0',
+                Width: '6px',
+                Transition: 'background 0.14s ease',
+                }),
+                ThResizeHover:
+                new Rule('.ar-table__th-resize:hover', {
+                Background: 'var(--arianna-primary, var(--accent, #e40c88))',
+                }),
+                Row:
+                // Body
+                new Rule('.ar-table__row', {
+                Transition: 'background 0.14s ease',
+                Cursor: 'default',
+                }),
+                RowHover:
+                new Rule('.ar-table__row:hover', { background: 'var(--arianna-bg-3, var(--bg3, #f8f9fa))' }),
+                RowSelected:
+                new Rule('.ar-table__row--selected', { background: 'rgba(31,111,235,0.08)' }),
+                Td:
+                new Rule('.ar-table__td', {
+                BorderBottom: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                Padding: '10px 12px',
+                Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                WhiteSpace: 'nowrap',
+                Overflow: 'hidden',
+                TextOverflow: 'ellipsis',
+                }),
+                Footer:
+                // Footer pagination
+                new Rule('.ar-table__footer', {
+                Display: 'flex',
+                AlignItems: 'center',
+                Gap: '4px',
+                Padding: '10px 12px',
+                BorderTop: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                Background: 'var(--arianna-bg-3, var(--bg3, #f8f9fa))',
+                }),
+                Page:
+                new Rule('.ar-table__page', {
+                Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                Border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                BorderRadius: 'var(--arianna-radius-sm, 4px)',
+                Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                Cursor: 'pointer',
+                Font: 'inherit',
+                FontSize: '0.8rem',
+                MinWidth: '32px',
+                Padding: '4px 8px',
+                Transition: 'border-color 0.14s ease',
+                }),
+                PageHoverDisabled:
+                new Rule('.ar-table__page:hover:not(:disabled)', {
+                BorderColor: 'var(--arianna-primary, var(--accent, #e40c88))',
+                }),
+                PageActive:
+                new Rule('.ar-table__page--active', {
+                Background: 'var(--arianna-primary, var(--accent, #e40c88))',
+                BorderColor: 'var(--arianna-primary, var(--accent, #e40c88))',
+                Color: '#ffffff',
+                }),
+                PageDots:
+                new Rule('.ar-table__page--dots', {
+                Background: 'none',
+                Border: 'none',
+                Cursor: 'default',
+                Color: 'var(--arianna-muted, var(--muted, #687079))',
+                }),
+                PageDisabled:
+                new Rule('.ar-table__page:disabled', { opacity: '0.4', cursor: 'not-allowed' }),
+                Focus:
+                new Rule('.ar-table__search:focus', { borderColor: 'var(--arianna-primary, var(--accent, #e40c88))' }),
+                Active:
+                new Rule('.ar-table__page--active', { background: 'var(--arianna-primary, var(--accent, #e40c88))', color: '#fff' }),
+                Disabled:
+                new Rule('.ar-table__page:disabled', { opacity: '.4', cursor: 'not-allowed' }),
+            }
+        );
+
+
+        /** Embedded component icon. */
+        get Icon(): string { return Table.Icon; }
+
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'Table';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
         /** Compiler-visible AriannA template slot installed by @Component. */
         declare template: unknown;
         // ── Reactive state ──────────────────────────────────────────────────────
@@ -963,7 +1495,7 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        columns$: Types.Signal<Interfaces.TableColumn[]> = signal<Interfaces.TableColumn[]>([]);
+        declare columns$: Types.Signal<Interfaces.TableColumn[]>;
 
         /** @name        rows$
          *  @public
@@ -972,11 +1504,11 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        rows$: Types.Signal<Types.Row[]> = signal<Types.Row[]>([]);
+        declare rows$: Types.Signal<Types.Row[]>;
 
         /** Computed display rows (filtered + sorted + paged). Recomputed eagerly
          *  on input change AND on async worker / fetcher result. */
-        displayRows$: Types.Signal<Interfaces.DisplayRow[]> = signal<Interfaces.DisplayRow[]>([]);
+        declare displayRows$: Types.Signal<Interfaces.DisplayRow[]>;
 
         /** @name        totalCount$
          *  @public
@@ -985,7 +1517,7 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        totalCount$: Types.Signal<number> = signal<number>(0);
+        declare totalCount$: Types.Signal<number>;
 
         /** @name        selected$
          *  @public
@@ -994,10 +1526,10 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        selected$: Types.Signal<Set<number>> = signal<Set<number>>(new Set());
+        declare selected$: Types.Signal<Set<number>>;
 
         /** Multi-column sort stack: most-recently-added LAST. */
-        sortStack$: Types.Signal<Interfaces.SortState[]> = signal<Interfaces.SortState[]>([]);
+        declare sortStack$: Types.Signal<Interfaces.SortState[]>;
 
         /** @name        query$
          *  @public
@@ -1006,7 +1538,7 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        query$: Types.Signal<string> = signal<string>('');
+        declare query$: Types.Signal<string>;
 
         /** @name        page$
          *  @public
@@ -1015,7 +1547,7 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        page$: Types.Signal<number> = signal<number>(1);
+        declare page$: Types.Signal<number>;
 
         /** @name        loading$
          *  @public
@@ -1024,70 +1556,73 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        loading$: Types.Signal<boolean> = signal<boolean>(false);
+        declare loading$: Types.Signal<boolean>;
 
         /** Column visibility map. Keys NOT in this map default to visible. */
-        visibility$: Types.Signal<Record<string, boolean>> = signal<Record<string, boolean>>({});
+        declare visibility$: Types.Signal<Record<string, boolean>>;
 
         /** Column widths overridden by user resize. */
-        widthsOverride$: Types.Signal<Record<string, number>> = signal<Record<string, number>>({});
+        declare widthsOverride$: Types.Signal<Record<string, number>>;
 
         /** Toggle menu open state. */
-        toggleOpen$: Types.Signal<boolean> = signal<boolean>(false);
+        declare toggleOpen$: Types.Signal<boolean>;
         // ── Internals ───────────────────────────────────────────────────────────
-        /** @name        #fetcher
+        /** @name        _fetcher
          *  @public
          *  @type        {Table.Types.Fetcher | null}
          *  @description Component member for fetcher.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #fetcher: Types.Fetcher | null = null;
+        _fetcher: Types.Fetcher | null = null;
 
-        /** @name        #cache
+        /** Optional WASM-backed client processor. */
+        _wasmProcessor: Types.WasmProcessor | null = null;
+
+        /** @name        _cache
          *  @public
          *  @type        {Table.LRU<string, Table.Interfaces.FetchResult>}
          *  @description Component member for cache.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #cache: LRU<string, Interfaces.FetchResult>;
+        _cache: LRU<string, Interfaces.FetchResult>;
 
-        /** @name        #worker
+        /** @name        _worker
          *  @public
          *  @type        {Worker | null}
          *  @description Component member for worker.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #worker: Worker | null = null;
+        _worker: Worker | null = null;
 
-        /** @name        #lastSearchTimer
+        /** @name        _lastSearchTimer
          *  @public
          *  @type        {unknown}
          *  @description Component member for last Search Timer.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #lastSearchTimer = 0;
+        _lastSearchTimer = 0;
 
-        /** @name        #recomputeTimer
+        /** @name        _recomputeTimer
          *  @public
          *  @type        {unknown}
          *  @description Component member for recompute Timer.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #recomputeTimer = 0;
+        _recomputeTimer = 0;
 
-        /** @name        #toggleOutside
+        /** @name        _toggleOutside
          *  @public
          *  @type        {((e: Event) => void) | null}
          *  @description Component member for toggle Outside.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #toggleOutside: ((e: Event) => void) | null = null;
+        _toggleOutside: ((e: Event) => void) | null = null;
 
         /** @name        constructor
          *  @public
@@ -1099,7 +1634,137 @@ self.onmessage = (e) => {
         constructor()
         {
             super();
-            this.#cache = new LRU<string, Interfaces.FetchResult>(32);
+            this.classList.add('Table');
+            this._cache = new LRU<string, Interfaces.FetchResult>(32);
+        }
+
+        private _fallbackColumns: Interfaces.TableColumn[] = [];
+        private _fallbackRows: Types.Row[] = [];
+        private _fallbackPage = 1;
+        private _fallbackQuery = '';
+
+        private hasReactiveState(): boolean
+        {
+            return !!this.columns$ && typeof this.columns$.Get === 'function' &&
+                   !!this.rows$ && typeof this.rows$.Get === 'function';
+        }
+
+        private renderFallbackTable(): void
+        {
+            const columns = this._fallbackColumns ?? [];
+            const rows = this._fallbackRows ?? [];
+            if(!columns.length) return;
+
+            const pageSize = Math.max(1, parseInt(this.getAttribute('page-size') ?? '5', 10) || 5);
+            const query = (this._fallbackQuery ?? '').trim().toLowerCase();
+            const filtered = query
+                ? rows.filter(row => columns.some(column =>
+                    String((row as Record<string, unknown>)[column.key] ?? '').toLowerCase().includes(query)))
+                : rows;
+
+            const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+            this._fallbackPage = Math.min(Math.max(1, this._fallbackPage || 1), pages);
+            const start = (this._fallbackPage - 1) * pageSize;
+            const pageRows = filtered.slice(start, start + pageSize);
+
+            const toolbar = document.createElement('div');
+            toolbar.className = 'ar-table__toolbar';
+            if(this.hasAttribute('searchable'))
+            {
+                const search = document.createElement('input');
+                search.className = 'ar-table__search';
+                search.type = 'search';
+                search.placeholder = 'Search…';
+                search.value = this._fallbackQuery ?? '';
+                search.addEventListener('input', () =>
+                {
+                    const start = search.selectionStart ?? search.value.length;
+                    const end = search.selectionEnd ?? start;
+                    this._fallbackQuery = search.value;
+                    this._fallbackPage = 1;
+                    this.renderFallbackTable();
+
+                    const next = this.querySelector('.ar-table__search') as HTMLInputElement | null;
+                    if(next)
+                    {
+                        next.focus({ preventScroll: true });
+                        next.setSelectionRange(start, end);
+                    }
+                });
+                toolbar.appendChild(search);
+            }
+
+            const viewport = document.createElement('div');
+            viewport.className = 'ar-table__viewport';
+            const grid = document.createElement('table');
+            grid.className = 'ar-table__table';
+            const thead = document.createElement('thead');
+            const hr = document.createElement('tr');
+
+            for(const column of columns)
+            {
+                const th = document.createElement('th');
+                th.className = 'ar-table__th';
+                th.textContent = column.label ?? column.key;
+                if(column.sortable)
+                {
+                    th.addEventListener('click', () =>
+                    {
+                        const dir = th.dataset.direction === 'asc' ? 'desc' : 'asc';
+                        th.dataset.direction = dir;
+                        this._fallbackRows = [...this._fallbackRows].sort((a,b) =>
+                        {
+                            const av=(a as Record<string,unknown>)[column.key];
+                            const bv=(b as Record<string,unknown>)[column.key];
+                            const cmp=String(av??'').localeCompare(String(bv??''),undefined,{numeric:true,sensitivity:'base'});
+                            return dir==='asc'?cmp:-cmp;
+                        });
+                        this.renderFallbackTable();
+                    });
+                }
+                hr.appendChild(th);
+            }
+            thead.appendChild(hr);
+
+            const tbody=document.createElement('tbody');
+            for(const row of pageRows)
+            {
+                const tr=document.createElement('tr');
+                for(const column of columns)
+                {
+                    const td=document.createElement('td');
+                    td.className='ar-table__td';
+                    td.textContent=String((row as Record<string,unknown>)[column.key]??'');
+                    tr.appendChild(td);
+                }
+                tbody.appendChild(tr);
+            }
+            grid.append(thead,tbody);
+            viewport.appendChild(grid);
+
+            const footer=document.createElement('div');
+            footer.className='ar-table__footer';
+            const prev=document.createElement('button');
+            prev.className='ar-table__page';
+            prev.textContent='‹'; prev.disabled=this._fallbackPage<=1;
+            prev.addEventListener('click',()=>{this._fallbackPage--;this.renderFallbackTable();});
+            footer.appendChild(prev);
+            for(let page=1; page<=pages; page++)
+            {
+                const b=document.createElement('button');
+                b.className=page===this._fallbackPage?'ar-table__page ar-table__page--active':'ar-table__page';
+                b.textContent=String(page);
+                if(page===this._fallbackPage) b.setAttribute('aria-current','page');
+                b.addEventListener('click',()=>{this._fallbackPage=page;this.renderFallbackTable();});
+                footer.appendChild(b);
+            }
+            const next=document.createElement('button');
+            next.className='ar-table__page';
+            next.textContent='›'; next.disabled=this._fallbackPage>=pages;
+            next.addEventListener('click',()=>{this._fallbackPage++;this.renderFallbackTable();});
+            footer.appendChild(next);
+
+            this.replaceChildren(toolbar,viewport,footer);
         }
 
         /** @name        onConnected
@@ -1113,6 +1778,44 @@ self.onmessage = (e) => {
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.TableOptions = {})
         {
+            // Markup-upgraded hosts never executed constructor/class field initializers.
+            // Build every per-instance runtime slot lazily and idempotently here.
+            this.columns$ ??= signal<Interfaces.TableColumn[]>([]);
+            this.rows$ ??= signal<Types.Row[]>([]);
+            this.displayRows$ ??= signal<Interfaces.DisplayRow[]>([]);
+            this.totalCount$ ??= signal<number>(0);
+            this.selected$ ??= signal<Set<number>>(new Set());
+            this.sortStack$ ??= signal<Interfaces.SortState[]>([]);
+            this.query$ ??= signal<string>('');
+            this.page$ ??= signal<number>(1);
+            this.loading$ ??= signal<boolean>(false);
+            this.visibility$ ??= signal<Record<string, boolean>>({});
+            this.widthsOverride$ ??= signal<Record<string, number>>({});
+            this.toggleOpen$ ??= signal<boolean>(false);
+
+            this._fetcher ??= null;
+            this._wasmProcessor ??= null;
+            this._cache ??= new LRU<string, Interfaces.FetchResult>(32);
+            this._worker ??= null;
+            this._lastSearchTimer ??= 0;
+            this._recomputeTimer ??= 0;
+            this._toggleOutside ??= null;
+
+            this._fallbackColumns ??= [];
+            this._fallbackRows ??= [];
+            this._fallbackPage ??= 1;
+            this._fallbackQuery ??= '';
+
+            if(this.dataset.ariannaTableReady === 'true') return;
+            this.dataset.ariannaTableReady = 'true';
+            if(!this.hasReactiveState())
+            {
+                this.classList.add('Table');
+                this.setAttribute('role','grid');
+                this.renderFallbackTable();
+                return;
+            }
+
             this.setAttribute('role', 'grid');
             // Computed columns: filter out hidden ones for rendering purposes.
             /** @name        visibleCols
@@ -1448,7 +2151,7 @@ self.onmessage = (e) => {
                 this.dispatchEvent(new CustomEvent('arianna:sort', {
                     bubbles: true, detail: { sorts: stack },
                 }));
-                this.#recompute();
+                this._recompute();
             };
             this.onSearchInput = (e: Event) => {
                 /** @name        v
@@ -1459,14 +2162,25 @@ self.onmessage = (e) => {
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 const v = (e.target as HTMLInputElement).value;
-                clearTimeout(this.#lastSearchTimer);
-                this.#lastSearchTimer = window.setTimeout(() => {
+                clearTimeout(this._lastSearchTimer);
+                this._lastSearchTimer = window.setTimeout(() => {
                     this.query$.Set(v);
                     this.page$.Set(1);
                     this.dispatchEvent(new CustomEvent('arianna:search', {
                         bubbles: true, detail: { query: v },
                     }));
-                    this.#recompute();
+                    const active = document.activeElement as HTMLInputElement | null;
+                    const caretStart = active?.classList?.contains('ar-table__search') ? active.selectionStart : null;
+                    const caretEnd = active?.classList?.contains('ar-table__search') ? active.selectionEnd : null;
+                    this._recompute();
+                    queueMicrotask(() =>
+                    {
+                        if(caretStart === null) return;
+                        const next = this.querySelector('.ar-table__search') as HTMLInputElement | null;
+                        if(!next) return;
+                        next.focus({ preventScroll: true });
+                        next.setSelectionRange(caretStart, caretEnd ?? caretStart);
+                    });
                 }, 200);
             };
             this.onRowClick = (dr: Interfaces.DisplayRow, e: Event) => {
@@ -1555,7 +2269,7 @@ self.onmessage = (e) => {
                 this.dispatchEvent(new CustomEvent('arianna:select', {
                     bubbles: true, detail: { rows: selectedRows, indices: [...cur] },
                 }));
-                this.#recompute();
+                this._recompute();
             };
             this.onPageClick = (btn: Interfaces.PageBtn) => {
                 if (btn.disabled || btn.isDots)
@@ -1564,7 +2278,7 @@ self.onmessage = (e) => {
                 this.dispatchEvent(new CustomEvent('arianna:page', {
                     bubbles: true, detail: { page: btn.page },
                 }));
-                this.#recompute();
+                this._recompute();
             };
             this.onToggleMenu = (e: Event) => {
                 e.stopPropagation();
@@ -1580,16 +2294,16 @@ self.onmessage = (e) => {
                 this.toggleOpen$.Set(!wasOpen);
                 if (!wasOpen)
                 {
-                    this.#toggleOutside = (ev: Event) => {
+                    this._toggleOutside = (ev: Event) => {
                         if (!this.contains(ev.target as Node))
                             this.toggleOpen$.Set(false);
                     };
-                    setTimeout(() => document.addEventListener('click', this.#toggleOutside!), 0);
+                    setTimeout(() => document.addEventListener('click', this._toggleOutside!), 0);
                 }
-                else if (this.#toggleOutside)
+                else if (this._toggleOutside)
                 {
-                    document.removeEventListener('click', this.#toggleOutside);
-                    this.#toggleOutside = null;
+                    document.removeEventListener('click', this._toggleOutside);
+                    this._toggleOutside = null;
                 }
             };
             this.onColumnToggle = (key: string, visible: boolean) => {
@@ -1786,16 +2500,6 @@ self.onmessage = (e) => {
                         @click="(e) => this.onPageClick(btn)">{{ btn.label }}</button>
             </div>
         `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Table.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = Table.DefaultSheet();
         }
         // ── Public API ───────────────────────────────────────────────────────────
         /** @name        columns
@@ -1808,8 +2512,20 @@ self.onmessage = (e) => {
          *  @license     MIT / Commercial (dual license) */
         set columns(v: Interfaces.TableColumn[])
         {
-            this.columns$.Set(v ?? []);
-            this.#recompute();
+            this._fallbackColumns = Array.isArray(v) ? v : [];
+
+            if(this.hasReactiveState())
+            {
+                this.columns$.Set(v ?? []);
+                this._recompute();
+                requestAnimationFrame(() =>
+                {
+                    if(!this.querySelector('table')) this.renderFallbackTable();
+                });
+                return;
+            }
+
+            this.renderFallbackTable();
         }
 
         /** @name        columns
@@ -1820,7 +2536,10 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        get columns(): Interfaces.TableColumn[] { return this.columns$.Get(); }
+        get columns(): Interfaces.TableColumn[]
+        {
+            return this.hasReactiveState() ? this.columns$.Get() : (this._fallbackColumns ?? []);
+        }
 
         /** @name        rows
          *  @public
@@ -1832,10 +2551,23 @@ self.onmessage = (e) => {
          *  @license     MIT / Commercial (dual license) */
         set rows(v: Types.Row[])
         {
-            this.rows$.Set(v ?? []);
-            this.selected$.Set(new Set());
-            this.page$.Set(1);
-            this.#recompute();
+            this._fallbackRows = Array.isArray(v) ? v : [];
+            this._fallbackPage = 1;
+
+            if(this.hasReactiveState())
+            {
+                this.rows$.Set(v ?? []);
+                this.selected$.Set(new Set());
+                this.page$.Set(1);
+                this._recompute();
+                requestAnimationFrame(() =>
+                {
+                    if(!this.querySelector('table')) this.renderFallbackTable();
+                });
+                return;
+            }
+
+            this.renderFallbackTable();
         }
 
         /** @name        rows
@@ -1846,7 +2578,10 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        get rows(): Types.Row[] { return this.rows$.Get(); }
+        get rows(): Types.Row[]
+        {
+            return this.hasReactiveState() ? this.rows$.Get() : (this._fallbackRows ?? []);
+        }
 
         /**
          * Set a server-side fetcher. When set, every sort/search/page change
@@ -1854,9 +2589,9 @@ self.onmessage = (e) => {
          */
         set fetcher(fn: Types.Fetcher | null)
         {
-            this.#fetcher = fn;
-            this.#cache.clear();
-            this.#recompute();
+            this._fetcher = fn;
+            this._cache.clear();
+            this._recompute();
         }
 
         /** @name        fetcher
@@ -1867,7 +2602,17 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        get fetcher(): Types.Fetcher | null { return this.#fetcher; }
+        get fetcher(): Types.Fetcher | null { return this._fetcher; }
+
+
+        /** WASM processor adapter. Assign a function that bridges rows/params to a WebAssembly module. */
+        set wasmProcessor(fn: Types.WasmProcessor | null)
+        {
+            this._wasmProcessor = fn;
+            this._recompute();
+        }
+
+        get wasmProcessor(): Types.WasmProcessor | null { return this._wasmProcessor; }
 
         /** @name        getSelected
          *  @public
@@ -1898,7 +2643,7 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        clearSelection(): this { this.selected$.Set(new Set()); this.#recompute(); return this; }
+        clearSelection(): this { this.selected$.Set(new Set()); this._recompute(); return this; }
 
         /** @name        selectAll
          *  @public
@@ -1923,7 +2668,7 @@ self.onmessage = (e) => {
             const sel = new Set<number>();
             this.rows$.Get().forEach((_: any, i: any) => sel.add(i));
             this.selected$.Set(sel);
-            this.#recompute();
+            this._recompute();
             return this;
         }
 
@@ -1941,7 +2686,7 @@ self.onmessage = (e) => {
         {
             this.sortStack$.Set([{ key, dir }]);
             this.page$.Set(1);
-            this.#recompute();
+            this._recompute();
             return this;
         }
 
@@ -1957,7 +2702,7 @@ self.onmessage = (e) => {
              *  @license     MIT / Commercial (dual license) */
             const stack = [...this.sortStack$.Get(), { key, dir }];
             this.sortStack$.Set(stack);
-            this.#recompute();
+            this._recompute();
             return this;
         }
 
@@ -1972,7 +2717,7 @@ self.onmessage = (e) => {
         clearSort(): this
         {
             this.sortStack$.Set([]);
-            this.#recompute();
+            this._recompute();
             return this;
         }
 
@@ -1989,7 +2734,7 @@ self.onmessage = (e) => {
         {
             this.query$.Set(query);
             this.page$.Set(1);
-            this.#recompute();
+            this._recompute();
             return this;
         }
 
@@ -2013,7 +2758,7 @@ self.onmessage = (e) => {
              *  @license     MIT / Commercial (dual license) */
             const clamped = Math.max(1, Math.min(this.totalPages(), p));
             this.page$.Set(clamped);
-            this.#recompute();
+            this._recompute();
             return this;
         }
 
@@ -2052,7 +2797,7 @@ self.onmessage = (e) => {
         }
 
         /** Clear the LRU page cache (server-side mode). */
-        clearCache(): this { this.#cache.clear(); return this; }
+        clearCache(): this { this._cache.clear(); return this; }
 
         /**
          * Export current filtered+sorted rows (all pages) as CSV.
@@ -2076,9 +2821,9 @@ self.onmessage = (e) => {
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const sourceRows = this.#fetcher
+            const sourceRows = this._fetcher
                 ? this.displayRows$.Get().map((d: any) => d.raw)
-                : this.#processClientSide(this.rows$.Get(), false);
+                : this._processClientSide(this.rows$.Get(), false);
 
             /** @name        header
              *  @public
@@ -2170,7 +2915,13 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        onCreated() { }
+        onCreated()
+        {
+            requestAnimationFrame(() =>
+            {
+                if(this.isConnected) this.onConnected?.();
+            });
+        }
 
         /** @name        onBeforeMount
          *  @public
@@ -2193,7 +2944,7 @@ self.onmessage = (e) => {
         onMount()
         {
             // Trigger initial fetch / compute
-            this.#recompute();
+            this._recompute();
         }
 
         /** @name        onBeforeUpdate
@@ -2236,17 +2987,17 @@ self.onmessage = (e) => {
          *  @license     MIT / Commercial (dual license) */
         onUnmount()
         {
-            clearTimeout(this.#lastSearchTimer);
-            clearTimeout(this.#recomputeTimer);
-            if (this.#worker)
+            clearTimeout(this._lastSearchTimer);
+            clearTimeout(this._recomputeTimer);
+            if (this._worker)
             {
-                this.#worker.terminate();
-                this.#worker = null;
+                this._worker.terminate();
+                this._worker = null;
             }
-            if (this.#toggleOutside)
+            if (this._toggleOutside)
             {
-                document.removeEventListener('click', this.#toggleOutside);
-                this.#toggleOutside = null;
+                document.removeEventListener('click', this._toggleOutside);
+                this._toggleOutside = null;
             }
         }
         // ── Recompute pipeline ──────────────────────────────────────────────────
@@ -2254,17 +3005,17 @@ self.onmessage = (e) => {
          * Batched recompute. Microtask-coalesced so multiple set ops (sort+page+
          * search) run a single pipeline at the end of the tick.
          */
-        #recompute(): void
+        _recompute(): void
         {
-            clearTimeout(this.#recomputeTimer);
-            this.#recomputeTimer = window.setTimeout(() => {
-                if (this.#fetcher)
+            clearTimeout(this._recomputeTimer);
+            this._recomputeTimer = window.setTimeout(() => {
+                if (this._fetcher)
                 {
-                    this.#runServerSide();
+                    this._runServerSide();
                 }
                 else
                 {
-                    this.#runClientSide();
+                    this._runClientSide();
                 }
             }, 0);
         }
@@ -2275,7 +3026,7 @@ self.onmessage = (e) => {
          *     (those can't ride a Worker)
          *   • Otherwise main thread
          */
-        #runClientSide(): void
+        _runClientSide(): void
         {
             /** @name        rows
              *  @public
@@ -2293,13 +3044,19 @@ self.onmessage = (e) => {
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
+            if (this._wasmProcessor)
+            {
+                this._runWasm(rows);
+                return;
+            }
+
             const useWorker = this.hasAttribute('worker')
                 && rows.length >= this.workerThreshold
-                && this.#workerEligible();
+                && this._workerEligible();
             if (useWorker)
             {
                 this.loading$.Set(true);
-                this.#runWorker(rows);
+                this._runWorker(rows);
             }
             else
             {
@@ -2310,13 +3067,49 @@ self.onmessage = (e) => {
                  *  @author      Riccardo Angeli
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
-                const filteredSorted = this.#processClientSide(rows, false);
+                const filteredSorted = this._processClientSide(rows, false);
                 this.totalCount$.Set(filteredSorted.length);
-                this.#renderPage(filteredSorted);
+                this._renderPage(filteredSorted);
             }
         }
 
-        /** @name        #workerEligible
+        /** Run the optional WASM data pipeline. The adapter receives the same paging contract as server fetchers. */
+        _runWasm(rows: Types.Row[]): void
+        {
+            const processor = this._wasmProcessor;
+            if(!processor) return;
+
+            const params: Interfaces.FetchParams =
+            {
+                page: this.page$.Get(),
+                pageSize: this.pageSize,
+                sort: this.sortStack$.Get(),
+                query: this.query$.Get()
+            };
+
+            this.loading$.Set(true);
+            Promise.resolve(processor(rows, params))
+                .then(result =>
+                {
+                    this.totalCount$.Set(result.total);
+                    this._renderRows(result.rows);
+                    this.dispatchEvent(new CustomEvent('arianna:wasm',
+                    {
+                        bubbles: true,
+                        detail: { rows: result.rows, total: result.total, params }
+                    }));
+                })
+                .catch(error =>
+                {
+                    console.warn('[Table] WASM processor failed, falling back:', error);
+                    const filteredSorted = this._processClientSide(rows, false);
+                    this.totalCount$.Set(filteredSorted.length);
+                    this._renderPage(filteredSorted);
+                })
+                .finally(() => this.loading$.Set(false));
+        }
+
+        /** @name        _workerEligible
          *  @public
          *  @type        {boolean}
          *  @description Component member for worker Eligible.
@@ -2324,21 +3117,21 @@ self.onmessage = (e) => {
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #workerEligible(): boolean
+        _workerEligible(): boolean
         {
             return this.columns$.Get().every((c: any) => !c.render && !c.value && !c.sort);
         }
 
         /** Worker code can't access app functions, so for custom render/value/
          *  sort we always go main-thread. */
-        #runWorker(rows: Types.Row[]): void
+        _runWorker(rows: Types.Row[]): void
         {
-            if (!this.#worker)
+            if (!this._worker)
             {
                 try
                 {
-                    this.#worker = new Worker(getWorkerUrl());
-                    this.#worker.onmessage = (e) => {
+                    this._worker = new Worker(getWorkerUrl());
+                    this._worker.onmessage = (e) => {
                         /** @name        { rows: out, total }
                          *  @public
                          *  @type        {inferred}
@@ -2348,10 +3141,10 @@ self.onmessage = (e) => {
                          *  @license     MIT / Commercial (dual license) */
                         const { rows: out, total } = e.data;
                         this.totalCount$.Set(total);
-                        this.#renderPage(out);
+                        this._renderPage(out);
                         this.loading$.Set(false);
                     };
-                    this.#worker.onerror = (err) => {
+                    this._worker.onerror = (err) => {
                         console.warn('[Table] worker error, falling back:', err);
 
                         /** @name        filteredSorted
@@ -2361,9 +3154,9 @@ self.onmessage = (e) => {
                          *  @author      Riccardo Angeli
                          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                          *  @license     MIT / Commercial (dual license) */
-                        const filteredSorted = this.#processClientSide(rows, false);
+                        const filteredSorted = this._processClientSide(rows, false);
                         this.totalCount$.Set(filteredSorted.length);
-                        this.#renderPage(filteredSorted);
+                        this._renderPage(filteredSorted);
                         this.loading$.Set(false);
                     };
                 }
@@ -2378,14 +3171,14 @@ self.onmessage = (e) => {
                      *  @author      Riccardo Angeli
                      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                      *  @license     MIT / Commercial (dual license) */
-                    const filteredSorted = this.#processClientSide(rows, false);
+                    const filteredSorted = this._processClientSide(rows, false);
                     this.totalCount$.Set(filteredSorted.length);
-                    this.#renderPage(filteredSorted);
+                    this._renderPage(filteredSorted);
                     this.loading$.Set(false);
                     return;
                 }
             }
-            this.#worker.postMessage({
+            this._worker.postMessage({
                 rows,
                 query: this.query$.Get(),
                 sort: this.sortStack$.Get(),
@@ -2396,9 +3189,9 @@ self.onmessage = (e) => {
         /**
          * Server-side path with LRU cache. Cache key includes query+sort+page+pageSize.
          */
-        #runServerSide(): void
+        _runServerSide(): void
         {
-            if (!this.#fetcher)
+            if (!this._fetcher)
                 return;
 
             /** @name        params
@@ -2431,26 +3224,26 @@ self.onmessage = (e) => {
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const cached = this.#cache.get(cacheKey);
+            const cached = this._cache.get(cacheKey);
             if (cached)
             {
                 this.totalCount$.Set(cached.total);
-                this.#renderRows(cached.rows);
+                this._renderRows(cached.rows);
                 return;
             }
             this.loading$.Set(true);
-            this.#fetcher(params)
+            this._fetcher(params)
                 .then(result => {
-                this.#cache.set(cacheKey, result);
+                this._cache.set(cacheKey, result);
                 this.totalCount$.Set(result.total);
-                this.#renderRows(result.rows);
+                this._renderRows(result.rows);
                 this.dispatchEvent(new CustomEvent('arianna:fetch', {
                     bubbles: true, detail: { rows: result.rows, total: result.total },
                 }));
             })
                 .catch(err => {
                 console.warn('[Table] fetch failed:', err);
-                this.#renderRows([]);
+                this._renderRows([]);
                 this.totalCount$.Set(0);
             })
                 .finally(() => this.loading$.Set(false));
@@ -2460,7 +3253,7 @@ self.onmessage = (e) => {
          * Main-thread filter+sort. Optionally returns ALL rows (no pagination,
          * for CSV export).
          */
-        #processClientSide(rows: Types.Row[], _alreadyPaged: boolean): Types.Row[]
+        _processClientSide(rows: Types.Row[], _alreadyPaged: boolean): Types.Row[]
         {
             /** @name        cols
              *  @public
@@ -2589,7 +3382,7 @@ self.onmessage = (e) => {
         /**
          * Slice a filtered+sorted array by current page and render.
          */
-        #renderPage(filtered: Types.Row[]): void
+        _renderPage(filtered: Types.Row[]): void
         {
             /** @name        ps
              *  @public
@@ -2645,11 +3438,11 @@ self.onmessage = (e) => {
              *  @license     MIT / Commercial (dual license) */
             const indexMap = new Map<Types.Row, number>();
             all.forEach((r: any, i: any) => indexMap.set(r, i));
-            this.#renderRows(sliced, indexMap);
+            this._renderRows(sliced, indexMap);
         }
 
         /** Final stage: build DisplayRow[] for the current view. */
-        #renderRows(rows: Types.Row[], indexMap?: Map<Types.Row, number>): void
+        _renderRows(rows: Types.Row[], indexMap?: Map<Types.Row, number>): void
         {
             /** @name        cols
              *  @public
@@ -2736,6 +3529,32 @@ self.onmessage = (e) => {
             });
             this.displayRows$.Set(out);
         }
+        /**
+         * Server-side rendering helper for a single paged result. It emits portable HTML
+         * using the same column contract as the live component; the browser component can
+         * subsequently take ownership without changing the data/paging contract.
+         */
+        static RenderSSR
+        (
+            columns: Interfaces.TableColumn[],
+            result: Interfaces.FetchResult,
+            params: Interfaces.FetchParams
+        ): string
+        {
+            const esc = (value: unknown) => SSR.Renderer.EscapeHtml(String(value ?? ''));
+            const head = columns.map(col => `<th class="ar-table__th">${esc(col.label ?? col.key)}</th>`).join('');
+            const body = result.rows.map(row =>
+                `<tr class="ar-table__row">${columns.map(col =>
+                {
+                    const value = col.value ? col.value(row) : row[col.key];
+                    const html = col.render ? col.render(value, row, col) : esc(value);
+                    return `<td class="ar-table__td">${html}</td>`;
+                }).join('')}</tr>`
+            ).join('');
+
+            return `<arianna-table class="Table" page-size="${params.pageSize}" data-page="${params.page}" data-total="${result.total}"><div class="ar-table__scroll"><table class="ar-table"><thead class="ar-table__thead"><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></arianna-table>`;
+        }
+
         // ── Attributes ────────────────────────────────────────────────────────────────
         /** @name        pageSize
          *  @public
@@ -3105,204 +3924,11 @@ self.onmessage = (e) => {
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    width: '100%',
-                    overflow: 'hidden',
-                    background: 'var(--arianna-bg, #ffffff)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    fontSize: '0.85rem',
-                }),
-                // Toolbar
-                new Rule('.ar-table__toolbar', {
-                    alignItems: 'center',
-                    background: 'var(--arianna-bg-3, #f8f9fa)',
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    display: 'flex',
-                    gap: '8px',
-                    padding: '8px 12px',
-                }),
-                new Rule('.ar-table__search', {
-                    background: 'var(--arianna-bg, #ffffff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius-sm, 4px)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    font: 'inherit',
-                    padding: '5px 10px',
-                    width: '240px',
-                    outline: 'none',
-                }),
-                new Rule('.ar-table__search:focus', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
-                new Rule('.ar-table__total', {
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    fontSize: '0.78rem',
-                }),
-                new Rule('.ar-table__spinner', {
-                    animation: 'ar-table-spin 1s linear infinite',
-                    color: 'var(--arianna-primary, #1f6feb)',
-                    display: 'inline-block',
-                }),
-                new Rule('@keyframes ar-table-spin', {
-                    'from': { transform: 'rotate(0deg)' },
-                    'to': { transform: 'rotate(360deg)' },
-                } as never),
-                new Rule('.ar-table__spacer', { flex: '1' }),
-                // Column toggle menu
-                new Rule('.ar-table__col-toggle', { position: 'relative' }),
-                new Rule('.ar-table__col-toggle-btn, .ar-table__export-btn', {
-                    background: 'none',
-                    border: '1px solid transparent',
-                    borderRadius: 'var(--arianna-radius-sm, 4px)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    cursor: 'pointer',
-                    font: 'inherit',
-                    fontSize: '0.9rem',
-                    padding: '4px 10px',
-                    transition: 'background 0.14s ease',
-                }),
-                new Rule('.ar-table__col-toggle-btn:hover, .ar-table__export-btn:hover', {
-                    background: 'var(--arianna-bg, #ffffff)',
-                    borderColor: 'var(--arianna-border, #d8d8d8)',
-                }),
-                new Rule('.ar-table__col-menu', {
-                    background: 'var(--arianna-bg, #ffffff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                    minWidth: '160px',
-                    padding: '6px 0',
-                    position: 'absolute',
-                    right: '0',
-                    top: 'calc(100% + 4px)',
-                    zIndex: '500',
-                }),
-                new Rule('.ar-table__col-menu-item', {
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    fontSize: '0.82rem',
-                    gap: '8px',
-                    padding: '5px 12px',
-                }),
-                new Rule('.ar-table__col-menu-item:hover', { background: 'var(--arianna-bg-3, #f8f9fa)' }),
-                // Scroll wrapper + table
-                new Rule('.ar-table__scroll', {
-                    flex: '1',
-                    overflow: 'auto',
-                    minHeight: '0',
-                }),
-                new Rule('.ar-table', {
-                    width: '100%',
-                    borderCollapse: 'collapse',
-                    tableLayout: 'fixed',
-                }),
-                new Rule(':host([sticky-header]) .ar-table__thead', {
-                    position: 'sticky',
-                    top: '0',
-                    zIndex: '1',
-                }),
-                new Rule('.ar-table__thead', { background: 'var(--arianna-bg-3, #f8f9fa)' }),
-                new Rule('.ar-table__th', {
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                    fontSize: '0.72rem',
-                    fontWeight: '700',
-                    padding: '10px 12px',
-                    position: 'relative',
-                    textAlign: 'left',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    userSelect: 'none',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                }),
-                new Rule('.ar-table__th--sortable', { cursor: 'pointer' }),
-                new Rule('.ar-table__th--sortable:hover', { color: 'var(--arianna-text, #1f2328)' }),
-                new Rule('.ar-table__th--sorted', { color: 'var(--arianna-text, #1f2328)' }),
-                new Rule('.ar-table__th-sort', { marginLeft: '6px', fontSize: '0.7rem' }),
-                new Rule('.ar-table__th-order', {
-                    background: 'var(--arianna-primary, #1f6feb)',
-                    borderRadius: '8px',
-                    color: '#ffffff',
-                    fontSize: '0.62rem',
-                    marginLeft: '4px',
-                    padding: '0 5px',
-                }),
-                new Rule('.ar-table__th-resize', {
-                    bottom: '0',
-                    cursor: 'col-resize',
-                    height: '100%',
-                    position: 'absolute',
-                    right: '0',
-                    top: '0',
-                    width: '6px',
-                    transition: 'background 0.14s ease',
-                }),
-                new Rule('.ar-table__th-resize:hover', {
-                    background: 'var(--arianna-primary, #1f6feb)',
-                }),
-                // Body
-                new Rule('.ar-table__row', {
-                    transition: 'background 0.14s ease',
-                    cursor: 'default',
-                }),
-                new Rule('.ar-table__row:hover', { background: 'var(--arianna-bg-3, #f8f9fa)' }),
-                new Rule('.ar-table__row--selected', { background: 'rgba(31,111,235,0.08)' }),
-                new Rule('.ar-table__td', {
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    padding: '10px 12px',
-                    color: 'var(--arianna-text, #1f2328)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                }),
-                // Footer pagination
-                new Rule('.ar-table__footer', {
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '10px 12px',
-                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
-                    background: 'var(--arianna-bg-3, #f8f9fa)',
-                }),
-                new Rule('.ar-table__page', {
-                    background: 'var(--arianna-bg, #ffffff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius-sm, 4px)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    cursor: 'pointer',
-                    font: 'inherit',
-                    fontSize: '0.8rem',
-                    minWidth: '32px',
-                    padding: '4px 8px',
-                    transition: 'border-color 0.14s ease',
-                }),
-                new Rule('.ar-table__page:hover:not(:disabled)', {
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
-                }),
-                new Rule('.ar-table__page--active', {
-                    background: 'var(--arianna-primary, #1f6feb)',
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
-                    color: '#ffffff',
-                }),
-                new Rule('.ar-table__page--dots', {
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'default',
-                    color: 'var(--arianna-muted, #6e6b62)',
-                }),
-                new Rule('.ar-table__page:disabled', { opacity: '0.4', cursor: 'not-allowed' }),
-            ]);
-        }
+        { return TableDefaultSheet(); }
     }
 }
-export default Table;
+export const TableClass = Table.Table;
+export default Table.Table;
 
 export type Row = Table.Types.Row;
 export type SortDir = Table.Types.SortDir;
@@ -3310,3 +3936,6 @@ export type SortState = Table.Interfaces.SortState;
 export type SelectMode = Table.Types.SelectMode;
 export type TableColumn = Table.Interfaces.TableColumn;
 export type TableOptions = Table.Interfaces.TableOptions;
+export type FetchParams = Table.Interfaces.FetchParams;
+export type FetchResult = Table.Interfaces.FetchResult;
+export type WasmProcessor = Table.Types.WasmProcessor;

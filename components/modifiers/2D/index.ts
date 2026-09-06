@@ -1,52 +1,53 @@
 /**
- * @module    components/modifiers/2D
- * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026
- * @license   MIT / Commercial (dual license)
- *
- * AriannA 2D Modifiers — canonical barrel.
+ * @module components/modifiers/2D
+ * @description Canonical public barrel for AriannA 2D modifiers.
  */
 
-import { Modifier2D as BaseNamespace } from './Base.ts';
-import { Resizer as ResizerNamespace } from './Resizer.ts';
-import { Mover as MoverNamespace } from './Mover.ts';
-import { Rotator as RotatorNamespace } from './Rotator.ts';
-import { Reflector as ReflectorNamespace } from './Reflector.ts';
-import { Rounder as RounderNamespace } from './Rounder.ts';
-import { Skewer as SkewerNamespace } from './Skewer.ts';
+import * as BaseModule      from './Base.ts';
+import * as ResizerModule   from './Resizer.ts';
+import * as MoverModule     from './Mover.ts';
+import * as RotatorModule   from './Rotator.ts';
+import * as ReflectorModule from './Reflector.ts';
+import * as RounderModule   from './Rounder.ts';
+import * as SkewerModule    from './Skewer.ts';
 
-export const Modifier2D = BaseNamespace.Modifier2D;
-export const resolveTargets = BaseNamespace.resolveTargets;
-export type ModifierContext = BaseNamespace.Interfaces.ModifierContext;
+export const Modifier2D = BaseModule.Modifier2D.Modifier2D;
+export const ResolveTargets = BaseModule.Modifier2D.ResolveTargets;
 
-export const Resizer = ResizerNamespace.Resizer;
-export type ResizeDir = ResizerNamespace.Types.ResizeDir;
-export type ResizerOptions = ResizerNamespace.Interfaces.ResizerOptions;
+export type ModifierPhase = BaseModule.Modifier2D.Types.Phase;
+export type ModifierContext = BaseModule.Modifier2D.Interfaces.ModifierContext;
 
-export const Mover = MoverNamespace.Mover;
-export type MoverOptions = MoverNamespace.Interfaces.MoverOptions;
+export const Resizer = ResizerModule.Resizer.Resizer;
+export type ResizeDirection = ResizerModule.Resizer.Types.ResizeDirection;
+export type ResizerOptions = ResizerModule.Resizer.Interfaces.ResizerOptions;
 
-export const Rotator = RotatorNamespace.Rotator;
-export type RotatorOptions = RotatorNamespace.Interfaces.RotatorOptions;
+export const Mover = MoverModule.Mover.Mover;
+export type MoverAxis = MoverModule.Mover.Types.Axis;
+export type MoverBounds = MoverModule.Mover.Types.Bounds;
+export type MoverOptions = MoverModule.Mover.Interfaces.MoverOptions;
 
-export const Reflector = ReflectorNamespace.Reflector;
-export type ReflectorOptions = ReflectorNamespace.Interfaces.ReflectorOptions;
+export const Rotator = RotatorModule.Rotator.Rotator;
+export type RotatorOptions = RotatorModule.Rotator.Interfaces.RotatorOptions;
 
-export const Rounder = RounderNamespace.Rounder;
-export type Corner = RounderNamespace.Types.Corner;
-export type RounderOptions = RounderNamespace.Interfaces.RounderOptions;
+export const Reflector = ReflectorModule.Reflector.Reflector;
+export type ReflectorAxis = ReflectorModule.Reflector.Types.Axis;
+export type ReflectorOptions = ReflectorModule.Reflector.Interfaces.ReflectorOptions;
 
-export const Skewer = SkewerNamespace.Skewer;
-export type SkewerOptions = SkewerNamespace.Interfaces.SkewerOptions;
+export const Rounder = RounderModule.Rounder.Rounder;
+export type RounderCorner = RounderModule.Rounder.Types.Corner;
+export type RounderOptions = RounderModule.Rounder.Interfaces.RounderOptions;
 
-export const Modifiers2D =
-{
+export const Skewer = SkewerModule.Skewer.Skewer;
+export type SkewerAxis = SkewerModule.Skewer.Types.Axis;
+export type SkewerOptions = SkewerModule.Skewer.Interfaces.SkewerOptions;
+
+export const Modifiers2D = Object.freeze({
     Resizer,
     Mover,
     Rotator,
     Reflector,
     Rounder,
     Skewer,
-};
+});
 
 export default Modifiers2D;

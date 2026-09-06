@@ -845,6 +845,29 @@ export namespace Types
             canvas: OffscreenCanvas;
         };
     }
+
+    /** @namespace WebSockets */
+    export namespace WebSockets
+    {
+        export type State =
+            'Created' |
+            'Connecting' |
+            'Open' |
+            'Closing' |
+            'Closed' |
+            'Reconnecting' |
+            'Failed' |
+            'Disposed';
+
+        export type Direction = 'in' | 'out' | 'both';
+        export type BinaryType = 'blob' | 'arraybuffer';
+    }
+
+    /** @namespace GraphQL */
+    export namespace GraphQL
+    {
+        export type OperationKind = 'query' | 'mutation' | 'subscription';
+    }
     /** @name        Router
      *  @public
      *  @type        {namespace}

@@ -8,9 +8,13 @@
  * @description AriannA Sparkline component module.
  */
 
+
 import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _svg } from './helpers.ts';
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountFinanceTemplate } from './Base.ts';
+
 
 /** @namespace   Sparkline
  *  @public
@@ -122,7 +126,7 @@ export namespace Sparkline
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -148,11 +152,86 @@ export namespace Sparkline
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-sparkline', {}, {
-        Attributes: ['width', 'height', 'color'],
-    })
-    export class Sparkline extends HTMLElement
+    export const Styles: Types.Stylesheet = (() =>
     {
+            return new Stylesheet([
+            new Rule('.Sparkline', {
+                '--arianna-bg': '#17181c',
+                '--arianna-bg-2': '#1d1e23',
+                '--arianna-bg-3': '#24262b',
+                '--arianna-text': '#e6e8eb',
+                '--arianna-muted': '#9aa0aa',
+                '--arianna-dim': '#6f7580',
+                '--arianna-border': '#303238',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#26a69a',
+                '--arianna-warning': '#f5a623',
+                '--arianna-danger': '#ef5350',
+                '--bg': '#17181c',
+                '--bg3': '#24262b',
+                '--text': '#e6e8eb',
+                '--muted': '#9aa0aa',
+                '--border': '#303238',
+                '--accent': '#e40c88',
+            }),
+            new Rule('.Sparkline[theme="light"]', {
+                '--arianna-bg': '#ffffff',
+                '--arianna-bg-2': '#fbfbfc',
+                '--arianna-bg-3': '#f3f3f5',
+                '--arianna-text': '#1c1e21',
+                '--arianna-muted': '#626873',
+                '--arianna-dim': '#8a8f98',
+                '--arianna-border': '#e2e2e6',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#168a78',
+                '--arianna-warning': '#b66c00',
+                '--arianna-danger': '#c93645',
+                '--bg': '#ffffff',
+                '--bg3': '#f3f3f5',
+                '--text': '#1c1e21',
+                '--muted': '#626873',
+                '--border': '#e2e2e6',
+                '--accent': '#e40c88',
+            }),
+                new Rule('.Sparkline', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0', display: 'inline-block', lineHeight: '0' }),
+                new Rule('.Sparkline-Canvas svg', { display: 'inline-block', verticalAlign: 'middle' }),
+            ]);
+        
+    })();
+
+    @Component('arianna-sparkline', Styles, {
+        Shadow: false,
+        Attributes: ['width', 'height', 'color', 'theme', 'data'],
+        Properties: ['data'],
+    })
+    export class Sparkline extends HTMLDivElement
+    {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'Sparkline';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('Sparkline');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -166,8 +245,12 @@ export namespace Sparkline
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        data$: Types.Signal<number[]> = signal<number[]>([]);
-
+        private _dataSignal?: Types.Signal<number[]>;
+        public get data$(): Types.Signal<number[]>
+        {
+            this._dataSignal ??= signal<number[]>([]);
+            return this._dataSignal;
+        }
         /** @name        onConnected
          *  @public
          *  @type        {void}
@@ -179,6 +262,10 @@ export namespace Sparkline
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.SparklineOptions = {})
         {
+            this.classList.add('Sparkline');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            this.dataset.ariannaFolderReady = 'true';
             /** @name        w
              *  @public
              *  @type        {inferred}
@@ -338,7 +425,8 @@ export namespace Sparkline
                     })
                     + '</svg>';
             };
-            this.template = html `<span class="ar-sparkline" a-html="this.svgHtml()"></span>`;
+            this.template = html `<span class="Sparkline-Canvas" a-html="this.svgHtml()"></span>`;
+            MountFinanceTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -348,7 +436,7 @@ export namespace Sparkline
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 Sheet: Types.Stylesheet | null;
-            }).Sheet = Sparkline.DefaultSheet();
+            }).Sheet = Styles;
         }
 
         /** @name        data
@@ -459,13 +547,8 @@ export namespace Sparkline
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', { display: 'inline-block', lineHeight: '0' }),
-                new Rule('.ar-sparkline svg', { display: 'inline-block', verticalAlign: 'middle' }),
-            ]);
-        }
+        public static readonly Styles = Styles;
+        static DefaultSheet(): Types.Stylesheet { return Styles; }
     }
 }
 export default Sparkline;

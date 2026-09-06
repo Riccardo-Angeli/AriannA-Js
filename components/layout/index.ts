@@ -36,7 +36,7 @@ export type { ModalOptions } from './Modal.ts';
 export type { PanelOptions } from './Panel.ts';
 export type { SplitterOptions } from './Splitter.ts';
 export type { TabsOptions, TabOptions } from './Tabs.ts';
-export type { AccordionItem, AccordionOptions, AccordionIconStyle, } from './Accordion.ts';
+export type { AccordionItem, AccordionOptions } from './Accordion.ts';
 export type { DockItem, DockOptions, DockStyle } from './Dock.ts';
 export type { WindowOptions, WindowStyle, WindowMenuItem, } from './Window.ts';
 export type { Row, SortDir, SortState, SelectMode, TableColumn, TableOptions, } from './Table.ts';

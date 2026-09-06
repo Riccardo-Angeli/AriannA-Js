@@ -10,6 +10,7 @@
 
 import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+import { MountInputTemplate } from './Base.ts';
 
 /** @namespace   FileUpload
  *  @public
@@ -184,6 +185,7 @@ export namespace FileUpload
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-file-upload', {}, {
+        shadow: false,
         Attributes: ['accept', 'multiple', 'label', 'hint', 'disabled'],
     })
     export class FileUpload extends HTMLElement
@@ -223,6 +225,8 @@ export namespace FileUpload
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.FileUploadOptions = {})
         {
+            this.files$ ??= signal<File[]>([]);
+            this.dragging$ ??= signal<boolean>(false);
             /** @name        accept
              *  @public
              *  @type        {inferred}
@@ -272,7 +276,7 @@ export namespace FileUpload
                  *  @license     MIT / Commercial (dual license) */
                 const inp = e.target as HTMLInputElement;
                 if (inp.files)
-                    this.#setFiles(Array.from(inp.files));
+                    this.__setFiles(Array.from(inp.files));
             };
             this.onDragOver = (e: Event) => {
                 e.preventDefault();
@@ -292,7 +296,7 @@ export namespace FileUpload
                  *  @license     MIT / Commercial (dual license) */
                 const de = e as DragEvent;
                 if (de.dataTransfer?.files)
-                    this.#setFiles(Array.from(de.dataTransfer.files));
+                    this.__setFiles(Array.from(de.dataTransfer.files));
             };
             this.template = html `
             <div :class="this.zoneClass()"
@@ -313,6 +317,7 @@ export namespace FileUpload
                 <li class="ar-fileupload__file" a-for="f in this.fileViews()">{{ f.name }} ({{ f.sizeKB }} KB)</li>
             </ul>
         `;
+            MountInputTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -331,7 +336,7 @@ export namespace FileUpload
         /** Current files list (snapshot). */
         get files(): File[] { return this.files$.Get(); }
 
-        /** @name        #setFiles
+        /** @name        __setFiles
          *  @public
          *  @type        {void}
          *  @description Component member for set Files.
@@ -340,7 +345,7 @@ export namespace FileUpload
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #setFiles(files: File[]): void
+        __setFiles(files: File[]): void
         {
             this.files$.Set(files);
             this.dispatchEvent(new CustomEvent('arianna:change', {
@@ -547,7 +552,7 @@ export namespace FileUpload
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '8px' }),
+                new Rule('arianna-file-upload', { display: 'flex', flexDirection: 'column', gap: '8px' }),
                 new Rule('.ar-fileupload__zone', {
                     alignItems: 'center',
                     border: '2px dashed var(--arianna-border, #d8d8d8)',

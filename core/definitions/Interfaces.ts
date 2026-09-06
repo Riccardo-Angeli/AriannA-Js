@@ -2397,6 +2397,144 @@ export namespace Interfaces
             Keys(): string[];
         }
     }
+
+    /** @namespace WebSockets */
+    export namespace WebSockets
+    {
+        export interface RetryOptions
+        {
+            Count?: number;
+            Base?: number;
+            Maximum?: number;
+            Factor?: number;
+            Jitter?: number;
+            Codes?: number[];
+        }
+
+        export interface HeartbeatOptions
+        {
+            Interval?: number;
+            Payload?: unknown;
+            Reply?: unknown;
+            Timeout?: number;
+        }
+
+        export interface WorkerLike
+        {
+            Execute?<T = unknown>(request:
+            {
+                Id: string;
+                Type: 'Task';
+                Name: string;
+                Payload: unknown;
+                Transfer: Transferable[];
+                Timeout?: number;
+                Retry?: number;
+            }): Promise<T>;
+            Post?(request:
+            {
+                Id: string;
+                Type: 'Message';
+                Name: string;
+                Payload: unknown;
+                Transfer: Transferable[];
+            }): void;
+        }
+
+        export interface WorkerOptions
+        {
+            Direction?: Types.WebSockets.Direction;
+            InboundHandler?: string;
+            OutboundHandler?: string;
+            Required?: boolean;
+            Transfer?: boolean;
+        }
+
+        export interface SocketOptions
+        {
+            Protocols?: string[];
+            BinaryType?: Types.WebSockets.BinaryType;
+            Timeout?: number;
+            HighWaterMark?: number;
+            Retry?: number | RetryOptions;
+            Heartbeat?: number | HeartbeatOptions | false;
+            Worker?: WorkerLike;
+            WorkerOptions?: WorkerOptions;
+        }
+
+        export interface Metrics
+        {
+            Opens: number;
+            Reconnects: number;
+            MessagesIn: number;
+            MessagesOut: number;
+            BytesIn: number;
+            BytesOut: number;
+            LastOpenAt: number | null;
+            LastCloseAt: number | null;
+            LastMessageAt: number | null;
+            HeartbeatRtt: number | null;
+        }
+
+        export interface Service
+        {
+            Create(url: string | URL, options?: SocketOptions): unknown;
+        }
+    }
+
+    /** @namespace GraphQL */
+    export namespace GraphQL
+    {
+        export type Variables = Record<string, unknown>;
+
+        export interface Error
+        {
+            message: string;
+            locations?: Array<{ line: number; column: number }>;
+            path?: Array<string | number>;
+            extensions?: Record<string, unknown>;
+        }
+
+        export interface Response<T = unknown>
+        {
+            data?: T;
+            errors?: Error[];
+            extensions?: Record<string, unknown>;
+        }
+
+        export interface OperationOptions
+        {
+            OperationName?: string;
+            Headers?: Record<string, string>;
+            Signal?: AbortSignal;
+            Cache?: boolean;
+            CacheKey?: string;
+            PersistedId?: string;
+        }
+
+        export interface Subscription<T> extends AsyncIterable<T>
+        {
+            readonly Id: string;
+            Cancel(): void;
+        }
+
+        export interface ClientOptions
+        {
+            Headers?: Record<string, string>;
+            Fetch?: typeof fetch;
+            SocketEndpoint?: string | URL;
+            ConnectionParams?: unknown;
+            Cache?: boolean;
+            Persisted?: Record<string, string>;
+            Worker?: WebSockets.WorkerLike;
+            WorkerOptions?: WebSockets.WorkerOptions;
+        }
+
+        export interface Service
+        {
+            Create(endpoint: string | URL, options?: ClientOptions): unknown;
+        }
+    }
     /** @name        Workers
      *  @public
      *  @type        {namespace}

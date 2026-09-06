@@ -187,6 +187,7 @@ export namespace Rating
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-rating', {}, {
+        shadow: false,
         Attributes: ['max', 'value', 'readonly', 'disabled', 'icon', 'empty-icon'],
     })
     export class Rating extends HTMLElement
@@ -208,117 +209,20 @@ export namespace Rating
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.RatingOptions = {})
         {
-            /** @name        max
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned max value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const max = this.signal().attribute('max');
-
-            /** @name        value
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned value value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const value = this.signal().attribute('value');
-
-            /** @name        icon
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned icon value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const icon = this.signal().attribute('icon');
-
-            /** @name        emptyIcon
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned emptyIcon value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const emptyIcon = this.signal().attribute('empty-icon');
-            this.maxVal = () => parseInt(max.Get() ?? '5', 10) || 5;
-            this.currentVal = () => parseFloat(value.Get() ?? '0') || 0;
-            this.isReadonly = () => this.hasAttribute('readonly');
-            this.isDisabled = () => this.hasAttribute('disabled');
-            this.fullIcon = () => icon.Get() ?? '★';
-            this.unfilledIcon = () => emptyIcon.Get() ?? '☆';
-            this.stars = (): Interfaces.Star[] => {
-                /** @name        m
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned m value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const m = this.maxVal();
-
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = this.currentVal();
-
-                /** @name        out
-                 *  @public
-                 *  @type        {Rating.Interfaces.Star[]}
-                 *  @description Namespace-owned out value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const out: Interfaces.Star[] = [];
-                for (let i = 1; i <= m; i++)
-                {
-                    /** @name        filled
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned filled value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const filled = i <= v;
-                    out.push({
-                        index: i,
-                        filled,
-                        cls: 'ar-rating__star' + (filled ? ' ar-rating__star--filled' : ''),
-                        icon: filled ? this.fullIcon() : this.unfilledIcon(),
-                    });
+            const self=this as Rating & { __renderRating?:()=>void; onAttributeChanged?:()=>void };
+            this.classList.add('Rating');
+            const render=()=>{
+                const max=Math.max(1,parseInt(this.getAttribute('max')??'5',10)||5);const value=Math.max(0,parseFloat(this.getAttribute('value')??'0')||0);const disabled=this.hasAttribute('disabled');const readonly=this.hasAttribute('readonly');
+                const wrap=document.createElement('div');wrap.className='ar-rating';wrap.setAttribute('role','radiogroup');wrap.setAttribute('aria-label','Rating');
+                for(let i=1;i<=max;i++){
+                    const b=document.createElement('button');b.type='button';b.className='ar-rating__star'+(i<=value?' ar-rating__star--filled':'');b.textContent=i<=value?(this.getAttribute('icon')??'★'):(this.getAttribute('empty-icon')??'☆');b.disabled=disabled;b.setAttribute('aria-label',`${i} of ${max}`);b.style.cursor=disabled?'not-allowed':readonly?'default':'pointer';
+                    if(!readonly&&!disabled)b.addEventListener('click',()=>{this.setAttribute('value',String(i));this.dispatchEvent(new CustomEvent('arianna:change',{bubbles:true,composed:true,detail:{value:i}}));render();});
+                    wrap.appendChild(b);
                 }
-                return out;
+                this.replaceChildren(wrap);
             };
-            this.onStarClick = (star: Interfaces.Star) => {
-                if (this.isReadonly() || this.isDisabled())
-                    return;
-                this.setAttribute('value', String(star.index));
-                this.dispatchEvent(new CustomEvent('arianna:change', {
-                    bubbles: true, detail: { value: star.index },
-                }));
-            };
-            this.template = html `
-            <button :class="s.cls"
-                    a-for="s in this.stars()"
-                    :disabled="this.isDisabled()"
-                    @click="(e) => this.onStarClick(s)">{{ s.icon }}</button>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Rating.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = Rating.DefaultSheet();
+            self.__renderRating=render;self.onAttributeChanged=()=>render();render();
+            (this as unknown as { Sheet: Types.Stylesheet | null }).Sheet = Rating.DefaultSheet();
         }
 
         /** @name        onCreated
@@ -515,7 +419,7 @@ export namespace Rating
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'inline-flex', gap: '2px' }),
+                new Rule('arianna-rating', { display: 'inline-flex', gap: '2px' }),
                 new Rule('.ar-rating__star', {
                     background: 'none',
                     border: 'none',

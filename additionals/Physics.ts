@@ -185,7 +185,8 @@ interface WorldOptions {
   timestep? : number;
 }
 
-class World {
+class World
+{
   gravity     : Vec;
   dimension   : 2 | 3;
   substeps    : number;

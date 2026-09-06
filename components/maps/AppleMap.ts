@@ -1,695 +1,300 @@
-/**
- * @module    components/maps/AppleMap
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA AppleMap component module.
- */
+/** @module components/maps/AppleMap */
+import { Component, Css } from '../../core/index.ts';
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
-import { MapEmbed, type MapProvider } from './MapEmbed.ts';
+export interface LatLng { lat:number; lng:number; }
+export type MapProvider = 'google' | 'osm' | 'apple' | 'maplibre';
 
-declare global
-{
-    interface Window
-    {
-        mapkit?: AppleMap.Interfaces.MapKitGlobal;
-    }
+const ATTRIBUTES=['center-lat','center-lng','zoom','marker','label','address','aspect-ratio','mapkit-token'] as const;
+const OBSERVED=new Set<string>(ATTRIBUTES);
+
+function centerLat(host:Element): number {
+    const value=Number.parseFloat(host.getAttribute('center-lat') ?? '');
+    return Number.isFinite(value) ? value : 41.8902102;
 }
 
-/** @namespace   AppleMap
- *  @public
- *  @description Namespace containing AppleMap contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
-export namespace AppleMap
-{
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export namespace Types
-    {
-        /** @name        Stylesheet
-         *  @public
-         *  @type        {Css.Stylesheet}
-         *  @description Type alias for Stylesheet.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Stylesheet = Css.Stylesheet;
+function centerLng(host:Element): number {
+    const value=Number.parseFloat(host.getAttribute('center-lng') ?? '');
+    return Number.isFinite(value) ? value : 12.4922309;
+}
+
+function zoom(host:Element): number {
+    const value=Number.parseInt(host.getAttribute('zoom') ?? '13',10);
+    return Math.max(1,Math.min(20,Number.isFinite(value) ? value : 13));
+}
+
+function marker(host:Element): boolean {
+    return host.hasAttribute('marker') && host.getAttribute('marker') !== 'false';
+}
+
+function aspectRatio(host:Element): string {
+    return host.getAttribute('aspect-ratio')?.trim() || '16/8';
+}
+
+function renderKey(host:Element): string {
+    return ATTRIBUTES.map(name => `${name}=${host.getAttribute(name) ?? ''}`).join('|');
+}
+
+function ensureIdentity(host:HTMLElement,type:string): void {
+    for(const cls of Array.from(host.classList))
+        if(cls.startsWith('__real-')) host.classList.remove(cls);
+
+    if(!host.classList.contains(type)) host.classList.add(type);
+}
+
+function frame(host:HTMLElement,type:string,provider:string,openUrl:string): HTMLDivElement {
+    host.replaceChildren();
+
+    const stage=document.createElement('div');
+    stage.className=`${type}-Stage`;
+    stage.style.aspectRatio=aspectRatio(host);
+
+    const chrome=document.createElement('div');
+    chrome.className=`${type}-Chrome`;
+
+    const badge=document.createElement('span');
+    badge.className=`${type}-Badge`;
+    badge.textContent=provider;
+
+    const open=document.createElement('a');
+    open.className=`${type}-Open`;
+    open.href=openUrl;
+    open.target='_blank';
+    open.rel='noopener';
+    open.textContent='Open ↗';
+
+    chrome.append(badge,open);
+    host.appendChild(stage);
+    host.appendChild(chrome);
+    return stage;
+}
+
+function iframe(stage:HTMLElement,type:string,src:string,sandbox?:string): HTMLIFrameElement {
+    const element=document.createElement('iframe');
+    element.className=`${type}-Iframe`;
+    element.src=src;
+    element.loading='lazy';
+    element.referrerPolicy='no-referrer-when-downgrade';
+    element.allowFullscreen=true;
+    element.setAttribute('frameborder','0');
+    if(sandbox) element.setAttribute('sandbox',sandbox);
+    stage.replaceChildren(element);
+    return element;
+}
+
+function fallback(stage:HTMLElement,type:string,title:string,message:string,code?:string): HTMLDivElement {
+    const box=document.createElement('div');
+    box.className=`${type}-Fallback`;
+
+    const icon=document.createElement('div');
+    icon.className=`${type}-Fallback-Icon`;
+    icon.textContent='⌖';
+
+    const strong=document.createElement('strong');
+    strong.textContent=title;
+
+    const detail=document.createElement('span');
+    detail.textContent=message;
+
+    box.append(icon,strong,detail);
+    if(code){
+        const snippet=document.createElement('code');
+        snippet.textContent=code;
+        box.appendChild(snippet);
     }
+    stage.replaceChildren(box);
+    return box;
+}
 
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export namespace Interfaces
-    {
-        /** MapKit JS global injected by the SDK once loaded. */
-        export interface MapKitGlobal
-        {
-            /** @name        init
-             *  @public
-             *  @type        {void}
-             *  @description Component member for init.
-             *  @param       {{
-                authorizationCallback: (done: (token: string) => void) => void;
-            }} opts Parameter.
-             *  @returns     {void} Result.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            init(opts: {
-                /** @name        authorizationCallback
-                 *  @public
-                 *  @type        {(done: (token: string) => void) => void}
-                 *  @description Component member for authorization Callback.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                authorizationCallback: (done: (token: string) => void) => void;
-            }): void;
 
-            /** @name        Map
-             *  @public
-             *  @type        {new (el: HTMLElement, opts?: object) => {
-                center: {
-                    latitude: number;
-                    longitude: number;
-                };
-                showsCompass: string;
-                mapType: string;
-                cameraDistance: number;
-                setCenterAnimated(c: {
-                    latitude: number;
-                    longitude: number;
-                }): void;
-                addAnnotation(a: object): void;
-                destroy?(): void;
-            }}
-             *  @description Component member for Map.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Map: new (el: HTMLElement, opts?: object) => {
-                /** @name        center
-                 *  @public
-                 *  @type        {{
-                    latitude: number;
-                    longitude: number;
-                }}
-                 *  @description Component member for center.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                center: {
-                    /** @name        latitude
-                     *  @public
-                     *  @type        {number}
-                     *  @description Component member for latitude.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    latitude: number;
+type BrowserWindow=Window & typeof globalThis & { mapkit?:any; ARIANNA_MAPKIT_TOKEN?:string; __ariannaMapKitLoaded?:()=>void; };
+const Browser=():BrowserWindow=>window as BrowserWindow;
+let loader:Promise<any>|null=null;
 
-                    /** @name        longitude
-                     *  @public
-                     *  @type        {number}
-                     *  @description Component member for longitude.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    longitude: number;
-                };
-
-                /** @name        showsCompass
-                 *  @public
-                 *  @type        {string}
-                 *  @description Component member for shows Compass.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                showsCompass: string;
-
-                /** @name        mapType
-                 *  @public
-                 *  @type        {string}
-                 *  @description Component member for map Type.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                mapType: string;
-
-                /** @name        cameraDistance
-                 *  @public
-                 *  @type        {number}
-                 *  @description Component member for camera Distance.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                cameraDistance: number;
-
-                /** @name        setCenterAnimated
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for set Center Animated.
-                 *  @param       {{
-                    latitude: number;
-                    longitude: number;
-                }} c Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                setCenterAnimated(c: {
-                    /** @name        latitude
-                     *  @public
-                     *  @type        {number}
-                     *  @description Component member for latitude.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    latitude: number;
-
-                    /** @name        longitude
-                     *  @public
-                     *  @type        {number}
-                     *  @description Component member for longitude.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    longitude: number;
-                }): void;
-
-                /** @name        addAnnotation
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for add Annotation.
-                 *  @param       {object} a Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                addAnnotation(a: object): void;
-
-                /** @name        destroy
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for destroy.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                destroy?(): void;
-            };
-
-            /** @name        MarkerAnnotation
-             *  @public
-             *  @type        {new (coord: object, opts?: object) => object}
-             *  @description Component member for Marker Annotation.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            MarkerAnnotation: new (coord: object, opts?: object) => object;
-
-            /** @name        Coordinate
-             *  @public
-             *  @type        {new (lat: number, lng: number) => object}
-             *  @description Component member for Coordinate.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Coordinate: new (lat: number, lng: number) => object;
+function loadMapKit(token:string): Promise<any> {
+    if(Browser().mapkit) return Promise.resolve(Browser().mapkit);
+    if(loader) return loader;
+    loader=new Promise((resolve,reject)=>{
+        const done=()=>Browser().mapkit ? resolve(Browser().mapkit) : reject(new Error('MapKit JS loaded without mapkit global'));
+        const existing=document.querySelector<HTMLScriptElement>('script[data-arianna-mapkit]');
+        if(existing){
+            if(Browser().mapkit){ done(); return; }
+            existing.addEventListener('load',done,{once:true});
+            existing.addEventListener('error',()=>reject(new Error('MapKit JS failed to load')),{once:true});
+            return;
         }
-    }
+        const script=document.createElement('script');
+        script.dataset.ariannaMapkit='true';
+        script.src='https://cdn.apple-mapkit.com/mk/6.x.x/mapkit.core.js';
+        script.crossOrigin='anonymous';
+        script.dataset.libraries='map';
+        script.dataset.callback='__ariannaMapKitLoaded';
+        Browser().__ariannaMapKitLoaded=done;
+        script.onerror=()=>reject(new Error('MapKit JS failed to load'));
+        document.head.appendChild(script);
+    });
+    return loader.then((mapkit:any)=>{ try { mapkit.init({authorizationCallback:(done:(value:string)=>void)=>done(token)}); } catch {} return mapkit; });
+}
 
-    /** @name        html
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned html value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const html = Templates.Template.Html;
-
-    /** @name        { Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const { Stylesheet } = Css;
-
-    /** @name        MAPKIT_CDN
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned MAPKIT_CDN value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const MAPKIT_CDN = 'https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js';
-
-    /** @name        mapKitLoadPromise
-     *  @public
-     *  @type        {Promise<AppleMap.Interfaces.MapKitGlobal> | null}
-     *  @description Namespace-owned mapKitLoadPromise value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export let mapKitLoadPromise: Promise<Interfaces.MapKitGlobal> | null = null;
-    export function loadMapKit(token: string): Promise<Interfaces.MapKitGlobal> {
-        if (typeof window === 'undefined')
-            return Promise.reject(new Error('No window'));
-        if (window.mapkit)
-        {
-            // Re-init token if it changed (mapkit caches per-page).
-            window.mapkit.init({ authorizationCallback: done => done(token) });
-            return Promise.resolve(window.mapkit);
-        }
-        if (mapKitLoadPromise)
-            return mapKitLoadPromise;
-        mapKitLoadPromise = new Promise<Interfaces.MapKitGlobal>((resolve, reject) => {
-            /** @name        script
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned script value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const script = document.createElement('script');
-            script.src = MAPKIT_CDN;
-            script.crossOrigin = 'anonymous';
-            script.async = true;
-            script.onload = () => {
-                /** @name        mk
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned mk value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const mk = window.mapkit;
-                if (!mk)
-                {
-                    reject(new Error('MapKit script loaded but window.mapkit is undefined'));
-                    return;
-                }
-                try
-                {
-                    mk.init({ authorizationCallback: done => done(token) });
-                    resolve(mk);
-                }
-                catch (e)
-                {
-                    reject(e);
-                }
-            };
-            script.onerror = () => reject(new Error('Failed to load MapKit JS'));
-            document.head.appendChild(script);
-        });
-        return mapKitLoadPromise;
-    }
-
-    /** @name        LoadMapKit
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned LoadMapKit value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export function LoadMapKit
-    (
-        ...args: Parameters<typeof loadMapKit>
-    ): ReturnType<typeof loadMapKit>
-    {
-        return loadMapKit(...args);
-    }
-
-    /** @class       AppleMap
-     *  @public
-     *  @description AriannA AppleMap component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-apple-map', {}, {
-        Attributes: [
-            'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
-            'aspect-ratio', 'mapkit-token', 'map-type',
-        ],
+export namespace AppleMap {
+export const Styles = new Css.Stylesheet([
+    new Css.Rule('.AppleMap', {
+        Background:'var(--arianna-bg,#ffffff)',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        BoxSizing:'border-box',
+        Color:'var(--arianna-text,#1f2328)',
+        Display:'flex',
+        FlexDirection:'column',
+        FontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        FontSize:'12px',
+        MinHeight:'300px',
+        Overflow:'hidden',
+        Position:'relative',
+        Width:'100%'
+    }),
+    new Css.Rule('.AppleMap-Stage', {
+        Background:'var(--arianna-bg-2,#f6f7f9)',
+        MinHeight:'260px',
+        Overflow:'hidden',
+        Position:'relative',
+        Width:'100%'
+    }),
+    new Css.Rule('.AppleMap-Iframe', {
+        Border:'0', Display:'block', Height:'100%', Inset:'0', Position:'absolute', Width:'100%'
+    }),
+    new Css.Rule('.AppleMap-Chrome', {
+        AlignItems:'center',
+        Background:'var(--arianna-bg,#ffffff)',
+        BorderTop:'1px solid var(--arianna-border,#d8d8d8)',
+        Display:'flex',
+        Flex:'0 0 auto',
+        JustifyContent:'space-between',
+        MinHeight:'36px',
+        Padding:'5px 10px'
+    }),
+    new Css.Rule('.AppleMap-Badge', {
+        Background:'transparent',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'999px',
+        Color:'var(--arianna-muted,#6e6b62)',
+        Font:'600 10px ui-monospace,SFMono-Regular,Menlo,monospace',
+        LetterSpacing:'.06em',
+        Padding:'3px 8px',
+        TextTransform:'uppercase'
+    }),
+    new Css.Rule('.AppleMap-Open', {
+        Background:'transparent',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        Color:'var(--arianna-text,#1f2328)',
+        Font:'500 11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        Padding:'5px 9px',
+        TextDecoration:'none',
+        Transition:'border-color .18s ease,color .18s ease,background .18s ease'
+    }),
+    new Css.Rule('.AppleMap-Open:hover', {
+        Background:'var(--arianna-bg-2,#f6f7f9)',
+        BorderColor:'var(--arianna-primary,#e40c88)',
+        Color:'var(--arianna-primary,#e40c88)'
+    }),
+    new Css.Rule('.AppleMap-Fallback', {
+        AlignItems:'center',
+        Background:'var(--arianna-bg-2,#f6f7f9)',
+        Color:'var(--arianna-muted,#6e6b62)',
+        Display:'flex',
+        FlexDirection:'column',
+        Gap:'9px',
+        Height:'100%',
+        Inset:'0',
+        JustifyContent:'center',
+        Padding:'28px',
+        Position:'absolute',
+        TextAlign:'center'
+    }),
+    new Css.Rule('.AppleMap-Fallback-Icon', {
+        AlignItems:'center',
+        Background:'var(--arianna-bg,#ffffff)',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        Color:'var(--arianna-primary,#e40c88)',
+        Display:'flex',
+        FontSize:'28px',
+        Height:'52px',
+        JustifyContent:'center',
+        Width:'52px'
+    }),
+    new Css.Rule('.AppleMap-Fallback strong', {
+        Color:'var(--arianna-text,#1f2328)', FontSize:'14px'
+    }),
+    new Css.Rule('.AppleMap-Fallback code', {
+        Background:'var(--arianna-bg,#ffffff)',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        Color:'var(--arianna-text,#1f2328)',
+        Padding:'6px 8px'
     })
-    export class AppleMap extends MapEmbed.MapEmbed
-    {
-        /** Compiler-visible AriannA binding factory installed by @Component. */
-        declare signal: <T>(initial?: T) => Components.Binding<T>;
+]);
 
-        /** Compiler-visible AriannA template slot installed by @Component. */
-        declare template: unknown;
+    @Component('arianna-apple-map', Styles, { Attributes:[...ATTRIBUTES], Shadow:false })
+    export class AppleMap extends HTMLElement {
+        public static readonly Styles=Styles;
+        declare private instance:any;
+        declare private renderVersion:number;
+        declare private lastRenderKey:string | undefined;
 
-        /** The live MapKit instance, when MapKit JS path is active. */
-        #mapkitInstance: {
-            /** @name        destroy
-             *  @public
-             *  @type        {void}
-             *  @description Component member for destroy.
-             *  @returns     {void} Result.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            destroy?(): void;
-        } | null = null;
+        onConnected(): void { this.instance ??= null; this.renderVersion ??= 0; this.lastRenderKey ??= undefined; void this.render(); }
+        onDisconnected(): void { ++this.renderVersion; try { this.instance?.destroy?.(); } catch {} this.instance=null; this.lastRenderKey=undefined; }
+        onAttributeChanged(name:string): void { if(this.isConnected && OBSERVED.has(name.toLowerCase())) void this.render(); }
 
-        /** @name        getProvider
-         *  @public
-         *  @type        {MapProvider}
-         *  @description Component member for get Provider.
-         *  @returns     {MapProvider} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         getProvider(): MapProvider { return 'apple'; }
+        getCenter(): LatLng { return {lat:centerLat(this),lng:centerLng(this)}; }
+        getZoom(): number { return zoom(this); }
+        setLocation(center:LatLng): this { this.setAttribute('center-lat',String(center.lat)); this.setAttribute('center-lng',String(center.lng)); return this; }
+        setZoom(value:number): this { this.setAttribute('zoom',String(value)); return this; }
+        reload(): this { void this.render(true); return this; }
 
-        /** @name        getEmbedUrl
-         *  @protected
-         *  @type        {string}
-         *  @description Component member for get Embed Url.
-         *  @returns     {string} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected getEmbedUrl(): string
-        {
-            // Returned only for the iframe `src` of the standard MapEmbed template;
-            // we override the whole template in onConnected() to swap to fallback / MapKit.
-            return 'about:blank';
-        }
+        private token(): string { return this.getAttribute('mapkit-token')?.trim() || Browser().ARIANNA_MAPKIT_TOKEN || ''; }
+        private openUrl(): string { const address=this.getAttribute('address')?.trim(); if(address) return `https://maps.apple.com/?q=${encodeURIComponent(address)}`; return `https://maps.apple.com/?ll=${centerLat(this)},${centerLng(this)}&z=${zoom(this)}`; }
 
-        /** @name        getOpenUrl
-         *  @protected
-         *  @type        {string}
-         *  @description Component member for get Open Url.
-         *  @returns     {string} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected getOpenUrl(): string
-        {
-            /** @name        lat
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lat value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lat = this.centerLatNum();
-
-            /** @name        lng
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lng value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lng = this.centerLngNum();
-
-            /** @name        address
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned address value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const address = this.getAttribute('address');
-
-            /** @name        params
-             *  @public
-             *  @type        {string[]}
-             *  @description Namespace-owned params value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const params: string[] = [`ll=${lat},${lng}`, `z=${this.zoomNum()}`];
-            if (address)
-                params.push(`q=${encodeURIComponent(address)}`);
-            return `https://maps.apple.com/?${params.join('&')}`;
-        }
-
-        /**
-         * Override the standard build to support three states:
-         *   - MapKit token present → load MapKit JS into a `<div>`
-         *   - Else → render the styled fallback card
-         */
-        onConnected(_opts: object = {}): void
-        {
-            /** @name        centerLat
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned centerLat value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const centerLat = this.signal().attribute('center-lat');
-
-            /** @name        centerLng
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned centerLng value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const centerLng = this.signal().attribute('center-lng');
-
-            /** @name        aspectRatio
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned aspectRatio value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const aspectRatio = this.signal().attribute('aspect-ratio');
-
-            /** @name        tokenSig
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned tokenSig value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const tokenSig = this.signal().attribute('mapkit-token');
-            this.centerLatNum = () => parseFloat(centerLat.Get() ?? '51.4779');
-            this.centerLngNum = () => parseFloat(centerLng.Get() ?? '-0.0015');
-            this.zoomNum = () => parseInt(this.getAttribute('zoom') ?? '13', 10) || 13;
-            this.hasMarker = () => this.getAttribute('marker') !== 'false';
-            this.stageStyle = () => `aspect-ratio: ${aspectRatio.Get() ?? '16/9'}`;
-            this.providerBadge = () => 'APPLE';
-            this.openHref = () => this.getOpenUrl();
-            this.hasToken = () => !!tokenSig.Get();
-            this.notHasToken = () => !tokenSig.Get();
-            this.openInAppleMapsHref = () => this.getOpenUrl();
-            this.template = html `
-            <div class="ar-map__stage" :style="this.stageStyle()">
-                <div class="ar-map__mapkit-host"
-                     a-if="this.hasToken()"
-                     style="width:100%; height:100%; position:absolute; inset:0;"></div>
-                <div class="ar-map__fallback" a-if="this.notHasToken()">
-                    <svg width="48" height="48" viewBox="0 0 24 24"
-                         fill="none" stroke="currentColor" stroke-width="1.5">
-                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                        <circle cx="12" cy="10" r="3"/>
-                    </svg>
-                    <div>Apple Maps has no public iframe embed.<br>Click below to open the location in Apple Maps,
-                         or pass <code>mapkit-token</code> for an interactive embed.</div>
-                    <a :href="this.openInAppleMapsHref()"
-                       target="_blank" rel="noopener">Open in Apple Maps ↗</a>
-                </div>
-            </div>
-            <div class="ar-map__chrome">
-                <span class="ar-map__badge">{{ this.providerBadge() }}</span>
-                <a class="ar-map__open"
-                   :href="this.openHref()"
-                   target="_blank" rel="noopener">Open ↗</a>
-            </div>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {AppleMap.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = MapEmbed.MapEmbed.DefaultSheet();
-        }
-
-        /** @name        onMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onMount()
-        {
-            /** @name        token
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned token value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const token = this.getAttribute('mapkit-token');
-            if (token)
-                this.#initMapKit(token);
-        }
-
-        /** @name        onUpdate
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Update.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUpdate()
-        {
-            /** @name        token
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned token value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const token = this.getAttribute('mapkit-token');
-            if (token && !this.#mapkitInstance)
-                this.#initMapKit(token);
-        }
-
-        /** @name        onUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUnmount()
-        {
-            if (this.#mapkitInstance && typeof this.#mapkitInstance.destroy === 'function')
-            {
-                try
-                {
-                    this.#mapkitInstance.destroy();
-                }
-                catch { /* ignore */ }
+        private async render(force=false): Promise<void> {
+            const key=renderKey(this);
+            if(!force && key===this.lastRenderKey && this.firstElementChild) return;
+            const version=++this.renderVersion;
+            ensureIdentity(this,'AppleMap');
+            const stage=frame(this,'AppleMap','APPLE MAPS',this.openUrl());
+            const token=this.token();
+            if(!token){
+                try { this.instance?.destroy?.(); } catch {}
+                this.instance=null;
+                fallback(stage,'AppleMap','Apple Maps','MapKit JS requires an Apple Maps token.','window.ARIANNA_MAPKIT_TOKEN = "…"');
+                this.lastRenderKey=key;
+                return;
             }
-            this.#mapkitInstance = null;
+            const host=document.createElement('div');
+            host.className='AppleMap-MapKit-Host';
+            Object.assign(host.style,{position:'absolute',inset:'0'});
+            stage.replaceChildren(host);
+            try {
+                const mapkit=await loadMapKit(token);
+                if(!this.isConnected || version!==this.renderVersion) return;
+                const center=new mapkit.Coordinate(centerLat(this),centerLng(this));
+                const span=Math.max(.002,1/Math.pow(2,zoom(this)-7));
+                const region=new mapkit.CoordinateRegion(center,new mapkit.CoordinateSpan(span,span));
+                try { this.instance?.destroy?.(); } catch {}
+                this.instance=new mapkit.Map(host,{region,showsCompass:mapkit.FeatureVisibility?.Adaptive,showsZoomControl:true});
+                if(marker(this) && mapkit.MarkerAnnotation){
+                    const annotation=new mapkit.MarkerAnnotation(center,{title:this.getAttribute('label')||''});
+                    this.instance.addAnnotation?.(annotation);
+                }
+                this.lastRenderKey=key;
+            } catch(error) {
+                if(version!==this.renderVersion) return;
+                fallback(stage,'AppleMap','Apple Maps',error instanceof Error?error.message:String(error));
+                this.lastRenderKey=key;
+            }
         }
-
-        /** @name        #initMapKit
-         *  @public
-         *  @type        {void}
-         *  @description Component member for init Map Kit.
-         *  @param       {string} token Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #initMapKit(token: string): void
-        {
-            // Defer until template renders the host div
-            queueMicrotask(() => {
-                /** @name        host
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned host value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const host = this.querySelector<HTMLDivElement>('.ar-map__mapkit-host');
-                if (!host)
-                    return;
-                loadMapKit(token)
-                    .then(mk => {
-                    /** @name        map
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned map value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const map = new mk.Map(host, {
-                        center: new mk.Coordinate(this.centerLatNum(), this.centerLngNum()),
-                        mapType: this.getAttribute('map-type') ?? 'standard',
-                    });
-                    if (this.hasMarker())
-                    {
-                        /** @name        coord
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned coord value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const coord = new mk.Coordinate(this.centerLatNum(), this.centerLngNum());
-
-                        /** @name        ann
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned ann value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const ann = new mk.MarkerAnnotation(coord, {
-                            title: this.getAttribute('label') ?? this.getAttribute('address') ?? '',
-                        });
-                        map.addAnnotation(ann);
-                    }
-                    this.#mapkitInstance = map;
-                })
-                    .catch(err => {
-                    console.warn('[AppleMap] MapKit JS init failed, keeping fallback card:', err);
-                    // Remove the broken token so template falls back to card
-                    this.removeAttribute('mapkit-token');
-                });
-            });
-        }
-        // ── Template helpers added by AppleMap ───────────────────────────────────
-        /** @name        hasToken
-         *  @protected
-         *  @type        {() => boolean}
-         *  @description Component member for has Token.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected hasToken: () => boolean = () => false;
-
-        /** @name        notHasToken
-         *  @protected
-         *  @type        {() => boolean}
-         *  @description Component member for not Has Token.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected notHasToken: () => boolean = () => true;
-
-        /** @name        openInAppleMapsHref
-         *  @protected
-         *  @type        {() => string}
-         *  @description Component member for open In Apple Maps Href.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected openInAppleMapsHref: () => string = () => '#';
     }
 }
-export default AppleMap;
+
+export const AppleMapClass=AppleMap.AppleMap;
+export default AppleMap.AppleMap;

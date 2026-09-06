@@ -6,12 +6,13 @@
  *
  * AriannA Components 2.0 — top-level barrel.
  *
- * # Folder map (16 modules)
+ * # Folder map (18 modules)
  *
  *   animations/   — Blender-style Action Editor + F-Curves + Onion
  *   audio/        — Web Audio widgets
+ *   automotive/   — digital automotive cockpit
  *   charts/       — generic SVG charts (bar/line/pie)             ← canonical LineChart
- *   composite/    — NodeEditor (Daedalus), Chat
+ *   composite/    — Workflow (Daedalus), Chat, CodeEditor
  *   data/         — tree view
  *   display/      — atomic visual surfaces                         ← canonical Chip
  *   finance/      — finance-specialized charts + screener
@@ -25,8 +26,9 @@
  *   modifiers/    — 2D + 3D modifiers
  *   navigation/   — header, sidebar, menu, etc.
  *   payments/     — gateway + providers
+ *   project/      — Kanban / project work surfaces
  *   shipments/    — shipment trackers
- *   video/        — VideoPlayer
+ *   video/        — VideoPlayer + NLE timeline / tracks / parts
  *
  * The AriannA component surface (`signal().attribute`, `fire`, `render`, `Sheet`,
  * `template`, lifecycle hooks) is declared by the `AriannaElement` interface
@@ -43,6 +45,7 @@
 // Modules without name conflicts — bulk re-export.
 export * from './animations/index.ts';
 export * from './audio/index.ts';
+export * from './automotive/index.ts';
 export * from './charts/index.ts'; // canonical LineChart
 export * from './composite/index.ts';
 export * from './display/index.ts'; // canonical Chip
@@ -51,6 +54,7 @@ export * from './maps/index.ts';
 export * from './modifiers/index.ts';
 export * from './navigation/index.ts';
 export * from './payments/index.ts';
+export * from './project/index.ts';
 export * from './shipments/index.ts';
 export * from './video/index.ts';
 // data — Table is already exported by layout/ (canonical source); we only
@@ -58,7 +62,7 @@ export * from './video/index.ts';
 export { TreeView } from './data/TreeView.ts';
 export type { TreeNode, TreeViewOptions } from './data/TreeView.ts';
 // ── finance — alias LineChart, re-export everything else ───────────────────
-export { CandlestickChart, DepthChart, HeatmapChart, PortfolioDonut, PnLChart, RiskGauge, OrderBook, Screener, Sparkline, FinanceLineChart, } from './finance/index.ts';
+export { CandlestickChart, DepthChart, HeatmapChart, PortfolioDonut, PnLChart, RiskGauge, OrderBook, Screener, Sparkline, AlertBadge, FinanceLineChart, } from './finance/index.ts';
 // ── inputs — alias Chip, canonical ColorPicker, re-export everything else ──
 export { Button, Switch, Checkbox, Radio, TextField, SearchBar, Dropdown, Rating, FileUpload, TimePicker, ColorPicker, RangeSlider, Calendar, DatePicker, RichTextEditor, InputChip, } from './inputs/index.ts';
 // ── graphics — alias ColorPicker, re-export everything else ────────────────

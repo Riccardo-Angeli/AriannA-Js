@@ -1,3 +1,4 @@
+import { MountPaymentTemplate } from './Base.ts';
 /**
  * @module    components/payments/Nexi
  * @author    Riccardo Angeli
@@ -8,7 +9,14 @@
  * @description AriannA Nexi component module.
  */
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Templates: any;
+
+
 
 /** @namespace   Nexi
  *  @public
@@ -123,11 +131,38 @@ export namespace Nexi
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
+    export const NEXI_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 94 28" role="img" aria-label="Nexi"><rect width="94" height="28" rx="6" fill="#081E5B"/><text x="47" y="20" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="800" fill="#fff">nexi</text><circle cx="76" cy="8" r="3" fill="#00D0C6"/></svg>`;
+
     @Component('arianna-nexi', {}, {
+        shadow: false,
         Attributes: ['redirect-url', 'amount', 'currency', 'target'],
     })
-    export class Nexi extends HTMLElement
+    export class Nexi extends HTMLDivElement
     {
+        public static readonly Styles = Nexi.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'Nexi';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('Nexi');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -145,6 +180,8 @@ export namespace Nexi
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.NexiOptions = {} as Interfaces.NexiOptions)
         {
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            (this as any).NEXI_LOGO = NEXI_LOGO;
             /** @name        amountAttr
              *  @public
              *  @type        {inferred}
@@ -185,10 +222,12 @@ export namespace Nexi
             this.onClick = () => { void this.pay(); };
             this.template = html `
             <button type="button" class="ar-nexi__btn" @click="this.onClick">
-                <span class="ar-nexi__logo">nexi</span>
+                <span class="ar-nexi__logo" a-html="this.NEXI_LOGO"></span>
                 <span>{{ this.btnLabel() }}</span>
             </button>
         `;
+            MountPaymentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -344,7 +383,10 @@ export namespace Nexi
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'inline-block' }),
+                new Rule('.Nexi', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0', display: 'inline-block' }),
                 new Rule('.ar-nexi__btn', {
                     display: 'inline-flex',
                     alignItems: 'center',

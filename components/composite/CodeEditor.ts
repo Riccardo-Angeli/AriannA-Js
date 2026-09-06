@@ -43,6 +43,9 @@ export namespace CodeEditor
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         export type Language = 'js' | 'ts' | 'jsx' | 'tsx' | 'html' | 'css' | 'json' | 'plain';
+
+        /** Visual palette. Dark remains the default for backward compatibility. */
+        export type Theme = 'dark' | 'light';
     }
 
     /** @namespace   Interfaces
@@ -141,6 +144,9 @@ export namespace CodeEditor
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
             autoFocus?: boolean;
+
+            /** Visual palette. */
+            theme?: Types.Theme;
         }
     }
     /* ─── CodeEditor — composite Component ───────────────────────────────────── */
@@ -151,7 +157,7 @@ export namespace CodeEditor
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-code-editor', {}, {
-        Attributes: ['language', 'indent', 'readonly', 'line-numbers', 'tab-size', 'height', 'auto-focus'],
+        Attributes: ['language', 'indent', 'readonly', 'line-numbers', 'tab-size', 'height', 'auto-focus', 'theme'],
         shadow: false
     })
     export class CodeEditor extends HTMLElement
@@ -608,22 +614,36 @@ export namespace CodeEditor
                 .replace(/>/g, '&gt;');
         }
 
-        /** @name        value
-         *  @public
-         *  @type        {Reactivity.Signal<string>}
-         *  @description Component member for value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+        /** Normalize external / fluent language writes without ever exposing the Signal itself. */
+        static #NormalizeLanguage(value: unknown): Types.Language
+        {
+            switch (String(value ?? '').toLowerCase())
+            {
+                case 'js':
+                case 'ts':
+                case 'jsx':
+                case 'tsx':
+                case 'html':
+                case 'css':
+                case 'json':
+                case 'plain':
+                    return String(value).toLowerCase() as Types.Language;
+                default:
+                    return 'ts';
+            }
+        }
+
+        /** Backing signals. Public `value` / `language` are installed as OWN enumerable
+         *  accessors in `_initFields()`. This is intentional: Real.set() routes existing own
+         *  component properties as properties, so fluent `.set('language', 'ts')` must not
+         *  overwrite the Signal object with a primitive string. */
+        declare _valueSignal: Reactivity.Signal<string>;
+        declare _languageSignal: Reactivity.Signal<Types.Language>;
+
+        /** Public reactive value adapter used by AriannA Real / Component property routing. */
         declare value: Reactivity.Signal<string>;
 
-        /** @name        language
-         *  @public
-         *  @type        {Reactivity.Signal<CodeEditor.Types.Language>}
-         *  @description Component member for language.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+        /** Public reactive language adapter used by AriannA Real / Component property routing. */
         declare language: Reactivity.Signal<Types.Language>;
 
         /** @name        _indent
@@ -838,8 +858,89 @@ export namespace CodeEditor
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
             const attrAutoF = this.getAttribute('auto-focus');
-            this.value = new Reactivity.Signal(opts.value ?? this.textContent ?? '');
-            this.language = new Reactivity.Signal(opts.language ?? attrLang ?? 'ts');
+            const attrTheme = this.getAttribute('theme') as Types.Theme | null;
+            const theme: Types.Theme = opts.theme ?? (attrTheme === 'light' ? 'light' : 'dark');
+            if (!this.hasAttribute('theme')) this.setAttribute('theme', theme);
+
+            /*
+             * Real.set() intentionally routes existing OWN properties before falling back to
+             * attributes. The old CodeEditor stored Signal objects directly in own `value` and
+             * `language` data properties; therefore `.set('language', 'ts')` replaced the Signal
+             * with the string "ts" and the next render failed at `this.language.Get()`.
+             *
+             * Recover any value written before upgrade, remove the data properties, then install
+             * enumerable accessors. From this point Real.set()/Component(opts) writes go through
+             * the adapters and can never destroy the backing Signals.
+             */
+            const ownValue = Object.prototype.hasOwnProperty.call(this, 'value')
+                ? (this as unknown as Record<string, unknown>).value
+                : undefined;
+            const ownLanguage = Object.prototype.hasOwnProperty.call(this, 'language')
+                ? (this as unknown as Record<string, unknown>).language
+                : undefined;
+
+            try { delete (this as unknown as Record<string, unknown>).value; } catch {}
+            try { delete (this as unknown as Record<string, unknown>).language; } catch {}
+
+            const initialValue =
+                opts.value ??
+                (typeof ownValue === 'string' ? ownValue : undefined) ??
+                this.textContent ??
+                '';
+
+            const initialLanguageRaw =
+                opts.language ??
+                (typeof ownLanguage === 'string' ? ownLanguage : undefined) ??
+                attrLang ??
+                'ts';
+            const initialLanguage = CodeEditor.#NormalizeLanguage(initialLanguageRaw);
+
+            this._valueSignal = new Reactivity.Signal(String(initialValue ?? ''));
+            this._languageSignal = new Reactivity.Signal(initialLanguage);
+
+            Object.defineProperty(this, 'value',
+            {
+                configurable: true,
+                enumerable: true,
+                get: () => this._valueSignal,
+                set: (next: unknown) =>
+                {
+                    const signalLike = next as { Get?: unknown; Set?: unknown } | null;
+                    if (signalLike && typeof signalLike.Get === 'function' && typeof signalLike.Set === 'function')
+                    {
+                        this._valueSignal = next as Reactivity.Signal<string>;
+                    }
+                    else
+                    {
+                        const value = String(next ?? '');
+                        this._valueSignal.Set(value);
+                        if (this._ta && this._ta.value !== value) this._ta.value = value;
+                        if (this._code) this._render();
+                    }
+                }
+            });
+
+            Object.defineProperty(this, 'language',
+            {
+                configurable: true,
+                enumerable: true,
+                get: () => this._languageSignal,
+                set: (next: unknown) =>
+                {
+                    const signalLike = next as { Get?: unknown; Set?: unknown } | null;
+                    if (signalLike && typeof signalLike.Get === 'function' && typeof signalLike.Set === 'function')
+                    {
+                        this._languageSignal = next as Reactivity.Signal<Types.Language>;
+                    }
+                    else
+                    {
+                        const language = CodeEditor.#NormalizeLanguage(next);
+                        this._languageSignal.Set(language);
+                        if (this._code) this._render();
+                    }
+                }
+            });
+
             this._indent = opts.indent ?? (attrIndent ? parseInt(attrIndent, 10) : 4);
             this._useTabs = !!opts.useTabs;
             this._readonly = opts.readonly ?? (attrRO === 'true' || attrRO === '');
@@ -979,6 +1080,50 @@ export namespace CodeEditor
                 new Css.Rule(':host .tk-unknown', { color: '#e6e8eb' }),
                 new Css.Rule(':host .tk-space', { color: 'inherit' }),
                 new Css.Rule(':host .tk-newline', { color: 'inherit' }),
+
+                // ── Light palette ─────────────────────────────────────────────
+                // Selector-driven so changing theme="light" after mount is immediate.
+                new Css.Rule(':host[theme="light"]', {
+                    background: '#ffffff',
+                    color: '#24292f',
+                    border: '1px solid #d0d7de'
+                }),
+                new Css.Rule(':host[theme="light"] .ce-gutter', {
+                    color: '#8c959f',
+                    background: '#f6f8fa',
+                    borderRight: '1px solid #d0d7de'
+                }),
+                new Css.Rule(':host[theme="light"] .ce-pre', { color: '#24292f' }),
+                new Css.Rule(':host[theme="light"] .ce-ta', { caretColor: '#24292f' }),
+                new Css.Rule(':host[theme="light"] .ce-ta::selection', {
+                    background: 'rgba(228, 12, 136, 0.24)',
+                    color: '#24292f',
+                    WebkitTextFillColor: '#24292f',
+                    textShadow: 'none'
+                }),
+                new Css.Rule(':host[theme="light"] .ce-ta::-webkit-scrollbar-track', { background: '#f6f8fa' }),
+                new Css.Rule(':host[theme="light"] .ce-ta::-webkit-scrollbar-thumb', {
+                    background: '#c6cdd5',
+                    borderRadius: '8px',
+                    border: '3px solid #f6f8fa'
+                }),
+                new Css.Rule(':host[theme="light"] .ce-ta::-webkit-scrollbar-corner', { background: '#f6f8fa' }),
+                new Css.Rule(':host[theme="light"] .tk-comment',  { color: '#6e7781', fontStyle: 'italic' }),
+                new Css.Rule(':host[theme="light"] .tk-string',   { color: '#116329' }),
+                new Css.Rule(':host[theme="light"] .tk-number',   { color: '#953800' }),
+                new Css.Rule(':host[theme="light"] .tk-regex',    { color: '#116329' }),
+                new Css.Rule(':host[theme="light"] .tk-keyword',  { color: '#cf222e', fontWeight: '600' }),
+                new Css.Rule(':host[theme="light"] .tk-builtin',  { color: '#953800' }),
+                new Css.Rule(':host[theme="light"] .tk-function', { color: '#8250df' }),
+                new Css.Rule(':host[theme="light"] .tk-ident',    { color: '#24292f' }),
+                new Css.Rule(':host[theme="light"] .tk-punct',    { color: '#57606a' }),
+                new Css.Rule(':host[theme="light"] .tk-tag',      { color: '#116329' }),
+                new Css.Rule(':host[theme="light"] .tk-attr',     { color: '#953800' }),
+                new Css.Rule(':host[theme="light"] .tk-property', { color: '#0550ae' }),
+                new Css.Rule(':host[theme="light"] .tk-selector', { color: '#8250df' }),
+                new Css.Rule(':host[theme="light"] .tk-atrule',   { color: '#cf222e' }),
+                new Css.Rule(':host[theme="light"] .tk-doctype',  { color: '#6e7781' }),
+                new Css.Rule(':host[theme="light"] .tk-unknown',  { color: '#24292f' }),
             ];
             // Light-DOM scoping: `:host` → host tag (negative lookahead preserves `:host(...)`).
             /** @name        _host
@@ -2450,7 +2595,20 @@ export namespace CodeEditor
             this._render();
         }
         // ─── Lifecycle ───────────────────────────────────────────────────────
-        /** Re-mount after Namespace restores author markup over constructor output. */
+        /** Keep selector/attribute writes and the internal language Signal coherent. */
+        onAttributeChanged(name: string, _oldValue: string | null, value: string | null): void
+        {
+            if (!this.__fieldsInitialized) return;
+            if (name === 'language')
+            {
+                this.Language = CodeEditor.#NormalizeLanguage(value);
+            }
+        }
+
+        /** Markup-upgraded and programmatically-created instances converge here. */
+        onConnected(): void { this._mountEditor(); }
+
+        /** Structural-upgrade hook; idempotent with onConnected(). */
         onCreated(): void { this._mountEditor(); }
     }
 }
@@ -2459,3 +2617,4 @@ export default CodeEditor;
 export type CodeEditorOptions = CodeEditor.Interfaces.Options;
 
 export type CodeEditorLanguage = CodeEditor.Types.Language;
+export type CodeEditorTheme = CodeEditor.Types.Theme;

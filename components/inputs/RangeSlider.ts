@@ -9,6 +9,7 @@
  */
 
 import { Component, Components, Css, Templates } from '../../core/index.ts';
+import { MountInputTemplate } from './Base.ts';
 
 /** @namespace   RangeSlider
  *  @public
@@ -151,6 +152,7 @@ export namespace RangeSlider
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-range-slider', {}, {
+        shadow: false,
         Attributes: ['label', 'min', 'max', 'step', 'value', 'show-value', 'disabled'],
     })
     export class RangeSlider extends HTMLElement
@@ -240,6 +242,7 @@ export namespace RangeSlider
                 <span class="ar-slider__value" a-if="this.showVal()">{{ this.valText() }}</span>
             </div>
         `;
+            MountInputTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -493,7 +496,7 @@ export namespace RangeSlider
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '4px' }),
+                new Rule('arianna-range-slider', { display: 'flex', flexDirection: 'column', gap: '4px' }),
                 new Rule('.ar-slider__label', {
                     color: 'var(--arianna-muted, #6e6b62)',
                     fontSize: '0.78rem',

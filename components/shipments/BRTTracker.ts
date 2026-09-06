@@ -8,8 +8,13 @@
  * @description AriannA BRTTracker component module.
  */
 
-import { Component, Templates } from '../../core/index.ts';
+
 import { Tracker, type CarrierConfig, type TrackingEvent } from './Tracker.ts';
+
+import { MountShipmentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Templates: any;
+
 
 /** @namespace   BRTTracker
  *  @public
@@ -86,7 +91,7 @@ export namespace BRTTracker
         color: '#e30613',
         publicUrl: 'https://vas.brt.it/vas/sped_det_show.hsm?referer=sped_numspe_par.htm&Nspedizione={n}',
         pattern: /^\d{10,12}$/,
-        logo: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 22"><rect width="64" height="22" rx="3" fill="#e30613"/><text x="32" y="16" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="900" fill="#fff" letter-spacing="1">BRT</text></svg>`,
+        logo: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 92 34" role="img" aria-label="BRT"><path d="M3 5h86L77 29H3z" fill="#E30613"/><text x="42" y="25" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-size="22" font-style="italic" font-weight="900" fill="#fff">BRT</text></svg>`,
     };
 
     /** @class       BRTTracker
@@ -96,21 +101,45 @@ export namespace BRTTracker
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-brt-tracker', {}, {
+        shadow: false,
         Attributes: ['tracking-number', 'locale'],
     })
-    export class BRTTracker extends HTMLElement
+    export class BRTTracker extends HTMLDivElement
     {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'BRTTracker';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(this._inner === undefined) this._inner = null;
+        }
+
         /** Compiler-visible template slot installed by the Component decorator. */
         declare template: unknown;
 
-        /** @name        #inner
+        /** @name        _inner
          *  @public
          *  @type        {Tracker | null}
          *  @description Component member for inner.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #inner: Tracker.Tracker | null = null;
+        declare _inner: Tracker.Tracker | null;
 
         /** @name        onConnected
          *  @public
@@ -123,7 +152,11 @@ export namespace BRTTracker
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.BRTTrackerOptions = {})
         {
+            if(this._inner === undefined) this._inner = null;
+            if(this.dataset.ariannaFolderReady === 'true') return;
             this.template = html `<div class="ar-carrier-host" data-r="host"></div>`;
+            MountShipmentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
         }
 
         /** @name        carrier
@@ -159,8 +192,8 @@ export namespace BRTTracker
         setTrackingNumber(n: string): this
         {
             this.setAttribute('tracking-number', n);
-            if (this.#inner)
-                this.#inner.setTrackingNumber(n);
+            if (this._inner)
+                this._inner.setTrackingNumber(n);
             return this;
         }
 
@@ -185,8 +218,8 @@ export namespace BRTTracker
          *  @license     MIT / Commercial (dual license) */
         setEvents(events: TrackingEvent[]): this
         {
-            if (this.#inner)
-                this.#inner.setEvents(events);
+            if (this._inner)
+                this._inner.setEvents(events);
             return this;
         }
 
@@ -198,7 +231,7 @@ export namespace BRTTracker
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        getEvents(): TrackingEvent[] { return this.#inner?.getEvents() ?? []; }
+        getEvents(): TrackingEvent[] { return this._inner?.getEvents() ?? []; }
 
         /** @name        validateNumber
          *  @public
@@ -287,7 +320,7 @@ export namespace BRTTracker
             if (loc)
                 inner.setAttribute('locale', loc);
             host.appendChild(inner);
-            this.#inner = inner;
+            this._inner = inner;
         }
 
         /** @name        onBeforeUpdate
@@ -328,7 +361,7 @@ export namespace BRTTracker
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        onUnmount() { this.#inner = null; }
+        onUnmount() { this._inner = null; }
     }
 }
 export default BRTTracker;

@@ -148,6 +148,7 @@ export namespace ColorPicker
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-color-picker', {}, {
+        shadow: false,
         Attributes: ['label', 'value', 'disabled'],
     })
     export class ColorPicker extends HTMLElement
@@ -178,96 +179,26 @@ export namespace ColorPicker
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.ColorPickerOptions = {})
         {
-            /** @name        label
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned label value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const label = this.signal().attribute('label');
-
-            /** @name        value
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned value value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const value = this.signal().attribute('value');
-            this.hasLabel = () => !!label.Get();
-            this.labelText = () => label.Get() ?? '';
-            this.currentVal = () => value.Get() ?? '#000000';
-            this.swatchStyle = () => `background: ${this.currentVal()}`;
-            this.hexText = () => (value.Get() ?? '#000000').toUpperCase();
-            this.isDisabled = () => this.hasAttribute('disabled');
-            this.allPresets = () => this.presets$.Get();
-            this.hasPresets = () => this.presets$.Get().length > 0;
-            this.presetStyle = (c: string) => `background: ${c}`;
-            this.onInput = (e: Event) => {
-                /** @name        inp
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned inp value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const inp = e.target as HTMLInputElement;
-                this.setAttribute('value', inp.value);
-                this.dispatchEvent(new CustomEvent('arianna:input', {
-                    bubbles: true, detail: { value: inp.value },
-                }));
+            this.presets$ ??= signal<string[]>([]);
+            const self=this as ColorPicker & { __renderColorPicker?:()=>void; onAttributeChanged?:()=>void };
+            this.classList.add('ColorPicker');
+            const normalize=(v:string)=>/^#[0-9a-f]{6}$/i.test(v)?v:'#e40c88';
+            const render=()=>{
+                const value=normalize(this.getAttribute('value') ?? '#e40c88'); const disabled=this.hasAttribute('disabled'); const labelText=this.getAttribute('label')??'';
+                const label=document.createElement('div'); label.className='ar-colorpicker__label'; label.textContent=labelText; label.hidden=!labelText;
+                const row=document.createElement('div'); row.className='ar-colorpicker__row';
+                const swatch=document.createElement('span'); swatch.className='ar-colorpicker__swatch'; swatch.style.background=value; swatch.title=value;
+                const picker=document.createElement('input'); picker.className='ar-colorpicker__input'; picker.type='color'; picker.value=value; picker.disabled=disabled; picker.ariaLabel=labelText?`${labelText} color`:'Choose color';
+                const hex=document.createElement('input'); hex.className='ar-colorpicker__hex'; hex.value=value.toUpperCase(); hex.disabled=disabled; hex.maxLength=7; hex.spellcheck=false;
+                const commit=(v:string)=>{v=normalize(v);this.setAttribute('value',v);swatch.style.background=v;picker.value=v;hex.value=v.toUpperCase();this.dispatchEvent(new CustomEvent('arianna:change',{bubbles:true,composed:true,detail:{value:v}}));};
+                picker.addEventListener('input',()=>commit(picker.value)); hex.addEventListener('change',()=>commit(hex.value));
+                swatch.appendChild(picker);row.appendChild(swatch);row.appendChild(hex);
+                const presets=document.createElement('div'); presets.className='ar-colorpicker__presets';
+                for(const color of this.presets$.Get()){const b=document.createElement('button');b.type='button';b.className='ar-colorpicker__preset';b.style.background=color;b.title=color;b.disabled=disabled;b.addEventListener('click',()=>commit(color));presets.appendChild(b);}
+                this.replaceChildren(label,row,presets);
             };
-            this.onChange = (e: Event) => {
-                /** @name        inp
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned inp value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const inp = e.target as HTMLInputElement;
-                this.dispatchEvent(new CustomEvent('arianna:change', {
-                    bubbles: true, detail: { value: inp.value },
-                }));
-            };
-            this.onPresetClick = (c: string) => {
-                this.setAttribute('value', c);
-                this.dispatchEvent(new CustomEvent('arianna:change', {
-                    bubbles: true, detail: { value: c },
-                }));
-            };
-            this.template = html `
-            <div class="ar-colorpicker__label" a-if="this.hasLabel()">{{ this.labelText() }}</div>
-            <div class="ar-colorpicker__row">
-                <div class="ar-colorpicker__swatch" :style="this.swatchStyle()">
-                    <input class="ar-colorpicker__input"
-                           type="color"
-                           :value="this.currentVal()"
-                           :disabled="this.isDisabled()"
-                           @input="this.onInput"
-                           @change="this.onChange"/>
-                </div>
-                <span class="ar-colorpicker__hex">{{ this.hexText() }}</span>
-            </div>
-            <div class="ar-colorpicker__presets" a-if="this.hasPresets()">
-                <button class="ar-colorpicker__preset"
-                        a-for="c in this.allPresets()"
-                        :style="this.presetStyle(c)"
-                        :title="c"
-                        @click="(e) => this.onPresetClick(c)"></button>
-            </div>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {ColorPicker.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = ColorPicker.DefaultSheet();
+            self.__renderColorPicker=render;self.onAttributeChanged=()=>render();render();
+            (this as unknown as { Sheet: Types.Stylesheet | null }).Sheet = ColorPicker.DefaultSheet();
         }
 
         /** @name        presets
@@ -278,7 +209,7 @@ export namespace ColorPicker
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        set presets(v: string[]) { this.presets$.Set(v ?? []); }
+        set presets(v: string[]) { this.presets$.Set(v ?? []); ; (this as any).__renderColorPicker?.(); }
 
         /** @name        presets
          *  @public
@@ -520,7 +451,7 @@ export namespace ColorPicker
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'flex', flexDirection: 'column', gap: '6px' }),
+                new Rule('arianna-color-picker', { display: 'flex', flexDirection: 'column', gap: '6px', width: '100%', maxWidth: '280px' }),
                 new Rule('.ar-colorpicker__label', {
                     color: 'var(--arianna-muted, #6e6b62)',
                     fontSize: '0.78rem',
@@ -546,9 +477,21 @@ export namespace ColorPicker
                     width: '150%',
                 }),
                 new Rule('.ar-colorpicker__hex', {
+                    background: 'var(--arianna-bg, #ffffff)',
+                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    color: 'var(--arianna-text, #1f2328)',
+                    font: 'inherit',
                     fontSize: '0.82rem',
                     fontVariantNumeric: 'tabular-nums',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    minHeight: '34px',
+                    outline: 'none',
+                    padding: '5px 9px',
+                    width: '104px',
+                }),
+                new Rule('.ar-colorpicker__hex:focus', {
+                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                    boxShadow: '0 0 0 3px var(--arianna-focus-ring, rgba(31,111,235,.18))',
                 }),
                 new Rule('.ar-colorpicker__presets', { display: 'flex', flexWrap: 'wrap', gap: '4px' }),
                 new Rule('.ar-colorpicker__preset', {

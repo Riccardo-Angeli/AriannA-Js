@@ -1,310 +1,271 @@
-/**
- * @convention AriannA component namespace merge
- * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
- */
-/**
- * @module    components/maps/GoogleMap
- * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026
- * @license   MIT / Commercial (dual license)
- *
- * GoogleMap — Apple-friendly Google Maps embed with two modes:
- *
- *   • No API key (default) — uses the public `google.com/maps?q=…&output=embed`
- *     endpoint, free, unmetered, no Cloud project required. Supports a
- *     single marker at center (or address).
- *
- *   • API key (opt-in via `api-key` attr) — uses the official Maps Embed API
- *     `google.com/maps/embed/v1/{mode}` URL. Free with unlimited usage but
- *     requires a Cloud project + key. Supports modes: place, view,
- *     directions, streetview, search.
- *
- * @example HTML
- *   <!-- No-key path -->
- *   <arianna-google-map address="Eiffel Tower, Paris" zoom="14"></arianna-google-map>
- *
- *   <!-- With Maps Embed API key -->
- *   <arianna-google-map api-key="AIza..."
- *                       mode="place"
- *                       address="Eiffel Tower"
- *                       zoom="15"></arianna-google-map>
- *
- * @example JS
- *   const m = new GoogleMap();
- *   m.setLocation({ lat: 48.8584, lng: 2.2945 });
- *   m.setZoom(15);
- *   document.body.append(m);
- *
- * Attributes (inherited + own):
- *   center-lat, center-lng, zoom, marker, address, aspect-ratio, label,
- *   api-key, mode ('place' | 'view' | 'directions' | 'streetview' | 'search')
- */
-import { Component, Templates } from '../../core/index.ts';
-import { MapEmbed, type MapProvider } from './MapEmbed.ts';
+/** @module components/maps/GoogleMap */
+import { Component, Css } from '../../core/index.ts';
 
-/** @name        html
- *  @public
- *  @type        {inferred}
- *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
-const html = Templates.Template.Html;
+export interface LatLng { lat:number; lng:number; }
+export type MapProvider = 'google' | 'osm' | 'apple' | 'maplibre';
 
-/** @namespace   GoogleMap
- *  @public
- *  @description Namespace containing GoogleMap contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
-export namespace GoogleMap
-{
-    /** @class       GoogleMap
-     *  @public
-     *  @description AriannA GoogleMap component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-google-map', {}, {
-        Attributes: [
-            'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
-            'aspect-ratio', 'api-key', 'mode',
-        ],
+const ATTRIBUTES=['center-lat','center-lng','zoom','marker','label','address','aspect-ratio','api-key','mode','origin','destination'] as const;
+const OBSERVED=new Set<string>(ATTRIBUTES);
+
+function centerLat(host:Element): number {
+    const value=Number.parseFloat(host.getAttribute('center-lat') ?? '');
+    return Number.isFinite(value) ? value : 41.8902102;
+}
+
+function centerLng(host:Element): number {
+    const value=Number.parseFloat(host.getAttribute('center-lng') ?? '');
+    return Number.isFinite(value) ? value : 12.4922309;
+}
+
+function zoom(host:Element): number {
+    const value=Number.parseInt(host.getAttribute('zoom') ?? '13',10);
+    return Math.max(1,Math.min(20,Number.isFinite(value) ? value : 13));
+}
+
+function marker(host:Element): boolean {
+    return host.hasAttribute('marker') && host.getAttribute('marker') !== 'false';
+}
+
+function aspectRatio(host:Element): string {
+    return host.getAttribute('aspect-ratio')?.trim() || '16/8';
+}
+
+function renderKey(host:Element): string {
+    return ATTRIBUTES.map(name => `${name}=${host.getAttribute(name) ?? ''}`).join('|');
+}
+
+function ensureIdentity(host:HTMLElement,type:string): void {
+    for(const cls of Array.from(host.classList))
+        if(cls.startsWith('__real-')) host.classList.remove(cls);
+
+    if(!host.classList.contains(type)) host.classList.add(type);
+}
+
+function frame(host:HTMLElement,type:string,provider:string,openUrl:string): HTMLDivElement {
+    host.replaceChildren();
+
+    const stage=document.createElement('div');
+    stage.className=`${type}-Stage`;
+    stage.style.aspectRatio=aspectRatio(host);
+
+    const chrome=document.createElement('div');
+    chrome.className=`${type}-Chrome`;
+
+    const badge=document.createElement('span');
+    badge.className=`${type}-Badge`;
+    badge.textContent=provider;
+
+    const open=document.createElement('a');
+    open.className=`${type}-Open`;
+    open.href=openUrl;
+    open.target='_blank';
+    open.rel='noopener';
+    open.textContent='Open ↗';
+
+    chrome.append(badge,open);
+    host.appendChild(stage);
+    host.appendChild(chrome);
+    return stage;
+}
+
+function iframe(stage:HTMLElement,type:string,src:string,sandbox?:string): HTMLIFrameElement {
+    const element=document.createElement('iframe');
+    element.className=`${type}-Iframe`;
+    element.src=src;
+    element.loading='lazy';
+    element.referrerPolicy='no-referrer-when-downgrade';
+    element.allowFullscreen=true;
+    element.setAttribute('frameborder','0');
+    if(sandbox) element.setAttribute('sandbox',sandbox);
+    stage.replaceChildren(element);
+    return element;
+}
+
+function fallback(stage:HTMLElement,type:string,title:string,message:string,code?:string): HTMLDivElement {
+    const box=document.createElement('div');
+    box.className=`${type}-Fallback`;
+
+    const icon=document.createElement('div');
+    icon.className=`${type}-Fallback-Icon`;
+    icon.textContent='⌖';
+
+    const strong=document.createElement('strong');
+    strong.textContent=title;
+
+    const detail=document.createElement('span');
+    detail.textContent=message;
+
+    box.append(icon,strong,detail);
+    if(code){
+        const snippet=document.createElement('code');
+        snippet.textContent=code;
+        box.appendChild(snippet);
+    }
+    stage.replaceChildren(box);
+    return box;
+}
+
+
+export namespace GoogleMap {
+export const Styles = new Css.Stylesheet([
+    new Css.Rule('.GoogleMap', {
+        Background:'var(--arianna-bg,#ffffff)',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        BoxSizing:'border-box',
+        Color:'var(--arianna-text,#1f2328)',
+        Display:'flex',
+        FlexDirection:'column',
+        FontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        FontSize:'12px',
+        MinHeight:'300px',
+        Overflow:'hidden',
+        Position:'relative',
+        Width:'100%'
+    }),
+    new Css.Rule('.GoogleMap-Stage', {
+        Background:'var(--arianna-bg-2,#f6f7f9)',
+        MinHeight:'260px',
+        Overflow:'hidden',
+        Position:'relative',
+        Width:'100%'
+    }),
+    new Css.Rule('.GoogleMap-Iframe', {
+        Border:'0', Display:'block', Height:'100%', Inset:'0', Position:'absolute', Width:'100%'
+    }),
+    new Css.Rule('.GoogleMap-Chrome', {
+        AlignItems:'center',
+        Background:'var(--arianna-bg,#ffffff)',
+        BorderTop:'1px solid var(--arianna-border,#d8d8d8)',
+        Display:'flex',
+        Flex:'0 0 auto',
+        JustifyContent:'space-between',
+        MinHeight:'36px',
+        Padding:'5px 10px'
+    }),
+    new Css.Rule('.GoogleMap-Badge', {
+        Background:'transparent',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'999px',
+        Color:'var(--arianna-muted,#6e6b62)',
+        Font:'600 10px ui-monospace,SFMono-Regular,Menlo,monospace',
+        LetterSpacing:'.06em',
+        Padding:'3px 8px',
+        TextTransform:'uppercase'
+    }),
+    new Css.Rule('.GoogleMap-Open', {
+        Background:'transparent',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        Color:'var(--arianna-text,#1f2328)',
+        Font:'500 11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        Padding:'5px 9px',
+        TextDecoration:'none',
+        Transition:'border-color .18s ease,color .18s ease,background .18s ease'
+    }),
+    new Css.Rule('.GoogleMap-Open:hover', {
+        Background:'var(--arianna-bg-2,#f6f7f9)',
+        BorderColor:'var(--arianna-primary,#e40c88)',
+        Color:'var(--arianna-primary,#e40c88)'
+    }),
+    new Css.Rule('.GoogleMap-Fallback', {
+        AlignItems:'center',
+        Background:'var(--arianna-bg-2,#f6f7f9)',
+        Color:'var(--arianna-muted,#6e6b62)',
+        Display:'flex',
+        FlexDirection:'column',
+        Gap:'9px',
+        Height:'100%',
+        Inset:'0',
+        JustifyContent:'center',
+        Padding:'28px',
+        Position:'absolute',
+        TextAlign:'center'
+    }),
+    new Css.Rule('.GoogleMap-Fallback-Icon', {
+        AlignItems:'center',
+        Background:'var(--arianna-bg,#ffffff)',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        Color:'var(--arianna-primary,#e40c88)',
+        Display:'flex',
+        FontSize:'28px',
+        Height:'52px',
+        JustifyContent:'center',
+        Width:'52px'
+    }),
+    new Css.Rule('.GoogleMap-Fallback strong', {
+        Color:'var(--arianna-text,#1f2328)', FontSize:'14px'
+    }),
+    new Css.Rule('.GoogleMap-Fallback code', {
+        Background:'var(--arianna-bg,#ffffff)',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        Color:'var(--arianna-text,#1f2328)',
+        Padding:'6px 8px'
     })
-    export class GoogleMap extends MapEmbed.MapEmbed
-    {
-        /** @name        template
-         *  @public
-         *  @type        {unknown}
-         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
-         *               or behavior-only rendering logic while participating in the compiled Template fast path.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        template = html``;
+]);
 
-        /** @name        getProvider
-         *  @public
-         *  @type        {MapProvider}
-         *  @description Component member for get Provider.
-         *  @returns     {MapProvider} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+    @Component('arianna-google-map', Styles, { Attributes:[...ATTRIBUTES], Shadow:false })
+    export class GoogleMap extends HTMLElement {
+        public static readonly Styles=Styles;
+        declare private rendering:boolean;
+        declare private lastRenderKey:string | undefined;
+
+        onConnected(): void { this.rendering ??= false; this.lastRenderKey ??= undefined; this.render(); }
+        onDisconnected(): void { this.rendering=false; }
+        onAttributeChanged(name:string): void { if(this.isConnected && OBSERVED.has(name.toLowerCase())) this.render(); }
+
         getProvider(): MapProvider { return 'google'; }
+        getCenter(): LatLng { return {lat:centerLat(this),lng:centerLng(this)}; }
+        getZoom(): number { return zoom(this); }
+        setLocation(center:LatLng): this { this.setAttribute('center-lat',String(center.lat)); this.setAttribute('center-lng',String(center.lng)); return this; }
+        setZoom(value:number): this { this.setAttribute('zoom',String(value)); return this; }
+        reload(): this { this.render(true); return this; }
 
-        /** @name        getEmbedUrl
-         *  @protected
-         *  @type        {string}
-         *  @description Component member for get Embed Url.
-         *  @returns     {string} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected getEmbedUrl(): string
-        {
-            /** @name        apiKey
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned apiKey value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const apiKey = this.getAttribute('api-key');
-            if (apiKey)
-                return this.#officialEmbedUrl(apiKey);
-            return this.#publicEmbedUrl();
+        private openUrl(): string {
+            const address=this.getAttribute('address')?.trim();
+            if(address) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+            return `https://www.google.com/maps/@${centerLat(this)},${centerLng(this)},${zoom(this)}z`;
         }
 
-        /**
-         * Official Maps Embed API. Requires a project key but is free with
-         * unlimited usage. Supports place, view, directions, streetview, search.
-         */
-        #officialEmbedUrl(apiKey: string): string
-        {
-            /** @name        mode
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned mode value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const mode = (this.getAttribute('mode') ?? 'place');
+        private render(force=false): void {
+            if(this.rendering) return;
+            const key=renderKey(this);
+            if(!force && key===this.lastRenderKey && this.firstElementChild) return;
+            this.rendering=true;
+            try {
+                ensureIdentity(this,'GoogleMap');
+                const stage=frame(this,'GoogleMap','GOOGLE',this.openUrl());
+                iframe(stage,'GoogleMap',this.embedUrl());
+                this.lastRenderKey=key;
+            } finally { this.rendering=false; }
+        }
 
-            /** @name        lat
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lat value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lat = this.centerLatNum();
+        private embedUrl(): string {
+            const key=this.getAttribute('api-key')?.trim();
+            if(key) return this.officialUrl(key);
+            const address=this.getAttribute('address')?.trim();
+            const query=address || `${centerLat(this)},${centerLng(this)}`;
+            return `https://www.google.com/maps?${new URLSearchParams({q:query,z:String(zoom(this)),output:'embed'}).toString()}`;
+        }
 
-            /** @name        lng
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lng value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lng = this.centerLngNum();
-
-            /** @name        zoom
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned zoom value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const zoom = this.zoomNum();
-
-            /** @name        address
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned address value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const address = this.getAttribute('address') ?? '';
-
-            /** @name        base
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned base value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const base = `https://www.google.com/maps/embed/v1/${mode}?key=${encodeURIComponent(apiKey)}`;
-            switch (mode)
-            {
-                case 'place':
-                    return `${base}&q=${encodeURIComponent(address || `${lat},${lng}`)}&zoom=${zoom}`;
-                case 'view':
-                    return `${base}&center=${lat},${lng}&zoom=${zoom}`;
-                case 'streetview':
-                    return `${base}&location=${lat},${lng}`;
-                case 'search':
-                    return `${base}&q=${encodeURIComponent(address)}`;
-                case 'directions': {
-                    // Caller can pass `origin` and `destination` as data attributes
-                    /** @name        origin
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned origin value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const origin = this.getAttribute('origin') ?? '';
-
-                    /** @name        dest
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned dest value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const dest = this.getAttribute('destination') ?? address;
-                    return `${base}&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}`;
-                }
-                default:
-                    return `${base}&q=${encodeURIComponent(address || `${lat},${lng}`)}`;
+        private officialUrl(key:string): string {
+            const mode=(this.getAttribute('mode') ?? 'place').toLowerCase();
+            const lat=centerLat(this), lng=centerLng(this), z=zoom(this);
+            const address=this.getAttribute('address')?.trim() || `${lat},${lng}`;
+            const params=new URLSearchParams({key});
+            switch(mode){
+                case 'view': params.set('center',`${lat},${lng}`); params.set('zoom',String(z)); break;
+                case 'streetview': params.set('location',`${lat},${lng}`); break;
+                case 'search': params.set('q',address); break;
+                case 'directions': params.set('origin',this.getAttribute('origin')?.trim()||`${lat},${lng}`); params.set('destination',this.getAttribute('destination')?.trim()||address); break;
+                default: params.set('q',address); params.set('zoom',String(z)); break;
             }
-        }
-
-        /**
-         * Public no-key embed. Still works (verified May 2026). Limited to a
-         * single map view; the `output=embed` parameter tells Google to render
-         * the iframe-safe variant.
-         */
-        #publicEmbedUrl(): string
-        {
-            /** @name        lat
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lat value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lat = this.centerLatNum();
-
-            /** @name        lng
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lng value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lng = this.centerLngNum();
-
-            /** @name        zoom
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned zoom value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const zoom = this.zoomNum();
-
-            /** @name        address
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned address value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const address = this.getAttribute('address') ?? '';
-
-            /** @name        q
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned q value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const q = address ? encodeURIComponent(address) : `${lat},${lng}`;
-            return `https://www.google.com/maps?q=${q}&z=${zoom}&output=embed`;
-        }
-
-        /** @name        getOpenUrl
-         *  @protected
-         *  @type        {string}
-         *  @description Component member for get Open Url.
-         *  @returns     {string} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected getOpenUrl(): string
-        {
-            /** @name        lat
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lat value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lat = this.centerLatNum();
-
-            /** @name        lng
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lng value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lng = this.centerLngNum();
-
-            /** @name        address
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned address value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const address = this.getAttribute('address');
-            if (address)
-                return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-            return `https://www.google.com/maps/@${lat},${lng},${this.zoomNum()}z`;
+            return `https://www.google.com/maps/embed/v1/${mode}?${params.toString()}`;
         }
     }
 }
-export default GoogleMap;
+
+export const GoogleMapClass=GoogleMap.GoogleMap;
+export default GoogleMap.GoogleMap;

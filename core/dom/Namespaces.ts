@@ -182,6 +182,112 @@ export namespace Namespaces
          */
         static readonly Namespaces : Record<string, Namespace> = {};
 
+
+        /** Native DOM factories captured before AriannA patches Document.createElement. */
+        static readonly #nativeCreateElement =
+            typeof Document !== 'undefined'
+                ? Document.prototype.createElement
+                : undefined;
+
+        static readonly #nativeCreateElementNS =
+            typeof Document !== 'undefined'
+                ? Document.prototype.createElementNS
+                : undefined;
+
+        static #documentCreateElementPatched = false;
+
+        /** Mint through the browser's original DOM factory, never through AriannA's createElement bridge. */
+        private static NativeCreate(namespace: Namespace, tag: string): Element
+        {
+            if(typeof document === 'undefined')
+            {
+                throw new TypeError('[arianna] document is not available.');
+            }
+
+            if(namespace.NS && namespace.Uri && Namespace.#nativeCreateElementNS)
+            {
+                return Namespace.#nativeCreateElementNS.call(document, namespace.Uri, tag);
+            }
+
+            if(!Namespace.#nativeCreateElement)
+            {
+                throw new TypeError('[arianna] native Document.createElement is not available.');
+            }
+
+            return Namespace.#nativeCreateElement.call(document, tag);
+        }
+
+        /**
+         * Make document.createElement(tag) a first-class AriannA construction path.
+         *
+         * The browser necessarily creates HTMLUnknownElement for non-standard/non-hyphenated
+         * author tags. AriannA supports those tags as logical component names, so once a
+         * descriptor is Defined we must intercept createElement BEFORE the browser mints the
+         * wrong native object. Standard and unresolved tags still go straight to the browser.
+         */
+        private static PatchDocumentCreateElement(): void
+        {
+            if(Namespace.#documentCreateElementPatched) return;
+            if(typeof Document === 'undefined' || typeof document === 'undefined') return;
+            if(!Namespace.#nativeCreateElement) return;
+
+            const native = Namespace.#nativeCreateElement;
+
+            try
+            {
+                Object.defineProperty
+                (
+                    Document.prototype,
+                    'createElement',
+                    {
+                        configurable : true,
+                        writable     : true,
+                        value        : function
+                        (
+                            this: Document,
+                            localName: string,
+                            options?: ElementCreationOptions
+                        ): HTMLElement
+                        {
+                            const tag = String(localName ?? '').trim().toLowerCase();
+
+                            /* Namespace.Create currently mints in the active global document. Do not
+                             * cross realms/documents here: a foreign Document keeps its own native path. */
+                            if(this === document && tag)
+                            {
+                                const descriptor = Namespace.Resolve(tag);
+
+                                if
+                                (
+                                    descriptor &&
+                                    descriptor.Custom &&
+                                    descriptor.Defined &&
+                                    descriptor.Namespace === 'html'
+                                )
+                                {
+                                    const owner = Namespace.Namespaces[descriptor.Namespace];
+                                    const node  = owner?.Create(tag);
+
+                                    if(node instanceof HTMLElement)
+                                    {
+                                        return node;
+                                    }
+                                }
+                            }
+
+                            return native.call(this, localName, options as ElementCreationOptions);
+                        }
+                    }
+                );
+
+                Namespace.#documentCreateElementPatched = true;
+            }
+            catch(e)
+            {
+                console.warn('[arianna] could not patch Document.createElement:', e);
+            }
+        }
+
         /** @name        #pending
          *  @private
          *  @static
@@ -868,7 +974,16 @@ export namespace Namespaces
             if (typeof query === 'string')
             { key = query.trim().toLowerCase(); }
             else if (query instanceof Node)
-            { key = (query as Element).tagName?.toLowerCase() ?? ''; }
+            {
+                const el = query as Element;
+                key = String
+                (
+                    el.getAttribute?.('data-arianna-tag') ||
+                    el.getAttribute?.('is') ||
+                    el.tagName ||
+                    ''
+                ).toLowerCase();
+            }
             else if (typeof query === 'function')
             {
                 const cached =
@@ -933,66 +1048,6 @@ export namespace Namespaces
             return 'FUNCTION';
         }
 
-        /** @name        #mirror
-         *  @private
-         *  @param       {SchemaType} d The Success descriptor to mirror into customElements.
-         *  @returns     {void}
-         *  @description Registers a native customElements mirror for a Custom type, but ONLY when the
-         *               tag is a valid HTML autonomous custom element AND the author opts in via
-         *               `Constructor.CE === true`. The mirror is a thin `HTMLElement` subclass whose
-         *               reactive callbacks forward to the user element and whose constructor upgrades
-         *               the instance through `Upgrade` — idempotent by Upgrade's structural guard, so
-         *               no depth counter is needed. The mirror class is stored on `d.Native` (distinct
-         *               from `d.Constructor`, the user class). No-op off-DOM, for non-HTML namespaces,
-         *               for tags that don't opt in, or when the tag is already registered by someone
-         *               else (logged). Only the `html` namespace mirrors: SVG/MathML customs render
-         *               via createElementNS, not via customElements.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license)
-         */
-        RegisterNativeCustomElement(d: SchemaType): void
-        {
-            const t                      = d.Tags[0];
-            const b   = d.Interface;
-            const h= globalThis.HTMLElement;
-
-            /* Opt-in + HTML-compliance gate: html namespace, autonomous custom tag, base is HTMLElement, CE===true */
-            const compliant = this.Name === 'html' && !this.NS
-                && typeof customElements !== 'undefined'
-                && typeof h === 'function'
-                && b === (h as unknown as Constructor)
-                && t.includes('-') && /^[a-z][a-z0-9._-]*$/.test(t)
-                && (d.Constructor as { CE?: boolean } | null)?.CE === true;
-            if (!compliant) return;
-
-            /* Already registered elsewhere → warn if it isn't our own mirror, then leave it */
-            const already = customElements.get(t);
-            if (already)
-            {
-                if (already !== (d as { Native?: unknown }).Native)
-                    console.warn(`[arianna] <${t}> already registered in customElements by another constructor.`); return; }
-
-            try
-            {
-                const ns = this;
-                const Native = class extends h
-                {
-                    /* Structural idempotency in Upgrade makes a depth counter unnecessary */
-                    constructor() { super(); ns.Upgrade(this, d); }
-                    connectedCallback()    { (this as { onConnected?: () => void }).onConnected?.(); }
-                    disconnectedCallback() { (this as { onDisconnected?: () => void }).onDisconnected?.(); }
-                    adoptedCallback()      { (this as { onAdopted?: () => void }).onAdopted?.(); }
-                    attributeChangedCallback(n: string, o: string | null, v: string | null)
-                    { (this as { onAttributeChanged?: (n: string, o: string | null, v: string | null) => void }).onAttributeChanged?.(n, o, v); }
-                    static get observedAttributes(): string[] { return (d as { ObservedAttributes?: string[] }).ObservedAttributes ?? []; }
-                };
-                customElements.define(t, Native as unknown as CustomElementConstructor);
-                (d as { Native?: unknown }).Native = Native;
-            }
-            catch (e) { console.warn(`[arianna] customElements mirror skipped for <${t}>:`, e); }
-        }
-
         /** @name        patch
          *  @private
          *  @param       {string} name The native interface name to wrap on `window` (e.g. `'HTMLDivElement'`).
@@ -1021,7 +1076,6 @@ export namespace Namespaces
                 const np  = (idl as { prototype: object }).prototype;
                 const ns  = this;
                 const nsd = this.NS;
-                const uri = this.Uri;
                 const nx  = idl as unknown;
 
                 const wrapped = function(this: Element): Element
@@ -1034,11 +1088,16 @@ export namespace Namespaces
 
                     let t: string = tag;
                     let p: object = np;
+                    let logicalTag: string | undefined;
 
                     if(xd)
                     {
                         /* Splice the most-derived user prototype; climb to the nearest ancestor owning a
-                           Custom tag so HTML mints under it (SVG/MathML always mint the native base tag) */
+                           Custom tag so HTML mints under it (SVG/MathML always mint the native base tag).
+
+                           A non-hyphenated logical HTML tag cannot be minted natively without producing an
+                           HTMLUnknownElement. AriannA therefore separates LOGICAL tag from WIRE tag in that
+                           one case: a real <div> is minted and data-arianna-tag preserves the logical name. */
                         const xc = x as new (...a: unknown[]) => Element;
                         p = xc.prototype ?? np;
 
@@ -1048,15 +1107,16 @@ export namespace Namespaces
                             {
                                 const cd = ns.GetDescriptor(c as Base);
                                 if(cd && cd.Custom && cd.Tags[0])
-                                { t = cd.Tags[0]; break; }
+                                {
+                                    logicalTag = cd.Tags[0].toLowerCase();
+                                    t = logicalTag.includes('-') ? logicalTag : 'div';
+                                    break;
+                                }
                             }
                         }
                     }
 
                     const ao = (x as unknown as { Adopt?: Element } | undefined)?.Adopt;
-                    const cs = document.createElementNS.bind(document);
-                    const ce = document.createElement.bind(document);
-                    const el = (nsd && uri) ? cs(uri, t) : ce(t);
 
                     /** @description Install the type class on the freshly minted element.
                      *
@@ -1087,16 +1147,25 @@ export namespace Namespaces
                             if(md && md.Custom && md.Name && node.classList)
                             {
                                 node.classList.add(md.Name);
+
+                                const logical = logicalTag ?? md.Tags?.[0]?.toLowerCase();
+                                if(logical && node.localName.toLowerCase() !== logical)
+                                {
+                                    node.setAttribute('data-arianna-tag', logical);
+                                }
                             }
                         }
 
                         return node;
                     };
 
+                    /* Adopt is the existing-node path used by Upgrade: never mint a second node. */
                     if(ao)
                     {
                         return mark(Object.setPrototypeOf(ao, p) as Element);
                     }
+
+                    const el = Namespace.NativeCreate(ns, t);
 
                     return mark(Object.setPrototypeOf(el, p) as Element);
                 };
@@ -1176,10 +1245,9 @@ export namespace Namespaces
          *               does NOT do: it does not go through `Upgrade`. Construction and discovery remain
          *               separate paths, while user initialization belongs to the declared constructor/body.
          *
-         *               A standard tag is minted and returned as it is. Upgrade would not touch it anyway,
-         *               and a custom already mirrored into `customElements` ran its own registered
-         *               constructor during `createElement` — hence `Custom && !Native`, which is the exact
-         *               set of nodes nobody has touched yet.
+         *               A standard tag is minted and returned as it is. Upgrade does not participate in
+         *               standard-element construction. Custom FUNCTION forms run their body here after the
+         *               node has been minted and its prototype installed.
          *
          *               Two namespace rules. Which of createElement / createElementNS to use is read from the
          *               `NS` flag, never from the namespace name: the flag is declared for exactly this and
@@ -1213,7 +1281,6 @@ export namespace Namespaces
                     {
                         const cu = d.Custom;
                         const dl = d.Declaration;
-                        const dn = d.Native;
                         const dp = d.Prototype;
                         const di = d.Interface;
                         const c  = d.Constructor;
@@ -1226,24 +1293,39 @@ export namespace Namespaces
                         }
 
                         let tag = t || d.Tags[0];
+                        let logicalTag: string | undefined;
 
                         if(cu && typeof di === 'function')
                         {
                             const bd = ns.GetDescriptor(di);
+                            logicalTag = d.Tags[0]?.toLowerCase();
 
                             if(bd && bd.Tags[0] && (ns.NS || bd.Name !== 'HTMLElement'))
                             {
                                 tag = bd.Tags[0];
                             }
+                            else if
+                            (
+                                bd &&
+                                bd.Name === 'HTMLElement' &&
+                                logicalTag &&
+                                !logicalTag.includes('-')
+                            )
+                            {
+                                tag = 'div';
+                            }
                         }
 
                         if(tag)
                         {
-                            const el = ns.NS && ns.Uri ?
-                                document.createElementNS(ns.Uri, tag) :
-                                document.createElement(tag);
+                            const el = Namespace.NativeCreate(ns, tag);
 
-                            if (cu && !dn && dl === 'FUNCTION' && dp && cf)
+                            if(cu && logicalTag && el.localName.toLowerCase() !== logicalTag)
+                            {
+                                el.setAttribute('data-arianna-tag', logicalTag);
+                            }
+
+                            if (cu && dl === 'FUNCTION' && dp && cf)
                             {
                                 Object.setPrototypeOf(el, dp);
                                 el.classList.add(d.Name);
@@ -1275,9 +1357,11 @@ export namespace Namespaces
          *               Reserve → Promote lifecycle. Builds a COMPLETE descriptor minus the two fields
          *               that depend on the live class — `Prototype` and `Chain`, left `null`/`[]` for
          *               Promote to fill — commits it under both the Interfaces (by name) and Tags (by
-         *               tag) indices, and returns it in State `'Pending'` (`Defined: false`). Does NOT
-         *               splice prototypes, register a customElements mirror, or touch the DOM: that is
-         *               Promote's runtime work. Every guard must pass or the whole call yields `false`,
+         *               tag) indices. AriannA owns custom registration itself; Reserve does not touch
+         *               any browser custom-element registry. It still does NOT splice prototypes,
+         *               upgrade/scan DOM nodes or dispatch lifecycle:
+         *               those remain Promote/MutationObserver responsibilities. Every guard
+         *               must pass or the whole call yields `false`,
          *               gracefully, with nothing written:
          *                 • name — the constructor has a real, identifier-shaped name (not empty,
          *                   not `'anonymous'`), so anonymous classes can't collapse onto one key;
@@ -1536,7 +1620,7 @@ export namespace Namespaces
                                                 Type        : 'CUSTOM',
                                                 Standard    : false,
                                                 Custom      : true,
-                                                Component   : false,
+                                                Component   : o.Component === true,
                                                 Native      : false,
 
                                                 State       : 'Pending',
@@ -1549,13 +1633,42 @@ export namespace Namespaces
                                                 Render      : render as rdt,
                                                 Brokers     : brokers as brt,
 
-                                                Properties  : null,
+                                                Properties  :
+                                                    (
+                                                        Array.isArray
+                                                        (
+                                                            (
+                                                                o as unknown as
+                                                                {
+                                                                    Properties?: unknown;
+                                                                }
+                                                            ).Properties
+                                                        )
+                                                            ?
+                                                            (
+                                                                (
+                                                                    o as unknown as
+                                                                    {
+                                                                        Properties: unknown[];
+                                                                    }
+                                                                ).Properties
+                                                                    .map(value => String(value))
+                                                            )
+                                                            : null
+                                                    ) as SchemaType['Properties'],
+
                                                 Methods     : null
                                             };
 
+                                        /* Reserve owns registration only: commit the AriannA descriptor first,
+                                         * then mirror standards-compliant autonomous HTML names into the browser
+                                         * CustomElementRegistry. No Upgrade, DOM scan, lifecycle callback, timer,
+                                         * microtask or replay belongs here. */
                                         this.Custom.set(n, descriptor);
                                         this.CacheDescriptor(descriptor);
                                         this.Custom.Tags.set(t, descriptor);
+
+                                        /* AriannA owns custom types entirely; no browser registry side-channel. */
 
                                         return descriptor;
                                     }
@@ -1574,14 +1687,15 @@ export namespace Namespaces
          *  @param       {SchemaType} d The Pending descriptor produced by `#Reserve`.
          *  @returns     {SchemaType | false} The completed descriptor (State 'Success'), or
          *               `false` when the descriptor is not promotable or the class chain is invalid.
-         *  @description Second phase of `Define`, and the ONLY side-effecting one: everything that
-         *               touches the DOM lives here, so `#Reserve` stays pure and SSR-safe. Splices the
+         *  @description Second phase of `Define`. Reserve has already committed the descriptor and,
+         *               for a valid autonomous HTML name, registered its inert native bridge. Promote splices the
          *               user prototype onto the native base (CLASS forms are validated in place,
          *               FUNCTION forms are grafted), fills what Reserve left empty — `Prototype` and
          *               `Chain` — flips `State` 'Pending' → 'Success' and `Defined` false → true, then
-         *               performs the go-live effects: registers the customElements mirror, injects the
-         *               compiled `Css` as a scoped `<style>`, retro-upgrades matching nodes already in
-         *               the document, and fires 'Defined'.
+         *               performs the go-live effects owned by Namespace: injects the compiled `Css` as a
+         *               scoped `<style>` and fires 'Defined'. Existing/late DOM nodes are deliberately not
+         *               scanned here: Core.Observer buffers unknown custom tags during boot and Bootstrap()
+         *               flushes them after definition-bearing bundles have loaded.
          *
          *               CONTRACT: `#Reserve` has already rejected cycles and ancestor relationships
          *               between base and constructor prototypes. That check is NOT repeated here — the
@@ -1684,59 +1798,26 @@ export namespace Namespaces
             d.State     = 'Success';
             d.Defined   = true;
 
-            /* ── EVENT HELPER ─────────────────────────────────────────────────────────── */
-            const fire = (type: string, detail: unknown): void =>
+            /* ── DEFINITION EVENT ─────────────────────────────────────────────────────
+             * Core's markup bridge is a DOM concern, therefore its definition signal is
+             * always a native CustomEvent. Never switch transport depending on whether
+             * the optional Events service happened to be installed at bootstrap time. */
+            const fireDefined = (detail: unknown): void =>
             {
-                if (typeof document === 'undefined') return;
+                if(typeof document === 'undefined') return;
 
-                if (Services.Events)
-                {
-                    try
-                    {
-                        Services.Events.Fire
-                        (
-                            document,
-                            {
-                                Type       : type,
-                                Detail     : detail,
-                                Cancelable : false
-                            }
-                        );
-                    }
-                    catch (e) { console.warn(em + ` event failed for <${t}>:`, e); }
-                    return;
-                }
+                const CE = document.defaultView?.CustomEvent ?? globalThis.CustomEvent;
+                if(typeof CE !== 'function') return;
 
-                const CE =
-                    document.defaultView?.CustomEvent ??
-                    globalThis.CustomEvent;
-
-                if (typeof CE === 'function')
-                {
-                    try
-                    {
-                        document.dispatchEvent
-                        (
-                            new CE
-                            (
-                                type,
-                                {
-                                    detail,
-                                    bubbles    : true,
-                                    cancelable : false
-                                }
-                            )
-                        );
-                    }
-                    catch (e) { console.warn(em + ` event failed for <${t}>:`, e); }
-                }
+                document.dispatchEvent
+                (
+                    new CE
+                    (
+                        'Defined',
+                        { detail, bubbles: false, cancelable: false }
+                    )
+                );
             };
-
-            /* ── NATIVE CUSTOM-ELEMENT MIRROR ───────────────────────────────────────────
-             * PatchIDL remains the construction mechanism.
-             * RegisterNativeCustomElement only mirrors descriptors that explicitly opt in.
-             */
-            this.RegisterNativeCustomElement(d);
 
             /* ── DOM GO-LIVE ──────────────────────────────────────────────────────────── */
             if (typeof document !== 'undefined')
@@ -1759,13 +1840,10 @@ export namespace Namespaces
                     catch {}
                 }
 
-                const nodes = document.getElementsByTagName(t);
-
-                for (const node of Array.from(nodes)) { this.Upgrade(node, d) };
             }
 
             /* ── DEFINED EVENT ────────────────────────────────────────────────────────── */
-            fire('Defined', { Descriptor: d } );
+            fireDefined({ Descriptor: d });
 
             return d;
         }
@@ -1857,6 +1935,7 @@ export namespace Namespaces
                     ['render',     'Render'],
                     ['template',   'Template'],
                     ['slot',       'Slot'],
+                    ['properties', 'Properties'],
                     ['component',  'Component']
                 ]
             );
@@ -1999,6 +2078,17 @@ export namespace Namespaces
 
             if(!d || !d.Custom) return node;
 
+            /*
+             * MARKUP UPGRADE IS IN-PLACE.
+             *
+             * Parser-created AriannA tags may initially be HTMLUnknownElement objects.
+             * AriannA's contract is identity-preserving: Upgrade() promotes the SAME
+             * node by splicing the custom prototype; it never replaces the host.
+             *
+             * Replacing the parser placeholder here breaks every caller that already
+             * holds the markup node (Playground included) and makes that reference
+             * remain HTMLUnknownElement forever.
+             */
             Namespace.#pending.add(node);
 
             try
@@ -2035,23 +2125,6 @@ export namespace Namespaces
                             console.warn(`[arianna] FUNCTION body failed for <${d.Tags[0]}>:`, e);
                         }
                     }
-                    else if(d.Declaration === 'CLASS' && typeof d.Constructor === 'function')
-                    {
-                        const nt = function Adopted() { } as unknown as IDL & { Adopt: Element };
-
-                        nt.prototype = pr;
-                        nt.Adopt     = node;
-
-                        try
-                        {
-                            Reflect.construct(d.Constructor, [], nt);
-                        }
-                        catch(e)
-                        {
-                            console.warn(`[arianna] CLASS constructor failed for <${d.Tags[0]}>:`, e);
-                        }
-                    }
-
                     for(const [n, v] of na)
                     {
                         node.setAttribute(n, v);
@@ -2108,6 +2181,8 @@ export namespace Namespaces
             if (this._initialized) return;
             this._initialized = true;
             if (typeof window === 'undefined') return;
+
+            Namespace.PatchDocumentCreateElement();
 
             const win = window as unknown as Record<string, unknown>;
 

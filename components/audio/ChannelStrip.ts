@@ -1,1046 +1,577 @@
 /**
- * @module    components/audio/ChannelStrip
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA ChannelStrip component module.
+ * @module components/audio/ChannelStrip
+ * @version 2.0.0
  */
-
-import { Component, Css, Reactivity } from '../../core/index.ts';
+import { Component, Css, Templates } from '../../core/index.ts';
 import { AudioComponent as AudioComponentModule } from './AudioComponent.ts';
 
-type AudioComponentOptions = AudioComponentModule.AudioComponentOptions;
-import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+const html = Templates.Template.Html;
 
-/** @namespace   ChannelStrip
- *  @public
- *  @description Namespace containing ChannelStrip contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 export namespace ChannelStrip
 {
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Types
     {
-        /** @name        Signal
-         *  @public
-         *  @type        {SchemaInterfaces.Reactivity.Signal<T>}
-         *  @description Type alias for Signal.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
-
-        /** @name        Rule
-         *  @public
-         *  @type        {Css.Rule}
-         *  @description Type alias for Rule.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Rule = Css.Rule;
-
-        /** @name        Stylesheet
-         *  @public
-         *  @type        {Css.Stylesheet}
-         *  @description Type alias for Stylesheet.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Stylesheet = Css.Stylesheet;
+        export type Theme = 'dark' | 'light';
     }
 
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Interfaces
     {
-        /** @interface   ChannelStripOptions
-         *  @public
-         *  @description ChannelStripOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface ChannelStripOptions extends AudioComponentOptions
+        export interface ChannelStripOptions extends AudioComponentModule.AudioComponentOptions
         {
-            /** @name        name
-             *  @public
-             *  @type        {string}
-             *  @description Component member for name.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             name?: string;
-
-            /** @name        gain
-             *  @public
-             *  @type        {number}
-             *  @description Component member for gain.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            gain?: number; // 0..1 (or higher for >0dB)
-            /** @name        pan
-             *  @public
-             *  @type        {number}
-             *  @description Component member for pan.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            pan?: number; // -1..1
-            /** @name        muted
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for muted.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
+            gain?: number;
+            pan?: number;
             muted?: boolean;
-
-            /** @name        soloed
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for soloed.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             soloed?: boolean;
-
-            /** @name        meter
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for meter.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            meter?: boolean; // default true
+            meter?: boolean;
+            color?: string;
+            theme?: Types.Theme;
+            pre?: number;
+            eq?: number;
+            comp?: number;
+            insertA?: string;
+            insertB?: string;
+            send?: string;
         }
     }
-    /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
-       members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
-       `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
-       not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
-       returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
-       Map, Effect" with the same name printed twice. */
-    /** @name        signal
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned signal value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
 
-    /** @name        effect
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned effect value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const effect = (fn: () => void): (() => void) => {
-        /** @name        e
-         *  @public
-         *  @type        {inferred}
-         *  @description Namespace-owned e value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        const e = Reactivity.CreateEffect(fn);
-        return () => e.Stop();
-    };
+    export const Styles = new Css.Stylesheet([
+        new Css.Rule('.ChannelStrip', {
+            '--ChannelStrip-Accent': '#ef8d2f',
+            Background: '#24282c', Border: '1px solid #0d0f11', BorderRadius: '4px',
+            BoxShadow: 'inset 0 1px 0 rgba(255,255,255,.05), 0 2px 6px rgba(0,0,0,.35)',
+            BoxSizing: 'border-box', Color: '#dfe3e7', Display: 'grid', FontFamily: 'var(--arianna-font, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)',
+            GridTemplateRows: '5px auto auto auto auto 1fr auto auto', MinHeight: '430px', Overflow: 'hidden', Width: '92px'
+        }),
+        new Css.Rule('.ChannelStrip-Color', { Background: 'var(--ChannelStrip-Accent)', Height: '5px' }),
+        new Css.Rule('.ChannelStrip-Header', {
+            Background: 'linear-gradient(180deg,#34393e,#292d31)', BorderBottom: '1px solid #14171a',
+            BoxSizing: 'border-box', MinHeight: '38px', Padding: '6px 5px'
+        }),
+        new Css.Rule('.ChannelStrip-Name', {
+            Color: '#eef1f4', FontSize: '10px', FontWeight: '700', Overflow: 'hidden', TextAlign: 'center', TextOverflow: 'ellipsis', WhiteSpace: 'nowrap'
+        }),
+        new Css.Rule('.ChannelStrip-Inserts', { BorderBottom: '1px solid #15181a', Display: 'grid', Gap: '2px', Padding: '4px' }),
+        new Css.Rule('.ChannelStrip-Insert', {
+            Background: '#171a1d', Border: '1px solid #353a3f', BorderRadius: '2px', Color: '#8e979f',
+            Appearance: 'none', Cursor: 'pointer', FontSize: '8px', Height: '19px', LineHeight: '17px', Overflow: 'hidden', Padding: '0 16px 0 4px', TextOverflow: 'ellipsis', WhiteSpace: 'nowrap', Width: '100%'
+        }),
+        new Css.Rule('.ChannelStrip-Console', {
+            BorderBottom: '1px solid #15181a', Display: 'grid', Gap: '5px', GridTemplateColumns: 'repeat(3,1fr)', Padding: '7px 5px'
+        }),
+        new Css.Rule('.ChannelStrip-Module', { Display: 'grid', Gap: '3px', JustifyItems: 'center' }),
+        new Css.Rule('.ChannelStrip-Knob', {
+            Background: 'radial-gradient(circle at 42% 38%,#71777d 0 12%,#474c51 13% 42%,#202428 43% 68%,#111315 69% 100%)',
+            Border: '1px solid #090b0c', BorderRadius: '50%', BoxShadow: 'inset 0 1px 1px rgba(255,255,255,.13),0 1px 1px rgba(0,0,0,.55)', Cursor: 'ns-resize', Height: '20px', Position: 'relative', TouchAction: 'none', Width: '20px'
+        }),
+        new Css.Rule('.ChannelStrip-Knob::after', { Background: '#d9dde0', Content: '""', Height: '7px', Left: '9px', Position: 'absolute', Top: '2px', Transform: 'rotate(var(--ChannelStrip-KnobAngle,-135deg))', TransformOrigin: '50% 8px', Width: '1px' }),
+        new Css.Rule('.ChannelStrip-ModuleLabel', { Color: '#737c84', Font: '700 7px/1 var(--arianna-font,system-ui,sans-serif)', LetterSpacing: '.03em' }),
+        new Css.Rule('.ChannelStrip-PanArea', { BorderBottom: '1px solid #15181a', Display: 'grid', Gap: '4px', JustifyItems: 'center', Padding: '7px 4px' }),
+        new Css.Rule('.ChannelStrip-Pan', {
+            AccentColor: '#4b9ee9', Cursor: 'pointer', Height: '14px', Width: '72px'
+        }),
+        new Css.Rule('.ChannelStrip-PanValue', { Color: '#8d969f', Font: '9px/1 ui-monospace, SFMono-Regular, Menlo, monospace' }),
+        new Css.Rule('.ChannelStrip-Main', {
+            AlignItems: 'stretch', Display: 'grid', Gap: '4px', GridTemplateColumns: '12px 1fr 12px', MinHeight: '188px', Padding: '7px 5px 4px'
+        }),
+        new Css.Rule('.ChannelStrip-Meter', {
+            Background: '#0e1113', Border: '1px solid #090a0b', BorderRadius: '2px', BoxShadow: 'inset 0 0 3px rgba(0,0,0,.8)', Overflow: 'hidden', Position: 'relative'
+        }),
+        new Css.Rule('.ChannelStrip-MeterFill', {
+            Background: 'linear-gradient(to top,#37c851 0%,#7bd341 70%,#e4cf3c 86%,#e05945 100%)', Bottom: '0', Left: '1px', Position: 'absolute', Right: '1px', Transition: 'height .06s linear'
+        }),
+        new Css.Rule('.ChannelStrip-FaderWrap', {
+            AlignItems: 'center', Display: 'flex', JustifyContent: 'center', Position: 'relative'
+        }),
+        new Css.Rule('.ChannelStrip-FaderRail', {
+            Background: '#0f1113', BorderRadius: '1px', Bottom: '8px', BoxShadow: 'inset 0 0 0 1px #090a0b', Left: '50%', Position: 'absolute', Top: '8px', Transform: 'translateX(-50%)', Width: '3px'
+        }),
+        new Css.Rule('.ChannelStrip-Fader', {
+            Appearance: 'none', Background: 'transparent', Cursor: 'pointer', Direction: 'rtl', Height: '174px', Padding: '0', Position: 'relative', WebkitAppearance: 'none', Width: '28px', WritingMode: 'vertical-lr', ZIndex: '2'
+        }),
+        new Css.Rule('.ChannelStrip-Fader::-webkit-slider-runnable-track', {
+            Background: 'transparent', Border: '0', Height: '100%', Width: '3px'
+        }),
+        new Css.Rule('.ChannelStrip-Fader::-webkit-slider-thumb', {
+            WebkitAppearance: 'none',
+            Background: 'linear-gradient(90deg,transparent 0 46%,#676c70 46% 54%,transparent 54% 100%), linear-gradient(180deg,#f2f3f3 0%,#d8dadd 44%,#a7acb0 50%,#d9dcde 56%,#f1f2f2 100%)',
+            Border: '1px solid #565b60', BorderRadius: '1px', BoxShadow: '0 1px 2px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.75)', Height: '12px', Width: '20px'
+        }),
+        new Css.Rule('.ChannelStrip-Fader::-moz-range-track', {
+            Background: 'transparent', Border: '0', Height: '100%', Width: '3px'
+        }),
+        new Css.Rule('.ChannelStrip-Fader::-moz-range-thumb', {
+            Background: 'linear-gradient(90deg,transparent 0 46%,#676c70 46% 54%,transparent 54% 100%), linear-gradient(180deg,#f2f3f3 0%,#d8dadd 44%,#a7acb0 50%,#d9dcde 56%,#f1f2f2 100%)',
+            Border: '1px solid #565b60', BorderRadius: '1px', BoxShadow: '0 1px 2px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.75)', Height: '12px', Width: '20px'
+        }),
+        new Css.Rule('.ChannelStrip-GainValue', {
+            Background: '#141719', Border: '1px solid #0c0e10', BorderRadius: '2px', Color: '#b9c1c8',
+            Font: '9px/1 ui-monospace, SFMono-Regular, Menlo, monospace', Margin: '0 5px 5px', Padding: '5px 3px', TextAlign: 'center'
+        }),
+        new Css.Rule('.ChannelStrip-Buttons', { Display: 'grid', Gap: '3px', GridTemplateColumns: 'repeat(3,1fr)', Padding: '0 5px 5px' }),
+        new Css.Rule('.ChannelStrip-Button', {
+            Appearance: 'none', Background: 'linear-gradient(180deg,#383d42,#292d31)', Border: '1px solid #111315', BorderRadius: '2px',
+            BoxShadow: 'inset 0 1px 0 rgba(255,255,255,.05)', Color: '#b9c0c6', Cursor: 'pointer', Font: '700 9px/1 var(--arianna-font,system-ui,sans-serif)', Height: '22px', Padding: '0'
+        }),
+        new Css.Rule('.ChannelStrip-Button[data-active="true"][data-action="mute"]', { Background: '#f0b62b', BorderColor: '#b9830d', Color: '#211a08' }),
+        new Css.Rule('.ChannelStrip-Button[data-active="true"][data-action="solo"]', { Background: '#76c85c', BorderColor: '#3f8d2b', Color: '#0e2209' }),
+        new Css.Rule('.ChannelStrip-Button[data-active="true"][data-action="record"]', { Background: '#d95148', BorderColor: '#9d2d27', Color: '#fff' }),
+        new Css.Rule('.ChannelStrip-Footer', {
+            Background: 'linear-gradient(180deg,#2c3034,#202427)', BorderTop: '1px solid #111315', Color: '#9ca4ab', FontSize: '9px', Padding: '5px', TextAlign: 'center'
+        }),
+        new Css.Rule('.ChannelStrip[theme="light"]', {
+            Background: '#e7e9eb', BorderColor: '#aeb4ba', BoxShadow: 'inset 0 1px 0 #fff, 0 2px 6px rgba(0,0,0,.12)', Color: '#2b3035'
+        }),
+        new Css.Rule('.ChannelStrip[theme="light"] .ChannelStrip-Header', {
+            Background: 'linear-gradient(180deg,#fafafa,#d9dde0)', BorderBottomColor: '#bfc4c8'
+        }),
+        new Css.Rule('.ChannelStrip[theme="light"] .ChannelStrip-Name', { Color: '#24282c' }),
+        new Css.Rule('.ChannelStrip[theme="light"] .ChannelStrip-Insert', { Background: '#f6f7f8', BorderColor: '#c6cbd0', Color: '#697077' }),
+        new Css.Rule('.ChannelStrip[theme="light"] .ChannelStrip-Knob', { Background: 'radial-gradient(circle at 42% 38%,#9ca2a8 0 12%,#70767c 13% 42%,#464b50 43% 68%,#2a2e32 69% 100%)', BorderColor: '#aeb4b9' }),
+        new Css.Rule('.ChannelStrip[theme="light"] .ChannelStrip-ModuleLabel', { Color: '#6d747b' }),
+        new Css.Rule('.ChannelStrip[theme="light"] .ChannelStrip-GainValue', { Background: '#fff', BorderColor: '#c4c9ce', Color: '#3f474e' }),
+        new Css.Rule('.ChannelStrip[theme="light"] .ChannelStrip-Button', { Background: 'linear-gradient(180deg,#fff,#dfe2e5)', BorderColor: '#b8bdc2', Color: '#41474c' }),
+        new Css.Rule('.ChannelStrip[theme="light"] .ChannelStrip-Footer', { Background: 'linear-gradient(180deg,#e1e4e7,#cfd3d6)', BorderTopColor: '#b8bdc2', Color: '#5d646a' })
+    ]);
 
-    /** @name        { Rule, Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Rule, Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const { Rule, Stylesheet } = Css;
-
-    /** @class       ChannelStrip
-     *  @public
-     *  @description AriannA ChannelStrip component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
+    @Component('arianna-channel-strip', Styles, {
+        Shadow: false,
+        Attributes: ['name', 'gain', 'pan', 'muted', 'soloed', 'meter', 'color', 'theme']
+    })
     export class ChannelStrip extends AudioComponentModule.AudioComponent
     {
-        /** @name        tag
-         *  @public
-         *  @readonly
-         *  @static
-         *  @type        {unknown}
-         *  @description Component member for tag.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static readonly tag = 'arianna-channel-strip';
+        public static readonly Styles = Styles;
+        public template = html``;
+        public static readonly tag = 'arianna-channel-strip';
 
-        /** @name        gain$
-         *  @public
-         *  @readonly
-         *  @type        {ChannelStrip.Types.Signal<number>}
-         *  @description Component member for gain$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly gain$: Types.Signal<number> = signal(1);
+        private GainNode?: GainNode;
+        private PanNode?: StereoPannerNode;
+        private Analyser?: AnalyserNode;
+        private LeftMeter?: HTMLElement;
+        private RightMeter?: HTMLElement;
+        private Fader?: HTMLInputElement;
+        private Pan?: HTMLInputElement;
+        private GainReadout?: HTMLElement;
+        private PanReadout?: HTMLElement;
+        private ModuleValues: Record<string, number> = { PRE: .5, EQ: .5, COMP: .5 };
+        private InsertValues: Record<string, string> = { 'INSERT A': 'None', 'INSERT B': 'None', SEND: 'None' };
+        private InsertNodes = new Map<'INSERT A' | 'INSERT B', AudioNode>();
+        private SendNode?: AudioNode;
+        private SendGain?: GainNode;
+        private Raf = 0;
 
-        /** @name        pan$
-         *  @public
-         *  @readonly
-         *  @type        {ChannelStrip.Types.Signal<number>}
-         *  @description Component member for pan$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly pan$: Types.Signal<number> = signal(0);
-
-        /** @name        muted$
-         *  @public
-         *  @readonly
-         *  @type        {ChannelStrip.Types.Signal<boolean>}
-         *  @description Component member for muted$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly muted$: Types.Signal<boolean> = signal(false);
-
-        /** @name        soloed$
-         *  @public
-         *  @readonly
-         *  @type        {ChannelStrip.Types.Signal<boolean>}
-         *  @description Component member for soloed$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly soloed$: Types.Signal<boolean> = signal(false);
-
-        /** @name        #gain
-         *  @public
-         *  @type        {GainNode}
-         *  @description Component member for gain.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #gain?: GainNode;
-
-        /** @name        #pan
-         *  @public
-         *  @type        {StereoPannerNode}
-         *  @description Component member for pan.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #pan?: StereoPannerNode;
-
-        /** @name        #analyser
-         *  @public
-         *  @type        {AnalyserNode}
-         *  @description Component member for analyser.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #analyser?: AnalyserNode;
-
-        /** @name        #meterL
-         *  @public
-         *  @type        {HTMLDivElement}
-         *  @description Component member for meter L.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #meterL?: HTMLDivElement;
-
-        /** @name        #meterR
-         *  @public
-         *  @type        {HTMLDivElement}
-         *  @description Component member for meter R.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #meterR?: HTMLDivElement;
-
-        /** @name        #meterRaf
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for meter Raf.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #meterRaf = 0;
-
-        /** @name        constructor
-         *  @public
-         *  @type        {constructor}
-         *  @description Constructs the component for constructor.
-         *  @param       {ChannelStrip.Interfaces.ChannelStripOptions} opts Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        constructor(opts: Interfaces.ChannelStripOptions = {})
+        constructor(options: Interfaces.ChannelStripOptions = {})
         {
-            super(opts as never);
-
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-            };
-
-            /** @name        el
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned el value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const el = self.render();
-            if (opts.name)
-                el.setAttribute('name', opts.name);
-            if (opts.gain != null)
-                el.setAttribute('gain', String(opts.gain));
-            if (opts.pan != null)
-                el.setAttribute('pan', String(opts.pan));
-            if (opts.muted)
-                el.setAttribute('muted', '');
-            if (opts.soloed)
-                el.setAttribute('soloed', '');
-            if (opts.meter === false)
-                el.setAttribute('meter', 'false');
-            if (opts.gain != null)
-                this.gain$.Set(opts.gain);
-            if (opts.pan != null)
-                this.pan$.Set(opts.pan);
-            if (opts.muted)
-                this.muted$.Set(true);
-            if (opts.soloed)
-                this.soloed$.Set(true);
+            super(options);
+            this.EnsureState();
+            if(options.name) this.setAttribute('name', options.name);
+            if(options.gain != null) this.setAttribute('gain', String(options.gain));
+            if(options.pan != null) this.setAttribute('pan', String(options.pan));
+            if(options.muted) this.setAttribute('muted', '');
+            if(options.soloed) this.setAttribute('soloed', '');
+            if(options.meter != null) this.setAttribute('meter', String(options.meter));
+            if(options.color) this.setAttribute('color', options.color);
+            if(options.theme) this.setAttribute('theme', options.theme);
+            if(options.pre != null) this.ModuleValues.PRE = this.Clamp01(options.pre);
+            if(options.eq != null) this.ModuleValues.EQ = this.Clamp01(options.eq);
+            if(options.comp != null) this.ModuleValues.COMP = this.Clamp01(options.comp);
+            if(options.insertA) this.InsertValues['INSERT A'] = options.insertA;
+            if(options.insertB) this.InsertValues['INSERT B'] = options.insertB;
+            if(options.send) this.InsertValues.SEND = options.send;
         }
 
-        /** @name        onConnected
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Connected.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onConnected(): void
+        public onCreated(): void
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-
-                /** @name        fire
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for fire.
-                 *  @param       {string} t Parameter.
-                 *  @param       {CustomEventInit} init Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                fire(t: string, init?: CustomEventInit): void;
-
-                /** @name        signal
-                 *  @public
-                 *  @type        {{
-                    attribute(name: string): ChannelStrip.Types.Signal<string | null>;
-                }}
-                 *  @description Component member for signal.
-                 *  @returns     {{
-                    attribute(name: string): ChannelStrip.Types.Signal<string | null>;
-                }} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                signal():
-                {
-                    /** @name        attribute
-                     *  @public
-                     *  @type        {ChannelStrip.Types.Signal<string | null>}
-                     *  @description Component member for attribute.
-                     *  @param       {string} name Parameter.
-                     *  @returns     {ChannelStrip.Types.Signal<string | null>} Result.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    attribute(name: string): Types.Signal<string | null>;
-                };
-
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {ChannelStrip.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            };
-
-            /** @name        root
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned root value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const root = self.render();
-            if (root.querySelector('.cs-wrap'))
-                return;
-
-            /** @name        wrap
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned wrap value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const wrap = document.createElement('div');
-            wrap.className = 'cs-wrap';
-            // Label
-            /** @name        label
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned label value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const label = document.createElement('div');
-            label.className = 'cs-label';
-
-            /** @name        sName
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned sName value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const sName = self.signal().attribute('name');
-            effect(() => { label.textContent = sName?.Get() ?? 'Channel'; });
-            // VU meter (stereo, vertical)
-            /** @name        meter
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned meter value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const meter = document.createElement('div');
-            meter.className = 'cs-meter';
-
-            /** @name        meterL
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned meterL value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const meterL = document.createElement('div');
-            meterL.className = 'cs-meter-bar cs-meter-l';
-
-            /** @name        meterR
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned meterR value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const meterR = document.createElement('div');
-            meterR.className = 'cs-meter-bar cs-meter-r';
-            meter.appendChild(meterL);
-            meter.appendChild(meterR);
-            this.#meterL = meterL;
-            this.#meterR = meterR;
-            // Gain fader (vertical slider)
-            /** @name        gainWrap
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned gainWrap value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const gainWrap = document.createElement('div');
-            gainWrap.className = 'cs-fader-wrap';
-
-            /** @name        gainLabel
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned gainLabel value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const gainLabel = document.createElement('span');
-            gainLabel.className = 'cs-fader-label';
-            gainLabel.textContent = 'GAIN';
-
-            /** @name        gain
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned gain value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const gain = document.createElement('input') as HTMLInputElement;
-            gain.type = 'range';
-            gain.className = 'cs-gain';
-            gain.min = '0';
-            gain.max = '1500'; // up to +3.5dB (1.5x)
-            gain.step = '1';
-            gain.value = String(Math.round(this.gain$.Get() * 1000));
-
-            /** @name        gainVal
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned gainVal value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const gainVal = document.createElement('span');
-            gainVal.className = 'cs-fader-val';
-            gainWrap.appendChild(gainLabel);
-            gainWrap.appendChild(gain);
-            gainWrap.appendChild(gainVal);
-            // Pan knob
-            /** @name        panWrap
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned panWrap value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const panWrap = document.createElement('div');
-            panWrap.className = 'cs-pan-wrap';
-
-            /** @name        panLabel
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned panLabel value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const panLabel = document.createElement('span');
-            panLabel.className = 'cs-fader-label';
-            panLabel.textContent = 'PAN';
-
-            /** @name        pan
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned pan value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const pan = document.createElement('input') as HTMLInputElement;
-            pan.type = 'range';
-            pan.className = 'cs-pan';
-            pan.min = '-1000';
-            pan.max = '1000';
-            pan.step = '1';
-            pan.value = String(Math.round(this.pan$.Get() * 1000));
-
-            /** @name        panVal
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned panVal value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const panVal = document.createElement('span');
-            panVal.className = 'cs-fader-val';
-            panWrap.appendChild(panLabel);
-            panWrap.appendChild(pan);
-            panWrap.appendChild(panVal);
-            // Mute / Solo
-            /** @name        btns
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned btns value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const btns = document.createElement('div');
-            btns.className = 'cs-btns';
-
-            /** @name        btnMute
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned btnMute value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const btnMute = document.createElement('button');
-            btnMute.type = 'button';
-            btnMute.className = 'cs-btn cs-mute';
-            btnMute.textContent = 'M';
-            btnMute.setAttribute('aria-label', 'mute');
-
-            /** @name        btnSolo
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned btnSolo value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const btnSolo = document.createElement('button');
-            btnSolo.type = 'button';
-            btnSolo.className = 'cs-btn cs-solo';
-            btnSolo.textContent = 'S';
-            btnSolo.setAttribute('aria-label', 'solo');
-            btns.appendChild(btnMute);
-            btns.appendChild(btnSolo);
-            wrap.appendChild(label);
-            wrap.appendChild(meter);
-            wrap.appendChild(gainWrap);
-            wrap.appendChild(panWrap);
-            wrap.appendChild(btns);
-            root.appendChild(wrap);
-            // Reactive bindings
-            effect(() => {
-                /** @name        g
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned g value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const g = this.gain$.Get();
-                if (gain.value !== String(Math.round(g * 1000)))
-                    gain.value = String(Math.round(g * 1000));
-                gainVal.textContent = g === 0 ? '-∞' : (20 * Math.log10(g)).toFixed(1) + ' dB';
-                if (this.#gain)
-                    this.#gain.gain.value = this.muted$.Get() ? 0 : g;
-            });
-            effect(() => {
-                /** @name        p
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned p value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const p = this.pan$.Get();
-                if (pan.value !== String(Math.round(p * 1000)))
-                    pan.value = String(Math.round(p * 1000));
-
-                /** @name        lbl
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned lbl value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const lbl = p === 0 ? 'C' : (p < 0 ? `L${Math.round(-p * 100)}` : `R${Math.round(p * 100)}`);
-                panVal.textContent = lbl;
-                if (this.#pan)
-                    this.#pan.pan.value = p;
-            });
-            effect(() => {
-                /** @name        m
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned m value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const m = this.muted$.Get();
-                btnMute.classList.toggle('active', m);
-                if (this.#gain)
-                    this.#gain.gain.value = m ? 0 : this.gain$.Get();
-            });
-            effect(() => {
-                btnSolo.classList.toggle('active', this.soloed$.Get());
-            });
-            // Event handlers
-            gain.addEventListener('input', () => {
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = parseInt(gain.value, 10) / 1000;
-                this.gain$.Set(v);
-                self.fire('arianna:strip-gain', { detail: { value: v, source: this }, bubbles: true });
-            });
-            pan.addEventListener('input', () => {
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = parseInt(pan.value, 10) / 1000;
-                this.pan$.Set(v);
-                self.fire('arianna:strip-pan', { detail: { value: v, source: this }, bubbles: true });
-            });
-            btnMute.addEventListener('click', () => {
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = !this.muted$.Get();
-                this.muted$.Set(v);
-                self.fire('arianna:strip-mute', { detail: { value: v, source: this }, bubbles: true });
-            });
-            btnSolo.addEventListener('click', () => {
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = !this.soloed$.Get();
-                this.soloed$.Set(v);
-                self.fire('arianna:strip-solo', { detail: { value: v, source: this }, bubbles: true });
-            });
-            self.Sheet = ChannelStrip.DefaultSheet();
+            if(this.isConnected) this.onConnected();
         }
 
-        /** @name        _buildAudioGraph
-         *  @protected
-         *  @type        {void}
-         *  @description Component member for _build Audio Graph.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+        public onConnected(): void
+        {
+            this.EnsureState();
+            super.onConnected();
+            this.classList.add('ChannelStrip');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            this.style.setProperty('--ChannelStrip-Accent', this.getAttribute('color') || '#ef8d2f');
+            this.Render();
+            this.Sync();
+            if(this.getAttribute('meter') !== 'false') this.MeterLoop();
+        }
+
+        private EnsureState(): void
+        {
+            if(!this.ModuleValues || typeof this.ModuleValues !== 'object')
+                this.ModuleValues = { PRE: .5, EQ: .5, COMP: .5 };
+            if(!this.InsertValues || typeof this.InsertValues !== 'object')
+                this.InsertValues = { 'INSERT A': 'None', 'INSERT B': 'None', SEND: 'None' };
+            if(!(this.InsertNodes instanceof Map)) this.InsertNodes = new Map<'INSERT A' | 'INSERT B', AudioNode>();
+            if(!Number.isFinite(this.Raf)) this.Raf = 0;
+        }
+
         protected _buildAudioGraph(): void
         {
-            this._audioCtx = this._audioCtx ?? AudioComponentModule.AudioComponent.context;
-
-            /** @name        ctx
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned ctx value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const ctx = this._audioCtx;
-            this.#gain = ctx.createGain();
-            this.#pan = ctx.createStereoPanner();
-            this.#analyser = ctx.createAnalyser();
-            this.#analyser.fftSize = 256;
-            this.#gain.gain.value = this.muted$.Get() ? 0 : this.gain$.Get();
-            this.#pan.pan.value = this.pan$.Get();
-            this.#gain.connect(this.#pan);
-            this.#pan.connect(this.#analyser);
-            this._input = this.#gain;
-            this._output = this.#analyser;
-            this.#startMeter();
+            try
+            {
+                this.GainNode = this._audioCtx.createGain();
+                this.PanNode = this._audioCtx.createStereoPanner();
+                this.Analyser = this._audioCtx.createAnalyser();
+                this.Analyser.fftSize = 256;
+                this.SendGain = this._audioCtx.createGain();
+                this.SendGain.gain.value = 1;
+                this._input = this.GainNode;
+                this._output = this.Analyser;
+                this.RewireAudio();
+                this.SyncAudio();
+            }
+            catch {}
         }
 
-        /** @name        #startMeter
-         *  @public
-         *  @type        {void}
-         *  @description Component member for start Meter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #startMeter(): void
+        public get gain(): number { return Number(this.getAttribute('gain') ?? 1); }
+        public set gain(value: number) { this.setAttribute('gain', String(Math.max(0, Math.min(2, value)))); this.Sync(); }
+        public get pan(): number { return Number(this.getAttribute('pan') ?? 0); }
+        public set pan(value: number) { this.setAttribute('pan', String(Math.max(-1, Math.min(1, value)))); this.Sync(); }
+        public get muted(): boolean { return this.hasAttribute('muted'); }
+        public set muted(value: boolean) { this.toggleAttribute('muted', value); this.Sync(); }
+        public get soloed(): boolean { return this.hasAttribute('soloed'); }
+        public set soloed(value: boolean) { this.toggleAttribute('soloed', value); this.Sync(); }
+
+        public get input(): AudioNode | undefined { return this.getInput(); }
+        public get output(): AudioNode | undefined { return this.getOutput(); }
+
+        public setInsertNode(slot: 'INSERT A' | 'INSERT B', node?: AudioNode): this
         {
-            if (!this.#analyser || !this.#meterL || !this.#meterR)
-                return;
+            this.EnsureState();
+            if(node) this.InsertNodes.set(slot, node);
+            else this.InsertNodes.delete(slot);
+            this.RewireAudio();
+            return this;
+        }
 
-            /** @name        buf
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned buf value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const buf = new Float32Array(this.#analyser.fftSize);
+        public setSendNode(node?: AudioNode, amount = 1): this
+        {
+            this.SendNode = node;
+            if(this.SendGain) this.SendGain.gain.value = Math.max(0, Math.min(1, amount));
+            this.RewireAudio();
+            return this;
+        }
 
-            /** @name        tick
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned tick value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const tick = () => {
-                if (!this.#analyser || !this.#meterL || !this.#meterR)
+        public setSendAmount(amount: number): this
+        {
+            if(this.SendGain) this.SendGain.gain.value = Math.max(0, Math.min(1, amount));
+            return this;
+        }
+
+        public getModule(name: 'PRE' | 'EQ' | 'COMP'): number
+        {
+            this.EnsureState();
+            return this.ModuleValues[name] ?? .5;
+        }
+
+        public setModule(name: 'PRE' | 'EQ' | 'COMP', value: number): this
+        {
+            this.EnsureState();
+            const next = this.Clamp01(value);
+            this.ModuleValues[name] = next;
+            const knob = this.querySelector<HTMLElement>(`.ChannelStrip-Knob[data-module="${name}"]`);
+            this.SyncKnob(knob, next);
+            this.Emit('arianna:module', { module: name, value: next });
+            return this;
+        }
+
+        public getSlot(name: 'INSERT A' | 'INSERT B' | 'SEND'): string
+        {
+            this.EnsureState();
+            return this.InsertValues[name] ?? 'None';
+        }
+
+        public setSlot(name: 'INSERT A' | 'INSERT B' | 'SEND', value: string): this
+        {
+            this.EnsureState();
+            this.InsertValues[name] = value || 'None';
+            const select = this.querySelector<HTMLSelectElement>(`.ChannelStrip-Insert[data-slot="${name}"]`);
+            if(select) select.value = this.InsertValues[name];
+            this.Emit(name === 'SEND' ? 'arianna:send' : 'arianna:insert', { slot: name, value: this.InsertValues[name] });
+            return this;
+        }
+
+        private Render(): void
+        {
+            if(this.querySelector(':scope > .ChannelStrip-Color')) return;
+
+            const color = document.createElement('div');
+            color.className = 'ChannelStrip-Color';
+
+            const header = document.createElement('div');
+            header.className = 'ChannelStrip-Header';
+            const name = document.createElement('div');
+            name.className = 'ChannelStrip-Name';
+            name.textContent = this.getAttribute('name') || 'CHANNEL';
+            header.append(name);
+
+            const inserts = document.createElement('div');
+            inserts.className = 'ChannelStrip-Inserts';
+            for(const label of ['INSERT A', 'INSERT B', 'SEND'] as const)
+            {
+                const slot = document.createElement('select');
+                slot.className = 'ChannelStrip-Insert';
+                slot.dataset.slot = label;
+                slot.title = label;
+                const choices = label === 'SEND'
+                    ? ['None', 'Reverb', 'Delay', 'Cue 1', 'Cue 2']
+                    : ['None', 'Compressor', 'EQ', 'Gate', 'Saturator', 'Limiter'];
+                for(const choice of choices)
                 {
-                    this.#meterRaf = 0;
-                    return;
+                    const option = document.createElement('option');
+                    option.value = choice;
+                    option.textContent = choice === 'None' ? label : choice;
+                    slot.append(option);
                 }
-                this.#analyser.getFloatTimeDomainData(buf);
-                // Compute peak (simplified mono — true stereo metering would split L/R)
-                /** @name        peak
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned peak value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                let peak = 0;
-                for (let i = 0; i < buf.length; i++)
+                slot.value = this.InsertValues[label] ?? 'None';
+                slot.addEventListener('change', () => this.setSlot(label, slot.value));
+                inserts.append(slot);
+            }
+
+            const consoleArea = document.createElement('div');
+            consoleArea.className = 'ChannelStrip-Console';
+            for(const label of ['PRE', 'EQ', 'COMP'] as const)
+            {
+                const module = document.createElement('span'); module.className = 'ChannelStrip-Module';
+                const knob = document.createElement('span'); knob.className = 'ChannelStrip-Knob'; knob.dataset.module = label; knob.tabIndex = 0;
+                this.SyncKnob(knob, this.ModuleValues[label] ?? .5);
+                this.BindKnob(knob, label);
+                const caption = document.createElement('span'); caption.className = 'ChannelStrip-ModuleLabel'; caption.textContent = label;
+                module.append(knob, caption); consoleArea.append(module);
+            }
+
+            const panArea = document.createElement('div');
+            panArea.className = 'ChannelStrip-PanArea';
+            this.Pan = document.createElement('input');
+            this.Pan.type = 'range';
+            this.Pan.className = 'ChannelStrip-Pan';
+            this.Pan.min = '-1';
+            this.Pan.max = '1';
+            this.Pan.step = '0.01';
+            this.PanReadout = document.createElement('span');
+            this.PanReadout.className = 'ChannelStrip-PanValue';
+            panArea.append(this.Pan, this.PanReadout);
+
+            const main = document.createElement('div');
+            main.className = 'ChannelStrip-Main';
+            this.LeftMeter = this.Meter();
+            this.RightMeter = this.Meter();
+            const faderWrap = document.createElement('div');
+            faderWrap.className = 'ChannelStrip-FaderWrap';
+            const rail = document.createElement('span');
+            rail.className = 'ChannelStrip-FaderRail';
+            this.Fader = document.createElement('input');
+            this.Fader.type = 'range';
+            this.Fader.className = 'ChannelStrip-Fader';
+            this.Fader.min = '0';
+            this.Fader.max = '2';
+            this.Fader.step = '0.01';
+            this.Fader.setAttribute('orient', 'vertical');
+            faderWrap.append(rail, this.Fader);
+            main.append(this.LeftMeter, faderWrap, this.RightMeter);
+
+            this.GainReadout = document.createElement('div');
+            this.GainReadout.className = 'ChannelStrip-GainValue';
+
+            const buttons = document.createElement('div');
+            buttons.className = 'ChannelStrip-Buttons';
+            const mute = this.Button('M', 'mute');
+            const solo = this.Button('S', 'solo');
+            const record = this.Button('R', 'record');
+            buttons.append(mute, solo, record);
+
+            const footer = document.createElement('div');
+            footer.className = 'ChannelStrip-Footer';
+            footer.textContent = 'MAIN';
+
+            this.append(color, header, inserts, consoleArea, panArea, main, this.GainReadout, buttons, footer);
+
+            this.Pan.addEventListener('input', () => { this.pan = Number(this.Pan?.value ?? 0); this.Emit('arianna:pan', { pan: this.pan }); });
+            this.Fader.addEventListener('input', () => { this.gain = Number(this.Fader?.value ?? 1); this.Emit('arianna:gain', { gain: this.gain }); });
+            mute.addEventListener('click', () => { this.muted = !this.muted; this.Emit('arianna:mute', { muted: this.muted }); });
+            solo.addEventListener('click', () => { this.soloed = !this.soloed; this.Emit('arianna:solo', { soloed: this.soloed }); });
+            record.addEventListener('click', () =>
+            {
+                const active = record.dataset.active !== 'true';
+                record.dataset.active = String(active);
+                this.Emit('arianna:record', { recording: active });
+            });
+        }
+
+        private Meter(): HTMLElement
+        {
+            const meter = document.createElement('div');
+            meter.className = 'ChannelStrip-Meter';
+            const fill = document.createElement('span');
+            fill.className = 'ChannelStrip-MeterFill';
+            fill.style.height = '0%';
+            meter.append(fill);
+            return meter;
+        }
+
+        private Button(text: string, action: string): HTMLButtonElement
+        {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'ChannelStrip-Button';
+            button.dataset.action = action;
+            button.dataset.active = 'false';
+            button.textContent = text;
+            return button;
+        }
+
+        private Sync(): void
+        {
+            if(this.Fader) this.Fader.value = String(this.gain);
+            if(this.Pan) this.Pan.value = String(this.pan);
+            if(this.GainReadout) this.GainReadout.textContent = GainToDb(this.gain);
+            if(this.PanReadout) this.PanReadout.textContent = this.pan === 0 ? 'C' : `${this.pan < 0 ? 'L' : 'R'}${Math.round(Math.abs(this.pan) * 100)}`;
+            this.querySelector<HTMLButtonElement>('[data-action="mute"]')?.setAttribute('data-active', String(this.muted));
+            this.querySelector<HTMLButtonElement>('[data-action="solo"]')?.setAttribute('data-active', String(this.soloed));
+            this.SyncAudio();
+        }
+
+        private SyncAudio(): void
+        {
+            if(this.GainNode) this.GainNode.gain.value = this.muted ? 0 : this.gain;
+            if(this.PanNode) this.PanNode.pan.value = this.pan;
+        }
+
+        private RewireAudio(): void
+        {
+            if(!this.GainNode || !this.PanNode || !this.Analyser) return;
+            try { this.GainNode.disconnect(); } catch {}
+            for(const node of this.InsertNodes.values()) { try { node.disconnect(); } catch {} }
+            try { this.PanNode.disconnect(); } catch {}
+            try { this.SendGain?.disconnect(); } catch {}
+
+            let current: AudioNode = this.GainNode;
+            for(const slot of ['INSERT A', 'INSERT B'] as const)
+            {
+                const node = this.InsertNodes.get(slot);
+                if(!node) continue;
+                current.connect(node);
+                current = node;
+            }
+            current.connect(this.PanNode);
+            this.PanNode.connect(this.Analyser);
+
+            if(this.SendNode && this.SendGain)
+            {
+                this.PanNode.connect(this.SendGain);
+                this.SendGain.connect(this.SendNode);
+            }
+        }
+
+        private MeterLoop(): void
+        {
+            if(!this.isConnected) return;
+
+            let level = 0;
+            if(this.Analyser && !this.muted)
+            {
+                const data = new Uint8Array(this.Analyser.fftSize);
+                this.Analyser.getByteTimeDomainData(data);
+                let sum = 0;
+                for(const value of data)
                 {
-                    /** @name        v
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned v value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const v = Math.abs(buf[i] ?? 0);
-                    if (v > peak)
-                        peak = v;
+                    const sample = (value - 128) / 128;
+                    sum += sample * sample;
                 }
-                // Map [0..1] linear → 0..100% with a soft log curve
-                /** @name        pct
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned pct value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const pct = Math.min(100, peak * 140);
-                this.#meterL.style.height = pct + '%';
-                this.#meterR.style.height = pct + '%';
-                this.#meterRaf = requestAnimationFrame(tick);
+                const rms = Math.sqrt(sum / Math.max(1, data.length));
+                level = rms < .002 ? 0 : Math.min(1, rms * 5.25);
+            }
+
+            const leftFill = this.LeftMeter?.firstElementChild as HTMLElement | null;
+            const rightFill = this.RightMeter?.firstElementChild as HTMLElement | null;
+            if(leftFill) leftFill.style.height = `${level * 100}%`;
+            if(rightFill) rightFill.style.height = `${level * 100}%`;
+            this.Raf = requestAnimationFrame(() => this.MeterLoop());
+        }
+
+        private BindKnob(knob: HTMLElement, module: 'PRE' | 'EQ' | 'COMP'): void
+        {
+            let startY = 0;
+            let startValue = 0;
+            let pointerId = -1;
+
+            const move = (event: PointerEvent): void =>
+            {
+                if(event.pointerId !== pointerId) return;
+                const delta = (startY - event.clientY) / 100;
+                this.setModule(module, startValue + delta);
             };
-            this.#meterRaf = requestAnimationFrame(tick);
+            const finish = (event: PointerEvent): void =>
+            {
+                if(event.pointerId !== pointerId) return;
+                window.removeEventListener('pointermove', move, true);
+                window.removeEventListener('pointerup', finish, true);
+                window.removeEventListener('pointercancel', finish, true);
+                try { knob.releasePointerCapture(pointerId); } catch {}
+                pointerId = -1;
+            };
+
+            knob.addEventListener('pointerdown', event =>
+            {
+                if(event.button !== 0) return;
+                event.preventDefault();
+                pointerId = event.pointerId;
+                startY = event.clientY;
+                startValue = this.getModule(module);
+                try { knob.setPointerCapture(pointerId); } catch {}
+                window.addEventListener('pointermove', move, true);
+                window.addEventListener('pointerup', finish, true);
+                window.addEventListener('pointercancel', finish, true);
+            });
+            knob.addEventListener('wheel', event =>
+            {
+                event.preventDefault();
+                this.setModule(module, this.getModule(module) + (event.deltaY < 0 ? .03 : -.03));
+            }, { passive: false });
+            knob.addEventListener('dblclick', () => this.setModule(module, .5));
+            knob.addEventListener('keydown', event =>
+            {
+                if(event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+                event.preventDefault();
+                this.setModule(module, this.getModule(module) + (event.key === 'ArrowUp' ? .02 : -.02));
+            });
         }
 
-        /** @name        onUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUnmount()
+        private SyncKnob(knob: HTMLElement | null | undefined, value: number): void
         {
-            if (this.#meterRaf)
-                cancelAnimationFrame(this.#meterRaf);
-            this.#meterRaf = 0;
+            if(!knob) return;
+            const normalized = this.Clamp01(value);
+            const angle = -135 + normalized * 270;
+            knob.style.setProperty('--ChannelStrip-KnobAngle', `${angle}deg`);
+            knob.setAttribute('aria-valuenow', normalized.toFixed(2));
+            knob.title = `${Math.round(normalized * 100)}%`;
+        }
+
+        private Clamp01(value: number): number
+        {
+            return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+        }
+
+        private Emit(type: string, detail: Record<string, unknown>): void
+        {
+            this.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true, detail: { ...detail, source: this } }));
+        }
+
+        public onUnmount(): void
+        {
+            if(this.Raf) cancelAnimationFrame(this.Raf);
             super.onUnmount();
         }
+    }
 
-        /** Public API */
-        setGain(v: number): this { this.gain$.Set(Math.max(0, v)); return this; }
-
-        /** @name        setPan
-         *  @public
-         *  @type        {this}
-         *  @description Component member for set Pan.
-         *  @param       {number} v Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        setPan(v: number): this { this.pan$.Set(Math.max(-1, Math.min(1, v))); return this; }
-
-        /** @name        setMuted
-         *  @public
-         *  @type        {this}
-         *  @description Component member for set Muted.
-         *  @param       {boolean} v Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        setMuted(v: boolean): this { this.muted$.Set(v); return this; }
-
-        /** @name        setSoloed
-         *  @public
-         *  @type        {this}
-         *  @description Component member for set Soloed.
-         *  @param       {boolean} v Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        setSoloed(v: boolean): this { this.soloed$.Set(v); return this; }
-
-        /** @name        gain
-         *  @public
-         *  @type        {number}
-         *  @description Component member for gain.
-         *  @returns     {number} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get gain(): number { return this.gain$.Get(); }
-
-        /** @name        pan
-         *  @public
-         *  @type        {number}
-         *  @description Component member for pan.
-         *  @returns     {number} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get pan(): number { return this.pan$.Get(); }
-
-        /** @name        muted
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for muted.
-         *  @returns     {boolean} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get muted(): boolean { return this.muted$.Get(); }
-
-        /** @name        soloed
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for soloed.
-         *  @returns     {boolean} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get soloed(): boolean { return this.soloed$.Get(); }
-
-        /** @name        DefaultSheet
-         *  @public
-         *  @static
-         *  @type        {ChannelStrip.Types.Stylesheet}
-         *  @description Component member for Default Sheet.
-         *  @returns     {ChannelStrip.Types.Stylesheet} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--ar-bg2, #161616)',
-                    border: '1px solid var(--ar-border, #2a2a2a)',
-                    borderRadius: 'var(--ar-radius, 5px)',
-                    color: 'var(--ar-text, #e0e0e0)',
-                    display: 'inline-block',
-                    font: 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
-                    padding: '10px',
-                    width: '120px',
-                }),
-                new Rule(':host .cs-wrap', {
-                    alignItems: 'stretch',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    height: '320px',
-                }),
-                new Rule(':host .cs-label', {
-                    fontWeight: '600',
-                    overflow: 'hidden',
-                    textAlign: 'center',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                }),
-                new Rule(':host .cs-meter', {
-                    background: 'var(--ar-bg, #0d0d0d)',
-                    border: '1px solid var(--ar-border, #2a2a2a)',
-                    borderRadius: 'var(--ar-radius-sm, 3px)',
-                    display: 'flex',
-                    gap: '2px',
-                    height: '60px',
-                    padding: '2px',
-                }),
-                new Rule(':host .cs-meter-bar', {
-                    alignSelf: 'flex-end',
-                    background: 'linear-gradient(to top, #4caf50 0%, #ffeb3b 70%, #f44336 100%)',
-                    flex: '1',
-                    height: '0%',
-                    transition: 'height 0.06s linear',
-                }),
-                new Rule(':host .cs-fader-wrap, :host .cs-pan-wrap', {
-                    alignItems: 'center',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                }),
-                new Rule(':host .cs-fader-label', {
-                    color: 'var(--ar-muted, #888)',
-                    fontSize: '0.65rem',
-                    letterSpacing: '0.05em',
-                }),
-                new Rule(':host .cs-gain, :host .cs-pan', {
-                    accentColor: 'var(--ar-primary, #7eb8f7)',
-                    width: '100%',
-                }),
-                new Rule(':host .cs-fader-val', {
-                    color: 'var(--ar-text, #e0e0e0)',
-                    fontSize: '0.7rem',
-                    fontVariantNumeric: 'tabular-nums',
-                }),
-                new Rule(':host .cs-btns', {
-                    display: 'flex',
-                    gap: '4px',
-                    justifyContent: 'center',
-                }),
-                new Rule(':host .cs-btn', {
-                    background: 'var(--ar-bg3, #1e1e1e)',
-                    border: '1px solid var(--ar-border, #2a2a2a)',
-                    borderRadius: 'var(--ar-radius-sm, 3px)',
-                    color: 'var(--ar-text, #e0e0e0)',
-                    cursor: 'pointer',
-                    font: 'inherit',
-                    fontSize: '0.75rem',
-                    padding: '4px 10px',
-                    transition: 'all var(--ar-transition, 0.14s)',
-                }),
-                new Rule(':host .cs-mute.active', {
-                    background: 'var(--ar-danger, #f44336)',
-                    color: '#fff',
-                }),
-                new Rule(':host .cs-solo.active', {
-                    background: 'var(--ar-warning, #ff9800)',
-                    color: '#fff',
-                }),
-            ]);
-        }
+    function GainToDb(gain: number): string
+    {
+        if(gain <= 0) return '-∞ dB';
+        const db = 20 * Math.log10(gain);
+        return `${db >= 0 ? '+' : ''}${db.toFixed(1)} dB`;
     }
 }
+
 export default ChannelStrip;

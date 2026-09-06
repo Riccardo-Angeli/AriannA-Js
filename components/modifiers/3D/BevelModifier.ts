@@ -8,8 +8,12 @@
  * @description AriannA BevelModifier component module.
  */
 
-import { Component, Templates } from '../../../core/index.ts';
+
 import { Modifier3D as Modifier3DNamespace } from './Base.ts';
+
+declare const Component: any;
+declare const Templates: any;
+
 
 /** @name        html
  *  @public
@@ -39,6 +43,23 @@ export namespace BevelModifier
     })
     export class BevelModifierElement extends Modifier3DNamespace.Modifier3DElement
     {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaComponentIdentity = (() =>
+        {
+            const type = 'BevelModifierElement';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
         /** @name        template
          *  @public
          *  @type        {unknown}

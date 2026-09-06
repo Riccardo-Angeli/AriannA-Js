@@ -8,7 +8,14 @@
  * @description AriannA Modal component module.
  */
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Templates: any;
+
+
 
 /** @namespace   Modal
  *  @public
@@ -123,11 +130,298 @@ export namespace Modal
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-modal', {}, {
-        Attributes: ['title', 'open', 'size', 'dismissable'],
-    })
-    export class Modal extends HTMLElement
+    
+    /** Default class-driven light-DOM stylesheet; installed synchronously by @Component. */
+    export function ModalDefaultSheet(): Types.Stylesheet
     {
+        return new Stylesheet([
+            new Rule('arianna-modal', {
+                BoxSizing: 'border-box',
+                Display: 'none',
+                Inset: '0',
+                MaxWidth: '100%',
+                MinWidth: '0',
+                Position: 'fixed',
+                ZIndex: '2000',
+            }),
+
+            new Rule('arianna-modal[open]', {
+                Display: 'block',
+            }),
+
+            new Rule('.ar-modal__backdrop', {
+                BackdropFilter: 'blur(8px)',
+                Background: 'rgba(5,6,8,.68)',
+                Inset: '0',
+                Position: 'absolute',
+                WebkitBackdropFilter: 'blur(8px)',
+            }),
+
+            new Rule('.ar-modal__dialog', {
+                Background: 'linear-gradient(180deg,#1d1e23 0%,#17181c 100%)',
+                Border: '1px solid #34363d',
+                BorderRadius: '10px',
+                BoxShadow: '0 28px 86px rgba(0,0,0,.56), 0 0 0 1px rgba(255,255,255,.02)',
+                Color: '#e7e9ed',
+                Left: '50%',
+                MaxHeight: '92vh',
+                MaxWidth: '92vw',
+                Overflow: 'hidden',
+                Position: 'absolute',
+                Top: '50%',
+                Transform: 'translate(-50%, -50%)',
+                Width: '420px',
+            }),
+
+            new Rule('arianna-modal[size="sm"] .ar-modal__dialog', {
+                Width: '320px',
+            }),
+
+            new Rule('arianna-modal[size="md"] .ar-modal__dialog', {
+                Width: '420px',
+            }),
+
+            new Rule('arianna-modal[size="lg"] .ar-modal__dialog', {
+                Width: '640px',
+            }),
+
+            new Rule('arianna-modal[size="xl"] .ar-modal__dialog', {
+                Width: '880px',
+            }),
+
+            new Rule('.ar-modal__header', {
+                Background: 'linear-gradient(180deg,#36373b 0%,#292a2e 100%)',
+                BorderBottom: '1px solid #34363d',
+                BoxShadow: 'inset 0 2px 0 #e40c88',
+                Color: '#f2f3f5',
+                FontWeight: '650',
+                Padding: '12px 16px',
+            }),
+
+            new Rule('.ar-modal__header:empty', {
+                Display: 'none',
+            }),
+
+            new Rule('.ar-modal__body', {
+                Background: '#17181c',
+                Color: '#b0b5be',
+                Overflow: 'auto',
+                Padding: '15px 16px',
+            }),
+
+            new Rule('.ar-modal__footer', {
+                AlignItems: 'center',
+                Background: '#1a1b1f',
+                BorderTop: '1px solid #303238',
+                Display: 'flex',
+                Gap: '8px',
+                JustifyContent: 'flex-end',
+                Padding: '10px 16px',
+            }),
+
+            new Rule('.ar-modal__footer:empty', {
+                Display: 'none',
+            }),
+
+            new Rule('.ar-modal__footer button', {
+                Appearance: 'none',
+                Background: '#25272c',
+                Border: '1px solid #3a3d45',
+                BorderRadius: '6px',
+                Color: '#dfe2e7',
+                Cursor: 'pointer',
+                Padding: '7px 11px',
+            }),
+
+            new Rule('.ar-modal__footer button:hover', {
+                Background: '#2d3036',
+                BorderColor: '#555963',
+                Color: '#ffffff',
+            }),
+
+            new Rule('.ar-modal__footer button:last-child', {
+                Background: '#e40c88',
+                BorderColor: '#e40c88',
+                Color: '#ffffff',
+            }),
+
+            new Rule('.ar-modal__footer button:last-child:hover', {
+                Background: '#f01898',
+                BorderColor: '#f01898',
+            }),
+
+            /* Explicit Light */
+            new Rule('arianna-modal[theme="light"] .ar-modal__backdrop', {
+                Background: 'rgba(20,22,26,.30)',
+            }),
+
+            new Rule('arianna-modal[theme="light"] .ar-modal__dialog', {
+                Background: '#ffffff',
+                BorderColor: '#dedfe4',
+                BoxShadow: '0 28px 76px rgba(0,0,0,.22)',
+                Color: '#1c1e21',
+            }),
+
+            new Rule('arianna-modal[theme="light"] .ar-modal__header', {
+                Background: 'linear-gradient(180deg,#ffffff 0%,#f2f2f5 100%)',
+                BorderBottomColor: '#e3e4e8',
+                Color: '#1c1e21',
+            }),
+
+            new Rule('arianna-modal[theme="light"] .ar-modal__body', {
+                Background: '#ffffff',
+                Color: '#545a64',
+            }),
+
+            new Rule('arianna-modal[theme="light"] .ar-modal__footer', {
+                Background: '#f7f7f9',
+                BorderTopColor: '#e3e4e8',
+            }),
+
+            new Rule('arianna-modal[theme="light"] .ar-modal__footer button:not(:last-child)', {
+                Background: '#f0f1f3',
+                BorderColor: '#d7d9df',
+                Color: '#292c31',
+            }),
+
+            new Rule('arianna-modal arianna-button .ar-btn__native', {
+                Background: '#25272c',
+                Border: '1px solid #3a3d45',
+                Color: '#dfe2e7',
+            }),
+
+            new Rule('arianna-modal arianna-button[variant="primary"] .ar-btn__native', {
+                Background: '#e40c88',
+                Border: '1px solid #e40c88',
+                Color: '#ffffff',
+            }),
+
+            new Rule('arianna-modal arianna-button[variant="danger"] .ar-btn__native', {
+                Background: '#c83d4a',
+                Border: '1px solid #c83d4a',
+                Color: '#ffffff',
+            }),
+
+            new Rule('arianna-modal[theme="light"] arianna-button .ar-btn__native', {
+                Background: '#f0f1f3',
+                Border: '1px solid #d7d9df',
+                Color: '#292c31',
+            }),
+
+            new Rule('arianna-modal[theme="light"] arianna-button[variant="primary"] .ar-btn__native', {
+                Background: '#e40c88',
+                Border: '1px solid #e40c88',
+                Color: '#ffffff',
+            }),
+
+        ]);
+    }
+
+@Component('arianna-modal', ModalDefaultSheet(), {
+        Attributes: ['title', 'open', 'size', 'dismissable', 'theme'],
+    })
+    export class Modal extends HTMLDivElement
+    {
+        /** Embedded component icon used by WYSIWYG palettes and drag/drop panels. */
+        static readonly Icon = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 9h16" stroke="currentColor" stroke-width="2"/></svg>`;
+        /** Canonical named default styles. Use e.g. Component.Styles['Disabled']. */
+        static readonly Styles = Object.freeze
+        (
+            {
+                Default:
+                new Rule('arianna-modal', {
+                BoxSizing: 'border-box',
+                MaxWidth: '100%',
+                MinWidth: '0',
+                Display: 'none',
+                Position: 'fixed',
+                Inset: '0',
+                ZIndex: '1000',
+                }),
+                Open:
+                new Rule('arianna-modal[open]', { display: 'block' }),
+                Backdrop:
+                new Rule('.ar-modal__backdrop', {
+                Background: 'rgba(10,10,14,.58)',
+                BackdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                Position: 'absolute',
+                Inset: '0',
+                }),
+                Dialog:
+                new Rule('.ar-modal__dialog', {
+                Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                Border: '1px solid color-mix(in srgb, var(--arianna-primary, #e40c88) 28%, var(--arianna-border, #e6e8eb))',
+                BorderRadius: 'var(--arianna-radius, 12px)',
+                BoxShadow: '0 24px 80px rgba(0,0,0,.38), 0 0 0 1px rgba(255,255,255,.025)',
+                Color: 'var(--arianna-text, var(--text, #1c1e21))',
+                Left: '50%',
+                MaxWidth: '92vw',
+                MaxHeight: '92vh',
+                Overflow: 'auto',
+                Position: 'absolute',
+                Top: '50%',
+                Transform: 'translate(-50%, -50%)',
+                Width: '420px',
+                }),
+                SizeSmDialog:
+                new Rule('arianna-modal[size="sm"] .ar-modal__dialog', { width: '320px' }),
+                SizeMdDialog:
+                new Rule('arianna-modal[size="md"] .ar-modal__dialog', { width: '420px' }),
+                SizeLgDialog:
+                new Rule('arianna-modal[size="lg"] .ar-modal__dialog', { width: '640px' }),
+                SizeXlDialog:
+                new Rule('arianna-modal[size="xl"] .ar-modal__dialog', { width: '880px' }),
+                Header:
+                new Rule('.ar-modal__header', {
+                Background: 'linear-gradient(180deg, color-mix(in srgb, var(--arianna-primary, #e40c88) 7%, var(--arianna-bg, #fff)), var(--arianna-bg, #fff))',
+                BorderBottom: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                BoxShadow: 'inset 0 3px 0 var(--arianna-primary, #e40c88)',
+                FontWeight: '650',
+                Padding: '12px 16px',
+                }),
+                HeaderEmpty:
+                new Rule('.ar-modal__header:empty', { display: 'none' }),
+                Body:
+                new Rule('.ar-modal__body', { padding: '14px 16px' }),
+                Footer:
+                new Rule('.ar-modal__footer', {
+                BorderTop: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                Padding: '10px 16px',
+                TextAlign: 'right',
+                }),
+                FooterEmpty:
+                new Rule('.ar-modal__footer:empty', { display: 'none' }),
+            }
+        );
+
+
+        /** Embedded component icon. */
+        get Icon(): string { return Modal.Icon; }
+
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'Modal';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('Modal');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -145,39 +439,100 @@ export namespace Modal
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.ModalOptions = {})
         {
-            /** @name        title
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned title value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const title = this.signal().attribute('title');
-            this.hasTitle = () => !!title.Get();
-            this.titleText = () => title.Get() ?? '';
-            this.onBackdrop = () => {
-                if (this.getAttribute('dismissable') !== 'false')
-                    this.close();
-            };
-            this.template = html `
-            <div class="ar-modal__backdrop" @click="this.onBackdrop"></div>
-            <div class="ar-modal__dialog">
-                <header class="ar-modal__header" a-if="this.hasTitle()">{{ this.titleText() }}</header>
-                <header class="ar-modal__header"><slot name="header"></slot></header>
-                <section class="ar-modal__body"><slot></slot></section>
-                <footer class="ar-modal__footer"><slot name="footer"></slot></footer>
-            </div>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Modal.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = Modal.DefaultSheet();
+            this.classList.add('Modal');
+            if(this.childNodes.length === 0)
+            {
+                requestAnimationFrame(() => this.onConnected(_opts));
+                return;
+            }
+
+            if(this.dataset.ariannaModalReady === 'true') return;
+            this.dataset.ariannaModalReady = 'true';
+
+            const authored =
+                Array.from(this.childNodes);
+
+            const footerNodes =
+                authored.filter
+                (
+                    node =>
+                        node instanceof HTMLElement &&
+                        node.getAttribute('slot') === 'footer'
+                );
+
+            const headerNodes =
+                authored.filter
+                (
+                    node =>
+                        node instanceof HTMLElement &&
+                        node.getAttribute('slot') === 'header'
+                );
+
+            const bodyNodes =
+                authored.filter
+                (
+                    node =>
+                        !footerNodes.includes(node as HTMLElement) &&
+                        !headerNodes.includes(node as HTMLElement)
+                );
+
+            const backdrop = document.createElement('div');
+            backdrop.className = 'ar-modal__backdrop';
+
+            const dialog = document.createElement('div');
+            dialog.className = 'ar-modal__dialog';
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-modal', 'true');
+
+            const header = document.createElement('header');
+            header.className = 'ar-modal__header';
+
+            if(headerNodes.length)
+            {
+                for(const node of headerNodes)
+                {
+                    (node as HTMLElement).removeAttribute('slot');
+                    header.appendChild(node);
+                }
+            }
+            else
+            {
+                header.textContent = this.getAttribute('title') ?? '';
+            }
+
+            const body = document.createElement('section');
+            body.className = 'ar-modal__body';
+            for(const node of bodyNodes) body.appendChild(node);
+
+            const footer = document.createElement('footer');
+            footer.className = 'ar-modal__footer';
+            for(const node of footerNodes)
+            {
+                (node as HTMLElement).removeAttribute('slot');
+                footer.appendChild(node);
+            }
+
+            backdrop.addEventListener
+            (
+                'click',
+                () =>
+                {
+                    if(this.getAttribute('dismissable') !== 'false') this.close();
+                }
+            );
+
+            this.addEventListener
+            (
+                'click',
+                event =>
+                {
+                    const target = event.target as HTMLElement | null;
+                    if(target?.closest('[data-modal-close]')) this.close();
+                }
+            );
+
+            dialog.append(header, body, footer);
+            this.replaceChildren(backdrop, dialog);
         }
 
         /** @name        open
@@ -190,6 +545,12 @@ export namespace Modal
          *  @license     MIT / Commercial (dual license) */
         open(): this
         {
+            if(!this.querySelector('.ar-modal__dialog'))
+            {
+                this.dataset.ariannaModalReady='false';
+                this.onConnected();
+            }
+
             this.setAttribute('open', '');
             this.dispatchEvent(new CustomEvent('arianna:open', { bubbles: true, detail: { source: this } }));
             return this;
@@ -228,7 +589,13 @@ export namespace Modal
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        onCreated() { }
+        onCreated()
+        {
+            requestAnimationFrame(() =>
+            {
+                if(this.isConnected) this.onConnected?.();
+            });
+        }
 
         /** @name        onBeforeMount
          *  @public
@@ -387,55 +754,10 @@ export namespace Modal
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    display: 'none',
-                    position: 'fixed',
-                    inset: '0',
-                    zIndex: '1000',
-                }),
-                new Rule(':host([open])', { display: 'block' }),
-                new Rule('.ar-modal__backdrop', {
-                    background: 'rgba(0,0,0,0.45)',
-                    position: 'absolute',
-                    inset: '0',
-                }),
-                new Rule('.ar-modal__dialog', {
-                    background: 'var(--arianna-bg, #ffffff)',
-                    borderRadius: 'var(--arianna-radius, 10px)',
-                    boxShadow: '0 16px 48px rgba(0,0,0,0.30)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    left: '50%',
-                    maxWidth: '92vw',
-                    maxHeight: '92vh',
-                    overflow: 'auto',
-                    position: 'absolute',
-                    top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: '420px',
-                }),
-                new Rule(':host([size="sm"]) .ar-modal__dialog', { width: '320px' }),
-                new Rule(':host([size="md"]) .ar-modal__dialog', { width: '420px' }),
-                new Rule(':host([size="lg"]) .ar-modal__dialog', { width: '640px' }),
-                new Rule(':host([size="xl"]) .ar-modal__dialog', { width: '880px' }),
-                new Rule('.ar-modal__header', {
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    fontWeight: '600',
-                    padding: '12px 16px',
-                }),
-                new Rule('.ar-modal__header:empty', { display: 'none' }),
-                new Rule('.ar-modal__body', { padding: '14px 16px' }),
-                new Rule('.ar-modal__footer', {
-                    borderTop: '1px solid var(--arianna-border, #d8d8d8)',
-                    padding: '10px 16px',
-                    textAlign: 'right',
-                }),
-                new Rule('.ar-modal__footer:empty', { display: 'none' }),
-            ]);
-        }
+        { return ModalDefaultSheet(); }
     }
 }
-export default Modal;
+export const ModalClass = Modal.Modal;
+export default Modal.Modal;
 
 export type ModalOptions = Modal.Interfaces.ModalOptions;

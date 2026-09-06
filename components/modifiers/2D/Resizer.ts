@@ -1,665 +1,716 @@
 /**
- * @module    components/modifiers/2D/Resizer
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA Resizer component module.
+ * @module components/modifiers/2D/Resizer
+ * @description Reactive eight-direction Resizer with full edge hit areas.
  */
 
-import { Component, Templates } from '../../../core/index.ts';
-import { Modifier2D } from './Base.ts';
+import {
+    Component,
+    Css,
+    Templates,
+} from '../../../core/index.ts';
 
-/** @name        html
- *  @public
- *  @type        {inferred}
- *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
-const html = Templates.Template.Html;
+import * as Base from './Base.ts';
 
-/** @namespace   Resizer
- *  @public
- *  @description Namespace containing Resizer contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 export namespace Resizer
 {
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Types
     {
-        /** @name        ResizeDir
-         *  @public
-         *  @type        {'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'}
-         *  @description Type alias for ResizeDir.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type ResizeDir = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+        export type ResizeDirection =
+            'North' |
+            'NorthEast' |
+            'East' |
+            'SouthEast' |
+            'South' |
+            'SouthWest' |
+            'West' |
+            'NorthWest';
+
+        /** @deprecated Use ResizeDirection. */
+        export type ResizeDir = ResizeDirection;
     }
 
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Interfaces
     {
-        /** @interface   ResizerOptions
-         *  @public
-         *  @description ResizerOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         export interface ResizerOptions
         {
-            /** @name        handles
-             *  @public
-             *  @type        {Resizer.Types.ResizeDir[]}
-             *  @description Component member for handles.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            handles?: Types.ResizeDir[];
-
-            /** @name        minWidth
-             *  @public
-             *  @type        {number}
-             *  @description Component member for min Width.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
+            handles?: Types.ResizeDirection[];
             minWidth?: number;
-
-            /** @name        minHeight
-             *  @public
-             *  @type        {number}
-             *  @description Component member for min Height.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             minHeight?: number;
-
-            /** @name        maxWidth
-             *  @public
-             *  @type        {number}
-             *  @description Component member for max Width.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             maxWidth?: number;
-
-            /** @name        maxHeight
-             *  @public
-             *  @type        {number}
-             *  @description Component member for max Height.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             maxHeight?: number;
-
-            /** @name        handleSize
-             *  @public
-             *  @type        {number}
-             *  @description Component member for handle Size.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            handleSize?: number;
-
-            /** @name        handleColor
-             *  @public
-             *  @type        {string}
-             *  @description Component member for handle Color.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            handleColor?: string;
-
-            /** @name        allowCross
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for allow Cross.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             allowCross?: boolean;
+            disabled?: boolean;
         }
     }
-    export function handleStyle(dir: Types.ResizeDir, hs: number): string {
-        /** @name        h
-         *  @public
-         *  @type        {inferred}
-         *  @description Namespace-owned h value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        const h = hs / 2;
 
-        /** @name        map
-         *  @public
-         *  @type        {Record<Resizer.Types.ResizeDir, string>}
-         *  @description Namespace-owned map value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        const map: Record<Types.ResizeDir, string> = {
-            n: `top:-${h}px;left:50%;transform:translateX(-50%);cursor:n-resize;`,
-            s: `bottom:-${h}px;left:50%;transform:translateX(-50%);cursor:s-resize;`,
-            e: `right:-${h}px;top:50%;transform:translateY(-50%);cursor:e-resize;`,
-            w: `left:-${h}px;top:50%;transform:translateY(-50%);cursor:w-resize;`,
-            ne: `top:-${h}px;right:-${h}px;cursor:ne-resize;`,
-            nw: `top:-${h}px;left:-${h}px;cursor:nw-resize;`,
-            se: `bottom:-${h}px;right:-${h}px;cursor:se-resize;`,
-            sw: `bottom:-${h}px;left:-${h}px;cursor:sw-resize;`,
-        };
-        return map[dir] ?? '';
+    const html =
+        Templates.Template.Html;
+
+    const Directions:
+        readonly Types.ResizeDirection[] =
+    [
+        'North',
+        'NorthEast',
+        'East',
+        'SouthEast',
+        'South',
+        'SouthWest',
+        'West',
+        'NorthWest',
+    ];
+
+    const Aliases:
+        Readonly<Record<string, Types.ResizeDirection>> =
+    {
+        n: 'North',
+        north: 'North',
+
+        ne: 'NorthEast',
+        northeast: 'NorthEast',
+
+        e: 'East',
+        east: 'East',
+
+        se: 'SouthEast',
+        southeast: 'SouthEast',
+
+        s: 'South',
+        south: 'South',
+
+        sw: 'SouthWest',
+        southwest: 'SouthWest',
+
+        w: 'West',
+        west: 'West',
+
+        nw: 'NorthWest',
+        northwest: 'NorthWest',
+    };
+
+    function normalize(
+        value: string
+    ): Types.ResizeDirection | null
+    {
+        return (
+            Aliases[
+                value
+                    .trim()
+                    .replace(/[\s_-]+/g, '')
+                    .toLowerCase()
+            ] ??
+            null
+        );
     }
 
-    /** @name        HandleStyle
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned HandleStyle value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export function HandleStyle(...args: Parameters<typeof handleStyle>): ReturnType<typeof handleStyle>
+    function West(
+        direction: Types.ResizeDirection
+    ): boolean
     {
-        return handleStyle(...args);
+        return (
+            direction === 'West' ||
+            direction === 'NorthWest' ||
+            direction === 'SouthWest'
+        );
     }
 
-    /** @class       Resizer
-     *  @public
-     *  @description AriannA Resizer component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-resizer', {}, {
-        Attributes: [
-            'handles', 'min-width', 'min-height', 'max-width', 'max-height',
-            'handle-size', 'handle-color', 'allow-cross', 'disabled',
-        ],
-    })
-    export class Resizer extends Modifier2D.Modifier2D
+    function East(
+        direction: Types.ResizeDirection
+    ): boolean
     {
-        /** @name        template
-         *  @public
-         *  @type        {unknown}
-         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
-         *               or behavior-only rendering logic while participating in the compiled Template fast path.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        template = html``;
+        return (
+            direction === 'East' ||
+            direction === 'NorthEast' ||
+            direction === 'SouthEast'
+        );
+    }
 
-        /** @name        applyTo
-         *  @protected
-         *  @type        {void}
-         *  @description Component member for apply To.
-         *  @param       {HTMLElement} target Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected applyTo(target: HTMLElement): void
+    function North(
+        direction: Types.ResizeDirection
+    ): boolean
+    {
+        return (
+            direction === 'North' ||
+            direction === 'NorthEast' ||
+            direction === 'NorthWest'
+        );
+    }
+
+    function South(
+        direction: Types.ResizeDirection
+    ): boolean
+    {
+        return (
+            direction === 'South' ||
+            direction === 'SouthEast' ||
+            direction === 'SouthWest'
+        );
+    }
+
+    /*
+     * The four side handlers are full edge strips.
+     * The four diagonal handlers are corner squares.
+     * They are invisible by default but remain hit-testable.
+     */
+    export const Styles =
+        new Css.Stylesheet([
+            new Css.Rule('.Resizer', {
+                Display: 'contents',
+            }),
+
+            new Css.Rule('.Resizer-Handle', {
+                Background: 'transparent',
+                Border: '0',
+                BoxSizing: 'border-box',
+                Opacity: '0',
+                PointerEvents: 'auto',
+                Position: 'absolute',
+                TouchAction: 'none',
+                UserSelect: 'none',
+                ZIndex: '2147483646',
+            }),
+
+            new Css.Rule('.Resizer-North', {
+                Cursor: 'n-resize',
+                Height: '12px',
+                Left: '20px',
+                Right: '20px',
+                Top: '0',
+            }),
+
+            new Css.Rule('.Resizer-South', {
+                Bottom: '0',
+                Cursor: 's-resize',
+                Height: '12px',
+                Left: '20px',
+                Right: '20px',
+            }),
+
+            new Css.Rule('.Resizer-East', {
+                Bottom: '20px',
+                Cursor: 'e-resize',
+                Right: '0',
+                Top: '20px',
+                Width: '12px',
+            }),
+
+            new Css.Rule('.Resizer-West', {
+                Bottom: '20px',
+                Cursor: 'w-resize',
+                Left: '0',
+                Top: '20px',
+                Width: '12px',
+            }),
+
+            new Css.Rule('.Resizer-NorthEast', {
+                Cursor: 'ne-resize',
+                Height: '20px',
+                Right: '0',
+                Top: '0',
+                Width: '20px',
+            }),
+
+            new Css.Rule('.Resizer-NorthWest', {
+                Cursor: 'nw-resize',
+                Height: '20px',
+                Left: '0',
+                Top: '0',
+                Width: '20px',
+            }),
+
+            new Css.Rule('.Resizer-SouthEast', {
+                Bottom: '0',
+                Cursor: 'se-resize',
+                Height: '20px',
+                Right: '0',
+                Width: '20px',
+            }),
+
+            new Css.Rule('.Resizer-SouthWest', {
+                Bottom: '0',
+                Cursor: 'sw-resize',
+                Height: '20px',
+                Left: '0',
+                Width: '20px',
+            }),
+        ]);
+
+    @Component(
+        'arianna-resizer',
+        Styles,
         {
-            if (getComputedStyle(target).position === 'static')
-                target.style.position = 'relative';
+            Shadow: false,
+            Attributes:
+            [
+                'handles',
+                'min-width',
+                'min-height',
+                'max-width',
+                'max-height',
+                'allow-cross',
+                'disabled',
+            ],
+        }
+    )
+    export class Resizer
+        extends Base.Modifier2D.Modifier2D
+    {
+        public static readonly Styles =
+            Styles;
 
-            /** @name        handlesAttr
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned handlesAttr value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const handlesAttr = this.getAttribute('handles');
+        public template =
+            html``;
 
-            /** @name        handles
-             *  @public
-             *  @type        {Resizer.Types.ResizeDir[]}
-             *  @description Namespace-owned handles value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const handles: Types.ResizeDir[] = handlesAttr
-                ? handlesAttr.split(',').map(s => s.trim() as Types.ResizeDir).filter(s => /^(n|s|e|w|ne|nw|se|sw)$/.test(s))
-                : ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+        protected EventName =
+            'resize';
 
-            /** @name        hs
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned hs value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const hs = parseInt(this.getAttribute('handle-size') ?? '8', 10) || 8;
+        protected applyTo(
+            target: HTMLElement
+        ): void
+        {
+            this.classList.add(
+                'Resizer'
+            );
 
-            /** @name        hc
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned hc value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const hc = this.getAttribute('handle-color') ?? 'var(--arianna-primary, #1f6feb)';
+            if(
+                getComputedStyle(target)
+                    .position === 'static'
+            )
+                target.style.position =
+                    'relative';
 
-            /** @name        allowCross
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned allowCross value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const allowCross = this.getAttribute('allow-cross') !== 'false';
+            const handlesAttribute =
+                this.getAttribute('handles');
 
-            /** @name        minW
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned minW value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const minW = parseInt(this.getAttribute('min-width') ?? (allowCross ? '0' : '40'), 10) || (allowCross ? 0 : 40);
+            const directions =
+                handlesAttribute
+                    ? handlesAttribute
+                        .split(',')
+                        .map(normalize)
+                        .filter(
+                            (
+                                value
+                            ): value is Types.ResizeDirection =>
+                                value !== null
+                        )
+                    : [...Directions];
 
-            /** @name        minH
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned minH value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const minH = parseInt(this.getAttribute('min-height') ?? (allowCross ? '0' : '40'), 10) || (allowCross ? 0 : 40);
+            const allowCross =
+                this.getAttribute(
+                    'allow-cross'
+                ) !== 'false';
 
-            /** @name        maxW
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned maxW value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const maxW = parseInt(this.getAttribute('max-width') ?? '9999', 10) || 9999;
+            const minWidth =
+                Number.parseInt(
+                    this.getAttribute(
+                        'min-width'
+                    ) ??
+                    (allowCross ? '0' : '40'),
+                    10
+                ) ||
+                (allowCross ? 0 : 40);
 
-            /** @name        maxH
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned maxH value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const maxH = parseInt(this.getAttribute('max-height') ?? '9999', 10) || 9999;
-            for (const dir of handles)
+            const minHeight =
+                Number.parseInt(
+                    this.getAttribute(
+                        'min-height'
+                    ) ??
+                    (allowCross ? '0' : '40'),
+                    10
+                ) ||
+                (allowCross ? 0 : 40);
+
+            const maxWidth =
+                Number.parseInt(
+                    this.getAttribute(
+                        'max-width'
+                    ) ??
+                    '99999',
+                    10
+                ) ||
+                99999;
+
+            const maxHeight =
+                Number.parseInt(
+                    this.getAttribute(
+                        'max-height'
+                    ) ??
+                    '99999',
+                    10
+                ) ||
+                99999;
+
+            for(const direction of directions)
             {
-                /** @name        handle
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned handle value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const handle = document.createElement('div');
-                handle.dataset['resizeDir'] = dir;
-                handle.className = 'ar-resizer-handle';
-                handle.style.cssText =
-                    `position:absolute;width:${hs}px;height:${hs}px;background:${hc};` +
-                        `border-radius:50%;z-index:9999;touch-action:none;` +
-                        handleStyle(dir, hs);
-                target.appendChild(handle);
+                const handle =
+                    document.createElement(
+                        'div'
+                    );
 
-                /** @name        pointerId
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned pointerId value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
+                handle.className =
+                    `Resizer-Handle Resizer-${direction}`;
+
+                handle.dataset.resizeDirection =
+                    direction;
+
+                handle.setAttribute(
+                    'aria-hidden',
+                    'true'
+                );
+
+                target.appendChild(
+                    handle
+                );
+
                 let pointerId = -1;
+                let startX = 0;
+                let startY = 0;
+                let startLeft = 0;
+                let startTop = 0;
+                let startWidth = 0;
+                let startHeight = 0;
 
-                /** @name        startPx
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned startPx value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                let startPx = 0, startPy = 0;
-
-                /** @name        anchorX
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned anchorX value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                let anchorX = 0, pointerStartX = 0;
-
-                /** @name        anchorY
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned anchorY value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                let anchorY = 0, pointerStartY = 0;
-
-                /** @name        movesX
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned movesX value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                let movesX = false, movesY = false;
-
-                /** @name        onDown
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned onDown value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const onDown = (e: PointerEvent) => {
-                    if (!this.isEnabled)
+                const onMove =
+                    (
+                        event: PointerEvent
+                    ): void =>
+                {
+                    if(
+                        event.pointerId !==
+                            pointerId ||
+                        !this.isEnabled
+                    )
                         return;
-                    if (e.button !== 0)
-                        return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    pointerId = e.pointerId;
-                    startPx = e.clientX;
-                    startPy = e.clientY;
 
-                    /** @name        w
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned w value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const w = target.offsetWidth;
+                    const dx =
+                        event.clientX -
+                        startX;
 
-                    /** @name        h
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned h value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const h = target.offsetHeight;
+                    const dy =
+                        event.clientY -
+                        startY;
 
-                    /** @name        l
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned l value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const l = target.offsetLeft;
+                    let left =
+                        startLeft;
 
-                    /** @name        t
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned t value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const t = target.offsetTop;
-                    if (dir.includes('e'))
+                    let top =
+                        startTop;
+
+                    let width =
+                        startWidth;
+
+                    let height =
+                        startHeight;
+
+                    if(East(direction))
+                        width =
+                            startWidth + dx;
+
+                    if(South(direction))
+                        height =
+                            startHeight + dy;
+
+                    if(West(direction))
                     {
-                        anchorX = l;
-                        pointerStartX = l + w;
-                        movesX = true;
+                        width =
+                            startWidth - dx;
+
+                        left =
+                            startLeft + dx;
                     }
-                    else if (dir.includes('w'))
+
+                    if(North(direction))
                     {
-                        anchorX = l + w;
-                        pointerStartX = l;
-                        movesX = true;
+                        height =
+                            startHeight - dy;
+
+                        top =
+                            startTop + dy;
                     }
-                    else
+
+                    if(!allowCross)
                     {
-                        movesX = false;
+                        if(width < minWidth)
+                        {
+                            if(West(direction))
+                                left -=
+                                    minWidth -
+                                    width;
+
+                            width =
+                                minWidth;
+                        }
+
+                        if(height < minHeight)
+                        {
+                            if(North(direction))
+                                top -=
+                                    minHeight -
+                                    height;
+
+                            height =
+                                minHeight;
+                        }
                     }
-                    if (dir.includes('s'))
+
+                    width =
+                        Math.min(
+                            maxWidth,
+                            Math.max(
+                                allowCross
+                                    ? 0
+                                    : minWidth,
+                                width
+                            )
+                        );
+
+                    height =
+                        Math.min(
+                            maxHeight,
+                            Math.max(
+                                allowCross
+                                    ? 0
+                                    : minHeight,
+                                height
+                            )
+                        );
+
+                    const parent =
+                        target.parentElement;
+
+                    if(parent)
                     {
-                        anchorY = t;
-                        pointerStartY = t + h;
-                        movesY = true;
+                        left =
+                            Math.max(
+                                0,
+                                left
+                            );
+
+                        top =
+                            Math.max(
+                                0,
+                                top
+                            );
+
+                        width =
+                            Math.min(
+                                width,
+                                Math.max(
+                                    0,
+                                    parent.clientWidth -
+                                    left
+                                )
+                            );
+
+                        height =
+                            Math.min(
+                                height,
+                                Math.max(
+                                    0,
+                                    parent.clientHeight -
+                                    top
+                                )
+                            );
                     }
-                    else if (dir.includes('n'))
-                    {
-                        anchorY = t + h;
-                        pointerStartY = t;
-                        movesY = true;
-                    }
-                    else
-                    {
-                        movesY = false;
-                    }
-                    try
-                    {
-                        handle.setPointerCapture(pointerId);
-                    }
-                    catch { /* ignore */ }
-                    handle.addEventListener('pointermove', onMove);
-                    handle.addEventListener('pointerup', onUp);
-                    handle.addEventListener('pointercancel', onUp);
+
+                    left =
+                        Math.round(left);
+
+                    top =
+                        Math.round(top);
+
+                    width =
+                        Math.round(width);
+
+                    height =
+                        Math.round(height);
+
+                    target.style.left =
+                        `${left}px`;
+
+                    target.style.top =
+                        `${top}px`;
+
+                    target.style.width =
+                        `${width}px`;
+
+                    target.style.height =
+                        `${height}px`;
+
+                    target.setAttribute(
+                        'x',
+                        String(left)
+                    );
+
+                    target.setAttribute(
+                        'y',
+                        String(top)
+                    );
+
+                    target.setAttribute(
+                        'width',
+                        String(width)
+                    );
+
+                    target.setAttribute(
+                        'height',
+                        String(height)
+                    );
+
+                    this.Change({
+                        direction,
+                        x: left,
+                        y: top,
+                        width,
+                        height,
+                        pointerId,
+                    });
                 };
 
-                /** @name        onMove
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned onMove value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const onMove = (ev: PointerEvent) => {
-                    if (ev.pointerId !== pointerId)
+                const onUp =
+                    (
+                        event: PointerEvent
+                    ): void =>
+                {
+                    if(
+                        event.pointerId !==
+                        pointerId
+                    )
                         return;
 
-                    /** @name        dx
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned dx value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const dx = ev.clientX - startPx;
-
-                    /** @name        dy
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned dy value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const dy = ev.clientY - startPy;
-
-                    /** @name        w
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned w value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    let w = target.offsetWidth;
-
-                    /** @name        h
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned h value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    let h = target.offsetHeight;
-
-                    /** @name        nl
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned nl value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    let nl = target.offsetLeft;
-
-                    /** @name        nt
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned nt value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    let nt = target.offsetTop;
-                    if (movesX)
-                    {
-                        /** @name        pointerX
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned pointerX value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        let pointerX = pointerStartX + dx;
-                        if (allowCross)
-                        {
-                            /** @name        signed
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned signed value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const signed = pointerX - anchorX;
-                            if (Math.abs(signed) > maxW)
-                            {
-                                pointerX = anchorX + (signed < 0 ? -maxW : maxW);
-                            }
-                        }
-                        else
-                        {
-                            /** @name        origSign
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned origSign value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const origSign = (pointerStartX - anchorX) > 0 ? 1 : -1;
-
-                            /** @name        signed
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned signed value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const signed = pointerX - anchorX;
-                            if (origSign * signed < minW)
-                                pointerX = anchorX + origSign * minW;
-                            else if (Math.abs(signed) > maxW)
-                                pointerX = anchorX + origSign * maxW;
-                        }
-                        w = Math.round(Math.abs(pointerX - anchorX));
-                        nl = Math.round(Math.min(anchorX, pointerX));
-                    }
-                    if (movesY)
-                    {
-                        /** @name        pointerY
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned pointerY value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        let pointerY = pointerStartY + dy;
-                        if (allowCross)
-                        {
-                            /** @name        signed
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned signed value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const signed = pointerY - anchorY;
-                            if (Math.abs(signed) > maxH)
-                            {
-                                pointerY = anchorY + (signed < 0 ? -maxH : maxH);
-                            }
-                        }
-                        else
-                        {
-                            /** @name        origSign
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned origSign value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const origSign = (pointerStartY - anchorY) > 0 ? 1 : -1;
-
-                            /** @name        signed
-                             *  @public
-                             *  @type        {inferred}
-                             *  @description Namespace-owned signed value.
-                             *  @author      Riccardo Angeli
-                             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                             *  @license     MIT / Commercial (dual license) */
-                            const signed = pointerY - anchorY;
-                            if (origSign * signed < minH)
-                                pointerY = anchorY + origSign * minH;
-                            else if (Math.abs(signed) > maxH)
-                                pointerY = anchorY + origSign * maxH;
-                        }
-                        h = Math.round(Math.abs(pointerY - anchorY));
-                        nt = Math.round(Math.min(anchorY, pointerY));
-                    }
-                    target.style.width = `${w}px`;
-                    target.style.height = `${h}px`;
-                    target.style.left = `${nl}px`;
-                    target.style.top = `${nt}px`;
-                    target.dispatchEvent(new CustomEvent('arianna:resize', {
-                        bubbles: true,
-                        detail: { width: w, height: h, target },
-                    }));
-                };
-
-                /** @name        onUp
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned onUp value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const onUp = (ev: PointerEvent) => {
-                    if (ev.pointerId !== pointerId)
-                        return;
                     try
                     {
-                        handle.releasePointerCapture(pointerId);
+                        handle
+                            .releasePointerCapture(
+                                pointerId
+                            );
                     }
-                    catch { /* ignore */ }
-                    handle.removeEventListener('pointermove', onMove);
-                    handle.removeEventListener('pointerup', onUp);
-                    handle.removeEventListener('pointercancel', onUp);
+                    catch
+                    {
+                    }
+
+                    handle.removeEventListener(
+                        'pointermove',
+                        onMove
+                    );
+
+                    handle.removeEventListener(
+                        'pointerup',
+                        onUp
+                    );
+
+                    handle.removeEventListener(
+                        'pointercancel',
+                        onUp
+                    );
+
+                    this.End({
+                        direction,
+                        x: target.offsetLeft,
+                        y: target.offsetTop,
+                        width: target.offsetWidth,
+                        height: target.offsetHeight,
+                        pointerId,
+                    });
+
                     pointerId = -1;
                 };
-                handle.addEventListener('pointerdown', onDown);
-                this.cleanups.push(() => {
-                    handle.removeEventListener('pointerdown', onDown);
-                    handle.remove();
-                });
+
+                const onDown =
+                    (
+                        event: PointerEvent
+                    ): void =>
+                {
+                    if(
+                        !this.isEnabled ||
+                        event.button !== 0
+                    )
+                        return;
+
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    pointerId =
+                        event.pointerId;
+
+                    startX =
+                        event.clientX;
+
+                    startY =
+                        event.clientY;
+
+                    startLeft =
+                        target.offsetLeft;
+
+                    startTop =
+                        target.offsetTop;
+
+                    startWidth =
+                        target.offsetWidth;
+
+                    startHeight =
+                        target.offsetHeight;
+
+                    try
+                    {
+                        handle
+                            .setPointerCapture(
+                                pointerId
+                            );
+                    }
+                    catch
+                    {
+                    }
+
+                    handle.addEventListener(
+                        'pointermove',
+                        onMove
+                    );
+
+                    handle.addEventListener(
+                        'pointerup',
+                        onUp
+                    );
+
+                    handle.addEventListener(
+                        'pointercancel',
+                        onUp
+                    );
+
+                    this.Start({
+                        direction,
+                        x: startLeft,
+                        y: startTop,
+                        width: startWidth,
+                        height: startHeight,
+                        pointerId,
+                    });
+                };
+
+                handle.addEventListener(
+                    'pointerdown',
+                    onDown
+                );
+
+                this.cleanups.push(
+                    () =>
+                    {
+                        handle.removeEventListener(
+                            'pointerdown',
+                            onDown
+                        );
+
+                        handle.remove();
+                    }
+                );
             }
         }
     }
 }
-export default Resizer;
+
+export type ResizeDirection =
+    Resizer.Types.ResizeDirection;
+
+export type ResizerOptions =
+    Resizer.Interfaces.ResizerOptions;
+
+export default Resizer.Resizer;

@@ -35,6 +35,44 @@ import Virtual        from './Virtual.ts';
 import type { Types }      from '../definitions/Types.ts';
 import type { Interfaces } from '../definitions/Interfaces.ts';
 
+
+declare global
+{
+    interface HTMLElement
+    {
+        /** AriannA Direct Component fluent surface, delegated to its Real facet. */
+        set(name: string, value: unknown): this;
+        get(name: string): ReturnType<Real['get']>;
+        sub(path: string): ReturnType<Real['sub']>;
+        add(...items: Parameters<Real['add']>): this;
+
+        /*
+         * Preserve ParentNode.append(...nodes): void so HTMLElement remains
+         * structurally compatible with Element/ParentNode (SSR generics depend on it).
+         * AriannA Direct Components additionally expose append(parent): this.
+         * Keep the AriannA overload first so the one-parent fluent call is inferred
+         * as `this`, while the native variadic DOM signature remains available.
+         */
+        append(parent: Parameters<Real['append']>[0]): this;
+        append(...nodes: (string | Node)[]): void;
+    }
+
+    /*
+     * Preserve the native HTMLSelectElement.add(option, before?) overload.
+     * AriannA's fluent add remains available for other accepted child inputs.
+     */
+    interface HTMLSelectElement
+    {
+        add
+        (
+            item: HTMLOptGroupElement | HTMLOptionElement,
+            before?: HTMLElement | number | null
+        ): void;
+
+        add(...items: Parameters<Real['add']>): this;
+    }
+}
+
 /** @name        Components
  *  @public
  *  @type        {namespace}
@@ -446,13 +484,27 @@ export namespace Components
             const prototype =
                 (Target as { prototype: HTMLElement }).prototype;
 
+            /*
+             * Direct @Component classes expose the fundamental Real fluent
+             * surface. Existing OWN component implementations win; inherited
+             * native methods do not block AriannA's fluent contract.
+             *
+             * This distinction matters especially for HTMLElement.append():
+             * native append means append(children), while AriannA Real means
+             * append(THIS, parent) -> this.
+             */
             const define =
                 (
                     name       : PropertyKey,
-                    descriptor : PropertyDescriptor
+                    descriptor : PropertyDescriptor,
+                    inherited  : boolean = false
                 ): void =>
                 {
-                    if(name in prototype)
+                    if
+                    (
+                        Object.prototype.hasOwnProperty.call(prototype, name) ||
+                        (!inherited && name in prototype)
+                    )
                     {
                         return;
                     }
@@ -468,6 +520,78 @@ export namespace Components
                         }
                     );
                 };
+
+            define
+            (
+                'set',
+                {
+                    writable : true,
+                    value(this: HTMLElement, name: string, value: unknown): HTMLElement
+                    {
+                        Component.RealFacet(this).set(name, value);
+                        return this;
+                    }
+                },
+                true
+            );
+
+            define
+            (
+                'get',
+                {
+                    writable : true,
+                    value(this: HTMLElement, name: string): ReturnType<Real['get']>
+                    {
+                        return Component.RealFacet(this).get(name);
+                    }
+                },
+                true
+            );
+
+            define
+            (
+                'sub',
+                {
+                    writable : true,
+                    value(this: HTMLElement, path: string): ReturnType<Real['sub']>
+                    {
+                        return Component.RealFacet(this).sub(path);
+                    }
+                },
+                true
+            );
+
+            define
+            (
+                'add',
+                {
+                    writable : true,
+                    value(this: HTMLElement, ...items: Parameters<Real['add']>): HTMLElement
+                    {
+                        Component.RealFacet(this).add(...items);
+                        return this;
+                    }
+                },
+                true
+            );
+
+            define
+            (
+                'append',
+                {
+                    writable : true,
+                    value
+                    (
+                        this   : HTMLElement,
+                        parent : Parameters<Real['append']>[0]
+                    ): HTMLElement
+                    {
+                        Component.RealFacet(this).append(parent);
+                        return this;
+                    }
+                },
+                true
+            );
 
             define
             (
@@ -704,12 +828,21 @@ export namespace Components
             const rawCss = objectForm ? spec?.Css : args[1];
 
             /* An empty plain object means no stylesheet. */
-            const css =
-                rawCss &&
+            const emptyPlainCss =
+                !!rawCss &&
                 typeof rawCss === 'object' &&
                 !Array.isArray(rawCss) &&
                 Object.getPrototypeOf(rawCss) === Object.prototype &&
-                Object.keys(rawCss as object).length === 0
+                Object.keys(rawCss as object).length === 0;
+
+            const emptyStringCss =
+                typeof rawCss === 'string' &&
+                rawCss.trim().length === 0;
+
+            const css =
+                rawCss == null ||
+                emptyPlainCss ||
+                emptyStringCss
                     ? undefined
                     : rawCss;
 
@@ -738,7 +871,9 @@ export namespace Components
             {
                 ...(objectForm ? objectDefinition : positionalDefinition),
                 ...explicitOptions,
-                ...(css === undefined ? {} : { Css: css })
+                ...(css === undefined ? {} : { Css: css }),
+                /* Must be committed by Namespace.Reserve BEFORE Promote emits Defined. */
+                Component: true
             } as Interfaces.Core.TypeOptions;
 
             const tg = tag.trim().toLowerCase();
@@ -830,14 +965,6 @@ export namespace Components
                     );
                 }
 
-                const record =
-                    Namespaces.Namespace.Resolve(tg);
-
-                if(record !== false)
-                {
-                    record.Component = true;
-                }
-
                 let constructing =
                     false;
 
@@ -870,6 +997,37 @@ export namespace Components
 
                                         if(element)
                                         {
+                                            /*
+                                             * Direct decorated constructors are minted through Namespace.Create,
+                                             * so Target's native constructor is deliberately not invoked here.
+                                             * Preserve the useful `new X({ ...properties })` contract by applying
+                                             * a single plain-object options bag through the same canonical Real.set
+                                             * path used everywhere else in AriannA.
+                                             *
+                                             * This fixes `new Chat({ theme:'light' })`, `new Workflow({...})`,
+                                             * CodeEditor options, and every decorated component without forcing
+                                             * individual components to duplicate constructor-option plumbing.
+                                             */
+                                            if
+                                            (
+                                                constructorArgs.length === 1 &&
+                                                constructorArgs[0] !== null &&
+                                                typeof constructorArgs[0] === 'object' &&
+                                                !Array.isArray(constructorArgs[0]) &&
+                                                Object.getPrototypeOf(constructorArgs[0]) === Object.prototype
+                                            )
+                                            {
+                                                const properties =
+                                                    constructorArgs[0] as Record<string, unknown>;
+                                                const facet =
+                                                    Component.RealFacet(element);
+
+                                                for(const [name, value] of Object.entries(properties))
+                                                {
+                                                    facet.set(name, value);
+                                                }
+                                            }
+
                                             return element;
                                         }
                                     }

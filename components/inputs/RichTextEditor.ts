@@ -8,7 +8,7 @@
  * @description AriannA RichTextEditor component module.
  */
 
-import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
+import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 /** @name        html
@@ -44,6 +44,7 @@ export namespace RichTextEditor
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         export type ToolbarCommandType = ToolbarCommand;
+        export type Theme = 'dark' | 'light';
     }
 
     /** @namespace   Interfaces
@@ -218,6 +219,9 @@ export namespace RichTextEditor
 
         /** Initial HTML content. Default: ''. */
         value?: string;
+
+        /** Component theme. Default: 'dark'. */
+        theme?: Types.Theme;
     }
     // ── Toolbar button map ────────────────────────────────────────────────────────
     /** @interface   ToolbarDef
@@ -353,6 +357,96 @@ export namespace RichTextEditor
             .replace(/&nbsp;/g, ' ')
             .trim();
     }
+    export const Styles = new Css.Stylesheet([
+        new Css.Rule('.RichTextEditor', {
+            background: '#171a1e',
+            border: '1px solid #0c0e10',
+            borderRadius: '6px',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,.04), 0 2px 8px rgba(0,0,0,.30)',
+            boxSizing: 'border-box',
+            color: '#e7eaed',
+            display: 'inline-block',
+            font: 'var(--arianna-font-size, 13px) var(--arianna-font, system-ui, sans-serif)',
+            overflow: 'hidden',
+        }),
+        new Css.Rule('.RichTextEditor-Wrap', {
+            display: 'flex',
+            flexDirection: 'column',
+        }),
+        new Css.Rule('.RichTextEditor-Toolbar', {
+            alignItems: 'center',
+            background: 'linear-gradient(180deg,#2c3034 0%,#202429 100%)',
+            borderBottom: '1px solid #0c0e10',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '2px',
+            padding: '6px 8px',
+        }),
+        new Css.Rule('.RichTextEditor-Button', {
+            background: '#282d32',
+            border: '1px solid #3a4046',
+            borderRadius: '4px',
+            color: '#d7dce1',
+            cursor: 'pointer',
+            font: 'inherit',
+            fontSize: '0.75rem',
+            lineHeight: '1.4',
+            padding: '3px 7px',
+            transition: 'background .14s ease, border-color .14s ease',
+        }),
+        new Css.Rule('.RichTextEditor-Button:hover', { background: '#333941', borderColor: '#4a525a' }),
+        new Css.Rule('.RichTextEditor-Button:active', { background: '#1b1f23' }),
+        new Css.Rule('.RichTextEditor-Separator', {
+            alignSelf: 'center',
+            background: '#3a4046',
+            display: 'inline-block',
+            height: '18px',
+            margin: '0 4px',
+            width: '1px',
+        }),
+        new Css.Rule('.RichTextEditor-Body', {
+            background: '#171a1e',
+            color: '#e7eaed',
+            fontSize: '0.88rem',
+            lineHeight: '1.75',
+            outline: 'none',
+            padding: '14px 16px',
+            position: 'relative',
+        }),
+        new Css.Rule('.RichTextEditor-Body:empty::before', {
+            color: '#7f8992',
+            content: 'attr(data-placeholder)',
+            pointerEvents: 'none',
+            position: 'absolute',
+        }),
+        new Css.Rule('.RichTextEditor[theme="light"]', {
+            background: '#f8f9fa',
+            borderColor: '#c9cdd1',
+            boxShadow: 'inset 0 1px 0 #fff, 0 2px 8px rgba(0,0,0,.10)',
+            color: '#24282c',
+        }),
+        new Css.Rule('.RichTextEditor[theme="light"] .RichTextEditor-Toolbar', {
+            background: 'linear-gradient(180deg,#f8f9fa 0%,#e7eaed 100%)',
+            borderBottomColor: '#c9cdd1',
+        }),
+        new Css.Rule('.RichTextEditor[theme="light"] .RichTextEditor-Button', {
+            background: '#ffffff',
+            borderColor: '#c9cdd1',
+            color: '#30353a',
+        }),
+        new Css.Rule('.RichTextEditor[theme="light"] .RichTextEditor-Button:hover', {
+            background: '#eef0f2',
+            borderColor: '#b7bcc1',
+        }),
+        new Css.Rule('.RichTextEditor[theme="light"] .RichTextEditor-Button:active', { background: '#e2e5e8' }),
+        new Css.Rule('.RichTextEditor[theme="light"] .RichTextEditor-Separator', { background: '#c9cdd1' }),
+        new Css.Rule('.RichTextEditor[theme="light"] .RichTextEditor-Body', {
+            background: '#ffffff',
+            color: '#24282c',
+        }),
+        new Css.Rule('.RichTextEditor[theme="light"] .RichTextEditor-Body:empty::before', { color: '#858c93' }),
+    ]);
+
     // ── RichTextEditor (v2 Component) ────────────────────────────────────────────
     /** @class       RichTextEditor
      *  @public
@@ -360,11 +454,14 @@ export namespace RichTextEditor
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-richtext-editor', {}, {
-        Attributes: ['placeholder', 'min-height', 'max-height', 'spellcheck', 'markdown', 'value'],
+    @Component('arianna-richtext-editor', Styles, {
+        Shadow: false,
+        Attributes: ['placeholder', 'min-height', 'max-height', 'spellcheck', 'markdown', 'value', 'theme'],
     })
     export class RichTextEditor extends HTMLElement
     {
+        public static readonly Styles = Styles;
+
         /** @name        template
          *  @public
          *  @type        {unknown}
@@ -395,32 +492,32 @@ export namespace RichTextEditor
          *  @license     MIT / Commercial (dual license) */
         readonly focused$: SchemaInterfaces.Reactivity.Signal<boolean> = signal(false);
 
-        /** @name        #toolbar
+        /** @name        __toolbar
          *  @public
          *  @type        {HTMLDivElement}
          *  @description Component member for toolbar.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #toolbar!: HTMLDivElement;
+        __toolbar!: HTMLDivElement;
 
-        /** @name        #body
+        /** @name        __body
          *  @public
          *  @type        {HTMLDivElement}
          *  @description Component member for body.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #body!: HTMLDivElement;
+        __body!: HTMLDivElement;
 
-        /** @name        #opts
+        /** @name        __opts
          *  @public
          *  @type        {Required<RichTextEditorOptions>}
          *  @description Component member for opts.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #opts!: Required<RichTextEditorOptions>;
+        __opts!: Required<RichTextEditorOptions>;
 
         /** @name        constructor
          *  @public
@@ -473,8 +570,10 @@ export namespace RichTextEditor
                 el.setAttribute('markdown', 'false');
             if (opts.value)
                 el.setAttribute('value', opts.value);
+            if (opts.theme)
+                el.setAttribute('theme', opts.theme);
             // Stash for onConnected()
-            this.#opts = {
+            this.__opts = {
                 placeholder: opts.placeholder ?? 'Start typing…',
                 toolbar: opts.toolbar ?? DEFAULT_TOOLBAR,
                 minHeight: opts.minHeight ?? 150,
@@ -482,6 +581,7 @@ export namespace RichTextEditor
                 spellcheck: opts.spellcheck ?? true,
                 markdown: opts.markdown ?? true,
                 value: opts.value ?? '',
+                theme: opts.theme ?? 'dark',
             };
         }
 
@@ -495,6 +595,21 @@ export namespace RichTextEditor
          *  @license     MIT / Commercial (dual license) */
         onConnected(): void
         {
+            this.classList.add('RichTextEditor');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', this.__opts?.theme ?? 'dark');
+
+            (this as any).html$ ??= signal('');
+            (this as any).focused$ ??= signal(false);
+            this.__opts ??= {
+                placeholder: 'Start typing…',
+                toolbar: DEFAULT_TOOLBAR,
+                minHeight: 150,
+                maxHeight: Number.POSITIVE_INFINITY,
+                spellcheck: true,
+                markdown: true,
+                value: '',
+                theme: 'dark',
+            };
             /** @name        self
              *  @public
              *  @type        {inferred}
@@ -551,14 +666,6 @@ export namespace RichTextEditor
                     attribute(name: string): SchemaInterfaces.Reactivity.Signal<string | null>;
                 };
 
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Css.Stylesheet | null;
             };
 
             /** @name        root
@@ -569,8 +676,13 @@ export namespace RichTextEditor
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
             const root = self.render();
-            if (root.querySelector('.rte-wrap'))
+            if (root.querySelector('.RichTextEditor-Wrap'))
                 return;
+
+            // Children/textContent are the canonical textual content form.
+            // Capture them before installing the editor chrome so they are moved
+            // into the contenteditable surface rather than left above the toolbar.
+            const initialText = (root.textContent ?? '').trim();
             // Re-read attributes (may override constructor opts if set via markup)
             /** @name        sPlaceholder
              *  @public
@@ -579,7 +691,7 @@ export namespace RichTextEditor
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const sPlaceholder = self.signal().attribute('placeholder');
+            const sPlaceholder = Components.Component.AttributeSignal(this, 'placeholder');
 
             /** @name        sMinH
              *  @public
@@ -588,7 +700,7 @@ export namespace RichTextEditor
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const sMinH = self.signal().attribute('min-height');
+            const sMinH = Components.Component.AttributeSignal(this, 'min-height');
 
             /** @name        sMaxH
              *  @public
@@ -597,7 +709,7 @@ export namespace RichTextEditor
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const sMaxH = self.signal().attribute('max-height');
+            const sMaxH = Components.Component.AttributeSignal(this, 'max-height');
 
             /** @name        sSpell
              *  @public
@@ -606,7 +718,7 @@ export namespace RichTextEditor
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const sSpell = self.signal().attribute('spellcheck');
+            const sSpell = Components.Component.AttributeSignal(this, 'spellcheck');
 
             /** @name        sMd
              *  @public
@@ -615,7 +727,7 @@ export namespace RichTextEditor
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const sMd = self.signal().attribute('markdown');
+            const sMd = Components.Component.AttributeSignal(this, 'markdown');
 
             /** @name        sValue
              *  @public
@@ -624,19 +736,19 @@ export namespace RichTextEditor
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const sValue = self.signal().attribute('value');
+            const sValue = Components.Component.AttributeSignal(this, 'value');
             if (sPlaceholder?.Peek())
-                this.#opts.placeholder = sPlaceholder.Peek() ?? this.#opts.placeholder;
+                this.__opts.placeholder = sPlaceholder.Peek() ?? this.__opts.placeholder;
             if (sMinH?.Peek())
-                this.#opts.minHeight = parseInt(sMinH.Peek() ?? '150', 10) || 150;
+                this.__opts.minHeight = parseInt(sMinH.Peek() ?? '150', 10) || 150;
             if (sMaxH?.Peek())
-                this.#opts.maxHeight = parseInt(sMaxH.Peek() ?? '0', 10) || Number.POSITIVE_INFINITY;
+                this.__opts.maxHeight = parseInt(sMaxH.Peek() ?? '0', 10) || Number.POSITIVE_INFINITY;
             if (sSpell?.Peek() === 'false')
-                this.#opts.spellcheck = false;
+                this.__opts.spellcheck = false;
             if (sMd?.Peek() === 'false')
-                this.#opts.markdown = false;
+                this.__opts.markdown = false;
             if (sValue?.Peek())
-                this.#opts.value = sValue.Peek() ?? '';
+                this.__opts.value = sValue.Peek() ?? '';
 
             /** @name        wrap
              *  @public
@@ -646,7 +758,7 @@ export namespace RichTextEditor
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
             const wrap = document.createElement('div');
-            wrap.className = 'rte-wrap';
+            wrap.className = 'RichTextEditor-Wrap';
             // Toolbar
             /** @name        tb
              *  @public
@@ -656,8 +768,8 @@ export namespace RichTextEditor
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
             const tb = document.createElement('div');
-            tb.className = 'rte-toolbar';
-            this.#toolbar = tb;
+            tb.className = 'RichTextEditor-Toolbar';
+            this.__toolbar = tb;
             // Body
             /** @name        body
              *  @public
@@ -667,27 +779,31 @@ export namespace RichTextEditor
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
             const body = document.createElement('div');
-            body.className = 'rte-body';
+            body.className = 'RichTextEditor-Body';
             body.contentEditable = 'true';
-            body.spellcheck = this.#opts.spellcheck;
-            body.dataset.placeholder = this.#opts.placeholder;
-            body.style.minHeight = this.#opts.minHeight + 'px';
-            if (isFinite(this.#opts.maxHeight))
+            body.spellcheck = this.__opts.spellcheck;
+            body.dataset.placeholder = this.__opts.placeholder;
+            body.style.minHeight = this.__opts.minHeight + 'px';
+            if (isFinite(this.__opts.maxHeight))
             {
-                body.style.maxHeight = this.#opts.maxHeight + 'px';
+                body.style.maxHeight = this.__opts.maxHeight + 'px';
                 body.style.overflowY = 'auto';
             }
-            this.#body = body;
+            this.__body = body;
             wrap.append(tb, body);
-            root.appendChild(wrap);
-            this.#buildToolbar();
-            if (this.#opts.value)
+            root.replaceChildren(wrap);
+            this.__buildToolbar();
+            if (this.__opts.value)
             {
-                body.innerHTML = this.#opts.value;
-                this.html$.Set(this.#opts.value);
+                body.innerHTML = this.__opts.value;
+                this.html$.Set(this.__opts.value);
             }
-            this.#wireEvents();
-            self.Sheet = RichTextEditor.DefaultSheet();
+            else if (initialText)
+            {
+                body.textContent = initialText;
+                this.html$.Set(body.innerHTML);
+            }
+            this.__wireEvents();
         }
         // ── Public API ────────────────────────────────────────────────────────────
         /** @name        html
@@ -698,7 +814,7 @@ export namespace RichTextEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        get html(): string { return this.#body?.innerHTML ?? ''; }
+        get html(): string { return this.__body?.innerHTML ?? ''; }
 
         /** @name        html
          *  @public
@@ -710,9 +826,9 @@ export namespace RichTextEditor
          *  @license     MIT / Commercial (dual license) */
         set html(value: string)
         {
-            if (!this.#body)
+            if (!this.__body)
                 return;
-            this.#body.innerHTML = value;
+            this.__body.innerHTML = value;
             this.html$.Set(value);
         }
 
@@ -724,7 +840,7 @@ export namespace RichTextEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        get text(): string { return this.#body?.innerText ?? ''; }
+        get text(): string { return this.__body?.innerText ?? ''; }
 
         /** @name        markdown
          *  @public
@@ -734,7 +850,7 @@ export namespace RichTextEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        get markdown(): string { return htmlToMarkdown(this.#body?.innerHTML ?? ''); }
+        get markdown(): string { return htmlToMarkdown(this.__body?.innerHTML ?? ''); }
 
         /** @name        isEmpty
          *  @public
@@ -746,9 +862,9 @@ export namespace RichTextEditor
          *  @license     MIT / Commercial (dual license) */
         get isEmpty(): boolean
         {
-            if (!this.#body)
+            if (!this.__body)
                 return true;
-            return !this.#body.textContent?.trim() && !this.#body.querySelector('img, video, iframe');
+            return !this.__body.textContent?.trim() && !this.__body.querySelector('img, video, iframe');
         }
 
         /** @name        focus
@@ -759,7 +875,7 @@ export namespace RichTextEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        focus(): this { this.#body?.focus(); return this; }
+        focus(): this { this.__body?.focus(); return this; }
 
         /** @name        blur
          *  @public
@@ -769,7 +885,7 @@ export namespace RichTextEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        blur(): this { this.#body?.blur(); return this; }
+        blur(): this { this.__body?.blur(); return this; }
 
         /** @name        clear
          *  @public
@@ -781,11 +897,11 @@ export namespace RichTextEditor
          *  @license     MIT / Commercial (dual license) */
         clear(): this
         {
-            if (!this.#body)
+            if (!this.__body)
                 return this;
-            this.#body.innerHTML = '';
+            this.__body.innerHTML = '';
             this.html$.Set('');
-            this.#fireChange();
+            this.__fireChange();
             return this;
         }
 
@@ -795,7 +911,7 @@ export namespace RichTextEditor
          */
         command(cmd: ToolbarCommand | string, val?: string): this
         {
-            if (!this.#body)
+            if (!this.__body)
                 return this;
 
             /** @name        self
@@ -818,7 +934,7 @@ export namespace RichTextEditor
                  *  @license     MIT / Commercial (dual license) */
                 fire(t: string, init?: CustomEventInit): void;
             };
-            this.#body.focus();
+            this.__body.focus();
 
             /** @name        def
              *  @public
@@ -840,12 +956,12 @@ export namespace RichTextEditor
             {
                 document.execCommand(cmd);
             }
-            this.#fireChange();
+            this.__fireChange();
             self.fire('arianna:richtext-command', { detail: { command: cmd, value: val, source: this }, bubbles: true });
             return this;
         }
         // ── Internal ──────────────────────────────────────────────────────────────
-        /** @name        #fireChange
+        /** @name        __fireChange
          *  @public
          *  @type        {void}
          *  @description Component member for fire Change.
@@ -853,7 +969,7 @@ export namespace RichTextEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #fireChange(): void
+        __fireChange(): void
         {
             /** @name        self
              *  @public
@@ -883,12 +999,12 @@ export namespace RichTextEditor
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const html = this.#body.innerHTML;
+            const html = this.__body.innerHTML;
             this.html$.Set(html);
             self.fire('arianna:richtext-change', { detail: { html, text: this.text, source: this }, bubbles: true });
         }
 
-        /** @name        #buildToolbar
+        /** @name        __buildToolbar
          *  @public
          *  @type        {void}
          *  @description Component member for build Toolbar.
@@ -896,9 +1012,9 @@ export namespace RichTextEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #buildToolbar(): void
+        __buildToolbar(): void
         {
-            for (const cmd of this.#opts.toolbar)
+            for (const cmd of this.__opts.toolbar)
             {
                 if (cmd === '|')
                 {
@@ -910,8 +1026,8 @@ export namespace RichTextEditor
                      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                      *  @license     MIT / Commercial (dual license) */
                     const sep = document.createElement('span');
-                    sep.className = 'rte-sep';
-                    this.#toolbar.appendChild(sep);
+                    sep.className = 'RichTextEditor-Separator';
+                    this.__toolbar.appendChild(sep);
                     continue;
                 }
 
@@ -935,16 +1051,16 @@ export namespace RichTextEditor
                  *  @license     MIT / Commercial (dual license) */
                 const btn = document.createElement('button');
                 btn.type = 'button';
-                btn.className = 'rte-btn';
+                btn.className = 'RichTextEditor-Button';
                 btn.title = def.title;
                 btn.innerHTML = def.label;
                 if (def.style)
                     btn.setAttribute('style', def.style);
                 btn.addEventListener('mousedown', (e: MouseEvent) => {
                     e.preventDefault(); // prevent editor losing focus
-                    this.#body.focus();
+                    this.__body.focus();
                     def.exec(this);
-                    this.#fireChange();
+                    this.__fireChange();
 
                     /** @name        self
                      *  @public
@@ -968,11 +1084,11 @@ export namespace RichTextEditor
                     };
                     self.fire('arianna:richtext-command', { detail: { command: cmd, source: this }, bubbles: true });
                 });
-                this.#toolbar.appendChild(btn);
+                this.__toolbar.appendChild(btn);
             }
         }
 
-        /** @name        #wireEvents
+        /** @name        __wireEvents
          *  @public
          *  @type        {void}
          *  @description Component member for wire Events.
@@ -980,7 +1096,7 @@ export namespace RichTextEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #wireEvents(): void
+        __wireEvents(): void
         {
             /** @name        self
              *  @public
@@ -1002,20 +1118,20 @@ export namespace RichTextEditor
                  *  @license     MIT / Commercial (dual license) */
                 fire(t: string, init?: CustomEventInit): void;
             };
-            this.#body.addEventListener('input', () => {
-                if (this.#opts.markdown)
-                    this.#processMarkdown();
-                this.#fireChange();
+            this.__body.addEventListener('input', () => {
+                if (this.__opts.markdown)
+                    this.__processMarkdown();
+                this.__fireChange();
             });
-            this.#body.addEventListener('focus', () => {
+            this.__body.addEventListener('focus', () => {
                 this.focused$.Set(true);
                 self.fire('arianna:richtext-focus', { detail: { source: this }, bubbles: true });
             });
-            this.#body.addEventListener('blur', () => {
+            this.__body.addEventListener('blur', () => {
                 this.focused$.Set(false);
                 self.fire('arianna:richtext-blur', { detail: { html: this.html, text: this.text, source: this }, bubbles: true });
             });
-            this.#body.addEventListener('keydown', (e: Event) => {
+            this.__body.addEventListener('keydown', (e: Event) => {
                 /** @name        ke
                  *  @public
                  *  @type        {inferred}
@@ -1056,7 +1172,7 @@ export namespace RichTextEditor
             });
         }
 
-        /** @name        #processMarkdown
+        /** @name        __processMarkdown
          *  @public
          *  @type        {void}
          *  @description Component member for process Markdown.
@@ -1064,7 +1180,7 @@ export namespace RichTextEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #processMarkdown(): void
+        __processMarkdown(): void
         {
             /** @name        sel
              *  @public
@@ -1155,6 +1271,16 @@ export namespace RichTextEditor
             }
         }
 
+        public get theme(): Types.Theme
+        {
+            return (this.getAttribute('theme') ?? 'dark') as Types.Theme;
+        }
+
+        public set theme(value: Types.Theme)
+        {
+            this.setAttribute('theme', value);
+        }
+
         /** @name        DefaultSheet
          *  @public
          *  @static
@@ -1166,67 +1292,7 @@ export namespace RichTextEditor
          *  @license     MIT / Commercial (dual license) */
         static DefaultSheet(): Css.Stylesheet
         {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--ar-bg, #fff)',
-                    border: '1px solid var(--ar-border, #e0e0e0)',
-                    borderRadius: 'var(--ar-radius, 6px)',
-                    color: 'var(--ar-text, #111)',
-                    display: 'inline-block',
-                    font: 'var(--ar-font-size, 13px) var(--ar-font, system-ui, sans-serif)',
-                    overflow: 'hidden',
-                }),
-                new Rule(':host .rte-wrap', {
-                    display: 'flex',
-                    flexDirection: 'column',
-                }),
-                new Rule(':host .rte-toolbar', {
-                    alignItems: 'center',
-                    background: 'var(--ar-bg2, #f5f5f5)',
-                    borderBottom: '1px solid var(--ar-border, #e0e0e0)',
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '2px',
-                    padding: '6px 8px',
-                }),
-                new Rule(':host .rte-btn', {
-                    background: 'var(--ar-bg, #fff)',
-                    border: '1px solid var(--ar-border, #e0e0e0)',
-                    borderRadius: 'var(--ar-radius-sm, 4px)',
-                    color: 'var(--ar-text, #111)',
-                    cursor: 'pointer',
-                    font: 'inherit',
-                    fontSize: '0.75rem',
-                    lineHeight: '1.4',
-                    padding: '3px 7px',
-                    transition: 'background var(--ar-transition, 0.14s)',
-                }),
-                new Rule(':host .rte-btn:hover', { background: 'var(--ar-bg3, #eee)' }),
-                new Rule(':host .rte-btn:active', { background: 'var(--ar-bg4, #ddd)' }),
-                new Rule(':host .rte-sep', {
-                    alignSelf: 'center',
-                    background: 'var(--ar-border, #e0e0e0)',
-                    display: 'inline-block',
-                    height: '18px',
-                    margin: '0 4px',
-                    width: '1px',
-                }),
-                new Rule(':host .rte-body', {
-                    background: 'var(--ar-bg, #fff)',
-                    color: 'var(--ar-text, #111)',
-                    fontSize: '0.88rem',
-                    lineHeight: '1.75',
-                    outline: 'none',
-                    padding: '14px 16px',
-                    position: 'relative',
-                }),
-                new Rule(':host .rte-body:empty::before', {
-                    color: 'var(--ar-muted, #aaa)',
-                    content: 'attr(data-placeholder)',
-                    pointerEvents: 'none',
-                    position: 'absolute',
-                }),
-            ]);
+            return Styles;
         }
     }
 }

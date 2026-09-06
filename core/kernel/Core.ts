@@ -275,7 +275,18 @@ export namespace Core {
          *  @license     MIT / Commercial (dual license) */
         constructor(packages?: Types.Core.Packages) {
             AriannA.Initialize();
-            AriannA.#ready ??= AriannA.Boot(packages);
+
+            /*
+             * The distribution entry (`core/index.ts`) runs `Bootstrap()` after publishing the complete Core
+             * API and before it starts the default companion boot. This avoids a race with
+             * zero-import components that resolve Component/Css from globalThis while
+             * arianna-components.js is being evaluated. An explicit package spec still
+             * means "boot now" for callers constructing AriannA themselves.
+             */
+            if(packages !== undefined)
+            {
+                AriannA.#ready ??= AriannA.Boot(packages);
+            }
         }
         /** @name        Ready
          *  @public
@@ -310,8 +321,47 @@ export namespace Core {
             urls: string[];
             mirror: boolean;
         } {
-            void spec;
-            return { urls: [], mirror: true };
+            const current = import.meta.url;
+            const suffix = /\.min\.js(?:$|[?#])/.test(current) ? '.min.js' : '.js';
+            const defaultBase = new URL('./', current).href;
+
+            const resolve = (value: string, base = defaultBase): string =>
+                new URL(value, base).href;
+
+            if(typeof spec === 'string')
+            {
+                return { urls: [resolve(spec)], mirror: true };
+            }
+
+            if(Array.isArray(spec))
+            {
+                return { urls: spec.map(value => resolve(value)), mirror: true };
+            }
+
+            const options = spec as Exclude<Types.Core.Packages, string | readonly string[]>;
+            const base = options.base ? resolve(options.base) : defaultBase;
+            const urls: string[] = [];
+
+            const add =
+            (
+                value: boolean | string | undefined,
+                fallback: string
+            ): void =>
+            {
+                if(value === false) return;
+                urls.push(resolve(typeof value === 'string' ? value : fallback, base));
+            };
+
+            // Full browser distribution: one arianna.js line loads the two companion bundles.
+            add(options.additionals, `arianna-additionals${suffix}`);
+            add(options.components,  `arianna-components${suffix}`);
+
+            for(const bundle of options.bundles ?? [])
+            {
+                urls.push(resolve(bundle, base));
+            }
+
+            return { urls: Array.from(new Set(urls)), mirror: options.mirror !== false };
         }
         /** @name        #mirror
          *  @private
@@ -326,11 +376,38 @@ export namespace Core {
          *  @license     MIT / Commercial (dual license)
          */
         static #mirror(mod: Record<string, unknown>): void {
-            if (typeof window === 'undefined')
-                return;
-            for (const k of Object.keys(mod)) {
-                const name = AriannA.#globals.has(k) ? 'AriannA' + k : k;
-                void name; /* defineProperty… */
+            if(typeof globalThis === 'undefined') return;
+
+            for(const [key, value] of Object.entries(mod))
+            {
+                const name = AriannA.#globals.has(key) ? 'AriannA' + key : key;
+                if(name in globalThis) continue;
+
+                /* TypeScript namespace merging exports `{ Foo: class Foo }`. The public
+                   browser surface historically exposes that as the class `Foo`, while
+                   the original module object remains available in __ARIANNA_MODULES__. */
+                const exposed =
+                    value &&
+                    typeof value === 'object' &&
+                    typeof (value as Record<string, unknown>)[key] === 'function'
+                        ? (value as Record<string, unknown>)[key]
+                        : value;
+
+                try
+                {
+                    Object.defineProperty
+                    (
+                        globalThis,
+                        name,
+                        {
+                            value        : exposed,
+                            writable     : false,
+                            configurable : true,
+                            enumerable   : false
+                        }
+                    );
+                }
+                catch {}
             }
         }
         /** @name        Initialized
@@ -397,17 +474,61 @@ export namespace Core {
                 return;
             AriannA.#booted = true;
             const { urls, mirror } = AriannA.#packages(spec ?? {});
-            const mods = await Promise.all(urls.map(u => import(/* @vite-ignore */ u).catch(() => null)));
-            if (mirror) {
-                for (const m of mods) {
-                    if (m)
-                        AriannA.#mirror(m as Record<string, unknown>);
+            const mods = await Promise.all
+            (
+                urls.map(url => import(/* @vite-ignore */ url))
+            );
+
+            if(mirror)
+            {
+                for(const mod of mods)
+                {
+                    AriannA.#mirror(mod as Record<string, unknown>);
                 }
             }
-            Services.Events?.Fire(document, {
-                Type: 'arianna-ready',
-                Detail: { version: AriannA.Configuration.version.string },
-            });
+
+            if(typeof globalThis !== 'undefined')
+            {
+                const modules = Object.fromEntries
+                (
+                    urls.map((url, index) =>
+                    [
+                        /arianna-additionals(?:\.min)?\.js(?:$|[?#])/.test(url)
+                            ? 'additionals'
+                            : /arianna-components(?:\.min)?\.js(?:$|[?#])/.test(url)
+                                ? 'components'
+                                : `bundle${index}`,
+                        mods[index]
+                    ])
+                );
+
+                Object.defineProperty
+                (
+                    globalThis,
+                    '__ARIANNA_MODULES__',
+                    {
+                        value        : modules,
+                        writable     : true,
+                        configurable : true,
+                        enumerable   : false
+                    }
+                );
+            }
+
+            const CE = document.defaultView?.CustomEvent ?? globalThis.CustomEvent;
+            if(typeof CE === 'function')
+            {
+                document.dispatchEvent
+                (
+                    new CE
+                    (
+                        'arianna-ready',
+                        {
+                            detail: { version: AriannA.Configuration.version.string }
+                        }
+                    )
+                );
+            }
         }
         /** @name        Initialize
          *  @public
@@ -441,78 +562,131 @@ export namespace Core {
          *  @license     MIT / Commercial (dual license)
          */
         static Initialize(): void {
-            if (typeof document === 'undefined')
-                return;
+            if(typeof document === 'undefined') return;
+
             const namespaces = Services.Namespaces;
-            if (!namespaces)
-                return;
-            if (!namespaces.Has('html'))
-                AriannA.Install();
-            if (typeof globalThis !== 'undefined') {
-                (globalThis as {
-                    Core?: unknown;
-                }).Core ??= Core;
+            if(!namespaces) return;
+
+            if(!namespaces.Has('html')) AriannA.Install();
+
+            if(typeof globalThis !== 'undefined')
+            {
+                (globalThis as { Core?: unknown }).Core ??= Core;
             }
-            if (AriannA.#observer)
-                return;
+
+            if(AriannA.#observer) return;
+
             const service = Services.Observer;
-            if (!service)
-                return;
+            if(!service) return;
+
             const stage = document.body ?? document.documentElement;
-            const observer = Services.Observer?.Create() as Observers.Observer;
+            const observer = service.Create() as Observers.Observer;
             const base = observer.Callback!;
-            observer?.connect(stage);
-            observer.Callback = function (mutations: MutationRecord[], observer: MutationObserver): void {
-                for (const m of mutations) {
-                    if (m.type !== 'childList')
-                        continue;
-                    for (const node of m.addedNodes) {
-                        if (!(node instanceof Element))
-                            continue;
-                        const d = namespaces.Resolve(node);
-                        if (!d || !d.Custom || !d.Defined)
-                            continue;
-                        if (Object.getPrototypeOf(node) === d.Prototype)
-                            continue;
-                        namespaces.Upgrade(node, d);
-                    }
+
+            type Descriptor = Exclude<ReturnType<NonNullable<typeof namespaces>['Resolve']>, false>;
+            type ComponentLifecycle =
+            {
+                AttributeChanged?(node: Element, name: string, old: string | null, value: string | null): void;
+                Connected?(node: Element): void;
+                Disconnected?(node: Element): void;
+            };
+
+            const connected = new WeakSet<Element>();
+            const component = (): ComponentLifecycle | undefined =>
+                Services.Resolve('component') as ComponentLifecycle | undefined;
+
+            const connect = (node: Element, known?: Descriptor | false): void =>
+            {
+                const descriptor = known || namespaces.Resolve(node);
+                if(!descriptor || !descriptor.Custom || !descriptor.Defined) return;
+
+                if(Object.getPrototypeOf(node) !== descriptor.Prototype)
+                {
+                    namespaces.Upgrade(node, descriptor);
                 }
-                base.call(this, mutations, observer);
+
+                if(node.isConnected && !connected.has(node))
+                {
+                    connected.add(node);
+                    component()?.Connected?.(node);
+                }
             };
-            /*
-             * FIRST-PAINT PATH
-             * ----------------
-             * The observer is already connected, so no mutation occurring from
-             * this point onward can be lost. The expensive initial full-tree
-             * sweep is therefore not part of synchronous framework boot.
-             *
-             * Existing DOM is reconciled when the browser has had an
-             * opportunity to paint. New DOM created meanwhile is handled by the
-             * live MutationObserver above.
-             *
-             * requestIdleCallback is preferred because it is explicitly outside
-             * the rendering critical path. setTimeout is the portable fallback.
-             */
-            const sweep = (): void => {
-                if (!stage.isConnected)
-                    return;
-                observer.sweep(stage);
+
+            const visit = (root: Element): void =>
+            {
+                connect(root);
+                for(let child = root.firstElementChild; child; child = child.nextElementSibling)
+                    visit(child);
             };
-            if (typeof globalThis !== 'undefined' &&
-                'requestIdleCallback' in globalThis &&
-                typeof (globalThis as typeof globalThis & {
-                    requestIdleCallback?: (callback: IdleRequestCallback) => number;
-                }).requestIdleCallback === 'function') {
-                (globalThis as typeof globalThis & {
-                    requestIdleCallback: (callback: IdleRequestCallback) => number;
-                }).requestIdleCallback(() => sweep());
-            }
-            else {
-                globalThis.setTimeout(sweep, 0);
-            }
-            AriannA.#observer = observer as Observers.Observer;
+
+            const detach = (root: Element): void =>
+            {
+                if(connected.delete(root)) component()?.Disconnected?.(root);
+                for(let child = root.firstElementChild; child; child = child.nextElementSibling)
+                    detach(child);
+            };
+
+            const onDefined: EventListener = event =>
+            {
+                const detail = (event as CustomEvent<{ Descriptor?: Descriptor }>).detail;
+                const descriptor = detail?.Descriptor;
+                if(!descriptor || !descriptor.Custom || !descriptor.Defined) return;
+
+                const tag = descriptor.Tags?.[0]?.toLowerCase();
+                if(!tag) return;
+
+                // Promote already performs the targeted structural retro-upgrade. This pass only
+                // completes the connected lifecycle, and also makes the event robust if Upgrade
+                // was skipped by a future alternate Promote implementation.
+                for(const node of Array.from(document.getElementsByTagName(tag)))
+                    connect(node, descriptor);
+            };
+
+            observer.connect(stage);
+            observer.Callback = function
+            (
+                mutations: MutationRecord[],
+                nativeObserver: MutationObserver
+            ): void
+            {
+                for(const mutation of mutations)
+                {
+                    if(mutation.type === 'attributes')
+                    {
+                        if(mutation.target instanceof Element && mutation.attributeName)
+                        {
+                            component()?.AttributeChanged?.
+                            (
+                                mutation.target,
+                                mutation.attributeName,
+                                mutation.oldValue ?? null,
+                                mutation.target.getAttribute(mutation.attributeName)
+                            );
+                        }
+                        continue;
+                    }
+
+                    if(mutation.type !== 'childList') continue;
+
+                    for(const node of mutation.removedNodes)
+                        if(node instanceof Element) detach(node);
+
+                    for(const node of mutation.addedNodes)
+                        if(node instanceof Element) visit(node);
+                }
+
+                base.call(this, mutations, nativeObserver);
+            };
+
+            document.addEventListener('Defined', onDefined);
+
+            // One bootstrap traversal. After this, MutationObserver is the only live DOM source.
+            visit(stage);
+
+            AriannA.#observer = observer;
             AriannA.#initialized = true;
         }
+
         /** @name        Install
          *  @public
          *  @memberof    Core

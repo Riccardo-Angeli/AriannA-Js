@@ -819,6 +819,48 @@ export namespace Reals
          */
         pop(n = 1): this { for (let i = 0; i < n && this.#el.lastChild; i++) Real.Remove(this.#el.lastChild); return this; }
 
+        /** @name        Class
+         *  @public
+         *  @type        {string}
+         *  @description Primary class convenience. Assignment is additive so a skin class never
+         *               removes the component's canonical class installed by AriannA.
+         */
+        get Class(): string
+        {
+            return this.#el.classList.item(0) ?? '';
+        }
+
+        set Class(value: string)
+        {
+            const name = String(value ?? '').trim();
+            if(name) this.#el.classList.add(name);
+        }
+
+        /** @name        Classes
+         *  @public
+         *  @type        {string[]}
+         *  @description Class collection convenience. Assignment is additive and accepts either
+         *               an array or a whitespace-separated string.
+         */
+        get Classes(): string[]
+        {
+            return Array.from(this.#el.classList);
+        }
+
+        set Classes(value: string[] | string)
+        {
+            const values =
+                Array.isArray(value)
+                    ? value
+                    : String(value ?? '').split(/\s+/);
+
+            for(const item of values)
+            {
+                const name = String(item ?? '').trim();
+                if(name) this.#el.classList.add(name);
+            }
+        }
+
         /** @name        get
          *  @public
          *  @description Read an attribute or property by name (case-insensitive). Supports a dotted path
@@ -868,6 +910,31 @@ export namespace Reals
          */
         set(name: string, value: unknown): this
         {
+            const key = name.trim().toUpperCase();
+
+            if(key === 'CLASS')
+            {
+                this.Class = String(value ?? '');
+                return this;
+            }
+
+            if(key === 'CLASSES')
+            {
+                this.Classes =
+                    Array.isArray(value)
+                        ? value.map(item => String(item))
+                        : String(value ?? '');
+                return this;
+            }
+
+            /* Sheet already exists as a Real property; route it explicitly so
+             * `.set('Sheet', sheet)` never degrades into a string attribute. */
+            if(key === 'SHEET')
+            {
+                this.Sheet = value as Stylesheet | null;
+                return this;
+            }
+
             if (name.indexOf('.') !== -1)
             {
                 const parts = name.split('.');
@@ -894,10 +961,53 @@ export namespace Reals
                 if (a.name.toUpperCase() === u) { Real.Attribute(this.#el, a.name, String(value)); return this; }
             }
 
-            const rec = this.#el as unknown as Record<string, unknown>;
-            for (const k of Object.keys(rec)) if (k.toUpperCase() === u) { rec[k] = value; return this; }
+            const rec =
+                this.#el as unknown as Record<string, unknown>;
 
-            Real.Attribute(this.#el, name.toLowerCase(), String(value));
+            /*
+             * Properties declared by AriannA Components normally live on the
+             * component prototype (e.g. `set items(...)`), therefore
+             * Object.keys(element) is not sufficient: it only sees enumerable
+             * own properties.
+             *
+             * Walk the complete prototype chain and resolve the property name
+             * case-insensitively. This preserves the documented routing:
+             *
+             *   existing attribute -> attribute
+             *   existing property  -> property
+             *   otherwise          -> new attribute
+             */
+            let owner: object | null =
+                this.#el;
+
+            while(owner)
+            {
+                for(const property of Reflect.ownKeys(owner))
+                {
+                    if
+                    (
+                        typeof property === 'string' &&
+                        property.toUpperCase() === u
+                    )
+                    {
+                        rec[property] =
+                            value;
+
+                        return this;
+                    }
+                }
+
+                owner =
+                    Object.getPrototypeOf(owner);
+            }
+
+            Real.Attribute
+            (
+                this.#el,
+                name.toLowerCase(),
+                String(value)
+            );
+
             return this;
         }
 

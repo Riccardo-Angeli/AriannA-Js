@@ -8,13 +8,24 @@
  * @description AriannA TrackingMulti component module.
  */
 
-import { Component, Css, Reactivity, Templates, Components } from '../../core/index.ts';
+
 import { DHLTracker } from './DHLTracker.ts';
 import { UPSTracker } from './UPSTracker.ts';
 import { FedExTracker } from './FedExTracker.ts';
 import { BRTTracker } from './BRTTracker.ts';
 import type { TrackingEvent } from './Tracker.ts';
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountShipmentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Reactivity: any;
+declare namespace Reactivity { type Signal<T> = any; type Effect = any; }
+declare const Templates: any;
+
 
 /** @namespace   TrackingMulti
  *  @public
@@ -214,7 +225,7 @@ export namespace TrackingMulti
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -255,10 +266,38 @@ export namespace TrackingMulti
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-tracking-multi', {}, {
+        shadow: false,
         Attributes: ['tracking-number', 'carrier', 'show-input', 'locale'],
     })
-    export class TrackingMulti extends HTMLElement
+    export class TrackingMulti extends HTMLDivElement
     {
+        public static readonly Styles = TrackingMulti.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'TrackingMulti';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(!this.candidates$) this.candidates$ = signal<Types.CarrierId[]>([]);
+            if(!this.pending$) this.pending$ = signal<TrackingEvent[] | null>(null);
+            if(this._activeTracker === undefined) this._activeTracker = null;
+            this.classList.add('TrackingMulti');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -272,7 +311,7 @@ export namespace TrackingMulti
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        candidates$: Types.Signal<Types.CarrierId[]> = signal<Types.CarrierId[]>([]);
+        declare candidates$: Types.Signal<Types.CarrierId[]>;
 
         /** @name        pending$
          *  @public
@@ -281,9 +320,9 @@ export namespace TrackingMulti
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        pending$: Types.Signal<TrackingEvent[] | null> = signal<TrackingEvent[] | null>(null);
+        declare pending$: Types.Signal<TrackingEvent[] | null>;
 
-        /** @name        #activeTracker
+        /** @name        _activeTracker
          *  @public
          *  @type        {(HTMLElement & {
             setTrackingNumber(n: string): unknown;
@@ -293,7 +332,7 @@ export namespace TrackingMulti
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #activeTracker: (HTMLElement & {
+        _activeTracker: (HTMLElement & {
             /** @name        setTrackingNumber
              *  @public
              *  @type        {unknown}
@@ -328,6 +367,10 @@ export namespace TrackingMulti
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.TrackingMultiOptions = {})
         {
+            if(!this.candidates$) this.candidates$ = signal<Types.CarrierId[]>([]);
+            if(!this.pending$) this.pending$ = signal<TrackingEvent[] | null>(null);
+            if(this._activeTracker === undefined) this._activeTracker = null;
+            if(this.dataset.ariannaFolderReady === 'true') return;
             /** @name        numberAttr
              *  @public
              *  @type        {inferred}
@@ -414,11 +457,11 @@ export namespace TrackingMulti
                 this.setAttribute('tracking-number', (e.target as HTMLInputElement).value);
             };
             this.onTrack = () => {
-                this.#detect();
+                this._detect();
             };
             this.onKeyDown = (e: Event) => {
                 if ((e as KeyboardEvent).key === 'Enter')
-                    this.#detect();
+                    this._detect();
             };
             this.onCandidatePick = (e: Event) => {
                 /** @name        btn
@@ -465,6 +508,8 @@ export namespace TrackingMulti
                 <div class="ar-trkm__mount" data-r="mount"></div>
             </div>
         `;
+            MountShipmentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -489,7 +534,7 @@ export namespace TrackingMulti
         setTrackingNumber(n: string): this
         {
             this.setAttribute('tracking-number', n);
-            this.#detect();
+            this._detect();
             return this;
         }
 
@@ -515,7 +560,7 @@ export namespace TrackingMulti
         setCarrier(id: Types.CarrierId): this
         {
             this.setAttribute('carrier', id);
-            this.#mountActive();
+            this._mountActive();
             return this;
         }
 
@@ -543,9 +588,9 @@ export namespace TrackingMulti
          *  @license     MIT / Commercial (dual license) */
         setEvents(events: TrackingEvent[]): this
         {
-            if (this.#activeTracker)
+            if (this._activeTracker)
             {
-                this.#activeTracker.setEvents(events);
+                this._activeTracker.setEvents(events);
             }
             else
             {
@@ -555,9 +600,9 @@ export namespace TrackingMulti
         }
 
         /** Currently-mounted inner tracker, if any. */
-        getActive(): HTMLElement | null { return this.#activeTracker; }
+        getActive(): HTMLElement | null { return this._activeTracker; }
         // ── Internal ─────────────────────────────────────────────────────────────
-        /** @name        #detect
+        /** @name        _detect
          *  @public
          *  @type        {void}
          *  @description Component member for detect.
@@ -565,7 +610,7 @@ export namespace TrackingMulti
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #detect(): void
+        _detect(): void
         {
             /** @name        n
              *  @public
@@ -608,12 +653,12 @@ export namespace TrackingMulti
                 else if (matches.length === 0)
                 {
                     this.removeAttribute('carrier');
-                    this.#unmountActive();
+                    this._unmountActive();
                 }
             }
             else
             {
-                this.#mountActive();
+                this._mountActive();
             }
             this.dispatchEvent(new CustomEvent('arianna:carrier-detected', {
                 bubbles: true,
@@ -621,7 +666,7 @@ export namespace TrackingMulti
             }));
         }
 
-        /** @name        #mountActive
+        /** @name        _mountActive
          *  @public
          *  @type        {void}
          *  @description Component member for mount Active.
@@ -629,7 +674,7 @@ export namespace TrackingMulti
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #mountActive(): void
+        _mountActive(): void
         {
             /** @name        host
              *  @public
@@ -641,7 +686,7 @@ export namespace TrackingMulti
             const host = this.querySelector<HTMLElement>('[data-r="mount"]');
             if (!host)
                 return;
-            this.#unmountActive();
+            this._unmountActive();
 
             /** @name        id
              *  @public
@@ -718,7 +763,7 @@ export namespace TrackingMulti
             if (loc)
                 (tracker as HTMLElement).setAttribute('locale', loc);
             host.appendChild(tracker);
-            this.#activeTracker = tracker;
+            this._activeTracker = tracker;
             // Flush pending events if any
             /** @name        pending
              *  @public
@@ -737,7 +782,7 @@ export namespace TrackingMulti
             }
         }
 
-        /** @name        #unmountActive
+        /** @name        _unmountActive
          *  @public
          *  @type        {void}
          *  @description Component member for unmount Active.
@@ -745,12 +790,12 @@ export namespace TrackingMulti
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #unmountActive(): void
+        _unmountActive(): void
         {
-            if (this.#activeTracker)
+            if (this._activeTracker)
             {
-                this.#activeTracker.remove();
-                this.#activeTracker = null;
+                this._activeTracker.remove();
+                this._activeTracker = null;
             }
         }
 
@@ -787,7 +832,7 @@ export namespace TrackingMulti
             // Initial detection if number provided via attribute
             if (this.getAttribute('tracking-number'))
             {
-                queueMicrotask(() => this.#detect());
+                queueMicrotask(() => this._detect());
             }
         }
 
@@ -831,7 +876,7 @@ export namespace TrackingMulti
          *  @license     MIT / Commercial (dual license) */
         onUnmount()
         {
-            this.#unmountActive();
+            this._unmountActive();
         }
 
         /** @name        showInput
@@ -958,11 +1003,14 @@ export namespace TrackingMulti
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', {
+                new Rule('.TrackingMulti', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
                     display: 'block',
                     fontFamily: '-apple-system, system-ui, sans-serif',
                     fontSize: '13px',
-                    color: 'var(--arianna-text, #1f2328)',
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
                     maxWidth: '480px',
                 }),
                 new Rule('.ar-trkm', {
@@ -973,20 +1021,20 @@ export namespace TrackingMulti
                 }),
                 new Rule('.ar-trkm__input', {
                     flex: '1',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    color: 'var(--arianna-text, #1f2328)',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
                     padding: '9px 12px',
                     font: '13px ui-monospace, monospace',
                     borderRadius: '6px',
                 }),
                 new Rule('.ar-trkm__input:focus', {
                     outline: 'none',
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
+                    borderColor: 'var(--arianna-primary, var(--accent, #e40c88))',
                 }),
                 new Rule('.ar-trkm__track', {
                     padding: '9px 16px',
-                    background: 'var(--arianna-primary, #1f6feb)',
+                    background: 'var(--arianna-primary, var(--accent, #e40c88))',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '6px',
@@ -995,14 +1043,14 @@ export namespace TrackingMulti
                 }),
                 new Rule('.ar-trkm__track:hover', { background: 'var(--arianna-primary-hover, #1858c4)' }),
                 new Rule('.ar-trkm__picker', {
-                    background: 'var(--arianna-bg-3, #f3f3f3)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg-3, var(--bg3, #f6f7f9))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                     borderRadius: '6px',
                     padding: '10px 12px',
                 }),
                 new Rule('.ar-trkm__picker-msg', {
                     fontSize: '12px',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
                     marginBottom: '8px',
                 }),
                 new Rule('.ar-trkm__picker-options', {
@@ -1010,15 +1058,15 @@ export namespace TrackingMulti
                 }),
                 new Rule('.ar-trkm__cand', {
                     padding: '5px 10px',
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     fontSize: '12px',
                 }),
                 new Rule('.ar-trkm__cand:hover', {
-                    borderColor: 'var(--arianna-primary, #1f6feb)',
-                    color: 'var(--arianna-primary, #1f6feb)',
+                    borderColor: 'var(--arianna-primary, var(--accent, #e40c88))',
+                    color: 'var(--arianna-primary, var(--accent, #e40c88))',
                 }),
             ]);
         }

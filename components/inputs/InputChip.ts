@@ -193,6 +193,7 @@ export namespace InputChip
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-input-chip', {}, {
+        shadow: false,
         Attributes: ['multiple', 'removable', 'disabled'],
     })
     export class InputChip extends HTMLElement
@@ -229,104 +230,25 @@ export namespace InputChip
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.ChipOptions = {})
         {
-            this.isMultiple = () => this.getAttribute('multiple') !== 'false';
-            this.isRemovable = () => this.hasAttribute('removable');
-            this.chips = (): Interfaces.ChipView[] => {
-                /** @name        opts
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned opts value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const opts = this.options$.Get();
-
-                /** @name        sel
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned sel value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const sel = this.selected$.Get();
-                return opts.map((label: any) => {
-                    /** @name        on
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned on value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const on = sel.has(label);
-                    return {
-                        label,
-                        on,
-                        cls: 'ar-chip' + (on ? ' ar-chip--on' : ''),
-                    };
-                });
-            };
-            this.onChipClick = (label: string) => {
-                /** @name        cur
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned cur value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const cur = new Set(this.selected$.Get());
-                if (cur.has(label))
-                {
-                    cur.delete(label);
+            this.options$ ??= signal<string[]>([]);
+            this.selected$ ??= signal<Set<string>>(new Set());
+            const self=this as InputChip & { __renderInputChip?:()=>void; onAttributeChanged?:()=>void };
+            this.classList.add('InputChip');
+            const render=()=>{
+                const disabled=this.hasAttribute('disabled'); const multiple=this.hasAttribute('multiple'); const removable=this.hasAttribute('removable');
+                const selected=new Set(this.selected$.Get()); const wrap=document.createElement('div'); wrap.className='ar-chip-group';
+                for(const option of this.options$.Get()){
+                    const on=selected.has(option); const chip=document.createElement('button'); chip.type='button'; chip.className='ar-chip'+(on?' ar-chip--on':'');chip.disabled=disabled;chip.dataset.value=option;
+                    const text=document.createElement('span');text.className='ar-chip__label';text.textContent=option;chip.appendChild(text);
+                    if(on&&removable){const x=document.createElement('span');x.className='ar-chip__remove';x.textContent='×';x.ariaHidden='true';chip.appendChild(x);}
+                    chip.addEventListener('click',()=>{if(disabled)return;const next=new Set(this.selected$.Get());if(multiple){next.has(option)?next.delete(option):next.add(option);}else{next.clear();next.add(option);}this.selected$.Set(next);this.dispatchEvent(new CustomEvent('arianna:change',{bubbles:true,composed:true,detail:{selected:[...next]}}));render();});
+                    wrap.appendChild(chip);
                 }
-                else
-                {
-                    if (!this.isMultiple())
-                        cur.clear();
-                    cur.add(label);
-                }
-                this.selected$.Set(cur);
-                this.dispatchEvent(new CustomEvent('arianna:change', {
-                    bubbles: true, detail: { selected: [...cur] },
-                }));
+                if(!this.options$.Get().length){const empty=document.createElement('span');empty.className='ar-chip__empty';empty.textContent='No options';wrap.appendChild(empty);}
+                this.replaceChildren(wrap);
             };
-            this.onRemoveClick = (label: string, e: Event) => {
-                e.stopPropagation();
-
-                /** @name        cur
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned cur value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const cur = new Set(this.selected$.Get());
-                cur.delete(label);
-                this.selected$.Set(cur);
-                this.dispatchEvent(new CustomEvent('arianna:change', {
-                    bubbles: true, detail: { selected: [...cur] },
-                }));
-            };
-            this.shouldShowRemove = (chip: Interfaces.ChipView) => this.isRemovable() && chip.on;
-            this.template = html `
-            <button :class="c.cls"
-                    a-for="c in this.chips()"
-                    @click="(e) => this.onChipClick(c.label)">
-                <span>{{ c.label }}</span>
-                <span class="ar-chip__remove"
-                      a-if="this.shouldShowRemove(c)"
-                      @click="(e) => this.onRemoveClick(c.label, e)"> ✕</span>
-            </button>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {InputChip.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = InputChip.DefaultSheet();
+            self.__renderInputChip=render;self.onAttributeChanged=()=>render();render();
+            (this as unknown as { Sheet: Types.Stylesheet | null }).Sheet = InputChip.DefaultSheet();
         }
 
         /** @name        options
@@ -337,7 +259,7 @@ export namespace InputChip
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        set options(v: string[]) { this.options$.Set(v ?? []); }
+        set options(v: string[]) { this.options$.Set(v ?? []); ; (this as any).__renderInputChip?.(); }
 
         /** @name        options
          *  @public
@@ -357,7 +279,7 @@ export namespace InputChip
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        set selected(v: string[]) { this.selected$.Set(new Set(v ?? [])); }
+        set selected(v: string[]) { this.selected$.Set(new Set(v ?? [])); ; (this as any).__renderInputChip?.(); }
 
         /** @name        selected
          *  @public
@@ -505,7 +427,7 @@ export namespace InputChip
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'flex', flexWrap: 'wrap', gap: '6px' }),
+                new Rule('arianna-input-chip', { display: 'flex', flexWrap: 'wrap', gap: '6px' }),
                 new Rule('.ar-chip', {
                     alignItems: 'center',
                     background: 'var(--arianna-bg, #ffffff)',

@@ -8,7 +8,14 @@
  * @description AriannA Drawer component module.
  */
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Templates: any;
+
+
 
 /** @namespace   Drawer
  *  @public
@@ -132,11 +139,261 @@ export namespace Drawer
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-drawer', {}, {
-        Attributes: ['side', 'width', 'height', 'open', 'close-on-backdrop'],
-    })
-    export class Drawer extends HTMLElement
+    
+    /** Default class-driven light-DOM stylesheet; installed synchronously by @Component. */
+    export function DrawerDefaultSheet(): Types.Stylesheet
     {
+        return new Stylesheet([
+            new Rule('arianna-drawer', {
+                BoxSizing: 'border-box',
+                Display: 'none',
+                Inset: '0',
+                MaxWidth: '100%',
+                MinWidth: '0',
+                Position: 'fixed',
+                ZIndex: '1900',
+            }),
+
+            new Rule('arianna-drawer[open]', {
+                Display: 'block',
+            }),
+
+            new Rule('.ar-drawer__backdrop', {
+                Background: 'rgba(5,6,8,.66)',
+                Inset: '0',
+                Opacity: '0',
+                Position: 'absolute',
+                Transition: 'opacity .22s ease',
+            }),
+
+            new Rule('arianna-drawer.ar-drawer--open .ar-drawer__backdrop', {
+                Opacity: '1',
+            }),
+
+            new Rule('.ar-drawer__panel', {
+                Background: 'linear-gradient(180deg,#1d1e23 0%,#17181c 100%)',
+                Border: '1px solid #34363d',
+                BoxShadow: '0 22px 64px rgba(0,0,0,.48)',
+                BoxSizing: 'border-box',
+                Color: '#e7e9ed',
+                OverflowY: 'auto',
+                Padding: '18px',
+                Position: 'absolute',
+                Transition: 'transform .24s cubic-bezier(.2,.8,.2,1)',
+            }),
+
+            new Rule('arianna-drawer[side="left"] .ar-drawer__panel', {
+                BorderRight: '2px solid #e40c88',
+                Bottom: '0',
+                Left: '0',
+                Top: '0',
+                Transform: 'translateX(-100%)',
+            }),
+
+            new Rule('arianna-drawer[side="right"] .ar-drawer__panel', {
+                BorderLeft: '2px solid #e40c88',
+                Bottom: '0',
+                Right: '0',
+                Top: '0',
+                Transform: 'translateX(100%)',
+            }),
+
+            new Rule('arianna-drawer[side="top"] .ar-drawer__panel', {
+                BorderBottom: '2px solid #e40c88',
+                Left: '0',
+                Right: '0',
+                Top: '0',
+                Transform: 'translateY(-100%)',
+            }),
+
+            new Rule('arianna-drawer[side="bottom"] .ar-drawer__panel', {
+                BorderTop: '2px solid #e40c88',
+                Bottom: '0',
+                Left: '0',
+                Right: '0',
+                Transform: 'translateY(100%)',
+            }),
+
+            new Rule('arianna-drawer:not([side]) .ar-drawer__panel', {
+                BorderRight: '2px solid #e40c88',
+                Bottom: '0',
+                Left: '0',
+                Top: '0',
+                Transform: 'translateX(-100%)',
+            }),
+
+            new Rule('arianna-drawer.ar-drawer--open .ar-drawer__panel', {
+                Transform: 'none',
+            }),
+
+            new Rule('.ar-drawer__panel h1, .ar-drawer__panel h2, .ar-drawer__panel h3, .ar-drawer__panel h4', {
+                Color: '#f3f4f6',
+                MarginTop: '0',
+            }),
+
+            new Rule('.ar-drawer__panel p', {
+                Color: '#a9afb8',
+            }),
+
+            new Rule('.ar-drawer__panel button', {
+                Appearance: 'none',
+                Background: '#25272c',
+                Border: '1px solid #3a3d45',
+                BorderRadius: '6px',
+                Color: '#dfe2e7',
+                Cursor: 'pointer',
+                Padding: '7px 11px',
+            }),
+
+            new Rule('.ar-drawer__panel button:hover', {
+                Background: '#2c2f35',
+                BorderColor: '#e40c88',
+                Color: '#ffffff',
+            }),
+
+            /* Explicit Light */
+            new Rule('arianna-drawer[theme="light"] .ar-drawer__backdrop', {
+                Background: 'rgba(20,22,26,.30)',
+            }),
+
+            new Rule('arianna-drawer[theme="light"] .ar-drawer__panel', {
+                Background: 'linear-gradient(180deg,#ffffff 0%,#f6f6f8 100%)',
+                BorderColor: '#dcdde2',
+                BoxShadow: '0 22px 64px rgba(0,0,0,.20)',
+                Color: '#1c1e21',
+            }),
+
+            new Rule('arianna-drawer[theme="light"] .ar-drawer__panel h1, arianna-drawer[theme="light"] .ar-drawer__panel h2, arianna-drawer[theme="light"] .ar-drawer__panel h3, arianna-drawer[theme="light"] .ar-drawer__panel h4', {
+                Color: '#1c1e21',
+            }),
+
+            new Rule('arianna-drawer[theme="light"] .ar-drawer__panel p', {
+                Color: '#60656e',
+            }),
+
+            new Rule('arianna-drawer[theme="light"] .ar-drawer__panel button', {
+                Background: '#f2f3f5',
+                BorderColor: '#d8dae0',
+                Color: '#292c31',
+            }),
+
+            new Rule('arianna-drawer arianna-button .ar-btn__native', {
+                Background: '#25272c',
+                Border: '1px solid #3a3d45',
+                Color: '#dfe2e7',
+            }),
+
+            new Rule('arianna-drawer arianna-button[variant="primary"] .ar-btn__native', {
+                Background: '#e40c88',
+                Border: '1px solid #e40c88',
+                Color: '#ffffff',
+            }),
+
+            new Rule('arianna-drawer arianna-button[variant="danger"] .ar-btn__native', {
+                Background: '#c83d4a',
+                Border: '1px solid #c83d4a',
+                Color: '#ffffff',
+            }),
+
+            new Rule('arianna-drawer[theme="light"] arianna-button .ar-btn__native', {
+                Background: '#f0f1f3',
+                Border: '1px solid #d7d9df',
+                Color: '#292c31',
+            }),
+
+            new Rule('arianna-drawer[theme="light"] arianna-button[variant="primary"] .ar-btn__native', {
+                Background: '#e40c88',
+                Border: '1px solid #e40c88',
+                Color: '#ffffff',
+            }),
+
+        ]);
+    }
+
+@Component('arianna-drawer', DrawerDefaultSheet(), {
+        Attributes: ['side', 'width', 'height', 'open', 'close-on-backdrop', 'theme'],
+    })
+    export class Drawer extends HTMLDivElement
+    {
+        /** Embedded component icon used by WYSIWYG palettes and drag/drop panels. */
+        static readonly Icon = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M14 4v16" stroke="currentColor" stroke-width="2"/></svg>`;
+        /** Canonical named default styles. Use e.g. Component.Styles['Disabled']. */
+        static readonly Styles = Object.freeze
+        (
+            {
+                Default:
+                new Rule('arianna-drawer', {
+                BoxSizing: 'border-box',
+                MaxWidth: '100%',
+                MinWidth: '0',
+                Position: 'fixed',
+                Inset: '0',
+                ZIndex: '900',
+                Display: 'none',
+                }),
+                Open:
+                new Rule('arianna-drawer[open]', { display: 'block' }),
+                Backdrop:
+                new Rule('.ar-drawer__backdrop', {
+                Position: 'absolute',
+                Inset: '0',
+                Background: 'rgba(0,0,0,0.5)',
+                Opacity: '0',
+                Transition: 'opacity 0.25s',
+                }),
+                DrawerOpenBackdrop:
+                new Rule('arianna-drawer.ar-drawer--open .ar-drawer__backdrop', { opacity: '1' }),
+                Panel:
+                new Rule('.ar-drawer__panel', {
+                Position: 'absolute',
+                Background: 'var(--arianna-bg, var(--bg, #ffffff))',
+                Border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                BoxShadow: '0 8px 32px rgba(0,0,0,0.20)',
+                OverflowY: 'auto',
+                Transition: 'transform 0.25s ease',
+                }),
+                SideLeftPanel:
+                new Rule('arianna-drawer[side="left"] .ar-drawer__panel', { left: '0', top: '0', bottom: '0', transform: 'translateX(-100%)' }),
+                SideRightPanel:
+                new Rule('arianna-drawer[side="right"] .ar-drawer__panel', { right: '0', top: '0', bottom: '0', transform: 'translateX(100%)' }),
+                SideTopPanel:
+                new Rule('arianna-drawer[side="top"] .ar-drawer__panel', { top: '0', left: '0', right: '0', transform: 'translateY(-100%)' }),
+                SideBottomPanel:
+                new Rule('arianna-drawer[side="bottom"] .ar-drawer__panel', { bottom: '0', left: '0', right: '0', transform: 'translateY(100%)' }),
+                SidePanel:
+                new Rule('arianna-drawer:not([side]) .ar-drawer__panel', { left: '0', top: '0', bottom: '0', transform: 'translateX(-100%)' }),
+                DrawerOpenPanel:
+                new Rule('arianna-drawer.ar-drawer--open .ar-drawer__panel', { transform: 'none' }),
+            }
+        );
+
+
+        /** Embedded component icon. */
+        get Icon(): string { return Drawer.Icon; }
+
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'Drawer';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('Drawer');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -154,94 +411,60 @@ export namespace Drawer
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.DrawerOptions = {})
         {
-            /** @name        side
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned side value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const side = this.signal().attribute('side');
+            this.classList.add('Drawer');
+            if(this.childNodes.length === 0)
+            {
+                requestAnimationFrame(() => this.onConnected(_opts));
+                return;
+            }
 
-            /** @name        width
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned width value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const width = this.signal().attribute('width');
+            if(this.dataset.ariannaDrawerReady === 'true') return;
+            this.dataset.ariannaDrawerReady = 'true';
 
-            /** @name        height
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned height value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const height = this.signal().attribute('height');
-            this.panelStyle = (): Record<string, string> => {
-                /** @name        s
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned s value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const s = side.Get() ?? 'left';
-                if (s === 'left' || s === 'right')
+            const authored =
+                Array.from(this.childNodes);
+
+            const backdrop = document.createElement('div');
+            backdrop.className = 'ar-drawer__backdrop';
+
+            const panel = document.createElement('div');
+            panel.className = 'ar-drawer__panel';
+
+            for(const node of authored) panel.appendChild(node);
+
+            const side =
+                this.getAttribute('side') ?? 'left';
+
+            if(side === 'left' || side === 'right')
+                panel.style.width = `${parseInt(this.getAttribute('width') ?? '280', 10) || 280}px`;
+            else
+                panel.style.height = `${parseInt(this.getAttribute('height') ?? '240', 10) || 240}px`;
+
+            backdrop.addEventListener
+            (
+                'click',
+                () =>
                 {
-                    /** @name        w
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned w value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const w = parseInt(width.Get() ?? '280', 10) || 280;
-                    return { width: w + 'px' };
+                    if(this.getAttribute('close-on-backdrop') !== 'false') this.close();
                 }
-                else
+            );
+
+            this.addEventListener
+            (
+                'click',
+                event =>
                 {
-                    /** @name        h
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned h value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const h = parseInt(height.Get() ?? '240', 10) || 240;
-                    return { height: h + 'px' };
+                    const target = event.target as HTMLElement | null;
+                    if(target?.closest('[data-drawer-close]')) this.close();
                 }
-            };
-            this.onBackdrop = () => {
-                /** @name        closeOn
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned closeOn value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const closeOn = this.getAttribute('close-on-backdrop');
-                if (closeOn !== 'false')
-                    this.close();
-            };
-            this.template = html `
-            <div class="ar-drawer__backdrop" @click="this.onBackdrop"></div>
-            <div class="ar-drawer__panel" :style="this.panelStyle()">
-                <slot></slot>
-            </div>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Drawer.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = Drawer.DefaultSheet();
+            );
+
+            this.replaceChildren(backdrop, panel);
+
+            if(this.hasAttribute('open'))
+            {
+                requestAnimationFrame(() => this.classList.add('ar-drawer--open'));
+            }
         }
 
         /** @name        open
@@ -254,6 +477,12 @@ export namespace Drawer
          *  @license     MIT / Commercial (dual license) */
         open(): this
         {
+            if(!this.querySelector('.ar-drawer__panel'))
+            {
+                this.dataset.ariannaDrawerReady='false';
+                this.onConnected();
+            }
+
             this.setAttribute('open', '');
             // tick so the CSS transition has something to interpolate from
             setTimeout(() => this.classList.add('ar-drawer--open'), 10);
@@ -297,7 +526,13 @@ export namespace Drawer
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        onCreated() { }
+        onCreated()
+        {
+            requestAnimationFrame(() =>
+            {
+                if(this.isConnected) this.onConnected?.();
+            });
+        }
 
         /** @name        onBeforeMount
          *  @public
@@ -467,41 +702,10 @@ export namespace Drawer
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    position: 'fixed',
-                    inset: '0',
-                    zIndex: '900',
-                    display: 'none',
-                }),
-                new Rule(':host([open])', { display: 'block' }),
-                new Rule('.ar-drawer__backdrop', {
-                    position: 'absolute',
-                    inset: '0',
-                    background: 'rgba(0,0,0,0.5)',
-                    opacity: '0',
-                    transition: 'opacity 0.25s',
-                }),
-                new Rule(':host.ar-drawer--open .ar-drawer__backdrop', { opacity: '1' }),
-                new Rule('.ar-drawer__panel', {
-                    position: 'absolute',
-                    background: 'var(--arianna-bg, #ffffff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-                    overflowY: 'auto',
-                    transition: 'transform 0.25s ease',
-                }),
-                new Rule(':host([side="left"]) .ar-drawer__panel', { left: '0', top: '0', bottom: '0', transform: 'translateX(-100%)' }),
-                new Rule(':host([side="right"]) .ar-drawer__panel', { right: '0', top: '0', bottom: '0', transform: 'translateX(100%)' }),
-                new Rule(':host([side="top"]) .ar-drawer__panel', { top: '0', left: '0', right: '0', transform: 'translateY(-100%)' }),
-                new Rule(':host([side="bottom"]) .ar-drawer__panel', { bottom: '0', left: '0', right: '0', transform: 'translateY(100%)' }),
-                new Rule(':host(:not([side])) .ar-drawer__panel', { left: '0', top: '0', bottom: '0', transform: 'translateX(-100%)' }),
-                new Rule(':host.ar-drawer--open .ar-drawer__panel', { transform: 'none' }),
-            ]);
-        }
+        { return DrawerDefaultSheet(); }
     }
 }
-export default Drawer;
+export const DrawerClass = Drawer.Drawer;
+export default Drawer.Drawer;
 
 export type DrawerOptions = Drawer.Interfaces.DrawerOptions;

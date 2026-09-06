@@ -5,1288 +5,978 @@
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description AriannA PianoRoll component module.
+ * @description Reference-quality piano-roll editor. The visual language and
+ * interaction model intentionally mirror the AriannA Reference demo: dark
+ * transport/tool bar, DAW-style ruler, piano keyboard, editable MIDI notes,
+ * velocity lane, playhead and MIDI event monitor.
  */
 
 import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
-/** @name        html
- *  @public
- *  @type        {inferred}
- *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
+const { Rule, Stylesheet } = Css;
 
-/** @namespace   PianoRoll
- *  @public
- *  @description Namespace containing PianoRoll contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 export namespace PianoRoll
 {
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
+    export namespace Interfaces
+    {
+        export interface PianoNote
+        {
+            pitch    : number;
+            start    : number;
+            length   : number;
+            velocity : number; // 0..1
+            channel? : number;
+            id?      : string;
+        }
+
+        export interface PianoRollOptions
+        {
+            beats?      : number;
+            pitchMin?   : number;
+            pitchMax?   : number;
+            cellWidth?  : number;
+            cellHeight? : number;
+            snap?       : number;
+            bpm?        : number;
+            bars?       : number;
+            theme?      : 'dark' | 'light';
+            src?        : string;
+        }
+    }
+
     export namespace Types
     {
-        /** @name        Signal
-         *  @public
-         *  @type        {SchemaInterfaces.Reactivity.Signal<T>}
-         *  @description Type alias for Signal.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
-
-        /** @name        Rule
-         *  @public
-         *  @type        {Css.Rule}
-         *  @description Type alias for Rule.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Rule = Css.Rule;
-
-        /** @name        Stylesheet
-         *  @public
-         *  @type        {Css.Stylesheet}
-         *  @description Type alias for Stylesheet.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+        export type Signal<T> = Reactivity.SignalContract<T>;
         export type Stylesheet = Css.Stylesheet;
     }
 
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export namespace Interfaces
-    {
-        /** @interface   PianoNote
-         *  @public
-         *  @description PianoNote contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface PianoNote
-        {
-            /** @name        pitch
-             *  @public
-             *  @type        {number}
-             *  @description Component member for pitch.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            pitch: number; // MIDI 0..127 (60 = C4)
-            /** @name        start
-             *  @public
-             *  @type        {number}
-             *  @description Component member for start.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            start: number; // beats
-            /** @name        length
-             *  @public
-             *  @type        {number}
-             *  @description Component member for length.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            length: number; // beats
-            /** @name        velocity
-             *  @public
-             *  @type        {number}
-             *  @description Component member for velocity.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            velocity: number; // 0..1
-        }
+    type Tool = 'draw' | 'select' | 'erase';
 
-        /** @interface   PianoRollOptions
-         *  @public
-         *  @description PianoRollOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface PianoRollOptions
-        {
-            /** @name        beats
-             *  @public
-             *  @type        {number}
-             *  @description Component member for beats.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            beats?: number; // total beat count
-            /** @name        pitchMin
-             *  @public
-             *  @type        {number}
-             *  @description Component member for pitch Min.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            pitchMin?: number; // lowest pitch shown (inclusive)
-            /** @name        pitchMax
-             *  @public
-             *  @type        {number}
-             *  @description Component member for pitch Max.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            pitchMax?: number; // highest pitch shown (inclusive)
-            /** @name        cellWidth
-             *  @public
-             *  @type        {number}
-             *  @description Component member for cell Width.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            cellWidth?: number; // px per beat
-            /** @name        cellHeight
-             *  @public
-             *  @type        {number}
-             *  @description Component member for cell Height.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            cellHeight?: number; // px per row (pitch)
-            /** @name        snap
-             *  @public
-             *  @type        {number}
-             *  @description Component member for snap.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            snap?: number; // beat snap (e.g. 0.25 = 16th)
-        }
-    }
-    /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
-       members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
-       `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
-       not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
-       returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
-       Map, Effect" with the same name printed twice. */
-    /** @name        signal
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned signal value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const BLACK = new Set([1, 3, 6, 8, 10]);
+    const BPB = 4;
 
-    /** @name        effect
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned effect value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const effect = (fn: () => void): (() => void) => {
-        /** @name        e
-         *  @public
-         *  @type        {inferred}
-         *  @description Namespace-owned e value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        const e = Reactivity.CreateEffect(fn);
-        return () => e.Stop();
-    };
+    const pitchLabel = (pitch: number): string =>
+        NOTE_NAMES[((pitch % 12) + 12) % 12] + (Math.floor(pitch / 12) - 1);
 
-    /** @name        { Rule, Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Rule, Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const { Rule, Stylesheet } = Css;
 
-    /** @name        PITCH_NAMES
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned PITCH_NAMES value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const PITCH_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    export function pitchLabel(p: number): string {
-        /** @name        oct
-         *  @public
-         *  @type        {inferred}
-         *  @description Namespace-owned oct value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        const oct = Math.floor(p / 12) - 1;
-
-        /** @name        name
-         *  @public
-         *  @type        {inferred}
-         *  @description Namespace-owned name value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        const name = PITCH_NAMES[p % 12] ?? '?';
-        return name + oct;
-    }
-    export function isBlackKey(p: number): boolean {
-        return [1, 3, 6, 8, 10].includes(p % 12);
-    }
-
-    /** @name        PitchLabel
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned PitchLabel value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export function PitchLabel(note: number): string
-    {
-        return pitchLabel(note);
-    }
-
-    /** @name        IsBlackKey
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned IsBlackKey value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export function IsBlackKey(note: number): boolean
-    {
-        return isBlackKey(note);
-    }
-
-    /** @class       PianoRoll
-     *  @public
-     *  @description AriannA PianoRoll component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-piano-roll', {}, {
-        Attributes: ['beats', 'pitch-min', 'pitch-max', 'cell-width', 'cell-height', 'snap'],
+    const Styles = new Stylesheet([
+                new Rule('.PianoRoll', {
+                    Background: '#fff', Border: '1px solid #333', BorderRadius: '6px', Color: '#222',
+                    Display: 'block', MinHeight: '520px', Overflow: 'hidden', Position: 'relative', Width: '100%'
+                }),
+                new Rule('.PianoRoll', {
+                    Background: '#fff', Color: '#222', Display: 'flex', FlexDirection: 'column',
+                    Font: '13px -apple-system, system-ui, sans-serif', Height: '100%', MinHeight: '520px', Position: 'relative'
+                }),
+                new Rule('.PianoRoll-Toolbar', {
+                    AlignItems: 'center', Background: '#1e1e1e', borderBottom: '1px solid #333', Color: '#d4d4d4',
+                    Display: 'flex', flexShrink: '0', flexWrap: 'wrap', Gap: '10px', MinHeight: '44px', Padding: '6px 16px'
+                }),
+                new Rule('.PianoRoll-Title', { Color: '#e40c88', FontSize: '13px', FontWeight: '500', margin: '0' }),
+                new Rule('.PianoRoll-Status', { Color: '#888', Font: '11px ui-monospace, monospace' }),
+                new Rule('.PianoRoll-Label', { Color: '#888', Font: '11px sans-serif' }),
+                new Rule('.PianoRoll-Fill', { Flex: '1 1 20px' }),
+                new Rule('.PianoRoll-Spacer', { Width: '8px' }),
+                new Rule('.PianoRoll-Button, .PianoRoll-ToolButton', {
+                    Background: 'transparent', Border: '1px solid #444', BorderRadius: '3px', Color: '#d4d4d4', Cursor: 'pointer',
+                    Font: '12px sans-serif', Padding: '4px 12px'
+                }),
+                new Rule('.PianoRoll-ToolButton', { MinWidth: '32px', Padding: '4px 8px' }),
+                new Rule('.PianoRoll-Button:hover, .PianoRoll-ToolButton:hover', { Background: '#2a2a2a' }),
+                new Rule('.PianoRoll-ToolButton.active', { Background: '#e40c88', borderColor: '#e40c88', Color: '#fff' }),
+                new Rule('.PianoRoll-Button.play', { Background: '#16a34a', borderColor: '#16a34a', Color: '#fff' }),
+                new Rule('.PianoRoll-Button.pause', { Background: '#eab308', borderColor: '#eab308', Color: '#1f1f1f' }),
+                new Rule('.PianoRoll-Button.stop', { Background: '#dc2626', borderColor: '#dc2626', Color: '#fff' }),
+                new Rule('.PianoRoll-Input', {
+                    Background: 'transparent', Border: '1px solid #444', BorderRadius: '3px', Color: '#d4d4d4',
+                    Font: '12px ui-monospace, monospace', Padding: '3px 8px', Width: '60px'
+                }),
+                new Rule('.PianoRoll-Snap', { Width: 'auto' }),
+                new Rule('.PianoRoll-Grid', {
+                    Background: '#fff', Display: 'grid', Flex: '1', GridTemplateColumns: '64px minmax(0,1fr)',
+                    GridTemplateRows: '22px minmax(0,1fr)', MinHeight: '0'
+                }),
+                new Rule('.PianoRoll-Corner', { Background: '#f0f0f0', borderBottom: '1px solid #ddd', borderRight: '1px solid #ddd' }),
+                new Rule('.PianoRoll-Ruler', {
+                    Background: '#f0f0f0', borderBottom: '1px solid #ddd', Color: '#666', Font: '10px ui-monospace, monospace',
+                    Overflow: 'hidden', Position: 'relative'
+                }),
+                new Rule('.PianoRoll-Tick', { Background: '#ccc', Bottom: '0', Position: 'absolute', Top: '0', Width: '1px' }),
+                new Rule('.PianoRoll-Tick.bar', { Background: '#888' }),
+                new Rule('.PianoRoll-TickLabel', { Color: '#555', FontSize: '10px', paddingLeft: '3px', Position: 'absolute', Top: '4px', UserSelect: 'none' }),
+                new Rule('.PianoRoll-Keys', { Background: '#fff', borderRight: '1px solid #ddd', Overflow: 'hidden', Position: 'relative', UserSelect: 'none' }),
+                new Rule('.PianoRoll-Key', {
+                    AlignItems: 'center', borderBottom: '1px solid #eee', Color: '#888', Cursor: 'pointer', Display: 'flex',
+                    Font: '9px ui-monospace, monospace', Left: '0', LineHeight: '1', paddingLeft: '4px', Position: 'absolute', Right: '0'
+                }),
+                new Rule('.PianoRoll-Key.white', { Background: '#fff' }),
+                new Rule('.PianoRoll-Key.black', { Background: '#2a2a2a', Color: '#ccc', Right: '28%', ZIndex: '2' }),
+                new Rule('.PianoRoll-Key.white:hover', { Background: '#fde7f3' }),
+                new Rule('.PianoRoll-Key.black:hover', { Background: '#4a3040' }),
+                new Rule('.PianoRoll-Canvas', { Background: '#fff', Cursor: 'crosshair', Overflow: 'auto', Position: 'relative' }),
+                new Rule('.PianoRoll-Grid-bg', {
+                    backgroundImage: 'linear-gradient(to right,#e8e8e8 1px,transparent 1px),linear-gradient(to bottom,#eee 1px,transparent 1px)',
+                    backgroundSize: 'var(--pr-beat-w) 100%,100% var(--pr-row-h)', pointerEvents: 'none', Position: 'absolute'
+                }),
+                new Rule('.PianoRoll__row-tint', { Background: '#f6f6f6', Left: '0', pointerEvents: 'none', Position: 'absolute' }),
+                new Rule('.PianoRoll-Note', {
+                    Background: '#e40c88', Border: '1px solid #b80b6f', BorderRadius: '2px', BoxShadow: '0 1px 2px rgba(0,0,0,.15)',
+                    Color: '#fff', Cursor: 'move', Font: '9px ui-monospace, monospace', LineHeight: '1.2', Overflow: 'hidden',
+                    Padding: '1px 4px', Position: 'absolute', UserSelect: 'none', WhiteSpace: 'nowrap', ZIndex: '3'
+                }),
+                new Rule('.PianoRoll-Note.selected', { Background: '#f06ab1', borderColor: '#fff', BoxShadow: '0 0 0 2px #e40c88,0 1px 4px rgba(0,0,0,.25)' }),
+                new Rule('.PianoRoll-NoteResize', { Background: 'rgba(255,255,255,.2)', Bottom: '0', Cursor: 'ew-resize', Position: 'absolute', Right: '0', Top: '0', Width: '6px' }),
+                new Rule('.PianoRoll-Playhead', { Background: '#16a34a', Bottom: '0', BoxShadow: '0 0 4px rgba(22,163,74,.5)', pointerEvents: 'none', Position: 'absolute', Top: '0', Width: '2px', ZIndex: '6' }),
+                new Rule('.PianoRoll-Playhead[hidden]', { Display: 'none' }),
+                new Rule('.PianoRoll__vel', { Background: 'rgba(245,245,245,.95)', borderTop: '1px solid #ddd', Bottom: '0', Cursor: 'ns-resize', Height: '60px', Left: '0', PointerEvents: 'auto', Position: 'absolute', Right: '0', ZIndex: '4' }),
+                new Rule('.PianoRoll__vel[hidden]', { Display: 'none' }),
+                new Rule('.PianoRoll-VelocityBar', { Background: '#e40c88', BorderRadius: '2px 2px 0 0', Bottom: '0', Cursor: 'ns-resize', Opacity: '.82', PointerEvents: 'auto', Position: 'absolute', Width: '6px' }),
+                new Rule('.PianoRoll-VelocityToggle', { Background: '#1e1e1e', Border: '0', BorderRadius: '3px 3px 0 0', Bottom: '60px', Color: '#d4d4d4', Cursor: 'pointer', Font: '10px sans-serif', Padding: '2px 8px', Position: 'absolute', Right: '6px', ZIndex: '7' }),
+                new Rule('.PianoRoll-Events', { Background: '#1e1e1e', BorderRadius: '6px', BoxShadow: '0 4px 12px rgba(0,0,0,.15)', Color: '#d4d4d4', MaxHeight: '200px', overflowY: 'auto', Padding: '8px 10px', Position: 'absolute', Right: '12px', Top: '80px', Width: '240px', ZIndex: '10' }),
+                new Rule('.PianoRoll-Events-ttl', { Color: '#c3e88d', FontSize: '9px', FontWeight: '600', LetterSpacing: '.5px', marginBottom: '4px', textTransform: 'uppercase' }),
+                new Rule('.PianoRoll-Events-list', { Color: '#888', Font: '10px ui-monospace, monospace' }),
+                new Rule('.PianoRoll-EventsRow', { borderBottom: '1px solid #333', Display: 'flex', JustifyContent: 'space-between', Padding: '1px 0' }),
+                new Rule('.PianoRoll-EventsRow .t', { Color: '#6cb6ff' }),
+                new Rule('.PianoRoll-EventsRow .ev', { Color: '#ffab40' }),
+                new Rule('.PianoRoll[theme="dark"]', { Background: '#171a1d', BorderColor: '#0d0f11', Color: '#eef1f4' }),
+                new Rule('.PianoRoll[theme="dark"] .PianoRoll-Grid', { Background: '#202428' }),
+                new Rule('.PianoRoll[theme="dark"] .PianoRoll-Corner, .PianoRoll[theme="dark"] .PianoRoll-Ruler', { Background: '#292e33', borderBottomColor: '#15181a', borderRightColor: '#15181a', Color: '#9aa2aa' }),
+                new Rule('.PianoRoll[theme="dark"] .PianoRoll-Keys', { Background: '#202428', borderRightColor: '#15181a' }),
+                new Rule('.PianoRoll[theme="dark"] .PianoRoll-Key.white', { Background: '#d8dde1', borderBottomColor: '#b7bec4', Color: '#42484d' }),
+                new Rule('.PianoRoll[theme="dark"] .PianoRoll-Key.black', { Background: '#24282c', borderBottomColor: '#15181a', Color: '#c8cdd2' }),
+                new Rule('.PianoRoll[theme="dark"] .PianoRoll-Canvas', { Background: '#202428' }),
+                new Rule('.PianoRoll[theme="dark"] .PianoRoll-Grid-bg', { backgroundImage: 'linear-gradient(to right,rgba(151,160,169,.16) 1px,transparent 1px),linear-gradient(to bottom,rgba(151,160,169,.12) 1px,transparent 1px)' }),
+                new Rule('.PianoRoll[theme="dark"] .PianoRoll__row-tint', { Background: 'rgba(255,255,255,.025)' }),
+                new Rule('.PianoRoll[theme="dark"] .PianoRoll__vel', { Background: 'rgba(23,26,29,.94)', borderTopColor: '#3a4046' }),
+                new Rule('.PianoRoll[theme="light"]', { Background: '#eef0f2', BorderColor: '#b9bec3', Color: '#25292d' }),
+            ]);
+    @Component('arianna-piano-roll', Styles, { Shadow: false,
+        Attributes: ['beats', 'bars', 'bpm', 'pitch-min', 'pitch-max', 'cell-width', 'cell-height', 'snap', 'theme'],
     })
     export class PianoRoll extends HTMLElement
     {
-        /** @name        template
-         *  @public
-         *  @type        {unknown}
-         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
-         *               or behavior-only rendering logic while participating in the compiled Template fast path.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        template = html``;
+        public static readonly Styles = Styles;
+        public static readonly tag = 'arianna-piano-roll';
+        public template = html``;
 
-        /** @name        notes$
-         *  @public
-         *  @readonly
-         *  @type        {PianoRoll.Types.Signal<PianoRoll.Interfaces.PianoNote[]>}
-         *  @description Component member for notes$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly notes$: Types.Signal<Interfaces.PianoNote[]> = signal<Interfaces.PianoNote[]>([]);
+        readonly notes$: Types.Signal<Interfaces.PianoNote[]> = Reactivity.CreateSignal<Interfaces.PianoNote[]>([]);
+        readonly playing$: Types.Signal<boolean> = Reactivity.CreateSignal(false);
+        readonly playhead$: Types.Signal<number> = Reactivity.CreateSignal(0);
 
-        /** @name        playing$
-         *  @public
-         *  @readonly
-         *  @type        {PianoRoll.Types.Signal<boolean>}
-         *  @description Component member for playing$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly playing$: Types.Signal<boolean> = signal(false);
+        _root?: HTMLElement;
+        _keys?: HTMLDivElement;
+        _ruler?: HTMLDivElement;
+        _canvas?: HTMLDivElement;
+        _grid?: HTMLDivElement;
+        _velocity?: HTMLDivElement;
+        _playhead?: HTMLDivElement;
+        _status?: HTMLSpanElement;
+        _events?: HTMLDivElement;
+        _velToggle?: HTMLButtonElement;
+        _playButton?: HTMLButtonElement;
+        _pauseButton?: HTMLButtonElement;
 
-        /** @name        playhead$
-         *  @public
-         *  @readonly
-         *  @type        {PianoRoll.Types.Signal<number>}
-         *  @description Component member for playhead$.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        readonly playhead$: Types.Signal<number> = signal(0);
+        _beats = 32;
+        _pitchMin = 36;
+        _pitchMax = 96;
+        _cellW = 80;
+        _cellH = 16;
+        _snap = .25;
+        _bpm = 120;
+        _tool: Tool = 'draw';
+        _selected = new Set<string>();
+        _showVelocity = true;
+        _nextId = 1;
+        _raf = 0;
+        _lastPlaybackBeat = 0;
+        _playStartedAt = 0;
+        _eventLog: Array<{ time: number; type: string; pitch: number; velocity: number }> = [];
+        _noteClipboard: Interfaces.PianoNote[] = [];
+        _synthContext?: AudioContext;
+        _synthMaster?: GainNode;
+        _synthVoices?: Map<number, { oscillator: OscillatorNode; gain: GainNode }>;
+        _bound?: boolean;
 
-        /** @name        #grid
-         *  @public
-         *  @type        {HTMLDivElement}
-         *  @description Component member for grid.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #grid?: HTMLDivElement;
-
-        /** @name        #cellW
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for cell W.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #cellW = 28;
-
-        /** @name        #cellH
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for cell H.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #cellH = 14;
-
-        /** @name        #beats
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for beats.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #beats = 16;
-
-        /** @name        #pitchMin
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for pitch Min.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #pitchMin = 36;
-
-        /** @name        #pitchMax
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for pitch Max.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #pitchMax = 84;
-
-        /** @name        #snap
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for snap.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #snap = 0.25;
-
-        /** @name        constructor
-         *  @public
-         *  @type        {constructor}
-         *  @description Constructs the component for constructor.
-         *  @param       {PianoRoll.Interfaces.PianoRollOptions} opts Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         constructor(opts: Interfaces.PianoRollOptions = {})
         {
             super();
-
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-            };
-
-            /** @name        el
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned el value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const el = self.render();
-            if (opts.beats != null)
-                el.setAttribute('beats', String(opts.beats));
-            if (opts.pitchMin != null)
-                el.setAttribute('pitch-min', String(opts.pitchMin));
-            if (opts.pitchMax != null)
-                el.setAttribute('pitch-max', String(opts.pitchMax));
-            if (opts.cellWidth != null)
-                el.setAttribute('cell-width', String(opts.cellWidth));
-            if (opts.cellHeight != null)
-                el.setAttribute('cell-height', String(opts.cellHeight));
-            if (opts.snap != null)
-                el.setAttribute('snap', String(opts.snap));
+            this.EnsureState();
+            const root = (this as unknown as { render(): HTMLElement }).render();
+            if (opts.beats != null) root.setAttribute('beats', String(opts.beats));
+            if (opts.bars != null) root.setAttribute('bars', String(opts.bars));
+            if (opts.bpm != null) root.setAttribute('bpm', String(opts.bpm));
+            if (opts.pitchMin != null) root.setAttribute('pitch-min', String(opts.pitchMin));
+            if (opts.pitchMax != null) root.setAttribute('pitch-max', String(opts.pitchMax));
+            if (opts.cellWidth != null) root.setAttribute('cell-width', String(opts.cellWidth));
+            if (opts.cellHeight != null) root.setAttribute('cell-height', String(opts.cellHeight));
+            if (opts.snap != null) root.setAttribute('snap', String(opts.snap));
+            if (opts.theme) root.setAttribute('theme', opts.theme);
         }
 
-        /** @name        onConnected
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Connected.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         onConnected(): void
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
+            this.EnsureState();
+            this.classList.add('PianoRoll');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            if(!this.hasAttribute('tabindex')) this.tabIndex = 0;
+            const root = (this as unknown as { render(): HTMLElement }).render();
+            if (root.querySelector('.PianoRoll')) return;
+            this._root = root;
 
-                /** @name        fire
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for fire.
-                 *  @param       {string} t Parameter.
-                 *  @param       {CustomEventInit} init Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                fire(t: string, init?: CustomEventInit): void;
+            const bars = parseInt(root.getAttribute('bars') ?? '', 10);
+            const beats = parseInt(root.getAttribute('beats') ?? '', 10);
+            this._beats = beats > 0 ? beats : (bars > 0 ? bars * BPB : 32);
+            this._pitchMin = parseInt(root.getAttribute('pitch-min') ?? '36', 10) || 36;
+            this._pitchMax = parseInt(root.getAttribute('pitch-max') ?? '96', 10) || 96;
+            this._cellW = parseFloat(root.getAttribute('cell-width') ?? '80') || 80;
+            this._cellH = parseFloat(root.getAttribute('cell-height') ?? '16') || 16;
+            this._snap = parseFloat(root.getAttribute('snap') ?? '.25') || .25;
+            this._bpm = parseFloat(root.getAttribute('bpm') ?? '120') || 120;
 
-                /** @name        signal
-                 *  @public
-                 *  @type        {{
-                    attribute(name: string): PianoRoll.Types.Signal<string | null>;
-                }}
-                 *  @description Component member for signal.
-                 *  @returns     {{
-                    attribute(name: string): PianoRoll.Types.Signal<string | null>;
-                }} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                signal():
-                {
-                    /** @name        attribute
-                     *  @public
-                     *  @type        {PianoRoll.Types.Signal<string | null>}
-                     *  @description Component member for attribute.
-                     *  @param       {string} name Parameter.
-                     *  @returns     {PianoRoll.Types.Signal<string | null>} Result.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    attribute(name: string): Types.Signal<string | null>;
-                };
+            const shell = document.createElement('div');
+            shell.className = 'PianoRoll';
 
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {PianoRoll.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            };
+            const toolbar = document.createElement('div');
+            toolbar.className = 'PianoRoll-Toolbar';
+            toolbar.innerHTML = `
+                <h3 class="PianoRoll-Title">PianoRoll</h3>
+                <span class="PianoRoll-Status">— idle</span>
+                <span class="PianoRoll-Spacer"></span>
+                <button type="button" class="PianoRoll-ToolButton active" data-tool="draw">✏ Draw</button>
+                <button type="button" class="PianoRoll-ToolButton" data-tool="select">⌖ Select</button>
+                <button type="button" class="PianoRoll-ToolButton" data-tool="erase">⌫ Erase</button>
+                <span class="PianoRoll-Spacer"></span>
+                <label class="PianoRoll-Label">Snap</label>
+                <select class="PianoRoll-Input PianoRoll-Snap" aria-label="Piano roll snap">
+                    <option value="0.0625">1/16</option><option value="0.125">1/8</option>
+                    <option value="0.25">1/4</option><option value="0.5">1/2</option><option value="1">1/1</option>
+                </select>
+                <label class="PianoRoll-Label">BPM</label>
+                <input class="PianoRoll-Input PianoRoll__bpm" type="number" min="20" max="300" aria-label="BPM">
+                <label class="PianoRoll-Label">Bars</label>
+                <input class="PianoRoll-Input PianoRoll__bars" type="number" min="1" max="64" aria-label="Bars">
+                <span class="PianoRoll-Fill"></span>
+                <button type="button" class="PianoRoll-Button play">▶ Play</button>
+                <button type="button" class="PianoRoll-Button pause">‖ Pause</button>
+                <button type="button" class="PianoRoll-Button stop">■ Stop</button>
+                <span class="PianoRoll-Spacer"></span>
+                <button type="button" class="PianoRoll-Button clear">Clear</button>
+                <button type="button" class="PianoRoll-Button export">Export JSON</button>`;
 
-            /** @name        root
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned root value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const root = self.render();
-            if (root.querySelector('.pr-wrap'))
-                return;
-            this.#beats = parseInt(self.signal().attribute('beats')?.Peek() ?? '16', 10) || 16;
-            this.#pitchMin = parseInt(self.signal().attribute('pitch-min')?.Peek() ?? '36', 10) || 36;
-            this.#pitchMax = parseInt(self.signal().attribute('pitch-max')?.Peek() ?? '84', 10) || 84;
-            this.#cellW = parseInt(self.signal().attribute('cell-width')?.Peek() ?? '28', 10) || 28;
-            this.#cellH = parseInt(self.signal().attribute('cell-height')?.Peek() ?? '14', 10) || 14;
-            this.#snap = parseFloat(self.signal().attribute('snap')?.Peek() ?? '0.25') || 0.25;
+            this._status = toolbar.querySelector('.PianoRoll-Status') as HTMLSpanElement;
+            this._playButton = toolbar.querySelector('.play') as HTMLButtonElement;
+            this._pauseButton = toolbar.querySelector('.pause') as HTMLButtonElement;
+            const snap = toolbar.querySelector('.PianoRoll-Snap') as HTMLSelectElement;
+            const bpm = toolbar.querySelector('.PianoRoll__bpm') as HTMLInputElement;
+            const barsInput = toolbar.querySelector('.PianoRoll__bars') as HTMLInputElement;
+            snap.value = String(this._snap);
+            bpm.value = String(this._bpm);
+            barsInput.value = String(Math.max(1, Math.ceil(this._beats / BPB)));
 
-            /** @name        wrap
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned wrap value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const wrap = document.createElement('div');
-            wrap.className = 'pr-wrap';
-            // Toolbar
-            /** @name        tb
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned tb value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const tb = document.createElement('div');
-            tb.className = 'pr-toolbar';
+            const gridShell = document.createElement('div');
+            gridShell.className = 'PianoRoll-Grid';
+            const corner = document.createElement('div');
+            corner.className = 'PianoRoll-Corner';
+            this._ruler = document.createElement('div');
+            this._ruler.className = 'PianoRoll-Ruler';
+            this._keys = document.createElement('div');
+            this._keys.className = 'PianoRoll-Keys';
+            this._canvas = document.createElement('div');
+            this._canvas.className = 'PianoRoll-Canvas';
+            this._grid = document.createElement('div');
+            this._grid.className = 'PianoRoll-Grid-bg';
+            this._velocity = document.createElement('div');
+            this._velocity.className = 'PianoRoll__vel';
+            this._velToggle = document.createElement('button');
+            this._velToggle.type = 'button';
+            this._velToggle.className = 'PianoRoll-VelocityToggle';
+            this._velToggle.textContent = '▼ Velocity';
+            this._playhead = document.createElement('div');
+            this._playhead.className = 'PianoRoll-Playhead';
+            this._playhead.hidden = true;
+            this._canvas.append(this._grid, this._velocity, this._velToggle, this._playhead);
+            gridShell.append(corner, this._ruler, this._keys, this._canvas);
 
-            /** @name        btnPlay
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned btnPlay value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const btnPlay = document.createElement('button');
-            btnPlay.type = 'button';
-            btnPlay.className = 'pr-btn';
-            btnPlay.textContent = '▶';
+            const eventPanel = document.createElement('div');
+            eventPanel.className = 'PianoRoll-Events';
+            eventPanel.innerHTML = '<div class="PianoRoll-Events-ttl">MIDI Events</div>';
+            this._events = document.createElement('div');
+            this._events.className = 'PianoRoll-Events-list';
+            this._events.textContent = '(no events yet — press Play)';
+            eventPanel.appendChild(this._events);
 
-            /** @name        btnStop
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned btnStop value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const btnStop = document.createElement('button');
-            btnStop.type = 'button';
-            btnStop.className = 'pr-btn';
-            btnStop.textContent = '■';
+            shell.append(toolbar, gridShell, eventPanel);
+            root.appendChild(shell);
 
-            /** @name        btnClear
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned btnClear value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const btnClear = document.createElement('button');
-            btnClear.type = 'button';
-            btnClear.className = 'pr-btn';
-            btnClear.textContent = 'Clear';
-            tb.append(btnPlay, btnStop, btnClear);
-            // Body: keyboard | grid
-            /** @name        body
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned body value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const body = document.createElement('div');
-            body.className = 'pr-body';
+            this._buildKeys();
+            this._buildRulerAndGrid();
+            this._bindToolbar(toolbar, snap, bpm, barsInput);
+            this._bindCanvas();
+            this.BindKeyboard();
+            this.BindRuler();
+            this.BindVelocity();
 
-            /** @name        keyboard
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned keyboard value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const keyboard = document.createElement('div');
-            keyboard.className = 'pr-keyboard';
-            for (let p = this.#pitchMax; p >= this.#pitchMin; p--)
+            this._canvas.addEventListener('scroll', () =>
             {
-                /** @name        k
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned k value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const k = document.createElement('div');
-                k.className = 'pr-key ' + (isBlackKey(p) ? 'pr-key-black' : 'pr-key-white');
-                k.style.height = this.#cellH + 'px';
-                if (p % 12 === 0)
-                    k.textContent = pitchLabel(p);
-                keyboard.appendChild(k);
-            }
-
-            /** @name        grid
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned grid value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const grid = document.createElement('div');
-            grid.className = 'pr-grid';
-            grid.style.width = (this.#beats * this.#cellW) + 'px';
-            grid.style.height = ((this.#pitchMax - this.#pitchMin + 1) * this.#cellH) + 'px';
-            this.#grid = grid;
-            this.#paintGrid(grid);
-            body.append(keyboard, grid);
-            wrap.append(tb, body);
-            root.appendChild(wrap);
-            // Notes layer
-            effect(() => {
-                // Strip existing note elements, redraw from signal
-                grid.querySelectorAll('.pr-note').forEach(n => n.remove());
-                for (const n of this.notes$.Get())
-                {
-                    /** @name        div
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned div value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const div = this.#renderNote(n);
-                    grid.appendChild(div);
-                }
-                // Playhead
-                /** @name        ph
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned ph value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const ph = this.playhead$.Get();
-
-                /** @name        phEl
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned phEl value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                let phEl = grid.querySelector<HTMLDivElement>('.pr-playhead');
-                if (!phEl)
-                {
-                    phEl = document.createElement('div');
-                    phEl.className = 'pr-playhead';
-                    grid.appendChild(phEl);
-                }
-                phEl.style.left = (ph * this.#cellW) + 'px';
+                if (this._keys) this._keys.scrollTop = this._canvas!.scrollTop;
+                if (this._ruler) this._ruler.scrollLeft = this._canvas!.scrollLeft;
             });
-            // Click-empty to add a note
-            grid.addEventListener('pointerdown', (e: PointerEvent) => {
-                /** @name        t
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned t value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const t = e.target as HTMLElement;
-                if (t.classList.contains('pr-note') || t.classList.contains('pr-note-grip'))
-                    return;
 
-                /** @name        r
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned r value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const r = grid.getBoundingClientRect();
-
-                /** @name        x
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned x value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const x = e.clientX - r.left;
-
-                /** @name        y
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned y value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const y = e.clientY - r.top;
-
-                /** @name        start
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned start value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const start = this.#snapBeat(x / this.#cellW);
-
-                /** @name        pitch
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned pitch value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const pitch = this.#pitchMax - Math.floor(y / this.#cellH);
-                if (pitch < this.#pitchMin || pitch > this.#pitchMax)
-                    return;
-
-                /** @name        note
-                 *  @public
-                 *  @type        {PianoRoll.Interfaces.PianoNote}
-                 *  @description Namespace-owned note value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const note: Interfaces.PianoNote = { pitch, start, length: 1, velocity: 0.8 };
-                this.notes$.Set([...this.notes$.Peek(), note]);
-                self.fire('arianna:pianoroll-note-add', { detail: { note, source: this }, bubbles: true });
+            Reactivity.CreateEffect(() =>
+            {
+                this.notes$.Get();
+                this._renderNotes();
             });
-            btnPlay.addEventListener('click', () => this.play());
-            btnStop.addEventListener('click', () => this.stop());
-            btnClear.addEventListener('click', () => {
+            Reactivity.CreateEffect(() =>
+            {
+                const beat = this.playhead$.Get();
+                if (this._playhead) this._playhead.style.left = this._beatX(beat) + 'px';
+            });
+
+        }
+
+        public onCreated(): void
+        {
+            requestAnimationFrame(() => { if(this.isConnected) this.onConnected(); });
+        }
+
+        private EnsureState(): void
+        {
+            const self = this as unknown as {
+                notes$?: Types.Signal<Interfaces.PianoNote[]>; playing$?: Types.Signal<boolean>; playhead$?: Types.Signal<number>;
+                _beats?: number; _pitchMin?: number; _pitchMax?: number; _cellW?: number; _cellH?: number; _snap?: number; _bpm?: number;
+                _tool?: Tool; _selected?: Set<string>; _showVelocity?: boolean; _nextId?: number; _raf?: number;
+                _lastPlaybackBeat?: number; _playStartedAt?: number;
+                _eventLog?: Array<{ time: number; type: string; pitch: number; velocity: number }>;
+                _noteClipboard?: Interfaces.PianoNote[]; _synthVoices?: Map<number, { oscillator: OscillatorNode; gain: GainNode }>; _bound?: boolean;
+            };
+            if(!self.notes$ || typeof self.notes$.Get !== 'function') self.notes$ = Reactivity.CreateSignal<Interfaces.PianoNote[]>([]);
+            if(!self.playing$ || typeof self.playing$.Get !== 'function') self.playing$ = Reactivity.CreateSignal(false);
+            if(!self.playhead$ || typeof self.playhead$.Get !== 'function') self.playhead$ = Reactivity.CreateSignal(0);
+            if(!Number.isFinite(self._beats)) self._beats = 32;
+            if(!Number.isFinite(self._pitchMin)) self._pitchMin = 36;
+            if(!Number.isFinite(self._pitchMax)) self._pitchMax = 96;
+            if(!Number.isFinite(self._cellW)) self._cellW = 80;
+            if(!Number.isFinite(self._cellH)) self._cellH = 16;
+            if(!Number.isFinite(self._snap)) self._snap = .25;
+            if(!Number.isFinite(self._bpm)) self._bpm = 120;
+            if(self._tool !== 'draw' && self._tool !== 'select' && self._tool !== 'erase') self._tool = 'draw';
+            if(!(self._selected instanceof Set)) self._selected = new Set<string>();
+            if(typeof self._showVelocity !== 'boolean') self._showVelocity = true;
+            if(!Number.isFinite(self._nextId) || (self._nextId ?? 0) < 1) self._nextId = 1;
+            if(!Number.isFinite(self._raf)) self._raf = 0;
+            if(!Number.isFinite(self._lastPlaybackBeat)) self._lastPlaybackBeat = 0;
+            if(!Number.isFinite(self._playStartedAt)) self._playStartedAt = 0;
+            if(!Array.isArray(self._eventLog)) self._eventLog = [];
+            if(!Array.isArray(self._noteClipboard)) self._noteClipboard = [];
+            if(!(self._synthVoices instanceof Map)) self._synthVoices = new Map();
+        }
+
+        public get notes(): Interfaces.PianoNote[] { this.EnsureState(); return this.getNotes(); }
+        public set notes(value: Interfaces.PianoNote[]) { this.EnsureState(); this.setNotes(Array.isArray(value) ? value : []); }
+
+        _bindToolbar(toolbar: HTMLElement, snap: HTMLSelectElement, bpm: HTMLInputElement, bars: HTMLInputElement): void
+        {
+            toolbar.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(button =>
+            {
+                button.addEventListener('click', () =>
+                {
+                    this._tool = (button.dataset.tool ?? 'draw') as Tool;
+                    toolbar.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b === button));
+                });
+            });
+
+            snap.addEventListener('change', () =>
+            {
+                this._snap = parseFloat(snap.value) || .25;
+                this.setAttribute('snap', String(this._snap));
+                this._buildRulerAndGrid();
+            });
+            bpm.addEventListener('change', () =>
+            {
+                this._bpm = Math.max(20, Math.min(300, parseFloat(bpm.value) || 120));
+                bpm.value = String(this._bpm);
+                this.setAttribute('bpm', String(this._bpm));
+            });
+            bars.addEventListener('change', () =>
+            {
+                const count = Math.max(1, Math.min(64, parseInt(bars.value, 10) || 8));
+                bars.value = String(count);
+                this._beats = count * BPB;
+                this.setAttribute('bars', String(count));
+                this.setAttribute('beats', String(this._beats));
+                this._buildRulerAndGrid();
+                this._renderNotes();
+            });
+
+            this._playButton?.addEventListener('click', () => this.play());
+            this._pauseButton?.addEventListener('click', () => this.pause());
+            toolbar.querySelector('.stop')?.addEventListener('click', () => this.stop());
+            toolbar.querySelector('.clear')?.addEventListener('click', () =>
+            {
+                this._selected.clear();
                 this.notes$.Set([]);
             });
-            self.Sheet = PianoRoll.DefaultSheet();
+            toolbar.querySelector('.export')?.addEventListener('click', () => this._exportJson());
+            this._velToggle?.addEventListener('click', () =>
+            {
+                this._showVelocity = !this._showVelocity;
+                if (this._velocity) this._velocity.hidden = !this._showVelocity;
+                if (this._velToggle) this._velToggle.textContent = this._showVelocity ? '▼ Velocity' : '▲ Velocity';
+            });
         }
 
-        /** @name        #paintGrid
-         *  @public
-         *  @type        {void}
-         *  @description Component member for paint Grid.
-         *  @param       {HTMLElement} grid Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #paintGrid(grid: HTMLElement): void
+        _buildKeys(): void
         {
-            /** @name        cols
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned cols value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const cols = this.#beats;
+            if (!this._keys) return;
+            this._keys.replaceChildren();
+            const height = (this._pitchMax - this._pitchMin + 1) * this._cellH;
+            this._keys.style.height = height + 'px';
 
-            /** @name        rows
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned rows value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const rows = this.#pitchMax - this.#pitchMin + 1;
-            // Vertical beat lines via background-image (cheap)
-            grid.style.backgroundImage = [
-                `linear-gradient(to right, var(--ar-border, #2a2a2a) 1px, transparent 1px)`,
-                `linear-gradient(to bottom, var(--ar-border, #2a2a2a) 1px, transparent 1px)`,
-            ].join(', ');
-            grid.style.backgroundSize = `${this.#cellW}px 100%, 100% ${this.#cellH}px`;
-            // Black-key row tint via overlay divs (one per black row)
-            for (let p = this.#pitchMax; p >= this.#pitchMin; p--)
+            for (let pitch = this._pitchMax; pitch >= this._pitchMin; pitch--)
             {
-                if (!isBlackKey(p))
-                    continue;
-
-                /** @name        row
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned row value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const row = document.createElement('div');
-                row.className = 'pr-row-tint';
-                row.style.top = ((this.#pitchMax - p) * this.#cellH) + 'px';
-                row.style.height = this.#cellH + 'px';
-                row.style.width = (cols * this.#cellW) + 'px';
-                grid.appendChild(row);
+                const key = document.createElement('div');
+                key.className = 'PianoRoll-Key ' + (BLACK.has(pitch % 12) ? 'black' : 'white');
+                key.style.top = this._pitchY(pitch) + 'px';
+                key.style.height = this._cellH + 'px';
+                if (pitch % 12 === 0 || pitch % 12 === 7) key.textContent = pitchLabel(pitch);
+                key.addEventListener('pointerdown', e =>
+                {
+                    e.preventDefault();
+                    this._midi('note-on', pitch, 1);
+                    const pointer = e.pointerId;
+                    const off = (ev: PointerEvent): void =>
+                    {
+                        if (ev.pointerId !== pointer) return;
+                        this._midi('note-off', pitch, 0);
+                        window.removeEventListener('pointerup', off);
+                        window.removeEventListener('pointercancel', off);
+                    };
+                    window.addEventListener('pointerup', off);
+                    window.addEventListener('pointercancel', off);
+                });
+                this._keys.appendChild(key);
             }
         }
 
-        /** @name        #renderNote
-         *  @public
-         *  @type        {HTMLDivElement}
-         *  @description Component member for render Note.
-         *  @param       {PianoRoll.Interfaces.PianoNote} n Parameter.
-         *  @returns     {HTMLDivElement} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #renderNote(n: Interfaces.PianoNote): HTMLDivElement
+        _buildRulerAndGrid(): void
         {
-            /** @name        div
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned div value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const div = document.createElement('div');
-            div.className = 'pr-note';
-            div.style.left = (n.start * this.#cellW) + 'px';
-            div.style.top = ((this.#pitchMax - n.pitch) * this.#cellH) + 'px';
-            div.style.width = (n.length * this.#cellW) + 'px';
-            div.style.height = this.#cellH + 'px';
-            div.style.opacity = String(0.5 + n.velocity * 0.5);
-            // Resize grip
-            /** @name        grip
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned grip value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const grip = document.createElement('div');
-            grip.className = 'pr-note-grip';
-            div.appendChild(grip);
+            if (!this._ruler || !this._grid || !this._canvas) return;
+            this._ruler.replaceChildren();
+            this._grid.replaceChildren();
+            const width = this._beatX(this._beats);
+            const height = (this._pitchMax - this._pitchMin + 1) * this._cellH;
+            this._ruler.style.width = width + 'px';
+            this._grid.style.width = width + 'px';
+            this._grid.style.height = height + 'px';
+            this._canvas.style.setProperty('--pr-grid-width', width + 'px');
+            this._canvas.style.setProperty('--pr-grid-height', height + 'px');
+            this._canvas.style.setProperty('--pr-row-h', this._cellH + 'px');
+            this._canvas.style.setProperty('--pr-beat-w', this._cellW + 'px');
+            this._canvas.style.minHeight = Math.min(520, height) + 'px';
 
-            /** @name        dragKind
-             *  @public
-             *  @type        {'move' | 'resize' | null}
-             *  @description Namespace-owned dragKind value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            let dragKind: 'move' | 'resize' | null = null;
-
-            /** @name        startX
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned startX value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            let startX = 0, startY = 0, origStart = 0, origPitch = 0, origLen = 0;
-            div.addEventListener('pointerdown', (e: PointerEvent) => {
-                e.stopPropagation();
-                if (e.detail >= 2)
+            for (let beat = 0; beat <= this._beats; beat++)
+            {
+                const tick = document.createElement('span');
+                tick.className = 'PianoRoll-Tick' + (beat % BPB === 0 ? ' bar' : '');
+                tick.style.left = this._beatX(beat) + 'px';
+                this._ruler.appendChild(tick);
+                if (beat % BPB === 0)
                 {
-                    // Double-click → delete
-                    /** @name        self
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned self value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const self = this as unknown as {
-                        /** @name        fire
-                         *  @public
-                         *  @type        {void}
-                         *  @description Component member for fire.
-                         *  @param       {string} t Parameter.
-                         *  @param       {CustomEventInit} init Parameter.
-                         *  @returns     {void} Result.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        fire(t: string, init?: CustomEventInit): void;
-                    };
-                    this.notes$.Set(this.notes$.Peek().filter((x: any) => x !== n));
-                    self.fire('arianna:pianoroll-note-remove', { detail: { note: n, source: this }, bubbles: true });
+                    const label = document.createElement('span');
+                    label.className = 'PianoRoll-TickLabel';
+                    label.style.left = (this._beatX(beat) + 2) + 'px';
+                    label.textContent = String(beat / BPB + 1);
+                    this._ruler.appendChild(label);
+                }
+            }
+
+            for (let pitch = this._pitchMax; pitch >= this._pitchMin; pitch--)
+            {
+                if (!BLACK.has(pitch % 12)) continue;
+                const tint = document.createElement('div');
+                tint.className = 'PianoRoll__row-tint';
+                tint.style.top = this._pitchY(pitch) + 'px';
+                tint.style.height = this._cellH + 'px';
+                tint.style.width = width + 'px';
+                this._grid.appendChild(tint);
+            }
+        }
+
+        _bindCanvas(): void
+        {
+            if (!this._canvas) return;
+            this._canvas.addEventListener('pointerdown', e =>
+            {
+                const target = e.target as Element;
+                if (target.closest('.PianoRoll-Note') || target.closest('.PianoRoll-VelocityToggle')) return;
+                if (this._tool === 'select')
+                {
+                    if (!e.shiftKey) this._selected.clear();
+                    this._renderNotes();
                     return;
                 }
-                dragKind = (e.target as HTMLElement).classList.contains('pr-note-grip') ? 'resize' : 'move';
-                startX = e.clientX;
-                startY = e.clientY;
-                origStart = n.start;
-                origPitch = n.pitch;
-                origLen = n.length;
-                div.setPointerCapture(e.pointerId);
-            });
-            div.addEventListener('pointermove', (e: PointerEvent) => {
-                if (!dragKind)
-                    return;
+                if (this._tool !== 'draw') return;
 
-                /** @name        dx
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned dx value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const dx = e.clientX - startX;
-
-                /** @name        dy
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned dy value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const dy = e.clientY - startY;
-                if (dragKind === 'move')
+                const { beat, pitch } = this._pointToNote(e);
+                if (pitch < this._pitchMin || pitch > this._pitchMax) return;
+                const note: Interfaces.PianoNote =
                 {
-                    /** @name        newStart
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned newStart value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const newStart = this.#snapBeat(origStart + dx / this.#cellW);
+                    id: 'n' + this._nextId++, pitch,
+                    start: this._snapBeat(beat), length: Math.max(this._snap, .0625), velocity: .8, channel: 1
+                };
+                this.notes$.Set([...this.notes$.Peek(), note]);
+                this._selected.clear();
+                this._selected.add(note.id!);
 
-                    /** @name        newPitch
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned newPitch value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const newPitch = origPitch - Math.round(dy / this.#cellH);
+                const pointer = e.pointerId;
+                const originBeat = note.start;
+                const move = (ev: PointerEvent): void =>
+                {
+                    if(ev.pointerId !== pointer) return;
+                    const point = this._pointToNote(ev);
+                    note.length = Math.max(this._snap, this._snapBeat(point.beat - originBeat));
+                    this._renderNotes();
+                };
+                const up = (ev: PointerEvent): void =>
+                {
+                    if(ev.pointerId !== pointer) return;
+                    window.removeEventListener('pointermove', move);
+                    window.removeEventListener('pointerup', up);
+                    window.removeEventListener('pointercancel', up);
+                    this.notes$.Set([...this.notes$.Peek()]);
+                    this.dispatchEvent(new CustomEvent('arianna:pianoroll-note-add', { bubbles: true, detail: { note: { ...note }, source: this } }));
+                };
+                window.addEventListener('pointermove', move);
+                window.addEventListener('pointerup', up);
+                window.addEventListener('pointercancel', up);
+            });
+        }
 
-                    /** @name        updated
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned updated value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const updated = { ...n, start: Math.max(0, newStart), pitch: Math.max(this.#pitchMin, Math.min(this.#pitchMax, newPitch)) };
-                    this.#updateNote(n, updated);
+        _renderNotes(): void
+        {
+            if (!this._canvas || !this._velocity) return;
+            this._canvas.querySelectorAll('.PianoRoll-Note').forEach(node => node.remove());
+            this._velocity.replaceChildren();
+
+            for (const note of this.notes$.Peek())
+            {
+                if (!note.id) note.id = 'n' + this._nextId++;
+                const el = document.createElement('div');
+                el.className = 'PianoRoll-Note' + (this._selected.has(note.id) ? ' selected' : '');
+                el.dataset.noteId = note.id;
+                el.style.left = this._beatX(note.start) + 'px';
+                el.style.top = this._pitchY(note.pitch) + 'px';
+                el.style.width = this._beatX(note.length) + 'px';
+                el.style.height = this._cellH + 'px';
+                el.style.opacity = String(.55 + Math.max(0, Math.min(1, note.velocity)) * .45);
+                el.innerHTML = `<span class="note-lbl">${pitchLabel(note.pitch)}</span><span class="PianoRoll-NoteResize"></span>`;
+                el.addEventListener('pointerdown', e => this._notePointerDown(e, note, el));
+                this._canvas.appendChild(el);
+
+                const velocity = document.createElement('span');
+                velocity.className = 'PianoRoll-VelocityBar';
+                velocity.dataset.noteId = note.id;
+                velocity.style.left = this._beatX(note.start) + 'px';
+                velocity.style.height = Math.max(2, note.velocity * 58) + 'px';
+                this._velocity.appendChild(velocity);
+            }
+            this._velocity.style.width = this._beatX(this._beats) + 'px';
+        }
+
+        _notePointerDown(e: PointerEvent, note: Interfaces.PianoNote, el: HTMLElement): void
+        {
+            e.preventDefault();
+            e.stopPropagation();
+            if (this._tool === 'erase')
+            {
+                this.removeNote(note.id!);
+                return;
+            }
+
+            if (!this._selected.has(note.id!))
+            {
+                if (!e.shiftKey) this._selected.clear();
+                this._selected.add(note.id!);
+                this._renderNotes();
+                el = this._canvas?.querySelector(`[data-note-id="${CSS.escape(note.id!)}"]`) as HTMLElement ?? el;
+            }
+
+            const resize = (e.target as Element).classList.contains('PianoRoll-NoteResize');
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const original = { start: note.start, pitch: note.pitch, length: note.length };
+            const pointer = e.pointerId;
+
+            const move = (ev: PointerEvent): void =>
+            {
+                if (ev.pointerId !== pointer) return;
+                if (resize)
+                {
+                    note.length = Math.max(this._snap, this._snapBeat(original.length + (ev.clientX - startX) / this._cellW));
                 }
                 else
                 {
-                    /** @name        newLen
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned newLen value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const newLen = Math.max(this.#snap, this.#snapBeat(origLen + dx / this.#cellW));
+                    note.start = Math.max(0, this._snapBeat(original.start + (ev.clientX - startX) / this._cellW));
+                    note.pitch = Math.max(this._pitchMin, Math.min(this._pitchMax, original.pitch - Math.round((ev.clientY - startY) / this._cellH)));
+                }
+                this._renderNotes();
+            };
+            const up = (ev: PointerEvent): void =>
+            {
+                if (ev.pointerId !== pointer) return;
+                window.removeEventListener('pointermove', move);
+                window.removeEventListener('pointerup', up);
+                window.removeEventListener('pointercancel', up);
+                this.notes$.Set([...this.notes$.Peek()]);
+                this.dispatchEvent(new CustomEvent('arianna:pianoroll-note-edit', { bubbles: true, detail: { note: { ...note }, source: this } }));
+            };
+            window.addEventListener('pointermove', move);
+            window.addEventListener('pointerup', up);
+            window.addEventListener('pointercancel', up);
+        }
 
-                    /** @name        updated
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned updated value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const updated = { ...n, length: newLen };
-                    this.#updateNote(n, updated);
+        private BindKeyboard(): void
+        {
+            if(this._bound) return;
+            this._bound = true;
+            this.addEventListener('keydown', event =>
+            {
+                const modifier = event.metaKey || event.ctrlKey;
+                const key = event.key.toLowerCase();
+                if(modifier && key === 'a')
+                {
+                    event.preventDefault();
+                    this._selected = new Set(this.notes$.Peek().map(note => note.id!).filter(Boolean));
+                    this._renderNotes();
+                    return;
+                }
+                if(modifier && key === 'c')
+                {
+                    event.preventDefault();
+                    this._noteClipboard = this.notes$.Peek().filter(note => this._selected.has(note.id!)).map(note => ({ ...note }));
+                    return;
+                }
+                if(modifier && key === 'x')
+                {
+                    event.preventDefault();
+                    this._noteClipboard = this.notes$.Peek().filter(note => this._selected.has(note.id!)).map(note => ({ ...note }));
+                    this.notes$.Set(this.notes$.Peek().filter(note => !this._selected.has(note.id!)));
+                    this._selected.clear();
+                    return;
+                }
+                if(modifier && key === 'v')
+                {
+                    event.preventDefault();
+                    const base = this.playhead$.Peek();
+                    const min = this._noteClipboard.length ? Math.min(...this._noteClipboard.map(note => note.start)) : 0;
+                    const pasted = this._noteClipboard.map(note => ({ ...note, id: 'n' + this._nextId++, start: Math.max(0, base + note.start - min) }));
+                    this.notes$.Set([...this.notes$.Peek(), ...pasted]);
+                    this._selected = new Set(pasted.map(note => note.id!));
+                    return;
+                }
+                if(event.key === 'Delete' || event.key === 'Backspace')
+                {
+                    event.preventDefault();
+                    this.notes$.Set(this.notes$.Peek().filter(note => !this._selected.has(note.id!)));
+                    this._selected.clear();
+                    return;
+                }
+                if(event.code === 'Space')
+                {
+                    event.preventDefault();
+                    this.playing$.Peek() ? this.pause() : this.play();
                 }
             });
-            div.addEventListener('pointerup', (e: PointerEvent) => {
-                div.releasePointerCapture(e.pointerId);
-                dragKind = null;
-            });
-            return div;
         }
 
-        /** @name        #updateNote
-         *  @public
-         *  @type        {void}
-         *  @description Component member for update Note.
-         *  @param       {PianoRoll.Interfaces.PianoNote} oldNote Parameter.
-         *  @param       {PianoRoll.Interfaces.PianoNote} newNote Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #updateNote(oldNote: Interfaces.PianoNote, newNote: Interfaces.PianoNote): void
+        private BindRuler(): void
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        fire
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for fire.
-                 *  @param       {string} t Parameter.
-                 *  @param       {CustomEventInit} init Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                fire(t: string, init?: CustomEventInit): void;
+            if(!this._ruler) return;
+            const set = (event: PointerEvent): void =>
+            {
+                const rect = this._ruler!.getBoundingClientRect();
+                const x = event.clientX - rect.left + this._ruler!.scrollLeft;
+                this.setPlayhead(this._snapBeat(x / this._cellW));
+                if(this._playhead) this._playhead.hidden = false;
             };
+            let dragging = false;
+            this._ruler.addEventListener('pointerdown', event => { dragging = true; set(event); });
+            this._ruler.addEventListener('pointermove', event => { if(dragging) set(event); });
+            this._ruler.addEventListener('pointerup', () => { dragging = false; });
+            this._ruler.addEventListener('pointercancel', () => { dragging = false; });
+        }
 
-            /** @name        list
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned list value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const list = this.notes$.Peek();
+        private BindVelocity(): void
+        {
+            if(!this._velocity) return;
+            this._velocity.addEventListener('pointerdown', event =>
+            {
+                event.preventDefault();
+                event.stopPropagation();
+                const target = event.target as HTMLElement;
+                const id = target.closest<HTMLElement>('.PianoRoll-VelocityBar')?.dataset.noteId;
+                const rect = this._velocity!.getBoundingClientRect();
+                const x = event.clientX - rect.left + (this._canvas?.scrollLeft ?? 0);
+                const beat = x / this._cellW;
+                let note = id ? this.notes$.Peek().find(item => item.id === id) : undefined;
+                if(!note)
+                {
+                    note = this.notes$.Peek().reduce<Interfaces.PianoNote | undefined>((best, item) =>
+                        !best || Math.abs(item.start - beat) < Math.abs(best.start - beat) ? item : best, undefined);
+                }
+                if(!note) return;
+                const pointer = event.pointerId;
+                const update = (ev: PointerEvent): void =>
+                {
+                    if(ev.pointerId !== pointer) return;
+                    const y = ev.clientY - rect.top;
+                    note!.velocity = Math.max(0, Math.min(1, 1 - y / Math.max(1, rect.height)));
+                    this._renderNotes();
+                    this.dispatchEvent(new CustomEvent('arianna:pianoroll-velocity', { bubbles: true, detail: { note: { ...note! }, source: this } }));
+                };
+                update(event);
+                const up = (ev: PointerEvent): void =>
+                {
+                    if(ev.pointerId !== pointer) return;
+                    window.removeEventListener('pointermove', update);
+                    window.removeEventListener('pointerup', up);
+                    window.removeEventListener('pointercancel', up);
+                    this.notes$.Set([...this.notes$.Peek()]);
+                };
+                window.addEventListener('pointermove', update);
+                window.addEventListener('pointerup', up);
+                window.addEventListener('pointercancel', up);
+            });
+        }
 
-            /** @name        idx
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned idx value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const idx = list.indexOf(oldNote);
-            if (idx < 0)
+        _pointToNote(e: PointerEvent): { beat: number; pitch: number }
+        {
+            const rect = this._canvas!.getBoundingClientRect();
+            const x = e.clientX - rect.left + this._canvas!.scrollLeft;
+            const y = e.clientY - rect.top + this._canvas!.scrollTop;
+            return { beat: x / this._cellW, pitch: this._pitchMax - Math.floor(y / this._cellH) };
+        }
+
+        _beatX(beat: number): number { return beat * this._cellW; }
+        _pitchY(pitch: number): number { return (this._pitchMax - pitch) * this._cellH; }
+        _snapBeat(beat: number): number { return this._snap > 0 ? Math.round(beat / this._snap) * this._snap : beat; }
+
+        _midi(type: string, pitch: number, velocity: number): void
+        {
+            this.EnsureState();
+            if(type === 'note-on' && velocity > 0) this.SynthNoteOn(pitch, velocity);
+            else if(type === 'note-off' || velocity <= 0) this.SynthNoteOff(pitch);
+
+            const event = { time: performance.now(), type, pitch, velocity };
+            this._eventLog.unshift(event);
+            if (this._eventLog.length > 30) this._eventLog.length = 30;
+            if (this._events)
+            {
+                this._events.replaceChildren();
+                for (const row of this._eventLog.slice(0, 12))
+                {
+                    const line = document.createElement('div');
+                    line.className = 'PianoRoll-EventsRow';
+                    line.innerHTML = `<span class="t">${(row.time / 1000).toFixed(2)}</span><span class="ev">${row.type}</span><span>${pitchLabel(row.pitch)} · ${Math.round(row.velocity * 127)}</span>`;
+                    this._events.appendChild(line);
+                }
+            }
+            this.dispatchEvent(new CustomEvent('arianna:pianoroll-midi', { bubbles: true, detail: { ...event, source: this } }));
+        }
+
+        private EnsureSynth(): AudioContext | undefined
+        {
+            if(this._synthContext) return this._synthContext;
+
+            try
+            {
+                const Constructor = window.AudioContext ||
+                    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+                if(!Constructor) return undefined;
+
+                const context = new Constructor();
+                const master = context.createGain();
+                master.gain.value = .16;
+                master.connect(context.destination);
+                this._synthContext = context;
+                this._synthMaster = master;
+                this._synthVoices ??= new Map();
+                return context;
+            }
+            catch
+            {
+                return undefined;
+            }
+        }
+
+        private SynthNoteOn(pitch: number, velocity: number): void
+        {
+            const context = this.EnsureSynth();
+            const master = this._synthMaster;
+            if(!context || !master) return;
+
+            if(context.state === 'suspended') void context.resume().catch(() => undefined);
+            this.SynthNoteOff(pitch, true);
+
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
+            oscillator.type = 'triangle';
+            oscillator.frequency.value = 440 * Math.pow(2, (pitch - 69) / 12);
+
+            const now = context.currentTime;
+            const level = Math.max(.01, Math.min(1, velocity)) * .32;
+            gain.gain.setValueAtTime(.0001, now);
+            gain.gain.exponentialRampToValueAtTime(Math.max(.0002, level), now + .008);
+
+            oscillator.connect(gain);
+            gain.connect(master);
+            oscillator.start(now);
+            this._synthVoices?.set(pitch, { oscillator, gain });
+        }
+
+        private SynthNoteOff(pitch: number, immediate = false): void
+        {
+            const voice = this._synthVoices?.get(pitch);
+            if(!voice) return;
+            this._synthVoices?.delete(pitch);
+
+            const context = this._synthContext;
+            if(!context)
+            {
+                try { voice.oscillator.stop(); } catch {}
                 return;
+            }
 
-            /** @name        next
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned next value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const next = list.slice();
-            next[idx] = newNote;
-            this.notes$.Set(next);
-            // Mutate oldNote in place so subsequent drag deltas track correctly
-            Object.assign(oldNote, newNote);
-            self.fire('arianna:pianoroll-note-edit', { detail: { note: newNote, oldNote, source: this }, bubbles: true });
+            const now = context.currentTime;
+            try
+            {
+                voice.gain.gain.cancelScheduledValues(now);
+                voice.gain.gain.setValueAtTime(Math.max(.0001, voice.gain.gain.value), now);
+                voice.gain.gain.exponentialRampToValueAtTime(.0001, now + (immediate ? .01 : .06));
+                voice.oscillator.stop(now + (immediate ? .015 : .07));
+            }
+            catch
+            {
+                try { voice.oscillator.stop(); } catch {}
+            }
         }
 
-        /** @name        #snapBeat
-         *  @public
-         *  @type        {number}
-         *  @description Component member for snap Beat.
-         *  @param       {number} b Parameter.
-         *  @returns     {number} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #snapBeat(b: number): number
+        private StopSynth(): void
         {
-            if (this.#snap <= 0)
-                return b;
-            return Math.round(b / this.#snap) * this.#snap;
+            for(const pitch of Array.from(this._synthVoices?.keys() ?? [])) this.SynthNoteOff(pitch, true);
         }
-        // ── Public API ────────────────────────────────────────────────────────
-        /** @name        addNote
-         *  @public
-         *  @type        {this}
-         *  @description Component member for add Note.
-         *  @param       {PianoRoll.Interfaces.PianoNote} n Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        addNote(n: Interfaces.PianoNote): this
+
+        _exportJson(): void
         {
-            this.notes$.Set([...this.notes$.Peek(), n]);
+            const blob = new Blob([JSON.stringify(this.getNotes(), null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'arianna-pianoroll.json';
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+        }
+
+        addNote(note: Interfaces.PianoNote): this
+        {
+            this.notes$.Set([...this.notes$.Peek(), { ...note, id: note.id ?? 'n' + this._nextId++ }]);
             return this;
         }
 
-        /** @name        setNotes
-         *  @public
-         *  @type        {this}
-         *  @description Component member for set Notes.
-         *  @param       {PianoRoll.Interfaces.PianoNote[]} notes Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+        removeNote(id: string): this
+        {
+            this.notes$.Set(this.notes$.Peek().filter(note => note.id !== id));
+            this._selected.delete(id);
+            return this;
+        }
+
         setNotes(notes: Interfaces.PianoNote[]): this
         {
-            this.notes$.Set(notes);
+            this._selected.clear();
+            this.notes$.Set(notes.map(note => ({ ...note, id: note.id ?? 'n' + this._nextId++ })));
             return this;
         }
 
-        /** @name        getNotes
-         *  @public
-         *  @type        {PianoRoll.Interfaces.PianoNote[]}
-         *  @description Component member for get Notes.
-         *  @returns     {PianoRoll.Interfaces.PianoNote[]} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        getNotes(): Interfaces.PianoNote[] { return this.notes$.Get(); }
+        getNotes(): Interfaces.PianoNote[] { return this.notes$.Get().map(note => ({ ...note })); }
 
-        /** @name        play
-         *  @public
-         *  @type        {void}
-         *  @description Component member for play.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         play(): void
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        fire
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for fire.
-                 *  @param       {string} t Parameter.
-                 *  @param       {CustomEventInit} init Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                fire(t: string, init?: CustomEventInit): void;
-            };
+            if (this.playing$.Get()) return;
             this.playing$.Set(true);
-            self.fire('arianna:pianoroll-play', { detail: { source: this }, bubbles: true });
+            this._playStartedAt = performance.now() - (this.playhead$.Peek() / (this._bpm / 60)) * 1000;
+            this._lastPlaybackBeat = this.playhead$.Peek() - 1e-6;
+            if (this._status) this._status.textContent = '● playing · internal synth';
+            if (this._playhead) this._playhead.hidden = false;
+            const synth = this.EnsureSynth();
+            if(synth?.state === 'suspended') void synth.resume().catch(() => undefined);
+            this.dispatchEvent(new CustomEvent('arianna:pianoroll-play', { bubbles: true, detail: { source: this } }));
+
+            const tick = (): void =>
+            {
+                if (!this.playing$.Peek()) return;
+                const beat = ((performance.now() - this._playStartedAt) / 1000) * (this._bpm / 60);
+                if (beat >= this._beats)
+                {
+                    this.stop();
+                    return;
+                }
+                for (const note of this.notes$.Peek())
+                {
+                    if (note.start > this._lastPlaybackBeat && note.start <= beat + 1e-6) this._midi('note-on', note.pitch, note.velocity);
+                    const end = note.start + note.length;
+                    if (end > this._lastPlaybackBeat && end <= beat) this._midi('note-off', note.pitch, 0);
+                }
+                this._lastPlaybackBeat = beat;
+                this.playhead$.Set(beat);
+                this._raf = requestAnimationFrame(tick);
+            };
+            this._raf = requestAnimationFrame(tick);
         }
 
-        /** @name        stop
-         *  @public
-         *  @type        {void}
-         *  @description Component member for stop.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+        pause(): void
+        {
+            if (!this.playing$.Peek()) return;
+            this.playing$.Set(false);
+            if (this._raf) cancelAnimationFrame(this._raf);
+            this._raf = 0;
+            this.StopSynth();
+            if (this._status) this._status.textContent = '‖ paused';
+            this.dispatchEvent(new CustomEvent('arianna:pianoroll-pause', { bubbles: true, detail: { source: this } }));
+        }
+
         stop(): void
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        fire
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for fire.
-                 *  @param       {string} t Parameter.
-                 *  @param       {CustomEventInit} init Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                fire(t: string, init?: CustomEventInit): void;
-            };
             this.playing$.Set(false);
+            if (this._raf) cancelAnimationFrame(this._raf);
+            this._raf = 0;
             this.playhead$.Set(0);
-            self.fire('arianna:pianoroll-stop', { detail: { source: this }, bubbles: true });
+            if (this._playhead) this._playhead.hidden = true;
+            this.StopSynth();
+            if (this._status) this._status.textContent = '— idle';
+            this.dispatchEvent(new CustomEvent('arianna:pianoroll-stop', { bubbles: true, detail: { source: this } }));
         }
 
-        /** Drive the playhead from an external clock (e.g. AudioContext). */
         setPlayhead(beat: number): this
         {
-            this.playhead$.Set(beat);
+            this.playhead$.Set(Math.max(0, Math.min(this._beats, beat)));
             return this;
         }
 
-        /** @name        DefaultSheet
-         *  @public
-         *  @static
-         *  @type        {PianoRoll.Types.Stylesheet}
-         *  @description Component member for Default Sheet.
-         *  @returns     {PianoRoll.Types.Stylesheet} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
+        onUnmount(): void
         {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--ar-bg, #0d0d0d)',
-                    border: '1px solid var(--ar-border, #2a2a2a)',
-                    borderRadius: 'var(--ar-radius, 5px)',
-                    color: 'var(--ar-text, #e0e0e0)',
-                    display: 'inline-block',
-                    font: 'var(--ar-font-size, 13px) var(--ar-font, ui-monospace, monospace)',
-                    padding: '8px',
-                    userSelect: 'none',
-                }),
-                new Rule(':host .pr-wrap', {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                }),
-                new Rule(':host .pr-toolbar', { display: 'flex', gap: '4px' }),
-                new Rule(':host .pr-btn', {
-                    background: 'var(--ar-bg3, #1e1e1e)',
-                    border: '1px solid var(--ar-border, #2a2a2a)',
-                    borderRadius: 'var(--ar-radius-sm, 3px)',
-                    color: 'var(--ar-text, #e0e0e0)',
-                    cursor: 'pointer',
-                    font: 'inherit',
-                    fontSize: '0.78rem',
-                    minWidth: '32px',
-                    padding: '4px 10px',
-                }),
-                new Rule(':host .pr-btn:hover', { background: 'var(--ar-bg4, #252525)' }),
-                new Rule(':host .pr-body', {
-                    display: 'flex',
-                    maxHeight: '320px',
-                    overflow: 'auto',
-                }),
-                new Rule(':host .pr-keyboard', {
-                    background: 'var(--ar-bg2, #161616)',
-                    borderRight: '1px solid var(--ar-border, #2a2a2a)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    position: 'sticky',
-                    left: '0',
-                    zIndex: '2',
-                }),
-                new Rule(':host .pr-key', {
-                    alignItems: 'center',
-                    borderBottom: '1px solid var(--ar-border, #2a2a2a)',
-                    color: 'var(--ar-muted, #888)',
-                    display: 'flex',
-                    fontSize: '0.62rem',
-                    paddingLeft: '6px',
-                    width: '48px',
-                }),
-                new Rule(':host .pr-key-white', { background: 'var(--ar-bg3, #1e1e1e)' }),
-                new Rule(':host .pr-key-black', { background: 'var(--ar-bg, #0d0d0d)' }),
-                new Rule(':host .pr-grid', {
-                    position: 'relative',
-                    cursor: 'crosshair',
-                }),
-                new Rule(':host .pr-row-tint', {
-                    background: 'rgba(255,255,255,0.02)',
-                    pointerEvents: 'none',
-                    position: 'absolute',
-                }),
-                new Rule(':host .pr-note', {
-                    background: 'var(--ar-primary, #7eb8f7)',
-                    border: '1px solid rgba(0,0,0,0.4)',
-                    borderRadius: '2px',
-                    cursor: 'move',
-                    position: 'absolute',
-                }),
-                new Rule(':host .pr-note-grip', {
-                    cursor: 'ew-resize',
-                    height: '100%',
-                    position: 'absolute',
-                    right: '0',
-                    top: '0',
-                    width: '4px',
-                }),
-                new Rule(':host .pr-playhead', {
-                    background: 'var(--ar-danger, #f44336)',
-                    bottom: '0',
-                    pointerEvents: 'none',
-                    position: 'absolute',
-                    top: '0',
-                    width: '2px',
-                }),
-            ]);
+            this.EnsureState();
+            this.StopSynth();
+            if (this._raf) cancelAnimationFrame(this._raf);
+            this._raf = 0;
         }
+
+        static DefaultSheet(): Types.Stylesheet { return Styles; }
     }
 }
+
+export type PianoRollOptions = PianoRoll.Interfaces.PianoRollOptions;
+export type PianoNote = PianoRoll.Interfaces.PianoNote;
 export default PianoRoll;

@@ -9,6 +9,7 @@
  */
 
 import { Component, Components, Css, Templates } from '../../core/index.ts';
+import { MountInputTemplate } from './Base.ts';
 
 /** @namespace   Checkbox
  *  @public
@@ -124,6 +125,7 @@ export namespace Checkbox
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-checkbox', {}, {
+        shadow: false,
         Attributes: ['label', 'checked', 'indeterminate', 'disabled'],
     })
     export class Checkbox extends HTMLElement
@@ -209,6 +211,7 @@ export namespace Checkbox
                 <span class="ar-checkbox__label" a-if="this.hasLabel()">{{ this.labelText() }}</span>
             </label>
         `;
+            MountInputTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -437,7 +440,7 @@ export namespace Checkbox
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'inline-block' }),
+                new Rule('arianna-checkbox', { display: 'inline-block' }),
                 new Rule('.ar-checkbox__row', {
                     alignItems: 'center',
                     cursor: 'pointer',

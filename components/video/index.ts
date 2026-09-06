@@ -1,30 +1,12 @@
-/**
- * @module    components/video
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description Barrel for AriannA video components, contracts and provider detection.
- */
+/** AriannA video components. */
+export { VideoPlayer, VideoPlayerComponent, AriannaVideoPlayer, detectVideoProvider } from './VideoPlayer.ts';
+export type { VideoProvider, VideoPlayerOptions } from './VideoPlayer.ts';
 
-import { VideoPlayer as VideoPlayerModule }           from './VideoPlayer.ts';
-import { VideoTrackEditor as VideoTrackEditorModule } from './VideoTrackEditor.ts';
+export { VideoPart, VideoPartComponent, VideoPartElement } from './VideoPart.ts';
+export type { VideoPartOptions } from './VideoPart.ts';
 
-/** VideoPlayer namespace and implementation. */
-export { VideoPlayer } from './VideoPlayer.ts';
+export { VideoTrack, VideoTrackComponent, VideoTrackElement } from './VideoTrack.ts';
+export type { VideoTrackOptions } from './VideoTrack.ts';
 
-/** VideoTrackEditor namespace and implementation. */
-export { VideoTrackEditor } from './VideoTrackEditor.ts';
-
-/** Detect the provider represented by a video URL. */
-export const detectVideoProvider = VideoPlayerModule.detectVideoProvider;
-
-/** Supported video-provider identifier. */
-export type VideoProvider = VideoPlayerModule.Types.VideoProvider;
-
-/** VideoPlayer construction options. */
-export type VideoPlayerOptions = VideoPlayerModule.Interfaces.VideoPlayerOptions;
-
-/** VideoTrackEditor clip contract. */
-export type VideoClip = VideoTrackEditorModule.VideoClip;
+export { VideoTrackEditor, VideoTrackEditorComponent, VideoTimelineEditor } from './VideoTrackEditor.ts';
+export type { VideoClip, VideoTrackEditorOptions } from './VideoTrackEditor.ts';

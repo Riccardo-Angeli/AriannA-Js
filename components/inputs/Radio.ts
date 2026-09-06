@@ -184,6 +184,7 @@ export namespace Radio
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-radio', {}, {
+        shadow: false,
         Attributes: ['label', 'direction', 'value'],
     })
     export class Radio extends HTMLElement
@@ -203,14 +204,14 @@ export namespace Radio
          *  @license     MIT / Commercial (dual license) */
         options$: Types.Signal<Interfaces.RadioOption[]> = signal<Interfaces.RadioOption[]>([]);
 
-        /** @name        #groupName
+        /** @name        __groupName
          *  @public
          *  @type        {unknown}
          *  @description Component member for group Name.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #groupName = 'ar-radio-' + Math.random().toString(36).slice(2, 7);
+        __groupName = 'ar-radio-' + Math.random().toString(36).slice(2, 7);
 
         /** @name        onConnected
          *  @public
@@ -223,74 +224,26 @@ export namespace Radio
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.RadioOptions = {})
         {
-            /** @name        label
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned label value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const label = this.signal().attribute('label');
-
-            /** @name        value
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned value value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const value = this.signal().attribute('value');
-            this.hasLabel = () => !!label.Get();
-            this.labelText = () => label.Get() ?? '';
-            this.allOpts = () => this.options$.Get();
-            this.itemsCls = () => 'ar-radio-group__items ar-radio-group__items--' +
-                (this.getAttribute('direction') ?? 'column');
-            this.optCls = (o: Interfaces.RadioOption) => 'ar-radio' + (o.disabled ? ' ar-radio--disabled' : '');
-            this.isChecked = (o: Interfaces.RadioOption) => o.value === (value.Get() ?? '');
-            this.groupName = () => this.#groupName;
-            this.onChange = (opt: Interfaces.RadioOption, e: Event) => {
-                /** @name        inp
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned inp value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const inp = e.target as HTMLInputElement;
-                if (inp.checked)
-                {
-                    this.setAttribute('value', opt.value);
-                    this.dispatchEvent(new CustomEvent('arianna:change', {
-                        bubbles: true, detail: { value: opt.value, option: opt },
-                    }));
+            this.options$ ??= signal<Interfaces.RadioOption[]>([]);
+            this.__groupName ??= 'ar-radio-' + Math.random().toString(36).slice(2, 7);
+            const self=this as Radio & { __renderRadio?:()=>void; onAttributeChanged?:()=>void };
+            this.classList.add('Radio');
+            const render=()=>{
+                const labelText=this.getAttribute('label')??'';const current=this.getAttribute('value')??'';const direction=(this.getAttribute('direction')??'column')==='row'?'row':'column';
+                const label=document.createElement('div');label.className='ar-radio-group__label';label.textContent=labelText;label.hidden=!labelText;
+                const items=document.createElement('div');items.className='ar-radio-group__items ar-radio-group__items--'+direction;
+                for(const opt of this.options$.Get()){
+                    const row=document.createElement('label');row.className='ar-radio'+(opt.disabled?' ar-radio--disabled':'');
+                    const input=document.createElement('input');input.type='radio';input.className='ar-radio__input';input.name=this.id+'-radio';input.value=opt.value;input.checked=current===opt.value;input.disabled=!!opt.disabled;
+                    const circle=document.createElement('span');circle.className='ar-radio__circle';const text=document.createElement('span');text.className='ar-radio__label';text.textContent=opt.label;
+                    input.addEventListener('change',()=>{if(!input.checked)return;this.setAttribute('value',opt.value);this.dispatchEvent(new CustomEvent('arianna:change',{bubbles:true,composed:true,detail:{value:opt.value,option:{...opt}}}));render();});
+                    row.appendChild(input);row.appendChild(circle);row.appendChild(text);items.appendChild(row);
                 }
+                if(!this.options$.Get().length){const hint=document.createElement('span');hint.className='ar-radio__empty';hint.textContent='No options';items.appendChild(hint);}
+                this.replaceChildren(label,items);
             };
-            this.template = html `
-            <div class="ar-radio-group__label" a-if="this.hasLabel()">{{ this.labelText() }}</div>
-            <div :class="this.itemsCls()">
-                <label :class="this.optCls(opt)" a-for="opt in this.allOpts()">
-                    <input class="ar-radio__input"
-                           type="radio"
-                           :name="this.groupName()"
-                           :value="opt.value"
-                           :checked="this.isChecked(opt)"
-                           :disabled="opt.disabled"
-                           @change="(e) => this.onChange(opt, e)"/>
-                    <span class="ar-radio__circle"></span>
-                    <span class="ar-radio__label">{{ opt.label }}</span>
-                </label>
-            </div>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Radio.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = Radio.DefaultSheet();
+            self.__renderRadio=render;self.onAttributeChanged=()=>render();render();
+            (this as unknown as { Sheet: Types.Stylesheet | null }).Sheet = Radio.DefaultSheet();
         }
 
         /** @name        options
@@ -301,7 +254,7 @@ export namespace Radio
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        set options(v: Interfaces.RadioOption[]) { this.options$.Set(v ?? []); }
+        set options(v: Interfaces.RadioOption[]) { this.options$.Set(v ?? []); ; (this as any).__renderRadio?.(); }
 
         /** @name        options
          *  @public
@@ -527,7 +480,7 @@ export namespace Radio
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'block' }),
+                new Rule('arianna-radio', { display: 'block' }),
                 new Rule('.ar-radio-group__label', {
                     color: 'var(--arianna-muted, #6e6b62)',
                     fontSize: '0.78rem',

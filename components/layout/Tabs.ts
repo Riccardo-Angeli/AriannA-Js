@@ -8,7 +8,14 @@
  * @description AriannA Tabs component module.
  */
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Templates: any;
+
+
 
 /** @namespace   Tabs
  *  @public
@@ -134,12 +141,142 @@ export namespace Tabs
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-        export @Component('arianna-tab', {}, {
+        
+        /** Default Tab stylesheet installed synchronously by @Component. */
+        export function TabDefaultSheet(): Types.Stylesheet
+        {
+            return new Stylesheet([
+                new Rule('arianna-tab', {
+                    display: 'contents'
+                }),
+                new Rule('.ar-tab__label', {
+                    boxSizing: 'border-box',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    minHeight: '38px',
+                    padding: '8px 14px',
+                    borderBottom: '2px solid transparent',
+                    color: 'var(--arianna-muted, #8a8f98)',
+                    transition: 'color .15s ease, border-color .15s ease, background .15s ease',
+                    userSelect: 'none',
+                    fontSize: '.85rem',
+                    whiteSpace: 'nowrap',
+                    justifyContent: 'center',
+                    width: '100%',
+                    gridRow: '1'
+                }),
+                new Rule('.ar-tab__label:hover', {
+                    color: 'var(--arianna-text, #f4f4f5)',
+                    background: 'color-mix(in srgb, var(--arianna-primary, #e40c88) 7%, transparent)'
+                }),
+                new Rule('arianna-tab[active] > .ar-tab__label', {
+                    borderBottomColor: 'var(--arianna-primary, #e40c88)',
+                    color: 'var(--arianna-primary, #e40c88)',
+                    fontWeight: '650'
+                }),
+                new Rule('arianna-tab[disabled] > .ar-tab__label', {
+                    cursor: 'not-allowed',
+                    opacity: '.45'
+                }),
+                new Rule('.ar-tab__panel', {
+                    boxSizing: 'border-box',
+                    gridRow: '2',
+                    gridColumn: '1 / -1',
+                    width: '100%',
+                    minWidth: '0',
+                    padding: '16px 4px 4px',
+                    color: 'var(--arianna-text, #f4f4f5)'
+                }),
+                new Rule('.ar-tab__panel[hidden]', { display: 'none' })
+            ]);
+        }
+
+export @Component('arianna-tab', TabDefaultSheet(), {
         Attributes: ['label', 'disabled', 'active'],
         bus: 'arianna-tabs',
     })
-    class Tab extends HTMLElement
+    class Tab extends HTMLDivElement
     {
+        /** Embedded component icon used by WYSIWYG palettes and drag/drop panels. */
+        static readonly Icon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 7h7l2 3h9v9H3V7Z"/></svg>`;
+        /** Canonical named default styles. Use e.g. Component.Styles['Disabled']. */
+        static readonly Styles = Object.freeze
+        (
+            {
+                Default:
+                new Rule('arianna-tab', {
+                display: 'contents'
+                }),
+                Label:
+                new Rule('.ar-tab__label', {
+                boxSizing: 'border-box',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                minHeight: '38px',
+                padding: '8px 14px',
+                borderBottom: '2px solid transparent',
+                color: 'var(--arianna-muted, #8a8f98)',
+                transition: 'color .15s ease, border-color .15s ease, background .15s ease',
+                userSelect: 'none',
+                fontSize: '.85rem',
+                whiteSpace: 'nowrap',
+                gridRow: '1'
+                }),
+                LabelHover:
+                new Rule('.ar-tab__label:hover', {
+                color: 'var(--arianna-text, #f4f4f5)',
+                background: 'color-mix(in srgb, var(--arianna-primary, #e40c88) 7%, transparent)'
+                }),
+                ActiveLabel:
+                new Rule('arianna-tab[active] > .ar-tab__label', {
+                borderBottomColor: 'var(--arianna-primary, #e40c88)',
+                color: 'var(--arianna-primary, #e40c88)',
+                fontWeight: '650'
+                }),
+                Active:
+                new Rule('arianna-tab[active] > .ar-tab__label', {
+                borderBottomColor: 'var(--arianna-primary, #e40c88)',
+                color: 'var(--arianna-primary, #e40c88)',
+                fontWeight: '650'
+                }),
+                DisabledLabel:
+                new Rule('arianna-tab[disabled] > .ar-tab__label', {
+                cursor: 'not-allowed',
+                opacity: '.45'
+                }),
+                Disabled:
+                new Rule('arianna-tab[disabled] > .ar-tab__label', {
+                cursor: 'not-allowed',
+                opacity: '.45'
+                }),
+                Panel:
+                new Rule('.ar-tab__panel', {
+                boxSizing: 'border-box',
+                gridRow: '2',
+                gridColumn: '1 / -1',
+                width: '100%',
+                minWidth: '0',
+                padding: '16px 4px 4px',
+                color: 'var(--arianna-text, #f4f4f5)'
+                }),
+                PanelHidden:
+                new Rule('.ar-tab__panel[hidden]', { display: 'none' }),
+            }
+        );
+
+
+
+        /** Embedded component icon. */
+        get Icon(): string { return Tab.Icon; }
+
+        constructor()
+        {
+            super();
+            this.classList.add('Tab');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -157,39 +294,74 @@ export namespace Tabs
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.TabOptions = {})
         {
-            /** @name        label
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned label value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const label = this.signal().attribute('label');
-            this.labelText = () => label.Get() ?? '';
-            this.hasLabel = () => !!label.Get();
-            this.onClick = () => {
-                if (this.hasAttribute('disabled'))
-                    return;
+            if(this.dataset.ariannaTabReady === 'true') return;
+
+            const panel =
+                Array.from(this.children)
+                    .find(child => child.tagName.toLowerCase() === 'section') as HTMLElement | undefined;
+
+            const textNodes =
+                Array.from(this.childNodes)
+                    .filter(node => node.nodeType === Node.TEXT_NODE);
+
+            const authored =
+                textNodes.map(node => node.textContent ?? '').join(' ').replace(/\s+/g, ' ').trim();
+
+            const label =
+                this.getAttribute('label')?.trim() || authored;
+
+            if(!label)
+            {
+                requestAnimationFrame(() => this.onConnected(_opts));
+                return;
+            }
+
+            this.dataset.ariannaTabReady = 'true';
+
+            for(const node of textNodes) node.remove();
+
+            let trigger =
+                Array.from(this.children)
+                    .find(child => child.classList.contains('ar-tab__label')) as HTMLElement | undefined;
+
+            if(!trigger)
+            {
+                trigger = document.createElement('span');
+                trigger.className = 'ar-tab__label';
+                this.prepend(trigger);
+            }
+
+            trigger.textContent = label;
+            trigger.setAttribute('role', 'tab');
+            trigger.tabIndex = this.hasAttribute('disabled') ? -1 : 0;
+
+            if(panel)
+            {
+                panel.classList.add('ar-tab__panel');
+                panel.setAttribute('role', 'tabpanel');
+            }
+
+            const select = (): void =>
+            {
+                if(this.hasAttribute('disabled')) return;
+
                 this.dispatchEvent(new CustomEvent('arianna:tab-select', {
-                    bubbles: true, detail: { source: this },
+                    bubbles: true,
+                    composed: true,
+                    detail: { source: this }
                 }));
             };
-            this.template = html `
-            <span a-if="this.hasLabel()" @click="this.onClick">{{ this.labelText() }}</span>
-            <span a-if="!this.hasLabel()" @click="this.onClick"><slot></slot></span>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Tabs.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = Tab.DefaultSheet();
-        }
 
+            trigger.addEventListener('click', select);
+            trigger.addEventListener('keydown', event =>
+            {
+                if(event.key === 'Enter' || event.key === ' ')
+                {
+                    event.preventDefault();
+                    select();
+                }
+            });
+        }
         /** @name        onCreated
          *  @public
          *  @type        {void}
@@ -198,7 +370,13 @@ export namespace Tabs
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        onCreated() { }
+        onCreated()
+        {
+            requestAnimationFrame(() =>
+            {
+                if(this.isConnected) this.onConnected?.();
+            });
+        }
 
         /** @name        onBeforeMount
          *  @public
@@ -357,27 +535,7 @@ export namespace Tabs
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    cursor: 'pointer',
-                    display: 'inline-block',
-                    padding: '8px 14px',
-                    borderBottom: '2px solid transparent',
-                    color: 'var(--arianna-text, #1f2328)',
-                    transition: 'all 0.15s ease',
-                    userSelect: 'none',
-                    fontSize: '0.85rem',
-                }),
-                new Rule(':host:hover', { color: 'var(--arianna-primary, #1f6feb)' }),
-                new Rule(':host([active])', {
-                    borderBottomColor: 'var(--arianna-primary, #1f6feb)',
-                    color: 'var(--arianna-primary, #1f6feb)',
-                    fontWeight: '600',
-                }),
-                new Rule(':host([disabled])', { cursor: 'not-allowed', opacity: '0.45' }),
-            ]);
-        }
+        { return TabDefaultSheet(); }
     }
     // ─────────────────────────────────────────────────────────────────────────────
     //  Tabs (parent, owns the active index)
@@ -388,11 +546,81 @@ export namespace Tabs
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-tabs', {}, {
+    
+    /** Default Tabs stylesheet installed synchronously by @Component. */
+    export function TabsDefaultSheet(): Types.Stylesheet
+    {
+            return new Stylesheet([
+                new Rule('arianna-tabs', {
+                    boxSizing: 'border-box',
+                    display: 'grid',
+                    gridAutoColumns: 'minmax(0, 1fr)',
+                    gridAutoFlow: 'column',
+                    gridTemplateRows: 'auto minmax(0, 1fr)',
+                    justifyContent: 'stretch',
+                    width: '100%',
+                    maxWidth: '100%',
+                    minWidth: '0',
+                    borderBottom: '1px solid var(--arianna-border, #2d3037)'
+                })
+            ]);
+        }
+
+@Component('arianna-tabs', TabsDefaultSheet(), {
         Attributes: ['active'],
     })
-    export class Tabs extends HTMLElement
+    export class Tabs extends HTMLDivElement
     {
+        /** Embedded component icon used by WYSIWYG palettes and drag/drop panels. */
+        static readonly Icon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 8h5l2-3h4l2 3h5v11H3V8Z"/></svg>`;
+        /** Canonical named default styles. Use e.g. Component.Styles['Disabled']. */
+        static readonly Styles = Object.freeze
+        (
+            {
+                Default:
+                new Rule('arianna-tabs', {
+                boxSizing: 'border-box',
+                display: 'grid',
+                gridAutoColumns: 'minmax(0, 1fr)',
+                gridAutoFlow: 'column',
+                gridTemplateRows: 'auto minmax(0, 1fr)',
+                justifyContent: 'stretch',
+                width: '100%',
+                maxWidth: '100%',
+                minWidth: '0',
+                borderBottom: '1px solid var(--arianna-border, #2d3037)'
+                }),
+            }
+        );
+
+
+
+        /** Embedded component icon. */
+        get Icon(): string { return Tabs.Icon; }
+
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'Tabs';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('Tabs');
+        }
+
         /** Compiler-visible AriannA template slot installed by @Component. */
         declare template: unknown;
 
@@ -407,106 +635,84 @@ export namespace Tabs
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.TabsOptions = {})
         {
-            // Listen for child triggers (event bubbles up from arianna-tab clicks)
-            this.addEventListener('arianna:tab-select', (e: Event) => {
-                /** @name        ev
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned ev value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const ev = e as CustomEvent<{
-                    /** @name        source
-                     *  @public
-                     *  @type        {Tabs.Tab}
-                     *  @description Component member for source.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    source: Tab;
-                }>;
+            const authoredTabs=Array.from(this.children).filter(child => child.tagName.toLowerCase()==='arianna-tab');
+            if(authoredTabs.length===0)
+            {
+                requestAnimationFrame(() => this.onConnected(_opts));
+                return;
+            }
 
-                /** @name        source
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned source value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const source = ev.detail?.source;
-                if (!source)
-                    return;
+            if(this.dataset.ariannaTabsReady === 'true') return;
+            this.dataset.ariannaTabsReady = 'true';
 
-                /** @name        triggers
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned triggers value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const triggers = Array.from(this.querySelectorAll('arianna-tab'));
+            this.setAttribute('role', 'tablist');
 
-                /** @name        idx
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned idx value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const idx = triggers.indexOf(source);
-                if (idx >= 0)
+            this.addEventListener
+            (
+                'arianna:tab-select',
+                (event: Event) =>
                 {
-                    this.setAttribute('active', String(idx));
-                    this.#syncChildren();
-                    this.dispatchEvent(new CustomEvent('arianna:change', {
-                        bubbles: true, detail: { active: idx, source: this },
-                    }));
+                    const source =
+                        (event as CustomEvent<{ source?: HTMLElement }>).detail?.source;
+
+                    if(!source) return;
+
+                    const triggers =
+                        Array.from(this.children)
+                            .filter(child => child.tagName.toLowerCase() === 'arianna-tab') as HTMLElement[];
+
+                    const index =
+                        triggers.indexOf(source);
+
+                    if(index < 0) return;
+
+                    this.setAttribute('active', String(index));
+                    this.syncChildren();
+
+                    this.dispatchEvent
+                    (
+                        new CustomEvent
+                        (
+                            'arianna:change',
+                            {
+                                bubbles  : true,
+                                composed : true,
+                                detail   : { active: index, source: this }
+                            }
+                        )
+                    );
                 }
-            });
-            this.template = html `
-            <header class="ar-tabs__header"><slot name="header"></slot></header>
-            <section class="ar-tabs__body"><slot></slot></section>
-        `;
-            // Initial sync (deferred so children mount first)
-            setTimeout(() => this.#syncChildren(), 0);
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Tabs.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = Tabs.DefaultSheet();
+            );
+
+            this.syncChildren();
         }
 
         /** Propagate the parent's `active` index down to children's `[active]` attr. */
-        #syncChildren(): void
+        private syncChildren(): void
         {
-            /** @name        i
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned i value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const i = parseInt(this.getAttribute('active') ?? '0', 10) || 0;
+            const active =
+                Math.max(0, parseInt(this.getAttribute('active') ?? '0', 10) || 0);
 
-            /** @name        triggers
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned triggers value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const triggers = Array.from(this.querySelectorAll('arianna-tab'));
-            triggers.forEach((t, idx) => {
-                if (idx === i)
-                    t.setAttribute('active', '');
-                else
-                    t.removeAttribute('active');
+            const tabs =
+                Array.from(this.children)
+                    .filter(child => child.tagName.toLowerCase() === 'arianna-tab') as HTMLElement[];
+
+            tabs.forEach((tab, index) =>
+            {
+                const selected = index === active;
+                tab.toggleAttribute('active', selected);
+
+                const trigger = tab.querySelector(':scope > .ar-tab__label') as HTMLElement | null;
+                trigger?.setAttribute('aria-selected', String(selected));
+                if(trigger) trigger.tabIndex = tab.hasAttribute('disabled') ? -1 : (selected ? 0 : -1);
+
+                const panel = tab.querySelector(':scope > section') as HTMLElement | null;
+                if(panel)
+                {
+                    panel.classList.add('ar-tab__panel');
+                    panel.hidden = !selected;
+                    panel.setAttribute('role', 'tabpanel');
+                }
             });
         }
 
@@ -518,7 +724,13 @@ export namespace Tabs
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        onCreated() { }
+        onCreated()
+        {
+            requestAnimationFrame(() =>
+            {
+                if(this.isConnected) this.onConnected?.();
+            });
+        }
 
         /** @name        onBeforeMount
          *  @public
@@ -541,7 +753,7 @@ export namespace Tabs
         onMount()
         {
             // Re-sync after mount in case children attached during build
-            this.#syncChildren();
+            this.syncChildren();
         }
 
         /** @name        onBeforeUpdate
@@ -564,7 +776,7 @@ export namespace Tabs
          *  @license     MIT / Commercial (dual license) */
         onUpdate()
         {
-            this.#syncChildren();
+            this.syncChildren();
         }
 
         /** @name        onBeforeUnmount
@@ -605,7 +817,7 @@ export namespace Tabs
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        set active(v: number) { this.setAttribute('active', String(v)); this.#syncChildren(); }
+        set active(v: number) { this.setAttribute('active', String(v)); this.syncChildren(); }
 
         /** @name        DefaultSheet
          *  @public
@@ -617,20 +829,11 @@ export namespace Tabs
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', { display: 'block' }),
-                new Rule('.ar-tabs__header', {
-                    borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                    display: 'flex',
-                    gap: '4px',
-                }),
-                new Rule('.ar-tabs__body', { padding: '12px 0' }),
-            ]);
-        }
+        { return TabsDefaultSheet(); }
     }
 }
-export default Tabs;
+export const TabsClass = Tabs.Tabs;
+export default Tabs.Tabs;
 
 export const Tab = Tabs.Tab;
 

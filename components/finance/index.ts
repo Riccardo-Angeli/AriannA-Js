@@ -11,7 +11,7 @@
  * # Tags registered
  *
  *   arianna-candlestick-chart   OHLC chart with bull/bear bodies
- *   arianna-line-chart          Multi-series line chart with grid+legend
+ *   arianna-finance-line-chart  Multi-series line chart with grid+legend
  *   arianna-depth-chart         Cumulative bid/ask area
  *   arianna-heatmap-chart       N×N correlation matrix (diverging ramp)
  *   arianna-portfolio-donut     Asset allocation donut
@@ -40,8 +40,9 @@
  *
  * # Light/dark theme
  *
- *   v1 hard-coded `#131722` background. v2 uses tokens so the widgets
- *   inherit your app theme (light by default, swap tokens for dark mode).
+ *   Each finance component owns both theme palettes. `theme="dark"` is the
+ *   default and `theme="light"` switches to the class-rooted Light palette.
+ *   Both paths use the same AriannA design tokens.
  *
  * # Helpers (not registered as elements)
  *

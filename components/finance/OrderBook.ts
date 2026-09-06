@@ -8,9 +8,13 @@
  * @description AriannA OrderBook component module.
  */
 
+
 import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _fmt, _fmtK } from './helpers.ts';
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountFinanceTemplate } from './Base.ts';
+
 
 /** @namespace   OrderBook
  *  @public
@@ -173,7 +177,7 @@ export namespace OrderBook
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -199,11 +203,124 @@ export namespace OrderBook
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-order-book', {}, {
-        Attributes: ['depth'],
-    })
-    export class OrderBook extends HTMLElement
+    export const Styles: Types.Stylesheet = (() =>
     {
+            return new Stylesheet([
+            new Rule('.OrderBook', {
+                '--arianna-bg': '#17181c',
+                '--arianna-bg-2': '#1d1e23',
+                '--arianna-bg-3': '#24262b',
+                '--arianna-text': '#e6e8eb',
+                '--arianna-muted': '#9aa0aa',
+                '--arianna-dim': '#6f7580',
+                '--arianna-border': '#303238',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#26a69a',
+                '--arianna-warning': '#f5a623',
+                '--arianna-danger': '#ef5350',
+                '--bg': '#17181c',
+                '--bg3': '#24262b',
+                '--text': '#e6e8eb',
+                '--muted': '#9aa0aa',
+                '--border': '#303238',
+                '--accent': '#e40c88',
+            }),
+            new Rule('.OrderBook[theme="light"]', {
+                '--arianna-bg': '#ffffff',
+                '--arianna-bg-2': '#fbfbfc',
+                '--arianna-bg-3': '#f3f3f5',
+                '--arianna-text': '#1c1e21',
+                '--arianna-muted': '#626873',
+                '--arianna-dim': '#8a8f98',
+                '--arianna-border': '#e2e2e6',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#168a78',
+                '--arianna-warning': '#b66c00',
+                '--arianna-danger': '#c93645',
+                '--bg': '#ffffff',
+                '--bg3': '#f3f3f5',
+                '--text': '#1c1e21',
+                '--muted': '#626873',
+                '--border': '#e2e2e6',
+                '--accent': '#e40c88',
+            }),
+                new Rule('.OrderBook', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
+                    display: 'inline-block',
+                    fontFamily: 'ui-monospace, monospace',
+                    fontSize: '12px',
+                    minWidth: '200px',
+                    overflow: 'hidden',
+                    padding: '8px',
+                }),
+                new Rule('.OrderBook-Table', {
+                    borderCollapse: 'collapse',
+                    width: '100%',
+                }),
+                new Rule('.OrderBook-Header', {
+                    color: 'var(--arianna-muted, var(--muted, #787b86))',
+                    fontWeight: '500',
+                    padding: '2px 8px',
+                    textAlign: 'left',
+                }),
+                new Rule('.OrderBook-Header-Right', { textAlign: 'right' }),
+                new Rule('.OrderBook-Price', { padding: '2px 8px' }),
+                new Rule('.OrderBook-Price-Ask', { color: 'var(--arianna-bear, #ef5350)' }),
+                new Rule('.OrderBook-Price-Bid', { color: 'var(--arianna-bull, #26a69a)' }),
+                new Rule('.OrderBook-Size', {
+                    color: 'var(--arianna-text, var(--text, #1c1e21))',
+                    padding: '2px 8px',
+                    textAlign: 'right',
+                }),
+                new Rule('.OrderBook-Mid', {
+                    borderTop: '1px solid var(--arianna-border, var(--border, #e0e0e0))',
+                    borderBottom: '1px solid var(--arianna-border, var(--border, #e0e0e0))',
+                    color: 'var(--arianna-warning, #f4c842)',
+                    display: 'flex',
+                    fontSize: '11px',
+                    justifyContent: 'space-between',
+                    padding: '4px 8px',
+                }),
+            ]);
+        
+    })();
+
+    @Component('arianna-order-book', Styles, {
+        Shadow: false,
+        Attributes: ['depth', 'theme', 'bids', 'asks'],
+        Properties: ['bids', 'asks'],
+    })
+    export class OrderBook extends HTMLDivElement
+    {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'OrderBook';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('OrderBook');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -217,8 +334,12 @@ export namespace OrderBook
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        bids$: Types.Signal<Types.Level[]> = signal<Types.Level[]>([]);
-
+        private _bidsSignal?: Types.Signal<Types.Level[]>;
+        public get bids$(): Types.Signal<Types.Level[]>
+        {
+            this._bidsSignal ??= signal<Types.Level[]>([]);
+            return this._bidsSignal;
+        }
         /** @name        asks$
          *  @public
          *  @type        {OrderBook.Types.Signal<OrderBook.Types.Level[]>}
@@ -226,8 +347,12 @@ export namespace OrderBook
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        asks$: Types.Signal<Types.Level[]> = signal<Types.Level[]>([]);
-
+        private _asksSignal?: Types.Signal<Types.Level[]>;
+        public get asks$(): Types.Signal<Types.Level[]>
+        {
+            this._asksSignal ??= signal<Types.Level[]>([]);
+            return this._asksSignal;
+        }
         /** @name        onConnected
          *  @public
          *  @type        {void}
@@ -239,6 +364,10 @@ export namespace OrderBook
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.OrderBookOptions = {})
         {
+            this.classList.add('OrderBook');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            this.dataset.ariannaFolderReady = 'true';
             /** @name        depth
              *  @public
              *  @type        {inferred}
@@ -268,8 +397,8 @@ export namespace OrderBook
                 return this.asks$.Get().slice(0, n).reverse().map(([p, s]: any) => ({
                     price: _fmt(p),
                     size: _fmtK(s),
-                    rowCls: 'ar-ob__row',
-                    priceCls: 'ar-ob__price ar-ob__price--ask',
+                    rowCls: 'OrderBook-Row',
+                    priceCls: 'OrderBook-Price OrderBook-Price-Ask',
                 }));
             };
             this.bidRows = (): Interfaces.Row[] => {
@@ -284,8 +413,8 @@ export namespace OrderBook
                 return this.bids$.Get().slice(0, n).map(([p, s]: any) => ({
                     price: _fmt(p),
                     size: _fmtK(s),
-                    rowCls: 'ar-ob__row',
-                    priceCls: 'ar-ob__price ar-ob__price--bid',
+                    rowCls: 'OrderBook-Row',
+                    priceCls: 'OrderBook-Price OrderBook-Price-Bid',
                 }));
             };
             this.midText = () => {
@@ -333,33 +462,34 @@ export namespace OrderBook
                 return _fmt(bestAsk - bestBid);
             };
             this.template = html `
-            <table class="ar-ob__table">
+            <table class="OrderBook-Table">
                 <thead>
                     <tr>
-                        <th class="ar-ob__th">Price</th>
-                        <th class="ar-ob__th ar-ob__th--right">Size</th>
+                        <th class="OrderBook-Header">Price</th>
+                        <th class="OrderBook-Header OrderBook-Header-Right">Size</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr :class="r.rowCls" a-for="r in this.askRows()">
                         <td :class="r.priceCls">{{ r.price }}</td>
-                        <td class="ar-ob__size">{{ r.size }}</td>
+                        <td class="OrderBook-Size">{{ r.size }}</td>
                     </tr>
                 </tbody>
             </table>
-            <div class="ar-ob__mid">
+            <div class="OrderBook-Mid">
                 <span>Mid: <strong>{{ this.midText() }}</strong></span>
                 <span>Spread: <strong>{{ this.spreadText() }}</strong></span>
             </div>
-            <table class="ar-ob__table">
+            <table class="OrderBook-Table">
                 <tbody>
                     <tr :class="r.rowCls" a-for="r in this.bidRows()">
                         <td :class="r.priceCls">{{ r.price }}</td>
-                        <td class="ar-ob__size">{{ r.size }}</td>
+                        <td class="OrderBook-Size">{{ r.size }}</td>
                     </tr>
                 </tbody>
             </table>
         `;
+            MountFinanceTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -369,7 +499,7 @@ export namespace OrderBook
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 Sheet: Types.Stylesheet | null;
-            }).Sheet = OrderBook.DefaultSheet();
+            }).Sheet = Styles;
         }
 
         /** @name        setData
@@ -564,51 +694,8 @@ export namespace OrderBook
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    color: 'var(--arianna-text, #1f2328)',
-                    display: 'inline-block',
-                    fontFamily: 'ui-monospace, monospace',
-                    fontSize: '12px',
-                    minWidth: '200px',
-                    overflow: 'hidden',
-                    padding: '8px',
-                }),
-                new Rule('.ar-ob__table', {
-                    borderCollapse: 'collapse',
-                    width: '100%',
-                }),
-                new Rule('.ar-ob__th', {
-                    color: 'var(--arianna-muted, #787b86)',
-                    fontWeight: '500',
-                    padding: '2px 8px',
-                    textAlign: 'left',
-                }),
-                new Rule('.ar-ob__th--right', { textAlign: 'right' }),
-                new Rule('.ar-ob__price', { padding: '2px 8px' }),
-                new Rule('.ar-ob__price--ask', { color: 'var(--arianna-bear, #ef5350)' }),
-                new Rule('.ar-ob__price--bid', { color: 'var(--arianna-bull, #26a69a)' }),
-                new Rule('.ar-ob__size', {
-                    color: 'var(--arianna-text, #1f2328)',
-                    padding: '2px 8px',
-                    textAlign: 'right',
-                }),
-                new Rule('.ar-ob__mid', {
-                    borderTop: '1px solid var(--arianna-border, #e0e0e0)',
-                    borderBottom: '1px solid var(--arianna-border, #e0e0e0)',
-                    color: 'var(--arianna-warning, #f4c842)',
-                    display: 'flex',
-                    fontSize: '11px',
-                    justifyContent: 'space-between',
-                    padding: '4px 8px',
-                }),
-            ]);
-        }
+        public static readonly Styles = Styles;
+        static DefaultSheet(): Types.Stylesheet { return Styles; }
     }
 }
 export default OrderBook;

@@ -184,6 +184,7 @@ export namespace DatePicker
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-date-picker', {}, {
+        shadow: false,
         Attributes: ['label', 'value', 'placeholder', 'min', 'max', 'locale', 'first-day', 'disabled'],
     })
     export class DatePicker extends HTMLElement
@@ -203,14 +204,14 @@ export namespace DatePicker
          *  @license     MIT / Commercial (dual license) */
         open$: Types.Signal<boolean> = signal<boolean>(false);
 
-        /** @name        #outsideClick
+        /** @name        __outsideClick
          *  @public
          *  @type        {((e: Event) => void) | null}
          *  @description Component member for outside Click.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #outsideClick: ((e: Event) => void) | null = null;
+        __outsideClick: ((e: Event) => void) | null = null;
 
         /** @name        onConnected
          *  @public
@@ -223,134 +224,183 @@ export namespace DatePicker
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.DatePickerOptions = {})
         {
-            /** @name        label
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned label value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const label = this.signal().attribute('label');
+            this.open$ ??= signal<boolean>(false);
+            this.__outsideClick ??= null;
+            type Runtime = DatePicker & {
+                __dateOpen?: boolean;
+                __dateRender?: () => void;
+                __dateOutside?: (event: Event) => void;
+                onAttributeChanged?: () => void;
+            };
 
-            /** @name        value
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned value value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const value = this.signal().attribute('value');
+            const self = this as Runtime;
+            this.classList.add('DatePicker');
 
-            /** @name        placeholder
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned placeholder value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const placeholder = this.signal().attribute('placeholder');
-            this.hasLabel = () => !!label.Get();
-            this.labelText = () => label.Get() ?? '';
-            this.inpValue = () => value.Get() ?? '';
-            this.inpPlaceholder = () => placeholder.Get() ?? 'YYYY-MM-DD';
-            this.isOpen = () => this.open$.Get();
-            this.isDisabled = () => this.hasAttribute('disabled');
-            this.calMin = () => this.getAttribute('min') ?? '';
-            this.calMax = () => this.getAttribute('max') ?? '';
-            this.calLocale = () => this.getAttribute('locale') ?? '';
-            this.calFirstDay = () => this.getAttribute('first-day') ?? '1';
-            this.onInputClick = (e: Event) => {
-                if (this.isDisabled())
-                    return;
-                e.stopPropagation();
+            if (self.__dateOpen === undefined)
+                self.__dateOpen = false;
 
-                /** @name        wasOpen
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned wasOpen value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const wasOpen = this.open$.Get();
-                this.open$.Set(!wasOpen);
-                if (!wasOpen)
+            const render = () =>
+            {
+                const disabled = this.hasAttribute('disabled');
+                const labelText = this.getAttribute('label') ?? '';
+                const value = this.getAttribute('value') ?? '';
+
+                const label = document.createElement('div');
+                label.className = 'ar-datepicker__label';
+                label.textContent = labelText;
+                label.hidden = !labelText;
+
+                const wrap = document.createElement('div');
+                wrap.className = 'ar-datepicker__wrap';
+
+                const input = document.createElement('input');
+                input.className = 'ar-datepicker__input';
+                input.type = 'text';
+                input.value = value;
+                input.placeholder = this.getAttribute('placeholder') ?? 'YYYY-MM-DD';
+                input.disabled = disabled;
+                input.setAttribute('aria-haspopup', 'dialog');
+                input.setAttribute('aria-expanded', self.__dateOpen ? 'true' : 'false');
+
+                const icon = document.createElement('button');
+                icon.type = 'button';
+                icon.className = 'ar-datepicker__icon';
+                icon.textContent = '▦';
+                icon.disabled = disabled;
+                icon.ariaLabel = 'Open calendar';
+                icon.setAttribute('aria-expanded', self.__dateOpen ? 'true' : 'false');
+
+                wrap.append(input, icon);
+
+                const nodes: Node[] = [label, wrap];
+
+                if (self.__dateOpen && !disabled)
                 {
-                    this.#outsideClick = (ev: Event) => {
-                        if (!this.contains(ev.target as Node))
-                            this.open$.Set(false);
-                    };
-                    setTimeout(() => document.addEventListener('click', this.#outsideClick!), 0);
+                    const popup = document.createElement('div');
+                    popup.className = 'ar-datepicker__popup';
+                    popup.addEventListener('pointerdown', event => event.stopPropagation());
+
+                    const calendar = document.createElement('arianna-calendar');
+
+                    for (const name of ['value', 'min', 'max', 'locale', 'first-day'])
+                    {
+                        const attributeValue = this.getAttribute(name);
+
+                        if (attributeValue !== null && attributeValue !== '')
+                            calendar.setAttribute(name, attributeValue);
+                    }
+
+                    calendar.addEventListener('arianna:select', (event: Event) =>
+                    {
+                        const selected =
+                            (event as CustomEvent<{ value?: string }>).detail?.value;
+
+                        if (!selected)
+                            return;
+
+                        this.setAttribute('value', selected);
+                        self.__dateOpen = false;
+
+                        this.dispatchEvent
+                        (
+                            new CustomEvent
+                            (
+                                'arianna:change',
+                                {
+                                    bubbles: true,
+                                    composed: true,
+                                    detail: { value: selected }
+                                }
+                            )
+                        );
+
+                        render();
+                    });
+
+                    popup.appendChild(calendar);
+                    nodes.push(popup);
                 }
+
+                const open = (event?: Event) =>
+                {
+                    event?.stopPropagation();
+
+                    if (disabled || self.__dateOpen)
+                        return;
+
+                    self.__dateOpen = true;
+                    render();
+                };
+
+                const toggle = (event: Event) =>
+                {
+                    event.stopPropagation();
+
+                    if (disabled)
+                        return;
+
+                    self.__dateOpen = !self.__dateOpen;
+                    render();
+                };
+
+                input.addEventListener('focus', open);
+                input.addEventListener('click', open);
+                icon.addEventListener('click', toggle);
+
+                input.addEventListener('change', () =>
+                {
+                    const next = input.value.trim();
+
+                    if (next)
+                        this.setAttribute('value', next);
+                    else
+                        this.removeAttribute('value');
+
+                    this.dispatchEvent
+                    (
+                        new CustomEvent
+                        (
+                            'arianna:change',
+                            {
+                                bubbles: true,
+                                composed: true,
+                                detail: { value: next }
+                            }
+                        )
+                    );
+                });
+
+                this.replaceChildren(...nodes);
             };
-            this.onInputChange = (e: Event) => {
-                /** @name        inp
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned inp value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const inp = e.target as HTMLInputElement;
-                this.setAttribute('value', inp.value);
-                this.dispatchEvent(new CustomEvent('arianna:change', {
-                    bubbles: true, detail: { value: inp.value },
-                }));
-            };
-            this.onCalendarSelect = (e: Event) => {
-                /** @name        ev
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned ev value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const ev = e as CustomEvent<{
-                    /** @name        value
-                     *  @public
-                     *  @type        {string}
-                     *  @description Component member for value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    value: string;
-                }>;
-                this.setAttribute('value', ev.detail.value);
-                this.open$.Set(false);
-                this.dispatchEvent(new CustomEvent('arianna:change', {
-                    bubbles: true, detail: { value: ev.detail.value },
-                }));
-            };
-            this.template = html `
-            <div class="ar-datepicker__label" a-if="this.hasLabel()">{{ this.labelText() }}</div>
-            <div class="ar-datepicker__wrap">
-                <span class="ar-datepicker__icon">📅</span>
-                <input class="ar-datepicker__input"
-                       type="text"
-                       :value="this.inpValue()"
-                       :placeholder="this.inpPlaceholder()"
-                       :disabled="this.isDisabled()"
-                       @click="this.onInputClick"
-                       @change="this.onInputChange"/>
-            </div>
-            <div class="ar-datepicker__popup" a-if="this.isOpen()">
-                <arianna-calendar :value="this.inpValue()"
-                                  :min="this.calMin()"
-                                  :max="this.calMax()"
-                                  :locale="this.calLocale()"
-                                  :first-day="this.calFirstDay()"
-                                  @arianna:select="this.onCalendarSelect"></arianna-calendar>
-            </div>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {DatePicker.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = DatePicker.DefaultSheet();
+
+            self.__dateRender = render;
+            self.onAttributeChanged = () => render();
+
+            if (!self.__dateOutside)
+            {
+                self.__dateOutside = (event: Event) =>
+                {
+                    const target = event.target;
+
+                    if
+                    (
+                        self.__dateOpen &&
+                        target instanceof Node &&
+                        !this.contains(target)
+                    )
+                    {
+                        self.__dateOpen = false;
+                        render();
+                    }
+                };
+
+                document.addEventListener('pointerdown', self.__dateOutside);
+            }
+
+            render();
+
+            (this as unknown as { Sheet: Types.Stylesheet | null }).Sheet =
+                DatePicker.DefaultSheet();
         }
 
         /** @name        onCreated
@@ -423,11 +473,20 @@ export namespace DatePicker
          *  @license     MIT / Commercial (dual license) */
         onUnmount()
         {
-            if (this.#outsideClick)
+            const self = this as DatePicker & {
+                __dateOutside?: (event: Event) => void;
+                __dateRender?: () => void;
+                __dateOpen?: boolean;
+            };
+
+            if (self.__dateOutside)
             {
-                document.removeEventListener('click', this.#outsideClick);
-                this.#outsideClick = null;
+                document.removeEventListener('pointerdown', self.__dateOutside);
+                self.__dateOutside = undefined;
             }
+
+            self.__dateRender = undefined;
+            self.__dateOpen = false;
         }
 
         /** @name        value
@@ -599,11 +658,11 @@ export namespace DatePicker
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', {
+                new Rule('arianna-date-picker', {
                     display: 'inline-block',
                     position: 'relative',
                     width: '100%',
-                    maxWidth: '240px',
+                    maxWidth: '280px',
                 }),
                 new Rule('.ar-datepicker__label', {
                     color: 'var(--arianna-muted, #6e6b62)',
@@ -619,11 +678,13 @@ export namespace DatePicker
                     cursor: 'pointer',
                     display: 'flex',
                     gap: '8px',
+                    minHeight: '36px',
                     padding: '5px 10px',
                     transition: 'border-color 0.18s ease',
                 }),
                 new Rule('.ar-datepicker__wrap:focus-within', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
-                new Rule('.ar-datepicker__icon', { flexShrink: '0' }),
+                new Rule('.ar-datepicker__icon', { flexShrink: '0', background:'transparent', border:'0', color:'inherit', cursor:'pointer', font:'inherit', fontSize:'1rem', lineHeight:'1', padding:'2px 4px' }),
+                new Rule('.ar-datepicker__icon:hover:not(:disabled)', { color:'var(--arianna-primary, #e40c88)' }),
                 new Rule('.ar-datepicker__input', {
                     background: 'none',
                     border: 'none',
@@ -631,7 +692,7 @@ export namespace DatePicker
                     cursor: 'pointer',
                     flex: '1',
                     font: 'inherit',
-                    fontSize: '0.82rem',
+                    fontSize: '0.86rem',
                     outline: 'none',
                     minWidth: '0',
                 }),

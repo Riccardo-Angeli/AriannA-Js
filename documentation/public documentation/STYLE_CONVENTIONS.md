@@ -18,7 +18,7 @@ This document defines the official style model for AriannA 2.0:
 1. **Basic CSS** — normal CSS authored by users.
 2. **Rule / Stylesheet** — AriannA's canonical object-based styling model.
 3. **AriannA CSS façade** — a compiler/adapter layer that makes normal-looking CSS work with closed Shadow DOM through explicit selector contracts.
-4. **Component default style classes** — every component must expose stable, prefixed class selectors internally so default styles and overrides compose predictably.
+4. **Component default style classes** — every component must expose a stable default class selector derived from its concrete constructor name; internal parts extend that class name using PascalCase segments.
 
 The goal is not to make Shadow DOM disappear. The goal is to give users the same productivity as normal CSS while keeping AriannA components safe, overridable, inspectable, and refactorable.
 
@@ -26,9 +26,9 @@ The goal is not to make Shadow DOM disappear. The goal is to give users the same
 
 ## 1. Core Principles
 
-### 1.1 Open Shadow DOM is the default
+### 1.1 Shadow DOM does not redefine the style selector
 
-AriannA components use Shadow DOM by default, preferably `closed`.
+AriannA components may use Shadow DOM, including `closed` Shadow DOM where appropriate. Shadow DOM does not change the canonical AriannA default selector convention: component-owned default styles are rooted in the concrete class name (for example `Button` → `.Button`).
 
 ```ts
 export class Button extends Component(
@@ -68,7 +68,48 @@ this.Sheet = Button.DefaultSheet();
 
 `build()` is for behavior, state, event wiring, and runtime instance logic.
 
-Default component style belongs in the third argument of `Component(...)`, which seeds `Sheet.Default` and lets the runtime clone or combine it into `Sheet.Current` per instance.
+Default component style belongs to the component's class-owned stylesheet, conventionally exposed as `static readonly Styles`, and supplied to the component registration path so the runtime can seed the default/current style layers as needed. The canonical root selector is the concrete class name, for example `.Button`.
+
+---
+
+## 1.4 Canonical class-name selector convention
+
+The default AriannA style selector is derived from the concrete TypeScript class name.
+
+```text
+Button         → .Button
+TimePicker     → .TimePicker
+RichTextEditor → .RichTextEditor
+```
+
+Internal stylable parts append a hyphen and preserve PascalCase:
+
+```text
+Button.Label          → .Button-Label
+Button.Icon           → .Button-Icon
+TimePicker.Field      → .TimePicker-Field
+RichTextEditor.Toolbar → .RichTextEditor-Toolbar
+```
+
+Do not use lowercase BEM-style part names such as `.Button-label`. The canonical form is `.Button-Label`.
+
+A component should expose its owned stylesheet as a static class property:
+
+```ts
+export class Button extends HTMLElement
+{
+    public static readonly Styles = new Css.Stylesheet([
+        new Css.Rule('.Button', {
+            display: 'inline-flex',
+        }),
+        new Css.Rule('.Button-Label', {
+            display: 'inline-flex',
+        }),
+    ]);
+}
+```
+
+`Rule` / `Stylesheet` selectors remain explicit and are honoured verbatim. `:host` is valid only when Shadow DOM host semantics are intentionally required.
 
 ---
 
@@ -92,7 +133,7 @@ In plain browser CSS, those rules affect only the host element, not closed Shado
 
 AriannA may additionally compile these rules through the CSS façade into Shadow-safe `Rule` / `Stylesheet` entries.
 
-Host CSS maps to `:host`:
+Host-facing CSS may map to the component's canonical class selector. `:host` remains available only when explicit Shadow DOM host semantics are required:
 
 ```css
 arianna-button {
@@ -103,12 +144,12 @@ arianna-button {
 becomes:
 
 ```ts
-new Rule(':host', {
+new Rule('.Button', {
     background: '#111827',
 });
 ```
 
-Host state CSS maps to `:host(...)`:
+Host state CSS maps canonically to the class selector plus the state/attribute selector:
 
 ```css
 arianna-button[variant="danger"] {
@@ -119,7 +160,7 @@ arianna-button[variant="danger"] {
 becomes:
 
 ```ts
-new Rule(':host([variant="danger"])', {
+new Rule('.Button[variant="danger"]', {
     background: '#dc2626',
 });
 ```
@@ -133,7 +174,7 @@ new Rule(':host([variant="danger"])', {
 A rule has a selector and a content object.
 
 ```ts
-new Rule(':host', {
+new Rule('.Button', {
     display     : 'inline-flex',
     alignItems  : 'center',
     borderRadius: '8px',
@@ -154,7 +195,7 @@ The equivalent plain object form is also valid where accepted:
 
 ```ts
 {
-    Selector: ':host',
+    Selector: '.Button',
     Content : {
         display: 'inline-flex',
     },
@@ -169,10 +210,10 @@ The equivalent plain object form is also valid where accepted:
 
 ```ts
 new Stylesheet([
-    new Rule(':host', {
+    new Rule('.Button', {
         display: 'inline-flex',
     }),
-    new Rule('.arianna-button', {
+    new Rule('.Button', {
         background: 'var(--arianna-button-bg, #f3f3f3)',
     }),
 ])
@@ -226,7 +267,7 @@ Example:
 const button = document.querySelector('arianna-button');
 
 button.Sheet.Current.add(
-    new Rule('.arianna-button-label', {
+    new Rule('.Button-Label', {
         fontWeight: '700',
     })
 );
@@ -244,37 +285,40 @@ This is required even when the component uses Shadow DOM.
 
 ### 6.1 Naming rule
 
-Every component default style must be rooted in a stable prefixed CSS class.
+Every component default style must be rooted in a stable CSS class derived directly from the concrete TypeScript constructor name. Internal stylable parts extend that name with a hyphen followed by a PascalCase part name.
 
-Recommended long form:
-
-```css
-.arianna-button
-.arianna-button-label
-.arianna-button-icon
-.arianna-button-trailing
-```
-
-Recommended short alias:
+Canonical form:
 
 ```css
-.a-button
-.a-button-label
-.a-button-icon
-.a-button-trailing
+.Button
+.Button-Label
+.Button-Icon
+.Button-Trailing
 ```
 
-Both may be present on internal nodes when useful:
+Other examples:
+
+```css
+.TimePicker
+.TimePicker-Field
+.TimePicker-Hours
+.TimePicker-Minutes
+.RichTextEditor
+.RichTextEditor-Toolbar
+.RichTextEditor-Content
+```
+
+The corresponding internal nodes carry those canonical classes:
 
 ```html
-<button class="arianna-button a-button" part="button">
-    <span class="arianna-button-icon a-button-icon">
+<button class="Button" part="button">
+    <span class="Button-Icon">
         <slot name="icon"></slot>
     </span>
-    <span class="arianna-button-label a-button-label">
+    <span class="Button-Label">
         <slot></slot>
     </span>
-    <span class="arianna-button-trailing a-button-trailing">
+    <span class="Button-Trailing">
         <slot name="trailing"></slot>
     </span>
 </button>
@@ -300,10 +344,10 @@ Good:
 
 ```ts
 new Stylesheet([
-    new Rule(':host', {
+    new Rule('.Button', {
         display: 'inline-flex',
     }),
-    new Rule('.arianna-button', {
+    new Rule('.Button', {
         alignItems    : 'center',
         background    : 'var(--arianna-button-bg, #f3f3f3)',
         border        : '1px solid var(--arianna-button-border, #d8d8d8)',
@@ -314,7 +358,7 @@ new Stylesheet([
         justifyContent: 'center',
         padding       : 'var(--arianna-button-padding, 5px 14px)',
     }),
-    new Rule('.arianna-button-label', {
+    new Rule('.Button-Label', {
         display   : 'inline-flex',
         alignItems: 'center',
     }),
@@ -368,10 +412,10 @@ Component('case-card-1o', HTMLDivElement, { Background: '#fff' });
 // → <style>.{ctor.name}{background:#fff}</style>
 
 // Rule with explicit selector → user-controlled
-Component('arianna-button', HTMLElement, new Rule('.arianna-button', {
+Component('arianna-button', HTMLElement, new Rule('.Button', {
     background: '#1f6feb',
 }));
-// → <style>.arianna-button{background:#1f6feb}</style>
+// → <style>.Button{background:#1f6feb}</style>
 ```
 
 ### 6.5.4 Nested CSS `:host` translation
@@ -416,32 +460,35 @@ DOM marker: every framework-injected `<style>` carries `data-arianna-tag-style="
 
 ## 7. Host vs Internal Classes
 
-Use `:host` for host-level behavior:
+Use the concrete class selector as the canonical default selector:
 
 ```ts
-new Rule(':host', {
+new Rule('.Button', {
     display: 'inline-flex',
 })
 ```
 
-Use internal prefixed classes for component visuals:
+Use PascalCase-derived internal classes for stylable component parts:
 
 ```ts
-new Rule('.arianna-button', {
-    background: 'var(--arianna-button-bg, #f3f3f3)',
+new Rule('.Button-Label', {
+    fontWeight: '700',
 })
 ```
+
+Use `:host` only when a rule specifically requires Shadow DOM host semantics. It is not the default AriannA component selector.
 
 Recommended split:
 
 | Layer | Selector | Purpose |
 |---|---|---|
-| Host layout | `:host` | display, visibility, sizing defaults, host state |
-| Main internal control | `.arianna-button` / `.a-button` | visual box, background, border, padding |
-| Internal parts | `.arianna-button-label`, `.arianna-button-icon` | fine-grain styling |
-| Public façade | `arianna-button::label` | user-friendly selector mapped to internal class |
+| Component root | `.Button` | canonical default component styling |
+| Component state | `.Button:hover`, `.Button[disabled]` | root state and attribute styling |
+| Internal parts | `.Button-Label`, `.Button-Icon` | fine-grain styling |
+| Explicit Shadow host semantics | `:host`, `:host(...)` | only where Shadow DOM host behavior is specifically required |
+| Public façade | `arianna-button::label` | user-friendly selector mapped to the canonical internal class |
 
-This split prevents `:host` from becoming an overloaded styling sink.
+The class name follows the concrete TypeScript class, and internal part names preserve PascalCase after the hyphen.
 
 ---
 
@@ -453,12 +500,12 @@ Example for Button:
 
 ```ts
 export const ButtonStyleMap = {
-    self    : ':host',
-    button  : '.arianna-button',
-    control : '.arianna-button',
-    label   : '.arianna-button-label',
-    icon    : '.arianna-button-icon',
-    trailing: '.arianna-button-trailing',
+    self    : '.Button',
+    button  : '.Button',
+    control : '.Button',
+    label   : '.Button-Label',
+    icon    : '.Button-Icon',
+    trailing: '.Button-Trailing',
 } as const;
 ```
 
@@ -475,9 +522,9 @@ The `StyleMap` is the contract used by:
 A component may expose aliases when useful:
 
 ```ts
-button  -> .arianna-button
-control -> .arianna-button
-label   -> .arianna-button-label
+button  -> .Button
+control -> .Button
+label   -> .Button-Label
 ```
 
 Aliases must be documented and stable.
@@ -502,7 +549,7 @@ arianna-button {
 Compiled output:
 
 ```ts
-new Rule(':host', {
+new Rule('.Button', {
     background: '#111827',
     color     : 'white',
 })
@@ -526,10 +573,10 @@ Compiled output:
 
 ```ts
 new Stylesheet([
-    new Rule('.arianna-button', {
+    new Rule('.Button', {
         background: '#111827',
     }),
-    new Rule('.arianna-button-label', {
+    new Rule('.Button-Label', {
         fontWeight: '700',
     }),
 ])
@@ -554,11 +601,11 @@ Compiled output for `s-button`:
 
 ```ts
 new Stylesheet([
-    new Rule(':host', {
+    new Rule('.Button', {
         background: '#111827',
         color     : 'white',
     }),
-    new Rule('.arianna-button-label', {
+    new Rule('.Button-Label', {
         fontWeight: '700',
     }),
 ])
@@ -631,12 +678,12 @@ class SButton extends Component(
     's-button',
     Button,
     new Stylesheet([
-        new Rule('.arianna-button', {
+        new Rule('.Button', {
             background: '#111827',
             color: '#ffffff',
             border: '1px solid #374151',
         }),
-        new Rule('.arianna-button-label', {
+        new Rule('.Button-Label', {
             fontWeight: '700',
         }),
     ]),
@@ -657,7 +704,7 @@ Instance-specific customization should use `Sheet.Current`.
 const button = document.querySelector('arianna-button');
 
 button.Sheet.Current.add(
-    new Rule('.arianna-button', {
+    new Rule('.Button', {
         background: '#7c3aed',
         color     : '#ffffff',
     })
@@ -684,7 +731,7 @@ arianna-button {
 Component internals should consume tokens:
 
 ```ts
-new Rule('.arianna-button', {
+new Rule('.Button', {
     background: 'var(--arianna-button-bg, #f3f3f3)',
     color     : 'var(--arianna-button-color, inherit)',
 })
@@ -723,7 +770,7 @@ Slots are the preferred way to customize content structure.
 The component may style slot containers:
 
 ```ts
-new Rule('.arianna-button-icon', {
+new Rule('.Button-Icon', {
     display: 'inline-flex',
 })
 ```
@@ -737,14 +784,14 @@ The slotted content itself remains user-owned content.
 Button should expose this internal structure:
 
 ```html
-<button class="arianna-button a-button" part="button" type="button">
-    <span class="arianna-button-icon a-button-icon" part="icon">
+<button class="Button" part="button" type="button">
+    <span class="Button-Icon" part="icon">
         <slot name="icon"></slot>
     </span>
-    <span class="arianna-button-label a-button-label" part="label">
+    <span class="Button-Label" part="label">
         <slot></slot>
     </span>
-    <span class="arianna-button-trailing a-button-trailing" part="trailing">
+    <span class="Button-Trailing" part="trailing">
         <slot name="trailing"></slot>
     </span>
 </button>
@@ -754,12 +801,12 @@ Button should expose this `StyleMap`:
 
 ```ts
 export const ButtonStyleMap = {
-    self    : ':host',
-    button  : '.arianna-button',
-    control : '.arianna-button',
-    icon    : '.arianna-button-icon',
-    label   : '.arianna-button-label',
-    trailing: '.arianna-button-trailing',
+    self    : '.Button',
+    button  : '.Button',
+    control : '.Button',
+    icon    : '.Button-Icon',
+    label   : '.Button-Label',
+    trailing: '.Button-Trailing',
 } as const;
 ```
 
@@ -767,17 +814,17 @@ Button default style should use the prefixed classes:
 
 ```ts
 new Stylesheet([
-    new Rule(':host', {
+    new Rule('.Button', {
         display: 'inline-flex',
     }),
-    new Rule('.arianna-button', {
+    new Rule('.Button', {
         background  : 'var(--arianna-button-bg, #f3f3f3)',
         border      : '1px solid var(--arianna-button-border, #d8d8d8)',
         borderRadius: 'var(--arianna-button-radius, 6px)',
         color       : 'var(--arianna-button-color, inherit)',
         padding     : 'var(--arianna-button-padding, 5px 14px)',
     }),
-    new Rule('.arianna-button-label', {
+    new Rule('.Button-Label', {
         display: 'inline-flex',
     }),
 ])
@@ -815,10 +862,10 @@ Do not rely only on tag selectors inside ShadowRoot:
 new Rule('button', { ... })
 ```
 
-Prefer stable prefixed classes:
+Prefer canonical class-name-derived selectors:
 
 ```ts
-new Rule('.arianna-button', { ... })
+new Rule('.Button', { ... })
 ```
 
 ---
@@ -827,16 +874,16 @@ new Rule('.arianna-button', { ... })
 
 AriannA styling should use this hierarchy:
 
-1. `:host` for host behavior and layout.
-2. Stable prefixed internal classes for default component visuals.
-3. `StyleMap` for public named selectors.
-4. `Rule` for atomic styles.
-5. `Stylesheet` for ordered style collections.
-6. CSS façade for normal-looking user CSS.
-7. tokens for broad theme values.
-8. subclass `Sheet.Default` for reusable design variants.
-9. instance `Sheet.Current` for one-off customization.
-10. trusted mode for advanced deep styling only when explicitly enabled.
+1. `.<ConcreteClassName>` as the canonical root selector for component-owned default styling (`Button` → `.Button`).
+2. `.<ConcreteClassName>-<PascalCasePart>` for internal stylable parts (`.Button-Label`, `.TimePicker-Field`).
+3. Root states and attributes extend the canonical class selector (`.Button:hover`, `.Button[disabled]`).
+4. `:host` only for explicit Shadow DOM host semantics, never as AriannA's default selector.
+5. `StyleMap` for public named selectors.
+6. `Rule` for atomic styles.
+7. `Stylesheet` for ordered style collections.
+8. CSS façade for normal-looking user CSS.
+9. tokens for broad theme values.
+10. subclass/default and instance/current layers for reusable or one-off customization.
 
 This gives AriannA both goals:
 

@@ -1,308 +1,258 @@
 /**
- * @module    components/modifiers/2D/Reflector
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA Reflector component module.
+ * @module components/modifiers/2D/Reflector
  */
 
 import { Component, Templates } from '../../../core/index.ts';
-import { Modifier2D } from './Base.ts';
+import * as Base from './Base.ts';
 
-/** @name        html
- *  @public
- *  @type        {inferred}
- *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
-const html = Templates.Template.Html;
-
-/** @namespace   Reflector
- *  @public
- *  @description Namespace containing Reflector contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 export namespace Reflector
 {
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
+    export namespace Types
+    {
+        export type Axis = 'x' | 'y' | 'both';
+    }
+
     export namespace Interfaces
     {
-        /** @interface   ReflectorOptions
-         *  @public
-         *  @description ReflectorOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         export interface ReflectorOptions
         {
-            /** @name        axis
-             *  @public
-             *  @type        {'x' | 'y' | 'both'}
-             *  @description Component member for axis.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            axis?: 'x' | 'y' | 'both';
-
-            /** @name        handleColor
-             *  @public
-             *  @type        {string}
-             *  @description Component member for handle Color.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
+            axis?: Types.Axis;
             handleColor?: string;
-
-            /** @name        animate
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for animate.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             animate?: boolean;
+            disabled?: boolean;
         }
     }
 
-    /** @class       Reflector
-     *  @public
-     *  @description AriannA Reflector component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
+    const html = Templates.Template.Html;
+
     @Component('arianna-reflector', {}, {
-        Attributes: ['axis', 'handle-color', 'animate', 'disabled'],
+        Shadow: false,
+        Attributes: [
+            'axis',
+            'handle-color',
+            'animate',
+            'disabled',
+        ],
     })
-    export class Reflector extends Modifier2D.Modifier2D
+    export class Reflector
+        extends Base.Modifier2D.Modifier2D
     {
-        /** @name        template
-         *  @public
-         *  @type        {unknown}
-         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
-         *               or behavior-only rendering logic while participating in the compiled Template fast path.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        template = html``;
+        public template = html``;
+        protected EventName = 'reflect';
 
-        /** @name        #state
-         *  @public
-         *  @type        {unknown}
-         *  @description Component member for state.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #state = { x: false, y: false };
+        #state =
+        {
+            x: false,
+            y: false,
+        };
 
-        /** @name        applyTo
-         *  @protected
-         *  @type        {void}
-         *  @description Component member for apply To.
-         *  @param       {HTMLElement} target Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         protected applyTo(target: HTMLElement): void
         {
-            if (getComputedStyle(target).position === 'static')
+            if(getComputedStyle(target).position === 'static')
                 target.style.position = 'relative';
 
-            /** @name        axis
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned axis value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const axis = (this.getAttribute('axis') ?? 'x') as 'x' | 'y' | 'both';
+            const axis =
+                this.getAttribute('axis') ?? 'x';
 
-            /** @name        hc
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned hc value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const hc = this.getAttribute('handle-color') ?? 'var(--arianna-primary, #1f6feb)';
+            const color =
+                this.getAttribute('handle-color') ??
+                'var(--arianna-primary, #1f6feb)';
 
-            /** @name        animate
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned animate value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const animate = this.getAttribute('animate') !== 'false';
-            if (animate)
+            if(this.getAttribute('animate') !== 'false')
                 target.style.transition = 'transform 0.2s ease';
 
-            /** @name        makeBtn
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned makeBtn value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const makeBtn = (label: string, pos: string): HTMLButtonElement => {
-                /** @name        b
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned b value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const b = document.createElement('button');
-                b.textContent = label;
-                b.className = 'ar-reflector-btn';
-                b.style.cssText =
-                    `position:absolute;${pos}background:${hc};color:#fff;border:none;` +
-                        `border-radius:4px;width:22px;height:22px;cursor:pointer;` +
-                        `font-size:10px;font-weight:700;z-index:9999;`;
-                target.appendChild(b);
-                return b;
+            const makeButton =
+                (
+                    label: string,
+                    position: string
+                ): HTMLButtonElement =>
+            {
+                const button =
+                    document.createElement('button');
+
+                button.type = 'button';
+                button.textContent = label;
+                button.className = 'ar-reflector-btn';
+
+                button.style.cssText =
+                    `position:absolute;${position}background:${color};color:#fff;border:none;border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:10px;font-weight:700;z-index:9999;`;
+
+                target.appendChild(button);
+
+                return button;
             };
-            if (axis === 'x' || axis === 'both')
-            {
-                /** @name        hx
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned hx value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const hx = makeBtn('H', 'right:-28px;top:50%;transform:translateY(-50%);');
 
-                /** @name        onClickX
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned onClickX value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const onClickX = () => {
-                    if (!this.isEnabled)
+            if(axis === 'x' || axis === 'both')
+            {
+                const horizontal =
+                    makeButton(
+                        'H',
+                        'right:-28px;top:50%;transform:translateY(-50%);'
+                    );
+
+                const onHorizontal =
+                    (): void =>
+                {
+                    if(!this.isEnabled)
                         return;
-                    this.#state.x = !this.#state.x;
-                    this.#apply(target);
+
+                    this.Perform(
+                        target,
+                        'x'
+                    );
                 };
-                hx.addEventListener('click', onClickX);
-                this.cleanups.push(() => { hx.removeEventListener('click', onClickX); hx.remove(); });
+
+                horizontal.addEventListener(
+                    'click',
+                    onHorizontal
+                );
+
+                this.cleanups.push(
+                    () =>
+                    {
+                        horizontal.removeEventListener(
+                            'click',
+                            onHorizontal
+                        );
+
+                        horizontal.remove();
+                    }
+                );
             }
-            if (axis === 'y' || axis === 'both')
-            {
-                /** @name        hy
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned hy value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const hy = makeBtn('V', 'top:-28px;left:50%;transform:translateX(-50%);');
 
-                /** @name        onClickY
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned onClickY value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const onClickY = () => {
-                    if (!this.isEnabled)
+            if(axis === 'y' || axis === 'both')
+            {
+                const vertical =
+                    makeButton(
+                        'V',
+                        'top:-28px;left:50%;transform:translateX(-50%);'
+                    );
+
+                const onVertical =
+                    (): void =>
+                {
+                    if(!this.isEnabled)
                         return;
-                    this.#state.y = !this.#state.y;
-                    this.#apply(target);
+
+                    this.Perform(
+                        target,
+                        'y'
+                    );
                 };
-                hy.addEventListener('click', onClickY);
-                this.cleanups.push(() => { hy.removeEventListener('click', onClickY); hy.remove(); });
+
+                vertical.addEventListener(
+                    'click',
+                    onVertical
+                );
+
+                this.cleanups.push(
+                    () =>
+                    {
+                        vertical.removeEventListener(
+                            'click',
+                            onVertical
+                        );
+
+                        vertical.remove();
+                    }
+                );
             }
         }
 
-        /** @name        #apply
-         *  @public
-         *  @type        {void}
-         *  @description Component member for apply.
-         *  @param       {HTMLElement} target Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #apply(target: HTMLElement): void
+        private Perform(
+            target: HTMLElement,
+            axis: 'x' | 'y',
+            programmatic = false
+        ): void
         {
-            target.style.transform = `scale(${this.#state.x ? -1 : 1},${this.#state.y ? -1 : 1})`;
-            target.dispatchEvent(new CustomEvent('arianna:reflect', {
-                bubbles: true,
-                detail: { x: this.#state.x, y: this.#state.y, target },
-            }));
+            this.Start({
+                x: this.#state.x,
+                y: this.#state.y,
+                axis,
+                programmatic,
+            });
+
+            this.#state[axis] =
+                !this.#state[axis];
+
+            target.style.transform =
+                `scale(${this.#state.x ? -1 : 1},${this.#state.y ? -1 : 1})`;
+
+            const data =
+            {
+                x: this.#state.x,
+                y: this.#state.y,
+                axis,
+                programmatic,
+            };
+
+            this.Change(data);
+            this.End(data);
         }
 
-        /** Programmatic flip on X axis. */
-        flipX(): this
+        public flipX(): this
         {
-            if (this.target)
-            {
-                this.#state.x = !this.#state.x;
-                this.#apply(this.target);
-            }
+            if(this.target)
+                this.Perform(
+                    this.target,
+                    'x',
+                    true
+                );
+
             return this;
         }
 
-        /** Programmatic flip on Y axis. */
-        flipY(): this
+        public flipY(): this
         {
-            if (this.target)
-            {
-                this.#state.y = !this.#state.y;
-                this.#apply(this.target);
-            }
+            if(this.target)
+                this.Perform(
+                    this.target,
+                    'y',
+                    true
+                );
+
             return this;
         }
 
-        /** Reset to identity. */
-        reset(): this
+        public reset(): this
         {
-            this.#state = { x: false, y: false };
-            if (this.target)
+            if(this.target)
             {
+                this.Start({
+                    ...this.#state,
+                    programmatic: true,
+                });
+
+                this.#state =
+                {
+                    x: false,
+                    y: false,
+                };
+
                 this.target.style.transform = '';
-                this.target.dispatchEvent(new CustomEvent('arianna:reflect', {
-                    bubbles: true,
-                    detail: { x: false, y: false, target: this.target },
-                }));
+
+                this.Change({
+                    ...this.#state,
+                    programmatic: true,
+                });
+
+                this.End({
+                    ...this.#state,
+                    programmatic: true,
+                });
             }
+
             return this;
         }
 
-        /** Current flip state. */
-        getState():
+        public getState(): { x: boolean; y: boolean }
         {
-            /** @name        x
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for x.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            x: boolean;
-
-            /** @name        y
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for y.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            y: boolean;
-        } { return { ...this.#state }; }
+            return { ...this.#state };
+        }
     }
 }
-export default Reflector;
+
+export type ReflectorAxis = Reflector.Types.Axis;
+export type ReflectorOptions = Reflector.Interfaces.ReflectorOptions;
+
+export default Reflector.Reflector;

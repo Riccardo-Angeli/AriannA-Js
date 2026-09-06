@@ -8,8 +8,19 @@
  * @description AriannA GooglePay component module.
  */
 
-import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
+
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountPaymentTemplate } from './Base.ts';
+declare const Component: any;
+declare const Components: any;
+declare namespace Components { type Binding<T> = any; }
+declare const Css: any;
+declare namespace Css { type Rule = any; type Stylesheet = any; }
+declare const Reactivity: any;
+declare namespace Reactivity { type Signal<T> = any; type Effect = any; }
+declare const Templates: any;
+
 
 /** @namespace   GooglePay
  *  @public
@@ -229,7 +240,7 @@ export namespace GooglePay
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -256,14 +267,41 @@ export namespace GooglePay
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-google-pay', {}, {
+        shadow: false,
         Attributes: [
             'merchant-id', 'merchant-name', 'country-code', 'currency', 'amount',
             'gateway', 'gateway-merchant-id', 'environment',
             'button-color', 'button-type', 'supported-networks', 'supported-auth-methods',
         ],
     })
-    export class GooglePay extends HTMLElement
+    export class GooglePay extends HTMLDivElement
     {
+        public static readonly Styles = GooglePay.DefaultSheet();
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'GooglePay';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            if(!this.available$) this.available$ = signal<boolean>(false);
+            if(!this.busy$) this.busy$ = signal<boolean>(false);
+            this.classList.add('GooglePay');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -277,7 +315,7 @@ export namespace GooglePay
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        available$: Types.Signal<boolean> = signal<boolean>(false);
+        declare available$: Types.Signal<boolean>;
 
         /** @name        busy$
          *  @public
@@ -286,7 +324,7 @@ export namespace GooglePay
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        busy$: Types.Signal<boolean> = signal<boolean>(false);
+        declare busy$: Types.Signal<boolean>;
 
         /** @name        onConnected
          *  @public
@@ -299,6 +337,10 @@ export namespace GooglePay
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.GooglePayOptions = {} as Interfaces.GooglePayOptions)
         {
+            if(!this.available$) this.available$ = signal<boolean>(false);
+            if(!this.busy$) this.busy$ = signal<boolean>(false);
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            (this as any).GPAY_LOGO = GPAY_LOGO;
             /** @name        colorAttr
              *  @public
              *  @type        {inferred}
@@ -365,12 +407,14 @@ export namespace GooglePay
                     a-if="this.available$.Get()"
                     @click="this.onClick">
                 <span class="ar-gpay__label">{{ this.btnLabel() }}</span>
-                <span class="ar-gpay__logo" a-html="GPAY_LOGO"></span>
+                <span class="ar-gpay__logo" a-html="this.GPAY_LOGO"></span>
             </button>
             <div class="ar-gpay__fallback" a-if="!this.available$.Get()">
                 Google Pay isn't available on this device.
             </div>
         `;
+            MountPaymentTemplate(this);
+            this.dataset.ariannaFolderReady = 'true';
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -907,7 +951,10 @@ export namespace GooglePay
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'inline-block' }),
+                new Rule('.GooglePay', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0', display: 'inline-block' }),
                 new Rule('.ar-gpay__btn', {
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -929,13 +976,13 @@ export namespace GooglePay
                 }),
                 new Rule('.ar-gpay__btn--white', {
                     background: '#fff', color: '#3c4043',
-                    border: '1px solid #d8d8d8',
+                    border: '1px solid #e6e8eb',
                 }),
                 new Rule('.ar-gpay__logo', { display: 'inline-flex', height: '18px' }),
                 new Rule('.ar-gpay__logo svg', { height: '100%' }),
                 new Rule('.ar-gpay__fallback', {
                     fontSize: '12px',
-                    color: 'var(--arianna-muted, #6e6b62)',
+                    color: 'var(--arianna-muted, var(--muted, #687079))',
                     padding: '8px',
                 }),
             ]);

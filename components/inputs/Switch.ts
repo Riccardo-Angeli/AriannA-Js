@@ -9,6 +9,7 @@
  */
 
 import { Component, Components, Css, Templates } from '../../core/index.ts';
+import { MountInputTemplate } from './Base.ts';
 
 /** @namespace   Switch
  *  @public
@@ -124,6 +125,7 @@ export namespace Switch
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-switch', {}, {
+        shadow: false,
         Attributes: ['label', 'label-position', 'checked', 'disabled'],
     })
     export class Switch extends HTMLElement
@@ -197,6 +199,7 @@ export namespace Switch
                 <span class="ar-switch__label" a-if="this.labelRight()">{{ this.labelText() }}</span>
             </label>
         `;
+            MountInputTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -414,7 +417,7 @@ export namespace Switch
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', { display: 'inline-block' }),
+                new Rule('arianna-switch', { display: 'inline-block' }),
                 new Rule('.ar-switch__row', {
                     alignItems: 'center',
                     cursor: 'pointer',

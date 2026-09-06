@@ -1,737 +1,288 @@
-/**
- * @module    components/maps/MapLibreMap
- * @author    Riccardo Angeli
- * @version   2.0.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license   MIT / Commercial (dual license)
- *
- * @description AriannA MapLibreMap component module.
- */
+/** @module components/maps/MapLibreMap */
+import { Component, Css } from '../../core/index.ts';
 
-import { Component, Components, Css, Templates } from '../../core/index.ts';
-import { MapEmbed, type MapProvider } from './MapEmbed.ts';
+export interface LatLng { lat:number; lng:number; }
+export type MapProvider = 'google' | 'osm' | 'apple' | 'maplibre';
 
-declare global
-{
-    interface Window
-    {
-        maplibregl?: MapLibreMap.Interfaces.MapLibreGlobal;
-    }
+const ATTRIBUTES=['center-lat','center-lng','zoom','marker','label','address','aspect-ratio','style-url','bearing','pitch'] as const;
+const OBSERVED=new Set<string>(ATTRIBUTES);
+
+function centerLat(host:Element): number {
+    const value=Number.parseFloat(host.getAttribute('center-lat') ?? '');
+    return Number.isFinite(value) ? value : 41.8902102;
 }
 
-/** @namespace   MapLibreMap
- *  @public
- *  @description Namespace containing MapLibreMap contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
-export namespace MapLibreMap
-{
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export namespace Types
-    {
-        /** @name        Stylesheet
-         *  @public
-         *  @type        {Css.Stylesheet}
-         *  @description Type alias for Stylesheet.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Stylesheet = Css.Stylesheet;
+function centerLng(host:Element): number {
+    const value=Number.parseFloat(host.getAttribute('center-lng') ?? '');
+    return Number.isFinite(value) ? value : 12.4922309;
+}
 
-        /** @name        MapLibreInstance
-         *  @public
-         *  @type        {{
-            setCenter(c: [
-                number,
-                number
-            ]): void;
-            setZoom(z: number): void;
-            remove(): void;
-            on(event: string, cb: () => void): void;
-            addControl(c: object, position?: string): void;
-        }}
-         *  @description Type alias for MapLibreInstance.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type MapLibreInstance = {
-            /** @name        setCenter
-             *  @public
-             *  @type        {void}
-             *  @description Component member for set Center.
-             *  @param       {[
-                number,
-                number
-            ]} c Parameter.
-             *  @returns     {void} Result.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            setCenter(c: [
-                number,
-                number
-            ]): void;
+function zoom(host:Element): number {
+    const value=Number.parseInt(host.getAttribute('zoom') ?? '13',10);
+    return Math.max(1,Math.min(20,Number.isFinite(value) ? value : 13));
+}
 
-            /** @name        setZoom
-             *  @public
-             *  @type        {void}
-             *  @description Component member for set Zoom.
-             *  @param       {number} z Parameter.
-             *  @returns     {void} Result.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            setZoom(z: number): void;
+function marker(host:Element): boolean {
+    return host.hasAttribute('marker') && host.getAttribute('marker') !== 'false';
+}
 
-            /** @name        remove
-             *  @public
-             *  @type        {void}
-             *  @description Component member for remove.
-             *  @returns     {void} Result.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            remove(): void;
+function aspectRatio(host:Element): string {
+    return host.getAttribute('aspect-ratio')?.trim() || '16/8';
+}
 
-            /** @name        on
-             *  @public
-             *  @type        {void}
-             *  @description Component member for on.
-             *  @param       {string} event Parameter.
-             *  @param       {() => void} cb Parameter.
-             *  @returns     {void} Result.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            on(event: string, cb: () => void): void;
+function renderKey(host:Element): string {
+    return ATTRIBUTES.map(name => `${name}=${host.getAttribute(name) ?? ''}`).join('|');
+}
 
-            /** @name        addControl
-             *  @public
-             *  @type        {void}
-             *  @description Component member for add Control.
-             *  @param       {object} c Parameter.
-             *  @param       {string} position Parameter.
-             *  @returns     {void} Result.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            addControl(c: object, position?: string): void;
-        };
+function ensureIdentity(host:HTMLElement,type:string): void {
+    for(const cls of Array.from(host.classList))
+        if(cls.startsWith('__real-')) host.classList.remove(cls);
+
+    if(!host.classList.contains(type)) host.classList.add(type);
+}
+
+function frame(host:HTMLElement,type:string,provider:string,openUrl:string): HTMLDivElement {
+    host.replaceChildren();
+
+    const stage=document.createElement('div');
+    stage.className=`${type}-Stage`;
+    stage.style.aspectRatio=aspectRatio(host);
+
+    const chrome=document.createElement('div');
+    chrome.className=`${type}-Chrome`;
+
+    const badge=document.createElement('span');
+    badge.className=`${type}-Badge`;
+    badge.textContent=provider;
+
+    const open=document.createElement('a');
+    open.className=`${type}-Open`;
+    open.href=openUrl;
+    open.target='_blank';
+    open.rel='noopener';
+    open.textContent='Open ↗';
+
+    chrome.append(badge,open);
+    host.appendChild(stage);
+    host.appendChild(chrome);
+    return stage;
+}
+
+function iframe(stage:HTMLElement,type:string,src:string,sandbox?:string): HTMLIFrameElement {
+    const element=document.createElement('iframe');
+    element.className=`${type}-Iframe`;
+    element.src=src;
+    element.loading='lazy';
+    element.referrerPolicy='no-referrer-when-downgrade';
+    element.allowFullscreen=true;
+    element.setAttribute('frameborder','0');
+    if(sandbox) element.setAttribute('sandbox',sandbox);
+    stage.replaceChildren(element);
+    return element;
+}
+
+function fallback(stage:HTMLElement,type:string,title:string,message:string,code?:string): HTMLDivElement {
+    const box=document.createElement('div');
+    box.className=`${type}-Fallback`;
+
+    const icon=document.createElement('div');
+    icon.className=`${type}-Fallback-Icon`;
+    icon.textContent='⌖';
+
+    const strong=document.createElement('strong');
+    strong.textContent=title;
+
+    const detail=document.createElement('span');
+    detail.textContent=message;
+
+    box.append(icon,strong,detail);
+    if(code){
+        const snippet=document.createElement('code');
+        snippet.textContent=code;
+        box.appendChild(snippet);
     }
+    stage.replaceChildren(box);
+    return box;
+}
 
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export namespace Interfaces
-    {
-        /** @interface   MapLibreGlobal
-         *  @public
-         *  @description MapLibreGlobal contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface MapLibreGlobal
-        {
-            /** @name        Map
-             *  @public
-             *  @type        {new (opts: {
-                container: HTMLElement;
-                style: string;
-                center: [
-                    number,
-                    number
-                ];
-                zoom: number;
-                bearing?: number;
-                pitch?: number;
-            }) => {
-                setCenter(c: [
-                    number,
-                    number
-                ]): void;
-                setZoom(z: number): void;
-                remove(): void;
-                on(event: string, cb: () => void): void;
-                addControl(c: object, position?: string): void;
-            }}
-             *  @description Component member for Map.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Map: new (opts: {
-                /** @name        container
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for container.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                container: HTMLElement;
 
-                /** @name        style
-                 *  @public
-                 *  @type        {string}
-                 *  @description Component member for style.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                style: string;
+type BrowserWindow=Window & typeof globalThis & { maplibregl?:any };
+const Browser=():BrowserWindow=>window as BrowserWindow;
+let loader:Promise<any>|null=null;
 
-                /** @name        center
-                 *  @public
-                 *  @type        {[
-                    number,
-                    number
-                ]}
-                 *  @description Component member for center.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                center: [
-                    number,
-                    number
-                ];
+function defaultStyle(): Record<string,unknown> {
+    return {version:8,sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}},layers:[{id:'osm',type:'raster',source:'osm'}]};
+}
 
-                /** @name        zoom
-                 *  @public
-                 *  @type        {number}
-                 *  @description Component member for zoom.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                zoom: number;
-
-                /** @name        bearing
-                 *  @public
-                 *  @type        {number}
-                 *  @description Component member for bearing.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                bearing?: number;
-
-                /** @name        pitch
-                 *  @public
-                 *  @type        {number}
-                 *  @description Component member for pitch.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                pitch?: number;
-            }) => {
-                /** @name        setCenter
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for set Center.
-                 *  @param       {[
-                    number,
-                    number
-                ]} c Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                setCenter(c: [
-                    number,
-                    number
-                ]): void;
-
-                /** @name        setZoom
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for set Zoom.
-                 *  @param       {number} z Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                setZoom(z: number): void;
-
-                /** @name        remove
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for remove.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                remove(): void;
-
-                /** @name        on
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for on.
-                 *  @param       {string} event Parameter.
-                 *  @param       {() => void} cb Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                on(event: string, cb: () => void): void;
-
-                /** @name        addControl
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for add Control.
-                 *  @param       {object} c Parameter.
-                 *  @param       {string} position Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                addControl(c: object, position?: string): void;
-            };
-
-            /** @name        Marker
-             *  @public
-             *  @type        {new (opts?: {
-                color?: string;
-            }) => {
-                setLngLat(c: [
-                    number,
-                    number
-                ]): {
-                    addTo(map: object): void;
-                };
-            }}
-             *  @description Component member for Marker.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            Marker: new (opts?: {
-                /** @name        color
-                 *  @public
-                 *  @type        {string}
-                 *  @description Component member for color.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                color?: string;
-            }) => {
-                /** @name        setLngLat
-                 *  @public
-                 *  @type        {{
-                    addTo(map: object): void;
-                }}
-                 *  @description Component member for set Lng Lat.
-                 *  @param       {[
-                    number,
-                    number
-                ]} c Parameter.
-                 *  @returns     {{
-                    addTo(map: object): void;
-                }} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                setLngLat(c: [
-                    number,
-                    number
-                ]): {
-                    /** @name        addTo
-                     *  @public
-                     *  @type        {void}
-                     *  @description Component member for add To.
-                     *  @param       {object} map Parameter.
-                     *  @returns     {void} Result.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    addTo(map: object): void;
-                };
-            };
-
-            /** @name        NavigationControl
-             *  @public
-             *  @type        {new (opts?: object) => object}
-             *  @description Component member for Navigation Control.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            NavigationControl: new (opts?: object) => object;
+function loadMapLibre(): Promise<any> {
+    if(Browser().maplibregl) return Promise.resolve(Browser().maplibregl);
+    if(loader) return loader;
+    loader=new Promise((resolve,reject)=>{
+        if(!document.querySelector('link[data-arianna-maplibre]')){
+            const link=document.createElement('link');
+            link.rel='stylesheet'; link.href='https://unpkg.com/maplibre-gl@5.7.1/dist/maplibre-gl.css'; link.dataset.ariannaMaplibre='true'; document.head.appendChild(link);
         }
-    }
+        const done=()=>Browser().maplibregl ? resolve(Browser().maplibregl) : reject(new Error('MapLibre loaded without maplibregl global'));
+        const existing=document.querySelector<HTMLScriptElement>('script[data-arianna-maplibre]');
+        if(existing){
+            if(Browser().maplibregl){ done(); return; }
+            existing.addEventListener('load',done,{once:true});
+            existing.addEventListener('error',()=>reject(new Error('MapLibre failed to load')),{once:true});
+            return;
+        }
+        const script=document.createElement('script');
+        script.src='https://unpkg.com/maplibre-gl@5.7.1/dist/maplibre-gl.js'; script.dataset.ariannaMaplibre='true'; script.onload=done; script.onerror=()=>reject(new Error('MapLibre failed to load')); document.head.appendChild(script);
+    });
+    return loader;
+}
 
-    /** @name        html
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned html value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const html = Templates.Template.Html;
-
-    /** @name        { Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const { Stylesheet } = Css;
-
-    /** @name        MAPLIBRE_JS_CDN
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned MAPLIBRE_JS_CDN value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const MAPLIBRE_JS_CDN = 'https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js';
-
-    /** @name        MAPLIBRE_CSS_CDN
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned MAPLIBRE_CSS_CDN value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const MAPLIBRE_CSS_CDN = 'https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css';
-
-    /** @name        DEFAULT_STYLE
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned DEFAULT_STYLE value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const DEFAULT_STYLE = 'https://demotiles.maplibre.org/style.json';
-
-    /** @name        mapLibrePromise
-     *  @public
-     *  @type        {Promise<MapLibreMap.Interfaces.MapLibreGlobal> | null}
-     *  @description Namespace-owned mapLibrePromise value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export let mapLibrePromise: Promise<Interfaces.MapLibreGlobal> | null = null;
-    export function loadMapLibre(): Promise<Interfaces.MapLibreGlobal> {
-        if (typeof window === 'undefined')
-            return Promise.reject(new Error('No window'));
-        if (window.maplibregl)
-            return Promise.resolve(window.maplibregl);
-        if (mapLibrePromise)
-            return mapLibrePromise;
-        mapLibrePromise = new Promise<Interfaces.MapLibreGlobal>((resolve, reject) => {
-            // Inject CSS
-            if (!document.querySelector(`link[href="${MAPLIBRE_CSS_CDN}"]`))
-            {
-                /** @name        link
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned link value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const link = document.createElement('link');
-                link.rel = 'stylesheet';
-                link.href = MAPLIBRE_CSS_CDN;
-                document.head.appendChild(link);
-            }
-            // Inject JS
-            /** @name        script
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned script value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const script = document.createElement('script');
-            script.src = MAPLIBRE_JS_CDN;
-            script.async = true;
-            script.onload = () => {
-                /** @name        mg
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned mg value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const mg = window.maplibregl;
-                if (mg)
-                    resolve(mg);
-                else
-                    reject(new Error('MapLibre script loaded but global is undefined'));
-            };
-            script.onerror = () => reject(new Error('Failed to load MapLibre GL JS'));
-            document.head.appendChild(script);
-        });
-        return mapLibrePromise;
-    }
-
-    /** @name        LoadMapLibre
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned LoadMapLibre value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export function LoadMapLibre
-    (
-        ...args: Parameters<typeof loadMapLibre>
-    ): ReturnType<typeof loadMapLibre>
-    {
-        return loadMapLibre(...args);
-    }
-
-    /** @class       MapLibreMap
-     *  @public
-     *  @description AriannA MapLibreMap component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-maplibre-map', {}, {
-        Attributes: [
-            'center-lat', 'center-lng', 'zoom', 'marker', 'label', 'address',
-            'aspect-ratio', 'style-url', 'bearing', 'pitch',
-        ],
+export namespace MapLibreMap {
+export const Styles = new Css.Stylesheet([
+    new Css.Rule('.MapLibreMap', {
+        Background:'var(--arianna-bg,#ffffff)',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        BoxSizing:'border-box',
+        Color:'var(--arianna-text,#1f2328)',
+        Display:'flex',
+        FlexDirection:'column',
+        FontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        FontSize:'12px',
+        MinHeight:'300px',
+        Overflow:'hidden',
+        Position:'relative',
+        Width:'100%'
+    }),
+    new Css.Rule('.MapLibreMap-Stage', {
+        Background:'var(--arianna-bg-2,#f6f7f9)',
+        MinHeight:'260px',
+        Overflow:'hidden',
+        Position:'relative',
+        Width:'100%'
+    }),
+    new Css.Rule('.MapLibreMap-Iframe', {
+        Border:'0', Display:'block', Height:'100%', Inset:'0', Position:'absolute', Width:'100%'
+    }),
+    new Css.Rule('.MapLibreMap-Chrome', {
+        AlignItems:'center',
+        Background:'var(--arianna-bg,#ffffff)',
+        BorderTop:'1px solid var(--arianna-border,#d8d8d8)',
+        Display:'flex',
+        Flex:'0 0 auto',
+        JustifyContent:'space-between',
+        MinHeight:'36px',
+        Padding:'5px 10px'
+    }),
+    new Css.Rule('.MapLibreMap-Badge', {
+        Background:'transparent',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'999px',
+        Color:'var(--arianna-muted,#6e6b62)',
+        Font:'600 10px ui-monospace,SFMono-Regular,Menlo,monospace',
+        LetterSpacing:'.06em',
+        Padding:'3px 8px',
+        TextTransform:'uppercase'
+    }),
+    new Css.Rule('.MapLibreMap-Open', {
+        Background:'transparent',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        Color:'var(--arianna-text,#1f2328)',
+        Font:'500 11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        Padding:'5px 9px',
+        TextDecoration:'none',
+        Transition:'border-color .18s ease,color .18s ease,background .18s ease'
+    }),
+    new Css.Rule('.MapLibreMap-Open:hover', {
+        Background:'var(--arianna-bg-2,#f6f7f9)',
+        BorderColor:'var(--arianna-primary,#e40c88)',
+        Color:'var(--arianna-primary,#e40c88)'
+    }),
+    new Css.Rule('.MapLibreMap-Fallback', {
+        AlignItems:'center',
+        Background:'var(--arianna-bg-2,#f6f7f9)',
+        Color:'var(--arianna-muted,#6e6b62)',
+        Display:'flex',
+        FlexDirection:'column',
+        Gap:'9px',
+        Height:'100%',
+        Inset:'0',
+        JustifyContent:'center',
+        Padding:'28px',
+        Position:'absolute',
+        TextAlign:'center'
+    }),
+    new Css.Rule('.MapLibreMap-Fallback-Icon', {
+        AlignItems:'center',
+        Background:'var(--arianna-bg,#ffffff)',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        Color:'var(--arianna-primary,#e40c88)',
+        Display:'flex',
+        FontSize:'28px',
+        Height:'52px',
+        JustifyContent:'center',
+        Width:'52px'
+    }),
+    new Css.Rule('.MapLibreMap-Fallback strong', {
+        Color:'var(--arianna-text,#1f2328)', FontSize:'14px'
+    }),
+    new Css.Rule('.MapLibreMap-Fallback code', {
+        Background:'var(--arianna-bg,#ffffff)',
+        Border:'1px solid var(--arianna-border,#d8d8d8)',
+        BorderRadius:'var(--arianna-radius,6px)',
+        Color:'var(--arianna-text,#1f2328)',
+        Padding:'6px 8px'
     })
-    export class MapLibreMap extends MapEmbed.MapEmbed
-    {
-        /** Compiler-visible AriannA binding factory installed by @Component. */
-        declare signal: <T>(initial?: T) => Components.Binding<T>;
+]);
+    export const MapStyles = new Css.Stylesheet([
+        new Css.Rule('.MapLibreMap-Map',{Height:'100%',Position:'absolute',Width:'100%'}),
+        new Css.Rule('.MapLibreMap .maplibregl-map',{Height:'100%',Position:'absolute',Width:'100%'}),
+        new Css.Rule('.MapLibreMap .maplibregl-canvas',{Outline:'none'})
+    ]);
 
-        /** Compiler-visible AriannA template slot installed by @Component. */
-        declare template: unknown;
+    @Component('arianna-maplibre-map', new Css.Stylesheet([...Styles.Rules,...MapStyles.Rules]), { Attributes:[...ATTRIBUTES], Shadow:false })
+    export class MapLibreMap extends HTMLElement {
+        public static readonly Styles=new Css.Stylesheet([...Styles.Rules,...MapStyles.Rules]);
+        declare private instance:any;
+        declare private renderVersion:number;
+        declare private lastRenderKey:string | undefined;
 
-        /** @name        #instance
-         *  @public
-         *  @type        {MapLibreMap.Types.MapLibreInstance | null}
-         *  @description Component member for instance.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #instance: Types.MapLibreInstance | null = null;
+        onConnected(): void { this.instance ??= null; this.renderVersion ??= 0; this.lastRenderKey ??= undefined; void this.render(); }
+        onDisconnected(): void { ++this.renderVersion; try { this.instance?.remove?.(); } catch {} this.instance=null; this.lastRenderKey=undefined; }
+        onAttributeChanged(name:string): void { if(this.isConnected && OBSERVED.has(name.toLowerCase())) void this.render(); }
 
-        /** @name        getProvider
-         *  @public
-         *  @type        {MapProvider}
-         *  @description Component member for get Provider.
-         *  @returns     {MapProvider} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         getProvider(): MapProvider { return 'maplibre'; }
+        getCenter(): LatLng { return {lat:centerLat(this),lng:centerLng(this)}; }
+        getZoom(): number { return zoom(this); }
+        setLocation(center:LatLng): this { this.setAttribute('center-lat',String(center.lat)); this.setAttribute('center-lng',String(center.lng)); return this; }
+        setZoom(value:number): this { this.setAttribute('zoom',String(value)); return this; }
+        reload(): this { void this.render(true); return this; }
 
-        /** @name        getEmbedUrl
-         *  @protected
-         *  @type        {string}
-         *  @description Component member for get Embed Url.
-         *  @returns     {string} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected getEmbedUrl(): string { return 'about:blank'; }
-
-        /** @name        getOpenUrl
-         *  @protected
-         *  @type        {string}
-         *  @description Component member for get Open Url.
-         *  @returns     {string} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected getOpenUrl(): string
-        {
-            /** @name        lat
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lat value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lat = this.centerLatNum();
-
-            /** @name        lng
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lng value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lng = this.centerLngNum();
-            return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=${this.zoomNum()}/${lat}/${lng}`;
-        }
-
-        /** Override to render a MapLibre host div instead of an iframe. */
-        onConnected(_opts: object = {}): void
-        {
-            /** @name        centerLat
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned centerLat value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const centerLat = this.signal().attribute('center-lat');
-
-            /** @name        centerLng
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned centerLng value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const centerLng = this.signal().attribute('center-lng');
-
-            /** @name        aspectRatio
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned aspectRatio value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const aspectRatio = this.signal().attribute('aspect-ratio');
-            this.centerLatNum = () => parseFloat(centerLat.Get() ?? '51.4779');
-            this.centerLngNum = () => parseFloat(centerLng.Get() ?? '-0.0015');
-            this.zoomNum = () => parseInt(this.getAttribute('zoom') ?? '13', 10) || 13;
-            this.hasMarker = () => this.getAttribute('marker') !== 'false';
-            this.stageStyle = () => `aspect-ratio: ${aspectRatio.Get() ?? '16/9'}`;
-            this.providerBadge = () => 'MAPLIBRE';
-            this.openHref = () => this.getOpenUrl();
-            this.template = html `
-            <div class="ar-map__stage" :style="this.stageStyle()">
-                <div class="ar-map__maplibre-host"
-                     style="width:100%; height:100%; position:absolute; inset:0;"></div>
-            </div>
-            <div class="ar-map__chrome">
-                <span class="ar-map__badge">{{ this.providerBadge() }}</span>
-                <a class="ar-map__open"
-                   :href="this.openHref()"
-                   target="_blank" rel="noopener">Open ↗</a>
-            </div>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {MapLibreMap.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = MapEmbed.MapEmbed.DefaultSheet();
-        }
-
-        /** @name        onMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onMount() { this.#initMapLibre(); }
-
-        /** @name        onUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUnmount()
-        {
-            if (this.#instance)
-            {
-                try
-                {
-                    this.#instance.remove();
-                }
-                catch { /* ignore */ }
-                this.#instance = null;
+        private openUrl(): string { return `https://www.openstreetmap.org/#map=${zoom(this)}/${centerLat(this)}/${centerLng(this)}`; }
+        private async render(force=false): Promise<void> {
+            const key=renderKey(this);
+            if(!force && key===this.lastRenderKey && this.firstElementChild) return;
+            const version=++this.renderVersion;
+            ensureIdentity(this,'MapLibreMap');
+            const stage=frame(this,'MapLibreMap','MAPLIBRE',this.openUrl());
+            const host=document.createElement('div'); host.className='MapLibreMap-Map'; stage.replaceChildren(host);
+            try {
+                const gl=await loadMapLibre();
+                if(!this.isConnected || version!==this.renderVersion) return;
+                try { this.instance?.remove?.(); } catch {}
+                this.instance=new gl.Map({container:host,style:this.getAttribute('style-url')?.trim()||defaultStyle(),center:[centerLng(this),centerLat(this)],zoom:zoom(this),bearing:Number(this.getAttribute('bearing')||0),pitch:Number(this.getAttribute('pitch')||0)});
+                this.instance.addControl?.(new gl.NavigationControl(),'top-right');
+                if(marker(this) && gl.Marker) new gl.Marker({color:'#e40c88'}).setLngLat([centerLng(this),centerLat(this)]).addTo(this.instance);
+                this.lastRenderKey=key;
+            } catch(error) {
+                if(version!==this.renderVersion) return;
+                fallback(stage,'MapLibreMap','MapLibre',error instanceof Error?error.message:String(error));
+                this.lastRenderKey=key;
             }
-        }
-
-        /** @name        #initMapLibre
-         *  @public
-         *  @type        {void}
-         *  @description Component member for init Map Libre.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #initMapLibre(): void
-        {
-            queueMicrotask(() => {
-                /** @name        host
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned host value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const host = this.querySelector<HTMLDivElement>('.ar-map__maplibre-host');
-                if (!host)
-                    return;
-                loadMapLibre()
-                    .then(mg => {
-                    /** @name        styleUrl
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned styleUrl value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const styleUrl = this.getAttribute('style-url') ?? DEFAULT_STYLE;
-
-                    /** @name        bearing
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned bearing value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const bearing = parseFloat(this.getAttribute('bearing') ?? '0') || 0;
-
-                    /** @name        pitch
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned pitch value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const pitch = parseFloat(this.getAttribute('pitch') ?? '0') || 0;
-
-                    /** @name        map
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned map value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const map = new mg.Map({
-                        container: host,
-                        style: styleUrl,
-                        center: [this.centerLngNum(), this.centerLatNum()],
-                        zoom: this.zoomNum(),
-                        bearing,
-                        pitch,
-                    });
-                    map.addControl(new mg.NavigationControl(), 'top-right');
-                    if (this.hasMarker())
-                    {
-                        new mg.Marker({ color: '#1f6feb' })
-                            .setLngLat([this.centerLngNum(), this.centerLatNum()])
-                            .addTo(map);
-                    }
-                    this.#instance = map;
-                })
-                    .catch(err => {
-                    console.warn('[MapLibreMap] failed to load MapLibre GL JS:', err);
-                });
-            });
         }
     }
 }
-export default MapLibreMap;
+
+export const MapLibreMapClass=MapLibreMap.MapLibreMap;
+export default MapLibreMap.MapLibreMap;

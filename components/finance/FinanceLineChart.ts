@@ -8,9 +8,13 @@
  * @description AriannA FinanceLineChart component module.
  */
 
+
 import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
 import { _svg, _fmt, _esc } from './helpers.ts';
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+
+import { MountFinanceTemplate } from './Base.ts';
+
 
 /** @namespace   FinanceLineChart
  *  @public
@@ -149,7 +153,7 @@ export namespace FinanceLineChart
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal;
+    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
 
     /** @name        { Rule, Stylesheet }
      *  @public
@@ -177,7 +181,7 @@ export namespace FinanceLineChart
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     export const PALETTE = [
-        'var(--arianna-primary, #1f6feb)',
+        'var(--arianna-primary, var(--accent, #e40c88))',
         'var(--arianna-bull,    #26a69a)',
         'var(--arianna-bear,    #ef5350)',
         'var(--arianna-warning, #f5a623)',
@@ -191,11 +195,92 @@ export namespace FinanceLineChart
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-finance-line-chart', {}, {
-        Attributes: ['width', 'height'],
-    })
-    export class FinanceLineChart extends HTMLElement
+    export const Styles: Types.Stylesheet = (() =>
     {
+            return new Stylesheet([
+            new Rule('.FinanceLineChart', {
+                '--arianna-bg': '#17181c',
+                '--arianna-bg-2': '#1d1e23',
+                '--arianna-bg-3': '#24262b',
+                '--arianna-text': '#e6e8eb',
+                '--arianna-muted': '#9aa0aa',
+                '--arianna-dim': '#6f7580',
+                '--arianna-border': '#303238',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#26a69a',
+                '--arianna-warning': '#f5a623',
+                '--arianna-danger': '#ef5350',
+                '--bg': '#17181c',
+                '--bg3': '#24262b',
+                '--text': '#e6e8eb',
+                '--muted': '#9aa0aa',
+                '--border': '#303238',
+                '--accent': '#e40c88',
+            }),
+            new Rule('.FinanceLineChart[theme="light"]', {
+                '--arianna-bg': '#ffffff',
+                '--arianna-bg-2': '#fbfbfc',
+                '--arianna-bg-3': '#f3f3f5',
+                '--arianna-text': '#1c1e21',
+                '--arianna-muted': '#626873',
+                '--arianna-dim': '#8a8f98',
+                '--arianna-border': '#e2e2e6',
+                '--arianna-primary': '#e40c88',
+                '--arianna-success': '#168a78',
+                '--arianna-warning': '#b66c00',
+                '--arianna-danger': '#c93645',
+                '--bg': '#ffffff',
+                '--bg3': '#f3f3f5',
+                '--text': '#1c1e21',
+                '--muted': '#626873',
+                '--border': '#e2e2e6',
+                '--accent': '#e40c88',
+            }),
+                new Rule('.FinanceLineChart', {
+                    BoxSizing: 'border-box',
+                    MaxWidth: '100%',
+                    MinWidth: '0',
+                    background: 'var(--arianna-bg, var(--bg, #fff))',
+                    border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
+                    borderRadius: 'var(--arianna-radius, 6px)',
+                    display: 'inline-block',
+                    padding: '4px',
+                }),
+                new Rule('.FinanceLineChart svg', { display: 'block' }),
+            ]);
+        
+    })();
+
+    @Component('arianna-finance-line-chart', Styles, {
+        Shadow: false,
+        Attributes: ['width', 'height', 'theme', 'series'],
+        Properties: ['series'],
+    })
+    export class FinanceLineChart extends HTMLDivElement
+    {
+        /** Canonical AriannA public DOM identity. */
+        private readonly _AriannaIdentity = (() =>
+        {
+            const type = 'FinanceLineChart';
+            for(const cls of Array.from(this.classList))
+            {
+                if(cls.startsWith('__real-')) this.classList.remove(cls);
+            }
+            this.classList.add(type);
+
+            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
+            const ids = counters.__AriannaComponentIds ??= Object.create(null);
+            const n = ids[type] = (ids[type] ?? 0) + 1;
+            this.id = `${type}-${n}`;
+            return true;
+        })();
+
+        constructor()
+        {
+            super();
+            this.classList.add('FinanceLineChart');
+        }
+
         /** Compiler-visible AriannA binding factory installed by @Component. */
         declare signal: <T>(initial?: T) => Components.Binding<T>;
 
@@ -209,8 +294,12 @@ export namespace FinanceLineChart
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        series$: Types.Signal<Interfaces.LineChartSeries[]> = signal<Interfaces.LineChartSeries[]>([]);
-
+        private _seriesSignal?: Types.Signal<Interfaces.LineChartSeries[]>;
+        public get series$(): Types.Signal<Interfaces.LineChartSeries[]>
+        {
+            this._seriesSignal ??= signal<Interfaces.LineChartSeries[]>([]);
+            return this._seriesSignal;
+        }
         /** @name        onConnected
          *  @public
          *  @type        {void}
@@ -222,6 +311,10 @@ export namespace FinanceLineChart
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.LineChartOptions = {})
         {
+            this.classList.add('FinanceLineChart');
+            if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            if(this.dataset.ariannaFolderReady === 'true') return;
+            this.dataset.ariannaFolderReady = 'true';
             /** @name        wAttr
              *  @public
              *  @type        {inferred}
@@ -388,12 +481,12 @@ export namespace FinanceLineChart
                     const y = yS(v);
                     grid += _svg('line', {
                         x1: pad.l, y1: y, x2: pad.l + W, y2: y,
-                        stroke: 'var(--arianna-border, #e0e0e0)',
+                        stroke: 'var(--arianna-border, var(--border, #e0e0e0))',
                         'stroke-width': 1,
                     });
                     grid += _svg('text', {
                         x: pad.l - 6, y: y + 4,
-                        fill: 'var(--arianna-muted, #787b86)',
+                        fill: 'var(--arianna-muted, var(--muted, #787b86))',
                         'font-size': 11,
                         'text-anchor': 'end',
                     }, _fmt(v));
@@ -455,7 +548,7 @@ export namespace FinanceLineChart
                     });
                     legend += _svg('text', {
                         x: lx + 18, y: h - 12,
-                        fill: 'var(--arianna-text, #1f2328)',
+                        fill: 'var(--arianna-text, var(--text, #1c1e21))',
                         'font-size': 12,
                     }, _esc(s.name));
                 });
@@ -463,7 +556,8 @@ export namespace FinanceLineChart
                     + grid + lines + legend
                     + `</svg>`;
             };
-            this.template = html `<div class="ar-linechart" a-html="this.svgHtml()"></div>`;
+            this.template = html `<div class="FinanceLineChart-Canvas" a-html="this.svgHtml()"></div>`;
+            MountFinanceTemplate(this);
             (this as unknown as {
                 /** @name        Sheet
                  *  @public
@@ -473,7 +567,7 @@ export namespace FinanceLineChart
                  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
                  *  @license     MIT / Commercial (dual license) */
                 Sheet: Types.Stylesheet | null;
-            }).Sheet = FinanceLineChart.DefaultSheet();
+            }).Sheet = Styles;
         }
 
         /** @name        series
@@ -584,19 +678,8 @@ export namespace FinanceLineChart
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet
-        {
-            return new Stylesheet([
-                new Rule(':host', {
-                    background: 'var(--arianna-bg, #fff)',
-                    border: '1px solid var(--arianna-border, #d8d8d8)',
-                    borderRadius: 'var(--arianna-radius, 6px)',
-                    display: 'inline-block',
-                    padding: '4px',
-                }),
-                new Rule(':host svg', { display: 'block' }),
-            ]);
-        }
+        public static readonly Styles = Styles;
+        static DefaultSheet(): Types.Stylesheet { return Styles; }
     }
 }
 export default FinanceLineChart;

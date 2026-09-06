@@ -446,6 +446,7 @@ export namespace Calendar
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-calendar', {}, {
+        shadow: false,
         Attributes: ['value', 'min', 'max', 'locale', 'first-day', 'show-week-numbers', 'disabled'],
     })
     export class Calendar extends HTMLElement
@@ -491,410 +492,105 @@ export namespace Calendar
          *  @license     MIT / Commercial (dual license) */
         onConnected(_opts: Interfaces.CalendarOptions = {})
         {
-            /** @name        value
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned value value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const value = this.signal().attribute('value');
-            // Sync cursor to selected value on first build
-            /** @name        selected
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned selected value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const selected = parseDate(value.Get());
-            if (selected)
-            {
-                this.cursor$.Set({ year: selected.getFullYear(), month: selected.getMonth() });
-            }
+            this.cursor$ ??= signal({
+                year: new Date().getFullYear(),
+                month: new Date().getMonth(),
+            });
+            const self = this as Calendar & { __renderCalendar?: () => void; onAttributeChanged?: () => void };
+            this.classList.add('Calendar');
             this.localeStr = () => this.getAttribute('locale') ?? navigator.language ?? 'en-US';
             this.firstDayN = () => (parseInt(this.getAttribute('first-day') ?? '1', 10) === 0 ? 0 : 1) as 0 | 1;
             this.showWeek = () => this.hasAttribute('show-week-numbers');
             this.isDisabled = () => this.hasAttribute('disabled');
-            this.monthLabel = (): string => {
-                /** @name        c
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned c value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const c = this.cursor$.Get();
 
-                /** @name        d
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned d value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const d = new Date(c.year, c.month, 1);
-                return d.toLocaleDateString(this.localeStr(), { month: 'long', year: 'numeric' });
-            };
-            this.weekdayLabels = (): string[] => {
-                /** @name        fmt
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned fmt value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const fmt = new Intl.DateTimeFormat(this.localeStr(), { weekday: 'short' });
+            if(!this.dataset.ariannaCalendarReady)
+            {
+                const selected = parseDate(this.getAttribute('value'));
+                const now = selected ?? new Date();
+                this.cursor$.Set({ year: now.getFullYear(), month: now.getMonth() });
+                this.dataset.ariannaCalendarReady = 'true';
+            }
 
-                /** @name        first
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned first value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const first = this.firstDayN();
-
-                /** @name        out
-                 *  @public
-                 *  @type        {string[]}
-                 *  @description Namespace-owned out value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const out: string[] = [];
-
-                /** @name        base
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned base value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const base = new Date(2024, 0, 7); // Sunday Jan 7 2024
-                for (let i = 0; i < 7; i++)
-                {
-                    /** @name        day
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned day value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const day = (i + first) % 7;
-
-                    /** @name        d
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned d value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const d = new Date(base);
-                    d.setDate(base.getDate() + day);
-                    out.push(fmt.format(d));
-                }
-                return out;
-            };
-            this.weeks = (): Interfaces.WeekRow[] => {
-                /** @name        c
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned c value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const c = this.cursor$.Get();
-
-                /** @name        first
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned first value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const first = this.firstDayN();
-
-                /** @name        min
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned min value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
+            const render = () =>
+            {
+                const cursor = this.cursor$.Get();
+                const locale = this.localeStr();
+                const firstDay = this.firstDayN();
+                const selected = parseDate(this.getAttribute('value'));
                 const min = parseDate(this.getAttribute('min'));
-
-                /** @name        max
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned max value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
                 const max = parseDate(this.getAttribute('max'));
-
-                /** @name        sel
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned sel value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const sel = parseDate(value.Get());
-
-                /** @name        today
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned today value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
                 const today = new Date();
 
-                /** @name        firstOfMonth
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned firstOfMonth value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const firstOfMonth = new Date(c.year, c.month, 1);
+                const header = document.createElement('div');
+                header.className = 'ar-cal__header';
+                const prev = document.createElement('button');
+                prev.type = 'button'; prev.className = 'ar-cal__nav'; prev.textContent = '‹'; prev.ariaLabel = 'Previous month';
+                const title = document.createElement('button');
+                title.type = 'button'; title.className = 'ar-cal__title';
+                title.textContent = new Date(cursor.year, cursor.month, 1).toLocaleDateString(locale,{month:'long',year:'numeric'});
+                const next = document.createElement('button');
+                next.type = 'button'; next.className = 'ar-cal__nav'; next.textContent = '›'; next.ariaLabel = 'Next month';
+                header.appendChild(prev); header.appendChild(title); header.appendChild(next);
 
-                /** @name        startDay
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned startDay value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const startDay = firstOfMonth.getDay();
-
-                /** @name        offset
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned offset value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const offset = (startDay - first + 7) % 7;
-
-                /** @name        gridStart
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned gridStart value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const gridStart = new Date(firstOfMonth);
-                gridStart.setDate(firstOfMonth.getDate() - offset);
-
-                /** @name        rows
-                 *  @public
-                 *  @type        {Calendar.Interfaces.WeekRow[]}
-                 *  @description Namespace-owned rows value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const rows: Interfaces.WeekRow[] = [];
-
-                /** @name        cur
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned cur value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const cur = new Date(gridStart);
-                for (let w = 0; w < 6; w++)
+                const weekdays = document.createElement('div');
+                weekdays.className = 'ar-cal__weekdays';
+                if(this.showWeek())
                 {
-                    /** @name        days
-                     *  @public
-                     *  @type        {Calendar.Interfaces.DayCell[]}
-                     *  @description Namespace-owned days value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const days: Interfaces.DayCell[] = [];
-                    for (let d = 0; d < 7; d++)
-                    {
-                        /** @name        day
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned day value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const day = cur.getDate();
-
-                        /** @name        inMonth
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned inMonth value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const inMonth = cur.getMonth() === c.month;
-
-                        /** @name        isToday
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned isToday value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const isToday = sameDay(cur, today);
-
-                        /** @name        isSelected
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned isSelected value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const isSelected = !!sel && sameDay(cur, sel);
-
-                        /** @name        isOutOfRange
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned isOutOfRange value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const isOutOfRange = (min && cur < min) || (max && cur > max) || false;
-
-                        /** @name        cls
-                         *  @public
-                         *  @type        {inferred}
-                         *  @description Namespace-owned cls value.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        const cls = 'ar-cal__day'
-                            + (inMonth ? '' : ' ar-cal__day--out')
-                            + (isToday ? ' ar-cal__day--today' : '')
-                            + (isSelected ? ' ar-cal__day--selected' : '')
-                            + (isOutOfRange ? ' ar-cal__day--disabled' : '');
-                        days.push({
-                            day, iso: toISO(cur), inMonth, isToday, isSelected,
-                            isOutOfRange, cls,
-                        });
-                        cur.setDate(cur.getDate() + 1);
-                    }
-                    rows.push({ weekNum: getISOWeek(days[0] ? new Date(days[0].iso) : cur), days });
+                    const wc=document.createElement('div'); wc.className='ar-cal__weekcol'; weekdays.appendChild(wc);
                 }
-                return rows;
-            };
-            this.onPrev = () => {
-                /** @name        c
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned c value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const c = this.cursor$.Get();
+                const fmt = new Intl.DateTimeFormat(locale,{weekday:'short'});
+                const sunday = new Date(2024,0,7);
+                for(let i=0;i<7;i++)
+                {
+                    const jsDay=(i+firstDay)%7;
+                    const d=new Date(sunday); d.setDate(sunday.getDate()+jsDay);
+                    const wd=document.createElement('div');
+                    wd.className='ar-cal__wkday'+(jsDay===0||jsDay===6?' ar-cal__wkday--weekend':'');
+                    wd.textContent=fmt.format(d); weekdays.appendChild(wd);
+                }
 
-                /** @name        month
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned month value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const month = c.month === 0 ? 11 : c.month - 1;
-
-                /** @name        year
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned year value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const year = c.month === 0 ? c.year - 1 : c.year;
-                this.cursor$.Set({ year, month });
-                this.dispatchEvent(new CustomEvent('arianna:nav', {
-                    bubbles: true, detail: { year, month },
-                }));
+                const grid=document.createElement('div'); grid.className='ar-cal__grid';
+                const firstOfMonth=new Date(cursor.year,cursor.month,1);
+                const offset=(firstOfMonth.getDay()-firstDay+7)%7;
+                const gridStart=new Date(cursor.year,cursor.month,1-offset);
+                for(let week=0;week<6;week++)
+                {
+                    const row=document.createElement('div'); row.className='ar-cal__row';
+                    if(this.showWeek())
+                    {
+                        const wn=document.createElement('div'); wn.className='ar-cal__weeknum';
+                        const wd=new Date(gridStart); wd.setDate(gridStart.getDate()+week*7);
+                        wn.textContent=String(getISOWeek(wd)); row.appendChild(wn);
+                    }
+                    for(let col=0;col<7;col++)
+                    {
+                        const d=new Date(gridStart); d.setDate(gridStart.getDate()+week*7+col);
+                        const iso=toISO(d); const inMonth=d.getMonth()===cursor.month;
+                        const weekend=d.getDay()===0||d.getDay()===6;
+                        const outOfRange=!!((min&&d<min)||(max&&d>max));
+                        const button=document.createElement('button'); button.type='button';
+                        button.className='ar-cal__day'+(inMonth?'':' ar-cal__day--out')+(weekend?' ar-cal__day--weekend':'')+(sameDay(d,today)?' ar-cal__day--today':'')+(selected&&sameDay(d,selected)?' ar-cal__day--selected':'')+(outOfRange?' ar-cal__day--disabled':'');
+                        button.textContent=String(d.getDate()); button.disabled=outOfRange||this.isDisabled();
+                        button.dataset.date=iso; button.setAttribute('aria-label',d.toLocaleDateString(locale,{weekday:'long',year:'numeric',month:'long',day:'numeric'}));
+                        button.addEventListener('click',()=>{
+                            this.setAttribute('value',iso);
+                            if(!inMonth) this.cursor$.Set({year:d.getFullYear(),month:d.getMonth()});
+                            this.dispatchEvent(new CustomEvent('arianna:select',{bubbles:true,composed:true,detail:{value:iso,date:new Date(d)}}));
+                            render();
+                        });
+                        row.appendChild(button);
+                    }
+                    grid.appendChild(row);
+                }
+                prev.addEventListener('click',()=>{ const c=this.cursor$.Get(); const d=new Date(c.year,c.month-1,1); this.cursor$.Set({year:d.getFullYear(),month:d.getMonth()}); this.dispatchEvent(new CustomEvent('arianna:nav',{bubbles:true,detail:{year:d.getFullYear(),month:d.getMonth()}})); render(); });
+                next.addEventListener('click',()=>{ const c=this.cursor$.Get(); const d=new Date(c.year,c.month+1,1); this.cursor$.Set({year:d.getFullYear(),month:d.getMonth()}); this.dispatchEvent(new CustomEvent('arianna:nav',{bubbles:true,detail:{year:d.getFullYear(),month:d.getMonth()}})); render(); });
+                title.addEventListener('click',()=>{ const d=new Date(); this.cursor$.Set({year:d.getFullYear(),month:d.getMonth()}); render(); });
+                this.replaceChildren(header,weekdays,grid);
             };
-            this.onNext = () => {
-                /** @name        c
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned c value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const c = this.cursor$.Get();
-
-                /** @name        month
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned month value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const month = c.month === 11 ? 0 : c.month + 1;
-
-                /** @name        year
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned year value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const year = c.month === 11 ? c.year + 1 : c.year;
-                this.cursor$.Set({ year, month });
-                this.dispatchEvent(new CustomEvent('arianna:nav', {
-                    bubbles: true, detail: { year, month },
-                }));
-            };
-            this.onToday = () => {
-                /** @name        t
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned t value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const t = new Date();
-                this.cursor$.Set({ year: t.getFullYear(), month: t.getMonth() });
-            };
-            this.onDayClick = (cell: Interfaces.DayCell) => {
-                if (cell.isOutOfRange || this.isDisabled())
-                    return;
-                this.setAttribute('value', cell.iso);
-                this.dispatchEvent(new CustomEvent('arianna:select', {
-                    bubbles: true, detail: { value: cell.iso, date: parseDate(cell.iso) },
-                }));
-            };
-            this.template = html `
-            <div class="ar-cal__header">
-                <button class="ar-cal__nav" @click="this.onPrev"  aria-label="Previous month">‹</button>
-                <button class="ar-cal__title" @click="this.onToday">{{ this.monthLabel() }}</button>
-                <button class="ar-cal__nav" @click="this.onNext"  aria-label="Next month">›</button>
-            </div>
-            <div class="ar-cal__weekdays">
-                <div class="ar-cal__weekcol" a-if="this.showWeek()"></div>
-                <div class="ar-cal__wkday" a-for="wd in this.weekdayLabels()">{{ wd }}</div>
-            </div>
-            <div class="ar-cal__row" a-for="row in this.weeks()">
-                <div class="ar-cal__weeknum" a-if="this.showWeek()">{{ row.weekNum }}</div>
-                <button :class="d.cls"
-                        a-for="d in row.days"
-                        :disabled="d.isOutOfRange || this.isDisabled()"
-                        @click="(e) => this.onDayClick(d)">{{ d.day }}</button>
-            </div>
-        `;
-            (this as unknown as {
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {Calendar.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            }).Sheet = Calendar.DefaultSheet();
+            self.__renderCalendar=render;
+            self.onAttributeChanged=()=>render();
+            render();
+            (this as unknown as { Sheet: Types.Stylesheet | null }).Sheet = Calendar.DefaultSheet();
         }
 
         /** @name        onCreated
@@ -1209,7 +905,7 @@ export namespace Calendar
         static DefaultSheet(): Types.Stylesheet
         {
             return new Stylesheet([
-                new Rule(':host', {
+                new Rule('arianna-calendar', {
                     background: 'var(--arianna-bg, #ffffff)',
                     border: '1px solid var(--arianna-border, #d8d8d8)',
                     borderRadius: 'var(--arianna-radius, 6px)',
@@ -1217,7 +913,7 @@ export namespace Calendar
                     display: 'inline-block',
                     fontSize: '0.82rem',
                     padding: '10px',
-                    minWidth: '260px',
+                    minWidth: '272px',
                 }),
                 new Rule('.ar-cal__header', {
                     alignItems: 'center',
@@ -1255,7 +951,7 @@ export namespace Calendar
                     gap: '2px',
                     marginBottom: '2px',
                 }),
-                new Rule(':host([show-week-numbers]) .ar-cal__weekdays, :host([show-week-numbers]) .ar-cal__row', {
+                new Rule('arianna-calendar[show-week-numbers] .ar-cal__weekdays, arianna-calendar[show-week-numbers] .ar-cal__row', {
                     gridTemplateColumns: '28px repeat(7, 1fr)',
                 }),
                 new Rule('.ar-cal__wkday', {
@@ -1274,6 +970,9 @@ export namespace Calendar
                 }),
                 new Rule('.ar-cal__day', {
                     aspectRatio: '1 / 1',
+                    minHeight: '30px',
+                    minWidth: '30px',
+                    position: 'relative',
                     background: 'none',
                     border: '1px solid transparent',
                     borderRadius: '4px',
@@ -1287,10 +986,18 @@ export namespace Calendar
                 new Rule('.ar-cal__day:hover:not(:disabled)', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
                 new Rule('.ar-cal__day--out', { color: 'var(--arianna-muted, #b8b8b8)' }),
                 new Rule('.ar-cal__day--today', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
+                new Rule('.ar-cal__day--weekend', { color: 'var(--arianna-primary, #e40c88)', fontWeight: '650' }),
+                new Rule('.ar-cal__wkday--weekend', { color: 'var(--arianna-primary, #e40c88)', fontWeight: '650' }),
                 new Rule('.ar-cal__day--selected', {
                     background: 'var(--arianna-primary, #1f6feb)',
                     color: '#ffffff',
                     fontWeight: '600',
+                }),
+                new Rule('.ar-cal__day--selected.ar-cal__day--today', {
+                    background: 'var(--arianna-primary, #1f6feb)',
+                    borderColor: 'transparent',
+                    boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.5)',
+                    color: '#ffffff',
                 }),
                 new Rule('.ar-cal__day--disabled, .ar-cal__day:disabled', {
                     opacity: '0.4', cursor: 'not-allowed',

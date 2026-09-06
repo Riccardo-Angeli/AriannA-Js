@@ -1,694 +1,576 @@
 /**
-     * @module    components/animations/AnimTrack
-     * @author    Riccardo Angeli
-     * @copyright Riccardo Angeli 2012-2026
-     *
-     * AnimTrack — one channel of a KeyframeEditor (e.g. "X Location",
-     * "W Quaternion Rotation"). Contains Keyframe children placed along
-     * the timeline.
-     *
-     *   <arianna-anim-track name="X Location" channel="loc-x" group="position">
-     *     <arianna-keyframe frame="0"  value="0"></arianna-keyframe>
-     *     <arianna-keyframe frame="24" value="5"></arianna-keyframe>
-     *   </arianna-anim-track>
-     *
-     *   const tr = new AnimTrack({ name: 'X Location', channel: 'loc-x', group: 'position' });
-     *   tr.addKeyframe(new Keyframe({ frame: 0,  value: 0 }));
-     *   tr.addKeyframe(new Keyframe({ frame: 24, value: 5 }));
-     *
-     * `group` is used by CurveEditor to colour curves consistently
-     * (e.g. all position channels in cyan, all rotation channels in orange).
-     *
-     * Events:
-     *   arianna:track-mute   { track, value }
-     *   arianna:track-lock   { track, value }
-     *   arianna:track-hidden { track, value }
-     */
-import { Component, Css, Reactivity, Templates } from '../../core/index.ts';
-import type { Keyframe } from './Keyframe.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
+ * @module components/animations/AnimTrack
+ * @version 2.0.0
+ */
+import { Component, Css, Templates, Namespaces } from '../../core/index.ts';
+import { Keyframe } from './Keyframe.ts';
 
-/** @name        html
- *  @public
- *  @type        {inferred}
- *  @description Compiler-visible AriannA Template tag used by imperative and behavior-only components.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
 
-/** @namespace   AnimTrack
- *  @public
- *  @description Namespace containing AnimTrack contracts and implementation.
- *  @author      Riccardo Angeli
- *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
- *  @license     MIT / Commercial (dual license) */
 export namespace AnimTrack
 {
-    /** @namespace   Types
-     *  @public
-     *  @description Namespace containing Types contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Types
     {
-        /** @name        Signal
-         *  @public
-         *  @type        {SchemaInterfaces.Reactivity.Signal<T>}
-         *  @description Type alias for Signal.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
-
-        /** @name        Rule
-         *  @public
-         *  @type        {Css.Rule}
-         *  @description Type alias for Rule.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Rule = Css.Rule;
-
-        /** @name        Stylesheet
-         *  @public
-         *  @type        {Css.Stylesheet}
-         *  @description Type alias for Stylesheet.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type Stylesheet = Css.Stylesheet;
-
-        /** @name        ChannelGroup
-         *  @public
-         *  @type        {'position' | 'rotation' | 'scale' | 'custom'}
-         *  @description Type alias for ChannelGroup.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         export type ChannelGroup = 'position' | 'rotation' | 'scale' | 'custom';
-
-        /** @name        AnimTrackOptions
-         *  @public
-         *  @type        {AnimTrack.Interfaces.AnimTrackOptions}
-         *  @description Type alias for AnimTrackOptions.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export type AnimTrackOptions = Interfaces.AnimTrackOptions;
     }
 
-    /** @namespace   Interfaces
-     *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
     export namespace Interfaces
     {
-        /** @interface   AnimTrackOptions
-         *  @public
-         *  @description AnimTrackOptions contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         export interface AnimTrackOptions
         {
-            /** @name        name
-             *  @public
-             *  @type        {string}
-             *  @description Component member for name.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             name?: string;
-
-            /** @name        channel
-             *  @public
-             *  @type        {string}
-             *  @description Component member for channel.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             channel?: string;
-
-            /** @name        group
-             *  @public
-             *  @type        {AnimTrack.Types.ChannelGroup}
-             *  @description Component member for group.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             group?: Types.ChannelGroup;
-
-            /** @name        muted
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for muted.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
+            folder?: string;
             muted?: boolean;
-
-            /** @name        locked
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for locked.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             locked?: boolean;
-
-            /** @name        hidden
-             *  @public
-             *  @type        {boolean}
-             *  @description Component member for hidden.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
             hidden?: boolean;
-        }
-
-        /** @interface   Options
-         *  @public
-         *  @description Options contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface Options extends Interfaces.AnimTrackOptions {
+            frameStart?: number;
+            frameEnd?: number;
+            frameStep?: number;
+            keyframes?: Keyframe.Interfaces.Options[];
         }
     }
-    
-    /* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
-       members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
-       `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
-       not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
-       returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
-       Map, Effect" with the same name printed twice. */
-    /** @name        effect
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned effect value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const effect = (fn: () => void): (() => void) => {
-        /** @name        e
-         *  @public
-         *  @type        {inferred}
-         *  @description Namespace-owned e value.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        const e = Reactivity.CreateEffect(fn);
-        return () => e.Stop();
-    };
 
-    /** @name        { Rule, Stylesheet }
-     *  @public
-     *  @type        {inferred}
-     *  @description Namespace-owned { Rule, Stylesheet } value.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    export const { Rule, Stylesheet } = Css;
+    export const Styles = new Css.Stylesheet([
+        new Css.Rule('.AnimTrack', {
+            '--Animation-KeyframeColor': '#4b9ee9',
+            BoxSizing: 'border-box', Display: 'grid', GridTemplateColumns: '164px minmax(0,1fr)',
+            MinHeight: '28px', MinWidth: '0', Position: 'relative', Width: '100%'
+        }),
+        new Css.Rule('.AnimTrack[data-group="position"]', { '--Animation-KeyframeColor': '#4b9ee9' }),
+        new Css.Rule('.AnimTrack[data-group="rotation"]', { '--Animation-KeyframeColor': '#e69a45' }),
+        new Css.Rule('.AnimTrack[data-group="scale"]', { '--Animation-KeyframeColor': '#42bd50' }),
+        new Css.Rule('.AnimTrack[hidden]', { Opacity: '.34' }),
+        new Css.Rule('.AnimTrack[muted] .AnimTrack-Lane', { Opacity: '.42' }),
 
-    /** @class       AnimTrack
-     *  @public
-     *  @description AriannA AnimTrack component implementation.
-     *  @author      Riccardo Angeli
-     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-     *  @license     MIT / Commercial (dual license) */
-    @Component('arianna-anim-track', {}, {
-        Attributes: ['name', 'channel', 'group', 'muted', 'locked', 'hidden'],
-        bus: 'arianna-keyframe-editor',
+        new Css.Rule('.AnimTrack-Header', {
+            AlignItems: 'center', Background: '#292d31', BorderBottom: '1px solid #15181a',
+            BorderRight: '1px solid #15181a', BoxSizing: 'border-box', Color: '#dde1e5',
+            Display: 'flex', Gap: '7px', MinWidth: '0', Padding: '4px 7px'
+        }),
+        new Css.Rule('.AnimTrack-Toggle', {
+            Appearance: 'none', Background: 'transparent', Border: '0', Color: '#e8ebee',
+            Cursor: 'pointer', Font: 'inherit', FontSize: '14px', Height: '20px',
+            LineHeight: '18px', Padding: '0', Width: '20px'
+        }),
+        new Css.Rule('.AnimTrack-Enabled', {
+            AccentColor: '#4c9be8', Cursor: 'pointer', Height: '14px', Margin: '0', Width: '14px'
+        }),
+        new Css.Rule('.AnimTrack-Name', {
+            Flex: '1 1 auto', FontFamily: 'var(--arianna-font, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif)',
+            FontSize: '12px', FontWeight: '550', MinWidth: '0', Overflow: 'hidden',
+            TextOverflow: 'ellipsis', WhiteSpace: 'nowrap'
+        }),
+        new Css.Rule('.AnimTrack-Icon', {
+            Appearance: 'none', Background: 'transparent', Border: '0', Color: '#c7ccd1',
+            Cursor: 'pointer', Font: '12px/1 var(--arianna-font, system-ui, sans-serif)',
+            Height: '20px', Padding: '0', Width: '20px'
+        }),
+        new Css.Rule('.AnimTrack-Icon:hover, .AnimTrack-Icon[data-active="true"]', { Color: '#ffffff' }),
+        new Css.Rule('.AnimTrack-Icon[data-active="true"]', { TextShadow: '0 0 8px rgba(239,141,47,.75)' }),
+
+        new Css.Rule('.AnimTrack-Lane', {
+            BackgroundColor: '#202428',
+            BackgroundImage: 'linear-gradient(to right, rgba(115,124,133,.18) 1px, transparent 1px), linear-gradient(to bottom, transparent calc(50% - .5px), #15181a calc(50% - .5px), #15181a calc(50% + .5px), transparent calc(50% + .5px))',
+            BackgroundSize: '20% 100%, 100% 100%', BorderBottom: '1px solid #15181a',
+            BoxSizing: 'border-box', MinHeight: '28px', Overflow: 'visible', Position: 'relative'
+        }),
+
+        /* Standalone track follows the image reference: header over a full-width lane. */
+        new Css.Rule('.AnimTrack.AnimTrack-Standalone', {
+            Background: '#202428', Border: '1px solid #15181a', BorderRadius: '8px',
+            GridTemplateColumns: '1fr', GridTemplateRows: '42px 86px', Overflow: 'hidden'
+        }),
+        new Css.Rule('.AnimTrack.AnimTrack-Standalone .AnimTrack-Header', {
+            Background: 'linear-gradient(180deg,#363b40 0%,#25292d 100%)', BorderRight: '0',
+            Padding: '8px 10px'
+        }),
+        new Css.Rule('.AnimTrack.AnimTrack-Standalone .AnimTrack-Lane', {
+            BorderBottom: '0', MinHeight: '86px'
+        }),
+        new Css.Rule('.AnimTrack-Ruler', {
+            Color: '#9ca4ab', Font: '10px/1 var(--arianna-font, system-ui, sans-serif)',
+            Height: '18px', Left: '0', PointerEvents: 'none', Position: 'absolute', Right: '0', Top: '4px'
+        }),
+        new Css.Rule('.AnimTrack-RulerTick', { Position: 'absolute', Transform: 'translateX(-50%)' }),
+        new Css.Rule('.AnimTrack.AnimTrack-Standalone .Keyframe', { Top: '58%' }),
+
+        new Css.Rule('.AnimTrack[theme="light"] .AnimTrack-Header, .KeyframeEditor[theme="light"] .AnimTrack-Header', {
+            Background: 'linear-gradient(180deg,#f7f8f9,#d9dde0)', BorderBottomColor: '#bdc2c6', BorderRightColor: '#bcc1c5', Color: '#2d3237'
+        }),
+        new Css.Rule('.AnimTrack[theme="light"] .AnimTrack-Toggle, .KeyframeEditor[theme="light"] .AnimTrack-Toggle', { Color: '#555c62' }),
+        new Css.Rule('.AnimTrack[theme="light"] .AnimTrack-Icon, .KeyframeEditor[theme="light"] .AnimTrack-Icon', { Color: '#697077' }),
+        new Css.Rule('.AnimTrack[theme="light"] .AnimTrack-Icon:hover, .AnimTrack[theme="light"] .AnimTrack-Icon[data-active="true"], .KeyframeEditor[theme="light"] .AnimTrack-Icon:hover, .KeyframeEditor[theme="light"] .AnimTrack-Icon[data-active="true"]', { Color: '#24282c' }),
+        new Css.Rule('.AnimTrack[theme="light"] .AnimTrack-Lane, .KeyframeEditor[theme="light"] .AnimTrack-Lane', {
+            BackgroundColor: '#fafafa', BackgroundImage: 'linear-gradient(to right,#e2e4e6 1px,transparent 1px),linear-gradient(to bottom,transparent calc(50% - .5px),#c8ccd0 calc(50% - .5px),#c8ccd0 calc(50% + .5px),transparent calc(50% + .5px))', BorderBottomColor: '#bdc2c6'
+        }),
+        new Css.Rule('.AnimTrack.AnimTrack-Standalone[theme="light"]', { Background: '#eef0f2', BorderColor: '#b9bec3' }),
+        new Css.Rule('.AnimTrack.AnimTrack-Standalone[theme="light"] .AnimTrack-Header', { Background: 'linear-gradient(180deg,#f9fafb,#dfe3e6)' }),
+        new Css.Rule('.AnimTrack[theme="light"] .AnimTrack-Ruler, .KeyframeEditor[theme="light"] .AnimTrack-Ruler', { Color: '#697077' }),
+    ]);
+
+    @Component('arianna-anim-track', Styles, {
+        Shadow: false,
+        Attributes: ['name', 'channel', 'group', 'folder', 'muted', 'locked', 'hidden', 'frame-start', 'frame-end', 'frame-step'],
+        Properties: ['keyframes']
     })
     export class AnimTrack extends HTMLElement
     {
-        /** @name        template
-         *  @public
-         *  @type        {unknown}
-         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
-         *               or behavior-only rendering logic while participating in the compiled Template fast path.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        template = html``;
+        public static readonly Styles = Styles;
+        public template = html``;
 
-        /** @name        constructor
-         *  @public
-         *  @type        {constructor}
-         *  @description Constructs the component for constructor.
-         *  @param       {AnimTrack.Interfaces.AnimTrackOptions} opts Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        constructor(opts: Interfaces.AnimTrackOptions = {}) {
-            super();
+        /*
+         * IMPORTANT: AriannA can promote markup-first hosts before the native class
+         * constructor/field initializers have run. These members therefore MUST be
+         * treated as optional runtime state and initialized lazily by EnsureState().
+         */
+        private _keyframes?: Keyframe.Interfaces.Options[];
+        private _bound?: boolean;
 
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-            };
-
-            /** @name        el
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned el value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const el = self.render();
-            if (opts.name)
-                el.setAttribute('name', opts.name);
-            if (opts.channel)
-                el.setAttribute('channel', opts.channel);
-            if (opts.group)
-                el.setAttribute('group', opts.group);
-            if (opts.muted)
-                el.setAttribute('muted', '');
-            if (opts.locked)
-                el.setAttribute('locked', '');
-            if (opts.hidden)
-                el.setAttribute('hidden', '');
-        }
-
-        /** @name        onConnected
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Connected.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onConnected(): void
+        constructor(options: Interfaces.AnimTrackOptions = {})
         {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-
-                /** @name        fire
-                 *  @public
-                 *  @type        {void}
-                 *  @description Component member for fire.
-                 *  @param       {string} t Parameter.
-                 *  @param       {CustomEventInit} init Parameter.
-                 *  @returns     {void} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                fire(t: string, init?: CustomEventInit): void;
-
-                /** @name        signal
-                 *  @public
-                 *  @type        {{
-                    attribute(name: string): AnimTrack.Types.Signal<string | null>;
-                }}
-                 *  @description Component member for signal.
-                 *  @returns     {{
-                    attribute(name: string): AnimTrack.Types.Signal<string | null>;
-                }} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                signal(): {
-                    /** @name        attribute
-                     *  @public
-                     *  @type        {AnimTrack.Types.Signal<string | null>}
-                     *  @description Component member for attribute.
-                     *  @param       {string} name Parameter.
-                     *  @returns     {AnimTrack.Types.Signal<string | null>} Result.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    attribute(name: string): Types.Signal<string | null>;
-                };
-
-                /** @name        Sheet
-                 *  @public
-                 *  @type        {AnimTrack.Types.Stylesheet | null}
-                 *  @description Component member for Sheet.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                Sheet: Types.Stylesheet | null;
-            };
-
-            /** @name        el
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned el value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const el = self.render();
-            if (el.querySelector('.at-head'))
-                return;
-            // Track header (left column inside the editor grid)
-            /** @name        head
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned head value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const head = document.createElement('div');
-            head.className = 'at-head';
-
-            /** @name        name
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned name value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const name = document.createElement('span');
-            name.className = 'at-name';
-
-            /** @name        sName
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned sName value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const sName = self.signal().attribute('name');
-            effect(() => { name.textContent = sName?.Get() ?? 'Channel'; });
-
-            /** @name        btnMute
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned btnMute value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const btnMute = document.createElement('button');
-            btnMute.type = 'button';
-            btnMute.className = 'at-icon at-mute';
-            btnMute.title = 'mute';
-            btnMute.textContent = '◉';
-
-            /** @name        btnHide
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned btnHide value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const btnHide = document.createElement('button');
-            btnHide.type = 'button';
-            btnHide.className = 'at-icon at-hide';
-            btnHide.title = 'hide';
-            btnHide.textContent = '◎';
-
-            /** @name        btnLock
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned btnLock value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const btnLock = document.createElement('button');
-            btnLock.type = 'button';
-            btnLock.className = 'at-icon at-lock';
-            btnLock.title = 'lock';
-            btnLock.textContent = '⚿';
-            head.append(name, btnMute, btnHide, btnLock);
-            // Track lane (right column — where keyframes are positioned)
-            /** @name        lane
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lane value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lane = document.createElement('div');
-            lane.className = 'at-lane';
-            // Group dot (color marker — set by CSS variable picked by 'group' attr)
-            /** @name        groupDot
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned groupDot value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const groupDot = document.createElement('span');
-            groupDot.className = 'at-group-dot';
-            head.insertBefore(groupDot, name);
-            // Migrate any pre-existing arianna-keyframe children into the lane
-            Array.from(el.querySelectorAll('arianna-keyframe'))
-                .forEach(kf => lane.appendChild(kf));
-            el.appendChild(head);
-            el.appendChild(lane);
-            // Reactive group-class
-            /** @name        sGroup
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned sGroup value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const sGroup = self.signal().attribute('group');
-            effect(() => {
-                /** @name        g
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned g value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const g = sGroup?.Get() ?? 'custom';
-                el.dataset.group = g;
-            });
-            btnMute.addEventListener('click', () => {
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = !el.hasAttribute('muted');
-                if (v)
-                    el.setAttribute('muted', '');
-                else
-                    el.removeAttribute('muted');
-                self.fire('arianna:track-mute', { detail: { track: this, value: v, source: this }, bubbles: true });
-            });
-            btnHide.addEventListener('click', () => {
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = !el.hasAttribute('hidden');
-                if (v)
-                    el.setAttribute('hidden', '');
-                else
-                    el.removeAttribute('hidden');
-                self.fire('arianna:track-hidden', { detail: { track: this, value: v, source: this }, bubbles: true });
-            });
-            btnLock.addEventListener('click', () => {
-                /** @name        v
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned v value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const v = !el.hasAttribute('locked');
-                if (v)
-                    el.setAttribute('locked', '');
-                else
-                    el.removeAttribute('locked');
-                self.fire('arianna:track-lock', { detail: { track: this, value: v, source: this }, bubbles: true });
-            });
-            effect(() => { btnMute.classList.toggle('active', el.hasAttribute('muted')); });
-            effect(() => { btnHide.classList.toggle('active', el.hasAttribute('hidden')); });
-            effect(() => { btnLock.classList.toggle('active', el.hasAttribute('locked')); });
-            self.Sheet = AnimTrack.DefaultSheet();
+            super();
+            this.EnsureState();
+            if(options.name) this.setAttribute('name', options.name);
+            if(options.channel) this.setAttribute('channel', options.channel);
+            if(options.group) this.setAttribute('group', options.group);
+            if(options.folder) this.setAttribute('folder', options.folder);
+            if(options.muted != null) this.toggleAttribute('muted', options.muted);
+            if(options.locked != null) this.toggleAttribute('locked', options.locked);
+            if(options.hidden != null) this.toggleAttribute('hidden', options.hidden);
+            if(options.frameStart != null) this.setAttribute('frame-start', String(options.frameStart));
+            if(options.frameEnd != null) this.setAttribute('frame-end', String(options.frameEnd));
+            if(options.frameStep != null) this.setAttribute('frame-step', String(options.frameStep));
+            if(options.keyframes) this._keyframes = options.keyframes.slice();
         }
 
-        /** Append a Keyframe to this track. */
-        addKeyframe(kf: Keyframe.Keyframe): this {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-            };
+        public get keyframes(): Keyframe.Interfaces.Options[]
+        {
+            this.EnsureState();
+            return this.getKeyframes().map(keyframe => ({
+                frame: keyframe.frame,
+                value: keyframe.value,
+                interpolation: keyframe.interpolation,
+                selected: keyframe.hasAttribute('selected'),
+                hot: keyframe.hasAttribute('hot')
+            }));
+        }
 
-            /** @name        lane
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned lane value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const lane = self.render().querySelector('.at-lane');
-            if (!lane)
-                return this;
+        public set keyframes(value: Keyframe.Interfaces.Options[])
+        {
+            this.EnsureState();
+            this._keyframes = Array.isArray(value) ? value.slice() : [];
+            if(this.isConnected) this.Render();
+        }
 
-            /** @name        kfEl
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned kfEl value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const kfEl = (kf as unknown as {
-                /** @name        render
-                 *  @public
-                 *  @type        {HTMLElement}
-                 *  @description Component member for render.
-                 *  @returns     {HTMLElement} Result.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                render(): HTMLElement;
-            }).render();
-            lane.appendChild(kfEl);
+        public onConnected(): void
+        {
+            this.EnsureState();
+            this.classList.add('AnimTrack');
+            this.classList.toggle('AnimTrack-Standalone', !this.closest('arianna-keyframe-editor, .KeyframeEditor'));
+            if(!this.hasAttribute('name')) this.setAttribute('name', 'X Location');
+            if(!this.hasAttribute('group')) this.setAttribute('group', 'position');
+            if(!this.hasAttribute('frame-start')) this.setAttribute('frame-start', '0');
+            if(!this.hasAttribute('frame-end')) this.setAttribute('frame-end', '50');
+            if(!this.hasAttribute('frame-step')) this.setAttribute('frame-step', '10');
+            this.dataset.group = this.getAttribute('group') ?? 'custom';
+            this.Render();
+        }
+
+        public onCreated(): void
+        {
+            if(this.isConnected) this.onConnected();
+        }
+
+        public render(): HTMLElement
+        {
             return this;
         }
 
-        /** All keyframes on this track. */
-        getKeyframes(): Keyframe.Keyframe[] {
-            /** @name        self
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned self value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const self = this as unknown as {
-                /** @name        _children
-                 *  @public
-                 *  @type        {unknown[]}
-                 *  @description Component member for _children.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                _children?: unknown[];
-            };
-            return (self._children ?? []) as Keyframe.Keyframe[];
+        public addKeyframe(keyframe: Keyframe.Keyframe): this
+        {
+            this.EnsureState();
+            this.Render();
+            const lane = this.querySelector<HTMLElement>(':scope > .AnimTrack-Lane');
+            const live = this.NormalizeKeyframe(keyframe);
+            lane?.append(live as unknown as Node);
+            live.onConnected?.();
+            this.PositionKeyframes();
+            this.dispatchEvent(new CustomEvent('arianna:track-update', {
+                bubbles: true, composed: true, detail: { track: this, source: this }
+            }));
+            return this;
         }
 
-        /** @name        DefaultSheet
-         *  @public
-         *  @static
-         *  @type        {AnimTrack.Types.Stylesheet}
-         *  @description Component member for Default Sheet.
-         *  @returns     {AnimTrack.Types.Stylesheet} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        static DefaultSheet(): Types.Stylesheet {
-            return new Stylesheet([
-                new Rule(':host', {
-                    borderBottom: '1px solid var(--ar-border, #2a2a2a)',
-                    display: 'grid',
-                    gridTemplateColumns: 'var(--track-head-width, 160px) 1fr',
-                    height: 'var(--track-height, 22px)',
-                    position: 'relative',
-                }),
-                new Rule(':host([hidden])', { opacity: '0.35' }),
-                new Rule(':host .at-head', {
-                    alignItems: 'center',
-                    background: 'var(--ar-bg2, #161616)',
-                    borderRight: '1px solid var(--ar-border, #2a2a2a)',
-                    display: 'flex',
-                    gap: '4px',
-                    paddingLeft: '6px',
-                    paddingRight: '4px',
-                }),
-                new Rule(':host .at-group-dot', {
-                    background: 'var(--ar-muted, #888)',
-                    borderRadius: '50%',
-                    display: 'inline-block',
-                    flexShrink: '0',
-                    height: '8px',
-                    width: '8px',
-                }),
-                new Rule(":host([data-group='position']) .at-group-dot", { background: 'var(--arianna-curve-position, #4dd0e1)' }),
-                new Rule(":host([data-group='rotation']) .at-group-dot", { background: 'var(--arianna-curve-rotation, #ff9800)' }),
-                new Rule(":host([data-group='scale'])    .at-group-dot", { background: 'var(--arianna-curve-scale,    #7eb8f7)' }),
-                new Rule(':host .at-name', {
-                    color: 'var(--ar-text, #e0e0e0)',
-                    flex: '1',
-                    fontSize: '0.74rem',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                }),
-                new Rule(':host .at-icon', {
-                    background: 'transparent',
-                    border: '0',
-                    color: 'var(--ar-muted, #888)',
-                    cursor: 'pointer',
-                    font: 'inherit',
-                    fontSize: '0.85rem',
-                    lineHeight: '1',
-                    padding: '0 2px',
-                }),
-                new Rule(':host .at-icon.active', { color: 'var(--ar-warning, #ff9800)' }),
-                new Rule(':host .at-icon:hover', { color: 'var(--ar-text, #e0e0e0)' }),
-                new Rule(':host .at-lane', {
-                    background: 'transparent',
-                    backgroundImage: 'linear-gradient(to right, var(--ar-border, #2a2a2a) 1px, transparent 1px)',
-                    backgroundSize: 'var(--frame-step-px, 70px) 100%',
-                    position: 'relative',
-                }),
-                new Rule(':host([muted]) .at-lane', { opacity: '0.4' }),
-            ]);
+        public getKeyframes(): Keyframe.Keyframe[]
+        {
+            const lane = this.querySelector<HTMLElement>(':scope > .AnimTrack-Lane');
+            if(!lane) return [];
+            return (Array.from(lane.children)
+                .filter(node => node instanceof HTMLElement && (node.matches('arianna-keyframe') || node.classList.contains('Keyframe'))) as unknown as Keyframe.Keyframe[]);
+        }
+
+        public PositionKeyframes(): void
+        {
+            const start = Number(this.getAttribute('frame-start') ?? 0) || 0;
+            const end = Number(this.getAttribute('frame-end') ?? 100) || 100;
+            for(const keyframe of this.getKeyframes())
+            {
+                const frame = Number((keyframe as unknown as HTMLElement).getAttribute('frame') ?? 0) || 0;
+                const ratio = Math.max(0, Math.min(1, (frame - start) / Math.max(1, end - start)));
+                const element = keyframe as unknown as HTMLElement;
+                element.style.left = `${ratio * 100}%`;
+                element.classList.remove('Keyframe-Standalone');
+            }
+        }
+
+        private EnsureState(): void
+        {
+            if(!Array.isArray(this._keyframes)) this._keyframes = [];
+            if(typeof this._bound !== 'boolean') this._bound = false;
+        }
+
+        private Render(): void
+        {
+            this.EnsureState();
+
+            /* Preserve markup-first keyframes whether AriannA has already promoted
+               them to their concrete DIV class or they are still custom tags. */
+            const existing = (Array.from(this.children)
+                .filter(node => node instanceof HTMLElement && (node.matches('arianna-keyframe') || node.classList.contains('Keyframe'))) as HTMLElement[])
+                .map(node => this.NormalizeKeyframe(node as unknown as Keyframe.Keyframe) as unknown as HTMLElement);
+
+            if(!this.querySelector(':scope > .AnimTrack-Header'))
+            {
+                const header = document.createElement('div');
+                header.className = 'AnimTrack-Header';
+
+                const toggle = document.createElement('button');
+                toggle.type = 'button';
+                toggle.className = 'AnimTrack-Toggle';
+                toggle.textContent = '⌄';
+                toggle.title = 'Channel';
+
+                const enabled = document.createElement('input');
+                enabled.type = 'checkbox';
+                enabled.className = 'AnimTrack-Enabled';
+                enabled.checked = !this.hasAttribute('muted');
+                enabled.title = 'Enable channel';
+
+                const name = document.createElement('span');
+                name.className = 'AnimTrack-Name';
+                name.textContent = this.getAttribute('name') ?? 'Channel';
+
+                const lock = document.createElement('button');
+                lock.type = 'button';
+                lock.className = 'AnimTrack-Icon';
+                lock.title = 'Lock';
+                lock.textContent = '♙';
+                lock.dataset.active = String(this.hasAttribute('locked'));
+
+                const eye = document.createElement('button');
+                eye.type = 'button';
+                eye.className = 'AnimTrack-Icon';
+                eye.title = 'Visibility';
+                eye.textContent = '◉';
+                eye.dataset.active = String(!this.hasAttribute('hidden'));
+
+                header.append(toggle, enabled, name, lock, eye);
+
+                const lane = document.createElement('div');
+                lane.className = 'AnimTrack-Lane';
+
+                const ruler = document.createElement('div');
+                ruler.className = 'AnimTrack-Ruler';
+                lane.append(ruler);
+
+                this.replaceChildren(header, lane);
+                existing.forEach(keyframe =>
+                {
+                    lane.append(keyframe);
+                    (keyframe as unknown as Keyframe.Keyframe).onConnected?.();
+                });
+
+                enabled.addEventListener('change', () =>
+                {
+                    this.toggleAttribute('muted', !enabled.checked);
+                    this.Emit('arianna:track-mute', !enabled.checked);
+                });
+
+                lock.addEventListener('click', () =>
+                {
+                    const value = !this.hasAttribute('locked');
+                    this.toggleAttribute('locked', value);
+                    lock.dataset.active = String(value);
+                    this.Emit('arianna:track-lock', value);
+                });
+
+                eye.addEventListener('click', () =>
+                {
+                    const value = !this.hasAttribute('hidden');
+                    this.toggleAttribute('hidden', value);
+                    eye.dataset.active = String(!value);
+                    this.Emit('arianna:track-hidden', value);
+                });
+
+                toggle.addEventListener('click', () =>
+                {
+                    const collapsed = this.toggleAttribute('collapsed');
+                    lane.style.display = collapsed ? 'none' : '';
+                    toggle.textContent = collapsed ? '›' : '⌄';
+                    this.Emit('arianna:track-collapse', collapsed);
+                });
+            }
+
+            const name = this.querySelector<HTMLElement>(':scope > .AnimTrack-Header > .AnimTrack-Name');
+            if(name) name.textContent = this.getAttribute('name') ?? 'Channel';
+
+            const enabled = this.querySelector<HTMLInputElement>(':scope > .AnimTrack-Header > .AnimTrack-Enabled');
+            if(enabled) enabled.checked = !this.hasAttribute('muted');
+
+            const icons = this.querySelectorAll<HTMLElement>(':scope > .AnimTrack-Header > .AnimTrack-Icon');
+            if(icons[0]) icons[0].dataset.active = String(this.hasAttribute('locked'));
+            if(icons[1]) icons[1].dataset.active = String(!this.hasAttribute('hidden'));
+
+            this.dataset.group = this.getAttribute('group') ?? 'custom';
+            this.RenderRuler();
+
+            const lane = this.querySelector<HTMLElement>(':scope > .AnimTrack-Lane');
+            if(lane && existing.length) existing.forEach(keyframe =>
+            {
+                lane.append(keyframe);
+                (keyframe as unknown as Keyframe.Keyframe).onConnected?.();
+            });
+
+            const pending = Array.isArray(this._keyframes) ? this._keyframes : [];
+            if(pending.length) this.RenderKeyframes();
+            else this.PositionKeyframes();
+
+            if(!this._bound)
+            {
+                this._bound = true;
+                this.BindInteraction();
+                this.addEventListener('arianna:keyframe-select', () =>
+                {
+                    this.dispatchEvent(new CustomEvent('arianna:track-update', {
+                        bubbles: true, composed: true, detail: { track: this, source: this }
+                    }));
+                });
+            }
+        }
+
+        private BindInteraction(): void
+        {
+            const lane = this.querySelector<HTMLElement>(':scope > .AnimTrack-Lane');
+            if(!lane) return;
+
+            let dragging: Keyframe.Keyframe | null = null;
+            let pointerId: number | null = null;
+            let moved = false;
+
+            const frameAt = (clientX: number): number =>
+            {
+                const rect = lane.getBoundingClientRect();
+                const ratio = rect.width > 0 ? Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) : 0;
+                const start = Number(this.getAttribute('frame-start') ?? 0) || 0;
+                const end = Number(this.getAttribute('frame-end') ?? 100) || 100;
+                return Math.round(start + ratio * Math.max(1, end - start));
+            };
+
+            const keyframeFromTarget = (target: EventTarget | null): Keyframe.Keyframe | null =>
+            {
+                if(!(target instanceof Element)) return null;
+                const element = target.closest('arianna-keyframe, .Keyframe');
+                if(!element || !lane.contains(element)) return null;
+                return element as unknown as Keyframe.Keyframe;
+            };
+
+            lane.addEventListener('pointerdown', event =>
+            {
+                const keyframe = keyframeFromTarget(event.target);
+                if(!keyframe || this.hasAttribute('locked')) return;
+
+                event.preventDefault();
+                dragging = keyframe;
+                pointerId = event.pointerId;
+                moved = false;
+
+                for(const sibling of this.getKeyframes())
+                    (sibling as unknown as HTMLElement).toggleAttribute('selected', sibling === keyframe);
+
+                lane.setPointerCapture?.(event.pointerId);
+            });
+
+            lane.addEventListener('pointermove', event =>
+            {
+                if(!dragging || pointerId !== event.pointerId) return;
+                const frame = frameAt(event.clientX);
+                const current = Number((dragging as unknown as HTMLElement).getAttribute('frame') ?? 0) || 0;
+                if(frame === current) return;
+
+                moved = true;
+                if(typeof dragging.setFrame === 'function') dragging.setFrame(frame);
+                else (dragging as unknown as HTMLElement).setAttribute('frame', String(frame));
+                this.PositionKeyframes();
+
+                this.dispatchEvent(new CustomEvent('arianna:keyframe-move', {
+                    bubbles: true, composed: true,
+                    detail: { track: this, keyframe: dragging, frame, source: this }
+                }));
+                this.dispatchEvent(new CustomEvent('arianna:track-update', {
+                    bubbles: true, composed: true, detail: { track: this, source: this }
+                }));
+            });
+
+            const finishDrag = (event: PointerEvent): void =>
+            {
+                if(pointerId !== event.pointerId) return;
+                try { lane.releasePointerCapture?.(event.pointerId); } catch { /* no-op */ }
+                if(dragging && moved)
+                {
+                    this.dispatchEvent(new CustomEvent('arianna:keyframe-change', {
+                        bubbles: true, composed: true,
+                        detail: {
+                            track: this,
+                            keyframe: dragging,
+                            frame: Number((dragging as unknown as HTMLElement).getAttribute('frame') ?? 0) || 0,
+                            source: this
+                        }
+                    }));
+                }
+                dragging = null;
+                pointerId = null;
+                moved = false;
+            };
+
+            lane.addEventListener('pointerup', finishDrag);
+            lane.addEventListener('pointercancel', finishDrag);
+
+            /* Double-clicking an empty lane creates a keyframe at that frame.
+               This makes the standalone demo genuinely editable without extra UI. */
+            lane.addEventListener('dblclick', event =>
+            {
+                if(this.hasAttribute('locked') || keyframeFromTarget(event.target)) return;
+                const frame = frameAt(event.clientX);
+                for(const sibling of this.getKeyframes())
+                    (sibling as unknown as HTMLElement).removeAttribute('selected');
+
+                const keyframe = this.CreateKeyframe({ frame, value: 0, interpolation: 'bezier', selected: true, tooltip: true });
+                this.addKeyframe(keyframe);
+                this.dispatchEvent(new CustomEvent('arianna:keyframe-add', {
+                    bubbles: true, composed: true,
+                    detail: { track: this, keyframe, frame, source: this }
+                }));
+            });
+        }
+
+        /**
+         * Always materialize nested keyframes as their LOGICAL AriannA tag.
+         * `new Keyframe.Keyframe()` inherits HTMLDivElement, so its native wire node is
+         * a <div>; the Playground correctly reports that as an un-upgraded component.
+         * Creating the logical tag and synchronously upgrading it keeps the DOM identity
+         * canonical and does not depend on a later MutationObserver turn.
+         */
+        private CreateKeyframe(options: Keyframe.Interfaces.Options = {}): Keyframe.Keyframe
+        {
+            const node = document.createElementNS('http://www.w3.org/1999/xhtml', 'arianna-keyframe') as HTMLElement;
+            const upgraded = Namespaces.Namespace.Upgrade(node) as HTMLElement;
+            const keyframe = upgraded as unknown as Keyframe.Keyframe;
+
+            if(options.frame != null) keyframe.setFrame?.(options.frame);
+            else if(!keyframe.hasAttribute('frame')) keyframe.setAttribute('frame', '0');
+
+            if(options.value != null) keyframe.setValue?.(options.value);
+            else if(!keyframe.hasAttribute('value')) keyframe.setAttribute('value', '0');
+
+            if(options.interpolation) keyframe.setInterpolation?.(options.interpolation);
+            else if(!keyframe.hasAttribute('interpolation')) keyframe.setAttribute('interpolation', 'bezier');
+
+            if(options.handleIn && options.handleOut) keyframe.setHandles?.(options.handleIn, options.handleOut);
+            if(options.selected != null) keyframe.toggleAttribute('selected', options.selected);
+            if(options.hot != null) keyframe.toggleAttribute('hot', options.hot);
+            if(options.tooltip != null) keyframe.toggleAttribute('tooltip', options.tooltip);
+
+            return keyframe;
+        }
+
+        private NormalizeKeyframe(keyframe: Keyframe.Keyframe): Keyframe.Keyframe
+        {
+            const element = keyframe as unknown as HTMLElement;
+
+            if(element.localName === 'arianna-keyframe')
+            {
+                Namespaces.Namespace.Upgrade(element);
+                return element as unknown as Keyframe.Keyframe;
+            }
+
+            const replacement = this.CreateKeyframe({
+                frame: Number(element.getAttribute('frame') ?? 0) || 0,
+                value: Number(element.getAttribute('value') ?? 0) || 0,
+                interpolation: (element.getAttribute('interpolation') as Keyframe.Types.Interpolation | null) ?? 'bezier',
+                selected: element.hasAttribute('selected'),
+                hot: element.hasAttribute('hot'),
+                tooltip: element.hasAttribute('tooltip'),
+                handleIn: keyframe.handleIn,
+                handleOut: keyframe.handleOut
+            });
+
+            return replacement;
+        }
+
+        private RenderKeyframes(): void
+        {
+            this.EnsureState();
+            const lane = this.querySelector<HTMLElement>(':scope > .AnimTrack-Lane');
+            if(!lane) return;
+
+            Array.from(lane.children)
+                .filter(node => node instanceof HTMLElement && (node.matches('arianna-keyframe') || node.classList.contains('Keyframe')))
+                .forEach(node => node.remove());
+
+            for(const options of this._keyframes ?? [])
+            {
+                const keyframe = this.CreateKeyframe(options);
+                lane.append(keyframe as unknown as Node);
+                keyframe.onConnected?.();
+            }
+
+            /* Options are an input buffer, not permanent render state. Clearing it
+               prevents a later Render() from destroying user-moved DOM keyframes. */
+            this._keyframes = [];
+            this.PositionKeyframes();
+        }
+
+        private RenderRuler(): void
+        {
+            const ruler = this.querySelector<HTMLElement>(':scope > .AnimTrack-Lane > .AnimTrack-Ruler');
+            if(!ruler) return;
+            ruler.replaceChildren();
+            if(!this.classList.contains('AnimTrack-Standalone')) return;
+
+            const start = Number(this.getAttribute('frame-start') ?? 0) || 0;
+            const end = Number(this.getAttribute('frame-end') ?? 50) || 50;
+            const step = Math.max(1, Number(this.getAttribute('frame-step') ?? 10) || 10);
+            for(let frame = start; frame <= end; frame += step)
+            {
+                const tick = document.createElement('span');
+                tick.className = 'AnimTrack-RulerTick';
+                tick.textContent = String(frame);
+                tick.style.left = `${((frame - start) / Math.max(1, end - start)) * 100}%`;
+                ruler.append(tick);
+            }
+        }
+
+        private Emit(type: string, value: boolean): void
+        {
+            this.dispatchEvent(new CustomEvent(type, {
+                bubbles: true, composed: true, detail: { track: this, value, source: this }
+            }));
         }
     }
 }
 
-export default AnimTrack;
-
 export type ChannelGroup = AnimTrack.Types.ChannelGroup;
-
-export type AnimTrackOptions = AnimTrack.Types.AnimTrackOptions;
+export type AnimTrackOptions = AnimTrack.Interfaces.AnimTrackOptions;
+export default AnimTrack.AnimTrack;
