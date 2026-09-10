@@ -568,7 +568,7 @@ export namespace LineEditor
             if(close)
             {
                 close.disabled = state.anchors.length < 3;
-                close.textContent = this.closed ? 'Open path' : 'Close path';
+                close.textContent = this.closed ? 'Open' : 'Close';
             }
         }
 
@@ -1265,6 +1265,23 @@ export namespace LineEditor
                     };
                     side.appendChild(input);
                 }
+            }
+
+            if(anchor && state.anchors.length >= 3)
+            {
+                const close = document.createElement('button');
+                close.type = 'button';
+                close.className = 'LineEditor-Button';
+                close.dataset.action = 'inspector-close';
+                close.textContent = this.closed ? 'Open' : 'Close';
+                close.title = this.closed ? 'Open path' : 'Close path';
+                close.style.width = '100%';
+                close.onclick = () =>
+                {
+                    this.closed ? this.openPath() : this.closePath();
+                    this.RenderInspector();
+                };
+                side.appendChild(close);
             }
 
             /*
