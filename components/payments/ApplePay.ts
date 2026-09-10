@@ -12,6 +12,7 @@
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 import { MountPaymentTemplate } from './Base.ts';
+import { PaymentProviders } from './Providers.ts';
 declare const Component: any;
 declare const Components: any;
 declare namespace Components { type Binding<T> = any; }
@@ -249,7 +250,7 @@ export namespace ApplePay
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const APPLE_LOGO_SVG = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M16.365 12.5c.02-2.21 1.81-3.27 1.89-3.32-1.03-1.5-2.63-1.71-3.2-1.73-1.36-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.18-1.54 2.66-.39 6.6 1.11 8.76.74 1.06 1.61 2.25 2.74 2.21 1.1-.04 1.52-.71 2.85-.71 1.34 0 1.71.71 2.88.69 1.19-.02 1.94-1.07 2.67-2.14.84-1.23 1.18-2.42 1.2-2.48-.03-.01-2.3-.88-2.32-3.5z"/><path fill="currentColor" d="M14.32 6.32c.61-.74 1.02-1.76.91-2.78-.88.04-1.94.59-2.57 1.33-.56.65-1.06 1.7-.93 2.7.98.08 1.98-.5 2.59-1.25z"/></svg>`;
+    export const APPLE_LOGO_SVG = PaymentProviders.ApplePay.logo;
 
     /** @class       ApplePay
      *  @public
@@ -265,7 +266,7 @@ export namespace ApplePay
             'force-show', 'button-style', 'button-type',
         ],
     })
-    export class ApplePay extends HTMLDivElement
+    export class ApplePay extends HTMLElement
     {
         public static readonly Styles = ApplePay.DefaultSheet();
         /** Canonical AriannA public DOM identity. */
@@ -332,6 +333,11 @@ export namespace ApplePay
             if(!this.busy$) this.busy$ = signal<boolean>(false);
             if(this.dataset.ariannaFolderReady === 'true') return;
             (this as any).APPLE_LOGO_SVG = APPLE_LOGO_SVG;
+            (this as any).PAYMENT_PROVIDER = PaymentProviders.ApplePay;
+            (this as any).PAYMENT_PROVIDER_LOGO = PaymentProviders.ApplePay.logo;
+            (this as any).PAYMENT_PROVIDER_NAME = PaymentProviders.ApplePay.name;
+            this.style.setProperty('--ar-payment-provider', PaymentProviders.ApplePay.color);
+            this.style.setProperty('--ar-payment-contrast', PaymentProviders.ApplePay.contrast ?? '#fff');
             /** @name        styleAttr
              *  @public
              *  @type        {inferred}
@@ -392,6 +398,12 @@ export namespace ApplePay
             this.visible = () => this.available$.Get() || this.hasAttribute('force-show');
             this.onClick = () => { void this.pay(); };
             this.template = html `
+            <section class="ar-payment-provider">
+                <header class="ar-payment-header">
+                    <span class="ar-payment-logo" a-html="this.PAYMENT_PROVIDER_LOGO"></span>
+                    <strong class="ar-payment-name">{{ this.PAYMENT_PROVIDER_NAME }}</strong>
+                </header>
+                <div class="ar-payment-body">
             <button type="button"
                     :class="this.btnCls()"
                     a-if="this.visible()"
@@ -402,6 +414,9 @@ export namespace ApplePay
             <div class="ar-applepay__fallback" a-if="!this.visible()">
                 Apple Pay isn't available on this device.
             </div>
+        
+                </div>
+            </section>
         `;
             MountPaymentTemplate(this);
             this.dataset.ariannaFolderReady = 'true';

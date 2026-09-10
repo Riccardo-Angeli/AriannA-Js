@@ -127,7 +127,7 @@ export namespace Tracker
      * page in a new tab.
      *
      * The 4 carrier-specific subclasses (DHL, UPS, FedEx, BRT) configure brand
-     * colours, logos, the public tracking URL pattern, and a regex for tracking-
+     * colours, the public tracking URL pattern, and a regex for tracking-
      * number validation; everything else is shared.
      *
      *   ┌─────────────────────────────────────────────┐
@@ -159,7 +159,7 @@ export namespace Tracker
      *   const t = new Tracker();
      *   t.setCarrier({
      *     id: 'gls', name: 'GLS', color: '#0033a0',
-     *     publicUrl: 'https://gls-group.com/track/{n}', logo: '...',
+     *     publicUrl: 'https://gls-group.com/track/{n}',
      *   });
      *   t.setTrackingNumber('123456789');
      *   t.setEvents(eventsFromServer);
@@ -290,7 +290,8 @@ export namespace Tracker
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        logo: string;
+        /** Optional application-supplied brand metadata. AriannA does not render a built-in carrier logo. */
+        logo?: string;
 
         /** @name        pattern
          *  @public
@@ -345,6 +346,11 @@ export namespace Tracker
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         locale?: string;
+
+        /** Merchant backend endpoint. Supports {carrier} and {n} placeholders. */
+        apiUrl?: string;
+        /** Optional bearer token for the merchant backend endpoint (not a carrier secret). */
+        apiToken?: string;
     }
 
     /** @name        KIND_LABELS
@@ -418,9 +424,9 @@ export namespace Tracker
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-tracker', {}, {
         shadow: false,
-        Attributes: ['tracking-number', 'carrier', 'locale'],
+        Attributes: ['tracking-number', 'carrier', 'locale', 'api-url', 'api-token', 'hide-header'],
     })
-    export class Tracker extends HTMLDivElement
+    export class Tracker extends HTMLElement
     {
         public static readonly Styles = Tracker.DefaultSheet();
         /** Canonical AriannA public DOM identity. */
@@ -445,6 +451,8 @@ export namespace Tracker
             super();
             if(!this.events$) this.events$ = signal<TrackingEvent[]>([]);
             if(!this.carrier$) this.carrier$ = signal<CarrierConfig | null>(null);
+            if(!this.busy$) this.busy$ = signal<boolean>(false);
+            if(!this.error$) this.error$ = signal<string>('');
             this.classList.add('Tracker');
         }
 
@@ -472,6 +480,10 @@ export namespace Tracker
          *  @license     MIT / Commercial (dual license) */
         declare carrier$: Types.Signal<CarrierConfig | null>;
 
+        /** Live API request state. */
+        declare busy$: Types.Signal<boolean>;
+        declare error$: Types.Signal<string>;
+
         /** @name        onConnected
          *  @public
          *  @type        {void}
@@ -485,6 +497,8 @@ export namespace Tracker
         {
             if(!this.events$) this.events$ = signal<TrackingEvent[]>([]);
             if(!this.carrier$) this.carrier$ = signal<CarrierConfig | null>(null);
+            if(!this.busy$) this.busy$ = signal<boolean>(false);
+            if(!this.error$) this.error$ = signal<string>('');
             if(this.dataset.ariannaFolderReady === 'true') return;
             /** @name        numberAttr
              *  @public
@@ -550,6 +564,7 @@ export namespace Tracker
                 return c?.color ? `border-left: 3px solid ${c.color}` : '';
             };
             this.logoHtml = () => this.carrier$.Get()?.logo ?? '';
+            this.showHeader = () => !this.hasAttribute('hide-header');
             this.hasEvents = () => this.events$.Get().length > 0;
             this.hasCarrierLink = () => {
                 /** @name        c
@@ -656,6 +671,13 @@ export namespace Tracker
                         + (TERMINAL.includes(e.kind) ? ' ar-trk__event--terminal' : ''),
                 }));
             };
+            this.inputVal = () => numberAttr.Get() ?? '';
+            this.trackLabel = () => this.busy$.Get() ? 'Tracking…' : 'Track';
+            this.trackStatus = () => this.error$.Get();
+            this.hasTrackStatus = () => !!this.error$.Get();
+            this.onInput = (e: Event) => this.setTrackingNumber((e.target as HTMLInputElement).value);
+            this.onTrack = () => { void this.track(); };
+            this.onKeyDown = (e: Event) => { if((e as KeyboardEvent).key === 'Enter') void this.track(); };
             this.onPortalClick = () => {
                 /** @name        c
                  *  @public
@@ -692,9 +714,13 @@ export namespace Tracker
             };
             this.template = html `
             <div class="ar-trk">
-                <header class="ar-trk__header" :style="this.headerStyle()">
-                    <span class="ar-trk__logo" a-if="this.logoHtml()"
-                          .innerHTML="this.logoHtml()"></span>
+                <div class="ar-trk__inputrow">
+                    <input class="ar-trk__input" type="text" placeholder="Tracking number" :value="this.inputVal()" @input="this.onInput" @keydown="this.onKeyDown"/>
+                    <button type="button" class="ar-trk__track" :disabled="this.busy$.Get()" @click="this.onTrack">{{ this.trackLabel() }}</button>
+                </div>
+                <div class="ar-trk__status" a-if="this.hasTrackStatus()">{{ this.trackStatus() }}</div>
+                <header class="ar-trk__header" :style="this.headerStyle()" a-if="this.showHeader()">
+                    <span class="ar-trk__logo" a-if="this.logoHtml()" a-html="this.logoHtml()"></span>
                     <span class="ar-trk__title">{{ this.headerTitle() }}</span>
                 </header>
                 <ol class="ar-trk__events" a-if="this.hasEvents()">
@@ -821,6 +847,75 @@ export namespace Tracker
             return this;
         }
 
+        /**
+         * Fetch live tracking events from the merchant backend configured by api-url.
+         * The endpoint may contain {carrier} and {n}; without placeholders the
+         * component appends ?carrier=...&tracking-number=.... If api-url is absent,
+         * Track falls back to the carrier's official public tracking page.
+         */
+        async track(): Promise<void>
+        {
+            const carrier = this.carrier$.Get();
+            const number = this.getTrackingNumber().trim();
+            if(!carrier || !number) {
+                this.error$.Set(!number ? 'Enter a tracking number.' : 'Select a carrier.');
+                return;
+            }
+
+            const endpoint = (this.getAttribute('api-url') ?? '').trim();
+            if(!endpoint) {
+                this.error$.Set('');
+                this.onPortalClick(new Event('click'));
+                return;
+            }
+
+            let url = endpoint
+                .replaceAll('{carrier}', encodeURIComponent(carrier.id))
+                .replaceAll('{n}', encodeURIComponent(number));
+            if(!endpoint.includes('{carrier}') && !endpoint.includes('{n}')) {
+                const parsed = new URL(url, document.baseURI);
+                parsed.searchParams.set('carrier', carrier.id);
+                parsed.searchParams.set('tracking-number', number);
+                url = parsed.href;
+            }
+
+            this.busy$.Set(true);
+            this.error$.Set('');
+            try {
+                const headers: Record<string, string> = { Accept: 'application/json' };
+                const token = (this.getAttribute('api-token') ?? '').trim();
+                if(token) headers.Authorization = `Bearer ${token}`;
+                const response = await fetch(url, { headers, credentials: 'same-origin' });
+                if(!response.ok) throw new Error(`Tracking API ${response.status} ${response.statusText}`);
+                const payload = await response.json() as unknown;
+                const rows = Array.isArray(payload)
+                    ? payload
+                    : (payload && typeof payload === 'object' && Array.isArray((payload as { events?: unknown[] }).events))
+                        ? (payload as { events: unknown[] }).events
+                        : [];
+                const validKinds = new Set<TrackingEventKind>(['created','picked-up','in-transit','arrived','customs','out-delivery','delivered','failed','returned','exception','unknown']);
+                const events: TrackingEvent[] = rows.map((item: any) => {
+                    const atValue = typeof item?.at === 'number' ? item.at : Date.parse(String(item?.at ?? item?.time ?? ''));
+                    const kind = validKinds.has(item?.kind as TrackingEventKind) ? item.kind as TrackingEventKind : 'unknown';
+                    return {
+                        kind,
+                        at: Number.isFinite(atValue) ? atValue : Date.now(),
+                        location: item?.location != null ? String(item.location) : undefined,
+                        raw: item?.raw != null ? String(item.raw) : item?.status != null ? String(item.status) : undefined,
+                    };
+                });
+                this.setEvents(events);
+                this.dispatchEvent(new CustomEvent('arianna:tracking-api', { bubbles:true, detail:{ carrier:carrier.id, trackingNumber:number, url, events:[...events] } }));
+                if(events.length === 0) this.error$.Set('The tracking endpoint returned no events.');
+            }
+            catch(error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.error$.Set(message);
+                this.dispatchEvent(new CustomEvent('arianna:tracking-error', { bubbles:true, detail:{ carrier:carrier.id, trackingNumber:number, message } }));
+            }
+            finally { this.busy$.Set(false); }
+        }
+
         /** @name        getEvents
          *  @public
          *  @type        {TrackingEvent[]}
@@ -943,14 +1038,12 @@ export namespace Tracker
          *  @license     MIT / Commercial (dual license) */
         private headerStyle: () => string = () => '';
 
-        /** @name        logoHtml
-         *  @private
-         *  @type        {() => string}
-         *  @description Component member for logo Html.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
+        /** Carrier logo markup for the standalone tracker header. */
         private logoHtml: () => string = () => '';
+
+        /** Whether the standalone tracker header is visible. CarrierShipment hides it
+         *  because the common Create / Track shell already owns the provider header. */
+        private showHeader: () => boolean = () => true;
 
         /** @name        hasEvents
          *  @private
@@ -1049,6 +1142,14 @@ export namespace Tracker
             cls: string;
         }> = () => [];
 
+        private inputVal: () => string = () => '';
+        private trackLabel: () => string = () => 'Track';
+        private trackStatus: () => string = () => '';
+        private hasTrackStatus: () => boolean = () => false;
+        private onInput: (e: Event) => void = () => {};
+        private onTrack: (e?: Event) => void = () => {};
+        private onKeyDown: (e: Event) => void = () => {};
+
         /** @name        onPortalClick
          *  @private
          *  @type        {(e: Event) => void}
@@ -1086,14 +1187,19 @@ export namespace Tracker
                     borderRadius: 'var(--arianna-radius, 8px)',
                     overflow: 'hidden',
                 }),
+                new Rule('.ar-trk__inputrow', { display:'flex', gap:'7px', padding:'10px 12px 0' }),
+                new Rule('.ar-trk__input', { boxSizing:'border-box', flex:'1', minWidth:'0', border:'1px solid var(--arianna-border, #d8d8d8)', borderRadius:'6px', background:'var(--arianna-bg, #fff)', color:'inherit', font:'13px ui-monospace,monospace', padding:'9px 10px' }),
+                new Rule('.ar-trk__track', { appearance:'none', border:'none', borderRadius:'6px', background:'var(--arianna-primary, #e40c88)', color:'#fff', cursor:'pointer', fontWeight:'700', padding:'0 15px' }),
+                new Rule('.ar-trk__track:disabled', { cursor:'wait', opacity:'.58' }),
+                new Rule('.ar-trk__status', { margin:'7px 12px 0', borderRadius:'5px', background:'rgba(228,12,136,.08)', color:'var(--arianna-muted, #687079)', fontSize:'11px', padding:'7px 9px' }),
                 new Rule('.ar-trk__header', {
                     display: 'flex', alignItems: 'center', gap: '10px',
                     padding: '12px 16px',
                     background: 'var(--arianna-bg-3, var(--bg3, #f6f7f9))',
                     borderBottom: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                 }),
-                new Rule('.ar-trk__logo', { display: 'inline-flex', alignItems: 'center' }),
-                new Rule('.ar-trk__logo svg', { height: '20px' }),
+                new Rule('.ar-trk__logo', { display:'inline-flex', alignItems:'center', width:'96px', height:'24px', flexShrink:'0' }),
+                new Rule('.ar-trk__logo img, .ar-trk__logo svg', { display:'block', maxWidth:'96px', maxHeight:'24px', width:'auto', height:'auto', objectFit:'contain' }),
                 new Rule('.ar-trk__title', { fontWeight: '600', fontSize: '13px' }),
                 new Rule('.ar-trk__events', {
                     listStyle: 'none', margin: '0', padding: '12px 16px',

@@ -39,7 +39,7 @@ export namespace FadeModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-fade', {}, {
-        Attributes: ['for', 'near', 'far', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'near', 'far', 'enabled'],
     })
     export class FadeModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

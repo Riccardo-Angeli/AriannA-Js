@@ -97,14 +97,14 @@ export namespace Keyframe
         Shadow: false,
         Attributes: ['frame', 'value', 'interpolation', 'selected', 'hot', 'tooltip']
     })
-    export class Keyframe extends HTMLDivElement
+    export class Keyframe extends HTMLElement
     {
         public static readonly Styles = Styles;
         public template = html``;
 
-        private _handleIn: [number, number] = [-1, 0];
-        private _handleOut: [number, number] = [1, 0];
-        private _bound = false;
+        private _handleIn?: [number, number];
+        private _handleOut?: [number, number];
+        private _bound?: boolean;
 
         constructor(options: Interfaces.Options = {})
         {
@@ -128,11 +128,14 @@ export namespace Keyframe
             return (this.getAttribute('interpolation') as Types.Interpolation | null) ?? 'bezier';
         }
         public set interpolation(value: Types.Interpolation) { this.setInterpolation(value); }
-        public get handleIn(): [number, number] { return this._handleIn; }
-        public get handleOut(): [number, number] { return this._handleOut; }
+        public get handleIn(): [number, number] { this.EnsureState(); return this._handleIn!; }
+        public get handleOut(): [number, number] { this.EnsureState(); return this._handleOut!; }
+
+        public render(): HTMLElement { return this; }
 
         public onConnected(): void
         {
+            this.EnsureState();
             this.classList.add('Keyframe');
             this.classList.toggle('Keyframe-Standalone', !this.closest('arianna-anim-track'));
             this.Render();
@@ -140,7 +143,7 @@ export namespace Keyframe
 
         public onCreated(): void
         {
-            requestAnimationFrame(() => { if(this.isConnected) this.onConnected(); });
+            if(this.isConnected) this.onConnected();
         }
 
         public setFrame(frame: number): this
@@ -167,13 +170,22 @@ export namespace Keyframe
 
         public setHandles(input: [number, number], output: [number, number]): this
         {
+            this.EnsureState();
             this._handleIn = input;
             this._handleOut = output;
             return this;
         }
 
+        private EnsureState(): void
+        {
+            if(!Array.isArray(this._handleIn)) this._handleIn = [-1, 0];
+            if(!Array.isArray(this._handleOut)) this._handleOut = [1, 0];
+            if(typeof this._bound !== 'boolean') this._bound = false;
+        }
+
         private Render(): void
         {
+            this.EnsureState();
             if(!this.hasAttribute('frame')) this.setAttribute('frame', '0');
             if(!this.hasAttribute('value')) this.setAttribute('value', '0');
             if(!this.hasAttribute('interpolation')) this.setAttribute('interpolation', 'bezier');
@@ -184,7 +196,7 @@ export namespace Keyframe
                 marker = document.createElement('span');
                 marker.className = 'Keyframe-Marker';
                 marker.setAttribute('aria-hidden', 'true');
-                this.append(marker);
+                this.appendChild(marker);
             }
 
             let tooltip = this.querySelector<HTMLElement>(':scope > .Keyframe-Tooltip');
@@ -192,7 +204,7 @@ export namespace Keyframe
             {
                 tooltip = document.createElement('span');
                 tooltip.className = 'Keyframe-Tooltip';
-                this.append(tooltip);
+                this.appendChild(tooltip);
             }
 
             if(!this._bound)

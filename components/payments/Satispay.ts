@@ -1,4 +1,5 @@
 import { MountPaymentTemplate } from './Base.ts';
+import { PaymentProviders } from './Providers.ts';
 /**
  * @module    components/payments/Satispay
  * @author    Riccardo Angeli
@@ -132,7 +133,7 @@ export namespace Satispay
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const SATISPAY_LOGO = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="11" fill="#ff3a44"/><circle cx="12" cy="12" r="4.5" fill="#fff"/></svg>`;
+    export const SATISPAY_LOGO = PaymentProviders.Satispay.logo;
 
     /** @class       Satispay
      *  @public
@@ -144,7 +145,7 @@ export namespace Satispay
         shadow: false,
         Attributes: ['redirect-url', 'amount', 'currency', 'target'],
     })
-    export class Satispay extends HTMLDivElement
+    export class Satispay extends HTMLElement
     {
         public static readonly Styles = Satispay.DefaultSheet();
         /** Canonical AriannA public DOM identity. */
@@ -189,6 +190,11 @@ export namespace Satispay
         {
             if(this.dataset.ariannaFolderReady === 'true') return;
             (this as any).SATISPAY_LOGO = SATISPAY_LOGO;
+            (this as any).PAYMENT_PROVIDER = PaymentProviders.Satispay;
+            (this as any).PAYMENT_PROVIDER_LOGO = PaymentProviders.Satispay.logo;
+            (this as any).PAYMENT_PROVIDER_NAME = PaymentProviders.Satispay.name;
+            this.style.setProperty('--ar-payment-provider', PaymentProviders.Satispay.color);
+            this.style.setProperty('--ar-payment-contrast', PaymentProviders.Satispay.contrast ?? '#fff');
             /** @name        amountAttr
              *  @public
              *  @type        {inferred}
@@ -228,10 +234,19 @@ export namespace Satispay
             };
             this.onClick = () => { void this.pay(); };
             this.template = html `
+            <section class="ar-payment-provider">
+                <header class="ar-payment-header">
+                    <span class="ar-payment-logo" a-html="this.PAYMENT_PROVIDER_LOGO"></span>
+                    <strong class="ar-payment-name">{{ this.PAYMENT_PROVIDER_NAME }}</strong>
+                </header>
+                <div class="ar-payment-body">
             <button type="button" class="ar-satispay__btn" @click="this.onClick">
                 <span class="ar-satispay__logo" a-html="this.SATISPAY_LOGO"></span>
                 <span>{{ this.btnLabel() }}</span>
             </button>
+        
+                </div>
+            </section>
         `;
             MountPaymentTemplate(this);
             this.dataset.ariannaFolderReady = 'true';

@@ -39,7 +39,7 @@ export namespace SmoothModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-smooth', {}, {
-        Attributes: ['for', 'iterations', 'factor', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'iterations', 'factor', 'enabled'],
     })
     export class SmoothModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

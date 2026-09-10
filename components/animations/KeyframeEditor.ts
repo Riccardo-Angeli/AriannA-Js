@@ -2,7 +2,7 @@
  * @module components/animations/KeyframeEditor
  * @version 2.0.0
  */
-import { Component, Css, Templates } from '../../core/index.ts';
+import { Component, Css, Templates, Namespaces } from '../../core/index.ts';
 import { AnimTrack } from './AnimTrack.ts';
 
 const html = Templates.Template.Html;
@@ -111,12 +111,23 @@ export namespace KeyframeEditor
         new Css.Rule('.KeyframeEditor .AnimTrack-Lane', { MinHeight: '28px' }),
 
         new Css.Rule('.KeyframeEditor-Playhead', {
-            Background: 'var(--Animation-Playhead)', Bottom: '0', BoxShadow: '0 0 8px rgba(228,74,69,.18)',
-            PointerEvents: 'none', Position: 'absolute', Top: '38px', Width: '2px', ZIndex: '8'
+            Background: '#ff3b30', Bottom: '0',
+            BoxShadow: '0 0 3px rgba(255,59,48,.95), 0 0 10px rgba(255,59,48,.72), 0 0 18px rgba(255,59,48,.38)',
+            Opacity: '1', PointerEvents: 'none', Position: 'absolute', Top: '38px', Width: '3px', ZIndex: '12'
         }),
         new Css.Rule('.KeyframeEditor-Playhead::before', {
-            Background: 'var(--Animation-Playhead)', BorderRadius: '2px 2px 0 0', Content: '""',
-            Height: '6px', Left: '-3px', Position: 'absolute', Top: '0', Width: '8px'
+            Background: '#ff3b30', Border: '1px solid rgba(255,255,255,.72)', BorderRadius: '3px 3px 1px 1px',
+            BoxShadow: '0 0 8px rgba(255,59,48,.75)', Content: '""',
+            Height: '8px', Left: '-4px', Position: 'absolute', Top: '-1px', Width: '10px'
+        }),
+        new Css.Rule('.KeyframeEditor[playing] .KeyframeEditor-Playhead', {
+            Background: '#ff2d20',
+            BoxShadow: '0 0 4px rgba(255,45,32,1), 0 0 12px rgba(255,45,32,.92), 0 0 24px rgba(255,45,32,.55)',
+            Width: '4px'
+        }),
+        new Css.Rule('.KeyframeEditor[playing] .KeyframeEditor-Playhead::before', {
+            Background: '#ff2d20', BoxShadow: '0 0 10px rgba(255,45,32,.95)',
+            Height: '9px', Left: '-4px', Width: '11px'
         }),
 
         new Css.Rule('.KeyframeEditor[theme="light"]', { Background: '#eef0f2', BorderColor: '#b9bec3', Color: '#2b3035' }),
@@ -230,9 +241,10 @@ export namespace KeyframeEditor
         {
             const body = this.querySelector<HTMLElement>(':scope > .KeyframeEditor-Body');
             if(!body) return this;
-            this.ConfigureTrack(track);
-            body.append(track);
-            track.onConnected?.();
+            const live = this.NormalizeTrack(track);
+            this.ConfigureTrack(live);
+            body.append(live);
+            live.onConnected?.();
             this.UpdatePlayhead();
             this.EmitUpdate();
             return this;
@@ -303,8 +315,9 @@ export namespace KeyframeEditor
         private Render(): void
         {
             this.EnsureState();
-            const markupTracks = Array.from(this.children)
-                .filter(node => node instanceof HTMLElement && (node.matches('arianna-anim-track') || node.classList.contains('AnimTrack'))) as AnimTrack.AnimTrack[];
+            const markupTracks = (Array.from(this.children)
+                .filter(node => node instanceof HTMLElement && (node.matches('arianna-anim-track') || node.classList.contains('AnimTrack'))) as AnimTrack.AnimTrack[])
+                .map(track => this.NormalizeTrack(track));
             const definitions = (this._tracks?.length ?? 0)
                 ? (this._tracks ?? [])
                 : markupTracks.length
@@ -534,7 +547,8 @@ export namespace KeyframeEditor
 
         private Track(definition: Interfaces.TrackDefinition): AnimTrack.AnimTrack
         {
-            const track = new AnimTrack.AnimTrack();
+            const node = document.createElementNS('http://www.w3.org/1999/xhtml', 'arianna-anim-track') as HTMLElement;
+            const track = Namespaces.Namespace.Upgrade(node) as unknown as AnimTrack.AnimTrack;
             if(definition.name) track.setAttribute('name', definition.name);
             if(definition.channel) track.setAttribute('channel', definition.channel);
             if(definition.group) track.setAttribute('group', definition.group);
@@ -544,6 +558,30 @@ export namespace KeyframeEditor
             if(definition.hidden != null) track.toggleAttribute('hidden', definition.hidden);
             if(definition.keyframes) track.keyframes = definition.keyframes;
             return track;
+        }
+
+        private NormalizeTrack(track: AnimTrack.AnimTrack): AnimTrack.AnimTrack
+        {
+            const element = track as unknown as HTMLElement;
+
+            if(element.localName === 'arianna-anim-track')
+            {
+                Namespaces.Namespace.Upgrade(element);
+                return element as unknown as AnimTrack.AnimTrack;
+            }
+
+            const replacement = this.Track({
+                name: element.getAttribute('name') ?? undefined,
+                channel: element.getAttribute('channel') ?? undefined,
+                group: (element.getAttribute('group') as AnimTrack.Types.ChannelGroup | null) ?? undefined,
+                folder: element.getAttribute('folder') ?? undefined,
+                muted: element.hasAttribute('muted'),
+                locked: element.hasAttribute('locked'),
+                hidden: element.hasAttribute('hidden'),
+                keyframes: track.keyframes
+            });
+
+            return replacement;
         }
 
         private ConfigureTrack(track: AnimTrack.AnimTrack): void

@@ -12,6 +12,7 @@
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 import { MountPaymentTemplate } from './Base.ts';
+import { PaymentProviders } from './Providers.ts';
 declare const Component: any;
 declare const Css: any;
 declare namespace Css { type Rule = any; type Stylesheet = any; }
@@ -247,13 +248,13 @@ export namespace Stripe
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const STRIPE_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 28" role="img" aria-label="Stripe"><rect width="90" height="28" rx="6" fill="#635BFF"/><text x="45" y="20" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="800" fill="#fff">stripe</text></svg>`;
+    export const STRIPE_LOGO = PaymentProviders.Stripe.logo;
 
     @Component('arianna-stripe', {}, {
         shadow: false,
         Attributes: ['publishable-key', 'client-secret', 'return-url', 'locale', 'appearance-theme'],
     })
-    export class Stripe extends HTMLDivElement
+    export class Stripe extends HTMLElement
     {
         public static readonly Styles = Stripe.DefaultSheet();
         /** Canonical AriannA public DOM identity. */
@@ -350,11 +351,22 @@ export namespace Stripe
             if(this._elements === undefined) this._elements = null;
             if(this.dataset.ariannaFolderReady === 'true') return;
             (this as any).STRIPE_LOGO = STRIPE_LOGO;
+            (this as any).PAYMENT_PROVIDER = PaymentProviders.Stripe;
+            (this as any).PAYMENT_PROVIDER_LOGO = PaymentProviders.Stripe.logo;
+            (this as any).PAYMENT_PROVIDER_NAME = PaymentProviders.Stripe.name;
+            this.style.setProperty('--ar-payment-provider', PaymentProviders.Stripe.color);
+            this.style.setProperty('--ar-payment-contrast', PaymentProviders.Stripe.contrast ?? '#fff');
             this.statusMsg = () => this.error$.Get() ?? (this.ready$.Get() ? '' : 'Loading Stripe…');
             this.payDisabled = () => !this.ready$.Get() || this.busy$.Get();
             this.payLabel = () => this.busy$.Get() ? 'Processing…' : 'Pay';
             this.onPay = () => { void this.pay(); };
             this.template = html `
+            <section class="ar-payment-provider">
+                <header class="ar-payment-header">
+                    <span class="ar-payment-logo" a-html="this.PAYMENT_PROVIDER_LOGO"></span>
+                    <strong class="ar-payment-name">{{ this.PAYMENT_PROVIDER_NAME }}</strong>
+                </header>
+                <div class="ar-payment-body">
             <div class="ar-stripe">
                 <div class="ar-stripe__brand" a-html="this.STRIPE_LOGO"></div>
                 <div class="ar-stripe__mount" data-r="mount"></div>
@@ -363,6 +375,9 @@ export namespace Stripe
                         :disabled="this.payDisabled()"
                         @click="this.onPay">{{ this.payLabel() }}</button>
             </div>
+        
+                </div>
+            </section>
         `;
             MountPaymentTemplate(this);
             this.dataset.ariannaFolderReady = 'true';
@@ -834,13 +849,15 @@ export namespace Stripe
                     color: 'var(--arianna-text, var(--text, #1c1e21))',
                 }),
                 new Rule('.ar-stripe', {
+                    boxSizing: 'border-box',
                     display: 'flex', flexDirection: 'column', gap: '12px',
+                    width: '100%', maxWidth: '100%', overflow: 'hidden',
                     padding: '14px',
                     background: 'var(--arianna-bg, var(--bg, #fff))',
                     border: '1px solid var(--arianna-border, var(--border, #e6e8eb))',
                     borderRadius: 'var(--arianna-radius, 8px)',
                 }),
-                new Rule('.ar-stripe__mount', { minHeight: '60px' }),
+                new Rule('.ar-stripe__mount', { minHeight: '60px', minWidth: '0', maxWidth: '100%', overflow: 'hidden' }),
                 new Rule('.ar-stripe__status', {
                     fontSize: '11px',
                     color: 'var(--arianna-muted, var(--muted, #687079))',

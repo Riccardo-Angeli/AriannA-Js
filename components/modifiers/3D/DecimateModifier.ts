@@ -39,7 +39,7 @@ export namespace DecimateModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-decimate', {}, {
-        Attributes: ['for', 'ratio', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'ratio', 'enabled'],
     })
     export class DecimateModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

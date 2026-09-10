@@ -39,7 +39,7 @@ export namespace SubdivisionModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-subdivision', {}, {
-        Attributes: ['for', 'iterations', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'iterations', 'enabled'],
     })
     export class SubdivisionModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

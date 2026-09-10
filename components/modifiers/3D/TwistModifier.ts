@@ -39,7 +39,7 @@ export namespace TwistModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-twist', {}, {
-        Attributes: ['for', 'angle', 'axis', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'angle', 'axis', 'enabled'],
     })
     export class TwistModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

@@ -75,7 +75,7 @@ export namespace LODModifier
      * after the viewport's asset registry is available.
      */
         @Component('arianna-lod', {}, {
-        Attributes: ['for', 'enabled'],
+        Attributes: ['disabled','viewport','for','near','mid','far','enabled'],
     })
     export class LODModifierElement extends Modifier3DNamespace.Modifier3DElement
     {
@@ -117,9 +117,15 @@ export namespace LODModifier
          *  @license     MIT / Commercial (dual license) */
         protected createModifier(mesh: Modifier3DNamespace.Interfaces.MeshLike): Modifier3DNamespace.Modifier3D
         {
-            // TODO second-pass: read <arianna-lod-level> children and resolve their
-            // `geometry` attribute against the viewport's asset registry.
-            return new LODModifier(mesh, []);
+            const high=Modifier3DNamespace._cloneGeom(mesh.geometry);
+            const simplify=(source:Modifier3DNamespace.Interfaces.Geometry3Like,ratio:number):Modifier3DNamespace.Interfaces.Geometry3Like=>{
+                const out=Modifier3DNamespace._cloneGeom(source); const tri=Math.max(1,Math.floor(out.indices.length/3*ratio)); const step=Math.max(1,Math.floor((out.indices.length/3)/tri)); const idx:number[]=[]; for(let i=0;i<out.indices.length;i+=3*step)idx.push(...out.indices.slice(i,i+3)); out.indices=idx; Modifier3DNamespace._recomputeNormals(out); return out;
+            };
+            const medium=simplify(high,.42), low=simplify(high,.12);
+            const near=parseFloat(this.getAttribute('near')??'4.5')||4.5;
+            const mid=parseFloat(this.getAttribute('mid')??'7')||7;
+            const far=parseFloat(this.getAttribute('far')??'11')||11;
+            return new LODModifier(mesh,[{distance:near,geometry:high},{distance:mid,geometry:medium},{distance:far,geometry:low}]);
         }
 
         /** @name        needsFrameUpdate

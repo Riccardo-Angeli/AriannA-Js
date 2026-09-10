@@ -146,25 +146,6 @@ export namespace AudioPlayer
         public get currentTime(): number { return this.Audio?.currentTime ?? 0; }
         public get isPlaying(): boolean { return Boolean(this.Audio && !this.Audio.paused); }
 
-        public async play(): Promise<void>
-        {
-            if(!this.Audio) return;
-            try { await AudioComponentModule.AudioComponent.resume(); } catch {}
-            await this.Audio.play();
-        }
-
-        public pause(): void
-        {
-            this.Audio?.pause();
-        }
-
-        public togglePlayback(): void
-        {
-            if(!this.Audio) return;
-            if(this.Audio.paused) void this.play().catch(() => undefined);
-            else this.pause();
-        }
-
         private Render(): void
         {
             if(this.querySelector(':scope > .AudioPlayer-Header')) return;
@@ -190,7 +171,7 @@ export namespace AudioPlayer
             this.Transport.setAttribute('theme', this.getAttribute('theme') ?? 'dark');
             this.Transport.setAttribute('show-skip', 'true');
 
-            this.append(header, this.Audio, this.Transport);
+            this.add(header, this.Audio, this.Transport);
             this.Bind();
         }
 
@@ -200,8 +181,12 @@ export namespace AudioPlayer
             const audio = this.Audio;
             const transport = this.Transport;
 
-            transport.addEventListener('arianna:play', () => void this.play().catch(() => undefined));
-            transport.addEventListener('arianna:pause', () => this.pause());
+            transport.addEventListener('arianna:play', async () =>
+            {
+                try { await AudioComponentModule.AudioComponent.resume(); } catch {}
+                await audio.play().catch(() => undefined);
+            });
+            transport.addEventListener('arianna:pause', () => audio.pause());
             transport.addEventListener('arianna:stop', () => { audio.pause(); audio.currentTime = 0; });
             transport.addEventListener('arianna:seek', event =>
             {

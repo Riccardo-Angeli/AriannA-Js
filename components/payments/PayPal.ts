@@ -12,6 +12,7 @@
 import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
 
 import { MountPaymentTemplate } from './Base.ts';
+import { PaymentProviders } from './Providers.ts';
 declare const Component: any;
 declare const Css: any;
 declare namespace Css { type Rule = any; type Stylesheet = any; }
@@ -288,13 +289,13 @@ export namespace PayPal
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const PAYPAL_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 106 30" role="img" aria-label="PayPal"><path d="M7 4h13c8 0 10 5 8 11-2 6-7 8-14 8H9L7 28H1L7 4z" fill="#003087"/><path d="M12 8h10c5 0 6 3 5 6-1 4-4 5-9 5h-7z" fill="#009CDE"/><text x="34" y="22" font-family="Arial,sans-serif" font-size="18" font-weight="800" font-style="italic" fill="#003087">Pay</text><text x="66" y="22" font-family="Arial,sans-serif" font-size="18" font-weight="800" font-style="italic" fill="#009CDE">Pal</text></svg>`;
+    export const PAYPAL_LOGO = PaymentProviders.PayPal.logo;
 
     @Component('arianna-paypal', {}, {
         shadow: false,
         Attributes: ['client-id', 'amount', 'currency', 'intent', 'redirect-url', 'button-style', 'button-color', 'button-shape'],
     })
-    export class PayPal extends HTMLDivElement
+    export class PayPal extends HTMLElement
     {
         public static readonly Styles = PayPal.DefaultSheet();
         /** Canonical AriannA public DOM identity. */
@@ -369,6 +370,11 @@ export namespace PayPal
             if(!this.busy$) this.busy$ = signal<boolean>(false);
             if(this.dataset.ariannaFolderReady === 'true') return;
             (this as any).PAYPAL_LOGO = PAYPAL_LOGO;
+            (this as any).PAYMENT_PROVIDER = PaymentProviders.PayPal;
+            (this as any).PAYMENT_PROVIDER_LOGO = PaymentProviders.PayPal.logo;
+            (this as any).PAYMENT_PROVIDER_NAME = PaymentProviders.PayPal.name;
+            this.style.setProperty('--ar-payment-provider', PaymentProviders.PayPal.color);
+            this.style.setProperty('--ar-payment-contrast', PaymentProviders.PayPal.contrast ?? '#fff');
             this.fallbackVisible = () => !this.sdkLoaded$.Get();
             this.fallbackLabel = () => this.sdkError$.Get()
                 ? 'Open PayPal'
@@ -388,6 +394,12 @@ export namespace PayPal
                     void this.pay();
             };
             this.template = html `
+            <section class="ar-payment-provider">
+                <header class="ar-payment-header">
+                    <span class="ar-payment-logo" a-html="this.PAYMENT_PROVIDER_LOGO"></span>
+                    <strong class="ar-payment-name">{{ this.PAYMENT_PROVIDER_NAME }}</strong>
+                </header>
+                <div class="ar-payment-body">
             <div class="ar-pp">
                 <div class="ar-pp__mount" data-r="mount"></div>
                 <button type="button" class="ar-pp__fallback"
@@ -397,6 +409,9 @@ export namespace PayPal
                     <span>{{ this.fallbackLabel() }}</span>
                 </button>
             </div>
+        
+                </div>
+            </section>
         `;
             MountPaymentTemplate(this);
             this.dataset.ariannaFolderReady = 'true';

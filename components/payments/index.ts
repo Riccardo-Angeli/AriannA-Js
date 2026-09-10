@@ -1,11 +1,10 @@
 /**
- * @module    components/payments
- * @author    Riccardo Angeli
+ * @module components/payments
+ * @author Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
- * @license   MIT / Commercial (dual license)
+ * @license MIT / Commercial (dual license)
  *
- * Payment component barrel. Runtime classes and contracts are exported from
- * their canonical component namespaces.
+ * Payment component barrel. CreditCard.ts is intentionally preserved unchanged.
  */
 
 import { ApplePay as ApplePayModule } from './ApplePay.ts';
@@ -16,7 +15,31 @@ import { Stripe as StripeModule } from './Stripe.ts';
 import { Satispay as SatispayModule } from './Satispay.ts';
 import { Nexi as NexiModule } from './Nexi.ts';
 import { AliPay as AliPayModule } from './AliPay.ts';
+import { WeChatPay as WeChatPayModule } from './WeChatPay.ts';
+import { AmazonPay as AmazonPayModule } from './AmazonPay.ts';
+import { Klarna as KlarnaModule } from './Klarna.ts';
+import { Sofort as SofortModule } from './Sofort.ts';
+import { Adyen as AdyenModule } from './Adyen.ts';
+import { Worldline as WorldlineModule } from './Worldline.ts';
+import { CheckoutCom as CheckoutComModule } from './CheckoutCom.ts';
+import { SumUp as SumUpModule } from './SumUp.ts';
+import { Mollie as MollieModule } from './Mollie.ts';
+import { TWINT as TWINTModule } from './TWINT.ts';
+import { Ideal as IdealModule } from './Ideal.ts';
+import { Bancontact as BancontactModule } from './Bancontact.ts';
+import { BLIK as BLIKModule } from './BLIK.ts';
+import { Trustly as TrustlyModule } from './Trustly.ts';
+import { Wero as WeroModule } from './Wero.ts';
+import { SEPA as SEPAModule } from './SEPA.ts';
+import { Pix as PixModule } from './Pix.ts';
+import { UPI as UPIModule } from './UPI.ts';
+import { MercadoPago as MercadoPagoModule } from './MercadoPago.ts';
+import { MPesa as MPesaModule } from './MPesa.ts';
+import { CashApp as CashAppModule } from './CashApp.ts';
+import { HostedPayment as HostedPaymentModule } from './HostedPayment.ts';
 import { PaymentGateway as PaymentGatewayModule } from './PaymentGateway.ts';
+export { PaymentProviders } from './Providers.ts';
+export type { PaymentProviderId, PaymentProviderKind, PaymentProviderConfig, PaymentApiCapability } from './Providers.ts';
 
 export const ApplePay = ApplePayModule.ApplePay;
 export const GooglePay = GooglePayModule.GooglePay;
@@ -26,19 +49,32 @@ export const Stripe = StripeModule.Stripe;
 export const Satispay = SatispayModule.Satispay;
 export const Nexi = NexiModule.Nexi;
 export const AliPay = AliPayModule.AliPay;
+export const WeChatPay = WeChatPayModule.WeChatPay;
+export const AmazonPay = AmazonPayModule.AmazonPay;
+export const Klarna = KlarnaModule.Klarna;
+export const Sofort = SofortModule.Sofort;
+export const Adyen = AdyenModule.Adyen;
+export const Worldline = WorldlineModule.Worldline;
+export const CheckoutCom = CheckoutComModule.CheckoutCom;
+export const SumUp = SumUpModule.SumUp;
+export const Mollie = MollieModule.Mollie;
+export const TWINT = TWINTModule.TWINT;
+export const Ideal = IdealModule.Ideal;
+export const Bancontact = BancontactModule.Bancontact;
+export const BLIK = BLIKModule.BLIK;
+export const Trustly = TrustlyModule.Trustly;
+export const Wero = WeroModule.Wero;
+export const SEPA = SEPAModule.SEPA;
+export const Pix = PixModule.Pix;
+export const UPI = UPIModule.UPI;
+export const MercadoPago = MercadoPagoModule.MercadoPago;
+export const MPesa = MPesaModule.MPesa;
+export const CashApp = CashAppModule.CashApp;
+export const HostedPayment = HostedPaymentModule.HostedPayment;
 export const PaymentGateway = PaymentGatewayModule.PaymentGateway;
 
-export type ApplePayNetwork = ApplePayModule.Types.ApplePayNetwork;
-export type ApplePayMerchantCapability = ApplePayModule.Types.ApplePayMerchantCapability;
-export type ApplePayButtonStyle = ApplePayModule.Types.ApplePayButtonStyle;
-export type ApplePayButtonType = ApplePayModule.Types.ApplePayButtonType;
 export type ApplePayOptions = ApplePayModule.Interfaces.ApplePayOptions;
-
-export type GooglePayEnvironment = GooglePayModule.Types.GooglePayEnvironment;
-export type GooglePayButtonColor = GooglePayModule.Types.GooglePayButtonColor;
-export type GooglePayButtonType = GooglePayModule.Types.GooglePayButtonType;
 export type GooglePayOptions = GooglePayModule.Interfaces.GooglePayOptions;
-
 export type CardBrand = CreditCardModule.Types.CardBrand;
 export type CardData = CreditCardModule.Interfaces.CardData;
 export type CreditCardOptions = CreditCardModule.Interfaces.CreditCardOptions;
@@ -48,6 +84,9 @@ export type SatispayOptions = SatispayModule.Interfaces.SatispayOptions;
 export type NexiOptions = NexiModule.Interfaces.NexiOptions;
 export type AliPayMode = AliPayModule.Types.AliPayMode;
 export type AliPayOptions = AliPayModule.Interfaces.AliPayOptions;
+export type HostedPaymentOptions = HostedPaymentModule.HostedPaymentOptions;
+export type PaymentRequest = HostedPaymentModule.PaymentRequest;
+export type PaymentResult = HostedPaymentModule.PaymentResult;
 export type PaymentMethodId = PaymentGatewayModule.Types.PaymentMethodId;
 export type PaymentGatewayMethodConfig = PaymentGatewayModule.Interfaces.PaymentGatewayMethodConfig;
 export type PaymentGatewayOptions = PaymentGatewayModule.Interfaces.PaymentGatewayOptions;

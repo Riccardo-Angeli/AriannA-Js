@@ -582,11 +582,69 @@ export namespace Components
                     writable : true,
                     value
                     (
-                        this   : HTMLElement,
-                        parent : Parameters<Real['append']>[0]
+                        this      : HTMLElement,
+                        ...values : unknown[]
                     ): HTMLElement
                     {
-                        Component.RealFacet(this).append(parent);
+                        /*
+                         * AriannA public contract: append(parent) takes ONE parent
+                         * and returns the component. Keep that semantic even when
+                         * the parent is detached (Playground Direct hosts rely on it).
+                         *
+                         * Decorated components still inherit ParentNode.append().
+                         * Legacy/internal multi-child calls such as this.append(a,b,c)
+                         * must therefore bypass the AriannA parent operation and use
+                         * the native DOM implementation, otherwise component render
+                         * trees are destroyed.
+                         */
+                        if(values.length === 1)
+                        {
+                            const candidate = values[0];
+
+                            if
+                            (
+                                candidate instanceof Real ||
+                                Real.IsRenderable(candidate) ||
+                                candidate instanceof Element ||
+                                candidate === null
+                            )
+                            {
+                                Component.RealFacet(this).append
+                                (
+                                    candidate as Parameters<Real['append']>[0]
+                                );
+                                return this;
+                            }
+
+                            if(typeof candidate === 'string')
+                            {
+                                let parent: Element | null = null;
+                                try
+                                {
+                                    parent = typeof document !== 'undefined'
+                                        ? document.querySelector(candidate)
+                                        : null;
+                                }
+                                catch
+                                {
+                                    parent = null;
+                                }
+
+                                if(parent)
+                                {
+                                    Component.RealFacet(this).append(parent);
+                                    return this;
+                                }
+                            }
+                        }
+
+                        Reflect.apply
+                        (
+                            Element.prototype.append,
+                            this,
+                            values as (Node | string)[]
+                        );
+
                         return this;
                     }
                 },

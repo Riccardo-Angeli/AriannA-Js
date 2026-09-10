@@ -1,5 +1,6 @@
 /**
  * @module components/modifiers/2D/Rotator
+ * @description Drag-to-rotate modifier with configurable angle snapping.
  */
 
 import { Component, Templates } from '../../../core/index.ts';
@@ -19,277 +20,124 @@ export namespace Rotator
         }
     }
 
+    export type RotateCallback = (element: HTMLElement, angle: number) => void;
     const html = Templates.Template.Html;
 
     @Component('arianna-rotator', {}, {
         Shadow: false,
-        Attributes: [
-            'handle-offset',
-            'handle-color',
-            'handle-size',
-            'snap',
-            'disabled',
-        ],
+        Attributes: ['handle-offset','handle-color','handle-size','snap','disabled'],
     })
-    export class Rotator
-        extends Base.Modifier2D.Modifier2D
+    export class Rotator extends Base.Modifier2D.Modifier2D
     {
         public template = html``;
         protected EventName = 'rotate';
 
-        #angle = 0;
+        public handleOffset = 24;
+        public handleColor = '#e40c88';
+        public handleSize = 14;
+        public snap = 0;
+        private angle = 0;
+        private readonly callbacks = new Set<RotateCallback>();
+
+        constructor(target?: Base.Modifier2D.Types.TargetInput, options: Interfaces.RotatorOptions = {})
+        {
+            super();
+            if(options.handleOffset !== undefined) this.handleOffset = options.handleOffset;
+            if(options.handleColor !== undefined) this.handleColor = options.handleColor;
+            if(options.handleSize !== undefined) this.handleSize = options.handleSize;
+            if(options.snap !== undefined) this.snap = Math.max(0, options.snap);
+            if(options.disabled) this.disable();
+            if(target !== undefined) this.attach(target);
+        }
+
+        private syncAttributes(): void
+        {
+            const number = (name:string,current:number) => {
+                const raw=this.getAttribute(name); if(raw===null) return current;
+                const n=Number.parseFloat(raw); return Number.isFinite(n)?n:current;
+            };
+            this.handleOffset = number('handle-offset',this.handleOffset);
+            this.handleSize = number('handle-size',this.handleSize);
+            this.snap = Math.max(0,number('snap',this.snap));
+            this.handleColor = this.getAttribute('handle-color') ?? this.handleColor;
+        }
 
         protected applyTo(target: HTMLElement): void
         {
-            if(getComputedStyle(target).position === 'static')
-                target.style.position = 'relative';
+            this.syncAttributes();
+            if(getComputedStyle(target).position === 'static') target.style.position='relative';
+            target.style.transformOrigin ||= 'center';
 
-            const offset =
-                Number.parseInt(
-                    this.getAttribute('handle-offset') ?? '24',
-                    10
-                ) || 24;
-
-            const size =
-                Number.parseInt(
-                    this.getAttribute('handle-size') ?? '10',
-                    10
-                ) || 10;
-
-            const color =
-                this.getAttribute('handle-color') ??
-                'var(--arianna-primary, #1f6feb)';
-
-            const snap =
-                Number.parseFloat(
-                    this.getAttribute('snap') ?? '0'
-                ) || 0;
-
-            const line =
-                document.createElement('div');
-
-            line.className =
-                'ar-rotator-line';
-
-            line.style.cssText =
-                `position:absolute;top:-${offset}px;left:50%;width:1px;height:${offset}px;background:${color};transform-origin:bottom;pointer-events:none;z-index:9998;`;
-
+            const line=document.createElement('div');
+            line.className='ar-rotator-line';
+            line.style.cssText=`position:absolute;top:-${this.handleOffset}px;left:50%;width:1px;height:${this.handleOffset}px;background:${this.handleColor};pointer-events:none;z-index:9998;`;
             target.appendChild(line);
 
-            const handle =
-                document.createElement('div');
-
-            handle.className =
-                'ar-rotator-handle';
-
-            handle.style.cssText =
-                `position:absolute;top:-${offset + size}px;left:50%;transform:translateX(-50%);width:${size}px;height:${size}px;background:${color};border-radius:50%;cursor:grab;z-index:9999;touch-action:none;`;
-
+            const handle=document.createElement('div');
+            handle.className='ar-rotator-handle';
+            handle.style.cssText=`position:absolute;top:-${this.handleOffset + this.handleSize/2}px;left:50%;transform:translate(-50%,-50%);width:${this.handleSize}px;height:${this.handleSize}px;background:${this.handleColor};border-radius:50%;cursor:grab;z-index:9999;touch-action:none;box-shadow:0 0 0 2px rgba(255,255,255,.75);`;
             target.appendChild(handle);
 
-            let pointerId = -1;
-
-            const onDown =
-                (event: PointerEvent): void =>
-            {
-                if(
-                    !this.isEnabled ||
-                    event.button !== 0
-                )
-                    return;
-
-                event.preventDefault();
-                event.stopPropagation();
-
-                pointerId =
-                    event.pointerId;
-
-                const rect =
-                    target.getBoundingClientRect();
-
-                const centerX =
-                    rect.left +
-                    rect.width / 2;
-
-                const centerY =
-                    rect.top +
-                    rect.height / 2;
-
-                const startAngle =
-                    this.#angle;
-
-                const startMouse =
-                    Math.atan2(
-                        event.clientY - centerY,
-                        event.clientX - centerX
-                    ) *
-                    180 /
-                    Math.PI;
-
-                this.Start({
-                    angle: startAngle,
-                    pointerId,
-                });
-
-                const onMove =
-                    (
-                        moveEvent: PointerEvent
-                    ): void =>
-                {
-                    if(
-                        moveEvent.pointerId !==
-                        pointerId
-                    )
-                        return;
-
-                    const current =
-                        Math.atan2(
-                            moveEvent.clientY -
-                                centerY,
-                            moveEvent.clientX -
-                                centerX
-                        ) *
-                        180 /
-                        Math.PI;
-
-                    let angle =
-                        startAngle +
-                        current -
-                        startMouse;
-
-                    if(snap > 0)
-                        angle =
-                            Math.round(
-                                angle / snap
-                            ) *
-                            snap;
-
-                    this.#angle =
-                        angle;
-
-                    target.style.transform =
-                        `rotate(${angle}deg)`;
-
-                    this.Change({
-                        angle,
-                        pointerId,
-                    });
-                };
-
-                const onUp =
-                    (
-                        upEvent: PointerEvent
-                    ): void =>
-                {
-                    if(
-                        upEvent.pointerId !==
-                        pointerId
-                    )
-                        return;
-
-                    handle.removeEventListener(
-                        'pointermove',
-                        onMove
-                    );
-
-                    handle.removeEventListener(
-                        'pointerup',
-                        onUp
-                    );
-
-                    handle.removeEventListener(
-                        'pointercancel',
-                        onUp
-                    );
-
-                    this.End({
-                        angle: this.#angle,
-                        pointerId,
-                    });
-
-                    pointerId = -1;
-                };
-
-                try
-                {
-                    handle.setPointerCapture(
-                        pointerId
-                    );
-                }
-                catch
-                {
-                }
-
-                handle.addEventListener(
-                    'pointermove',
-                    onMove
-                );
-
-                handle.addEventListener(
-                    'pointerup',
-                    onUp
-                );
-
-                handle.addEventListener(
-                    'pointercancel',
-                    onUp
-                );
+            let pointerId=-1;
+            const onMove=(event:PointerEvent) => {
+                if(event.pointerId!==pointerId || !this.isEnabled) return;
+                const rect=target.getBoundingClientRect();
+                const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+                let next=Math.atan2(event.clientY-cy,event.clientX-cx)*(180/Math.PI)+90;
+                if(this.snap>0) next=Math.round(next/this.snap)*this.snap;
+                this.angle=next;
+                target.style.transform=`rotate(${next}deg)`;
+                this.Change({angle:next,pointerId},target);
+                for(const cb of this.callbacks) cb(target,next);
             };
-
-            handle.addEventListener(
-                'pointerdown',
-                onDown
-            );
-
-            this.cleanups.push(
-                () =>
-                {
-                    handle.removeEventListener(
-                        'pointerdown',
-                        onDown
-                    );
-
-                    handle.remove();
-                    line.remove();
-                }
-            );
+            const onUp=(event:PointerEvent) => {
+                if(event.pointerId!==pointerId) return;
+                try{handle.releasePointerCapture(pointerId);}catch{}
+                handle.removeEventListener('pointermove',onMove);
+                handle.removeEventListener('pointerup',onUp);
+                handle.removeEventListener('pointercancel',onUp);
+                handle.style.cursor='grab';
+                this.End({angle:this.angle,pointerId},target);
+                pointerId=-1;
+            };
+            const onDown=(event:PointerEvent) => {
+                if(!this.isEnabled || event.button!==0) return;
+                event.preventDefault(); event.stopPropagation();
+                pointerId=event.pointerId;
+                handle.style.cursor='grabbing';
+                try{handle.setPointerCapture(pointerId);}catch{}
+                handle.addEventListener('pointermove',onMove);
+                handle.addEventListener('pointerup',onUp);
+                handle.addEventListener('pointercancel',onUp);
+                this.Start({angle:this.angle,pointerId},target);
+            };
+            handle.addEventListener('pointerdown',onDown);
+            this.cleanups.push(()=>{
+                handle.removeEventListener('pointerdown',onDown);
+                handle.removeEventListener('pointermove',onMove);
+                handle.removeEventListener('pointerup',onUp);
+                handle.removeEventListener('pointercancel',onUp);
+                handle.remove(); line.remove();
+            });
         }
 
-        public setAngle(angle: number): this
+        public onRotate(callback: RotateCallback): this { this.callbacks.add(callback); return this; }
+
+        public setAngle(angle:number): this
         {
-            if(this.target)
+            this.angle = this.snap>0 ? Math.round(angle/this.snap)*this.snap : angle;
+            for(const target of this.targets)
             {
-                this.Start({
-                    angle: this.#angle,
-                    programmatic: true,
-                });
-
-                this.#angle = angle;
-
-                this.target.style.transform =
-                    `rotate(${angle}deg)`;
-
-                this.Change({
-                    angle,
-                    programmatic: true,
-                });
-
-                this.End({
-                    angle,
-                    programmatic: true,
-                });
+                target.style.transform=`rotate(${this.angle}deg)`;
+                this.Change({angle:this.angle,programmatic:true},target);
+                for(const cb of this.callbacks) cb(target,this.angle);
             }
-
             return this;
         }
 
-        public getAngle(): number
-        {
-            return this.#angle;
-        }
+        public getAngle(): number { return this.angle; }
     }
 }
 
 export type RotatorOptions = Rotator.Interfaces.RotatorOptions;
-
 export default Rotator.Rotator;

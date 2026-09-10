@@ -39,7 +39,7 @@ export namespace BillboardModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-billboard', {}, {
-        Attributes: ['for', 'lock-x', 'lock-y', 'lock-z', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'lock-x', 'lock-y', 'lock-z', 'enabled'],
     })
     export class BillboardModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

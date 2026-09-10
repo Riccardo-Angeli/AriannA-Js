@@ -102,7 +102,7 @@ export namespace WaveModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-wave', {}, {
-        Attributes: ['for', 'amplitude', 'frequency', 'axis', 'direction', 'animate', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'amplitude', 'frequency', 'axis', 'direction', 'animate', 'enabled'],
     })
     export class WaveModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

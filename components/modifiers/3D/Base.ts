@@ -414,333 +414,415 @@ export namespace Modifier3D
      *
      *   onUnmount → modifier.destroy() → cleanup
      */
-        @Component('arianna-modifier-3d', {}, {
-        Attributes: ['for', 'enabled'],
-    })
-    export class Modifier3DElement extends HTMLDivElement
-    {
-        /** Canonical AriannA public DOM identity. */
-        private readonly _AriannaIdentity = (() =>
-        {
-            const type = 'Modifier3DElement';
-            for(const cls of Array.from(this.classList))
-            {
-                if(cls.startsWith('__real-')) this.classList.remove(cls);
-            }
-            this.classList.add(type);
+    type PanelControlType = 'range' | 'select' | 'toggle';
 
-            const counters = globalThis as typeof globalThis & { __AriannaComponentIds?: Record<string, number> };
-            const ids = counters.__AriannaComponentIds ??= Object.create(null);
-            const n = ids[type] = (ids[type] ?? 0) + 1;
-            this.id = `${type}-${n}`;
+    interface PanelControl
+    {
+        attr: string;
+        label: string;
+        type: PanelControlType;
+        min?: number;
+        max?: number;
+        step?: number;
+        value?: string | number | boolean;
+        options?: readonly string[];
+        suffix?: string;
+    }
+
+    interface PanelSchema
+    {
+        title: string;
+        subtitle: string;
+        controls: readonly PanelControl[];
+    }
+
+    const PanelSchemas: Readonly<Record<string, PanelSchema>> = Object.freeze({
+        'arianna-array': {
+            title:'Array', subtitle:'Linear / radial instances', controls:[
+                {attr:'count',label:'Count',type:'range',min:1,max:12,step:1,value:5},
+                {attr:'type',label:'Type',type:'select',value:'linear',options:['linear','radial']},
+                {attr:'offset-x',label:'Offset X',type:'range',min:-3,max:3,step:.05,value:1.25},
+                {attr:'offset-y',label:'Offset Y',type:'range',min:-3,max:3,step:.05,value:0},
+                {attr:'offset-z',label:'Offset Z',type:'range',min:-3,max:3,step:.05,value:0},
+                {attr:'radius',label:'Radius',type:'range',min:.5,max:5,step:.05,value:2.4},
+                {attr:'axis',label:'Axis',type:'select',value:'y',options:['x','y','z']},
+            ]
+        },
+        'arianna-bend': {
+            title:'Bend', subtitle:'Curve geometry along an axis', controls:[
+                {attr:'angle',label:'Angle',type:'range',min:-3.14,max:3.14,step:.01,value:1.35,suffix:' rad'},
+                {attr:'axis',label:'Axis',type:'select',value:'y',options:['x','y','z']},
+            ]
+        },
+        'arianna-bevel': {
+            title:'Bevel', subtitle:'Chamfer / soften edges', controls:[
+                {attr:'amount',label:'Amount',type:'range',min:0,max:.45,step:.01,value:.12},
+                {attr:'segments',label:'Segments',type:'range',min:1,max:6,step:1,value:2},
+            ]
+        },
+        'arianna-billboard': {
+            title:'Billboard', subtitle:'Face the active camera', controls:[
+                {attr:'lock-x',label:'Lock X',type:'toggle',value:false},
+                {attr:'lock-y',label:'Lock Y',type:'toggle',value:false},
+                {attr:'lock-z',label:'Lock Z',type:'toggle',value:false},
+            ]
+        },
+        'arianna-decimate': {
+            title:'Decimate', subtitle:'Reduce triangle density', controls:[
+                {attr:'ratio',label:'Ratio',type:'range',min:.05,max:1,step:.05,value:.45},
+            ]
+        },
+        'arianna-drag': {
+            title:'Drag', subtitle:'Move the cube on a plane', controls:[
+                {attr:'plane',label:'Plane',type:'select',value:'xz',options:['xz','xy','yz']},
+            ]
+        },
+        'arianna-fade': {
+            title:'Fade', subtitle:'Distance-based visibility', controls:[
+                {attr:'near',label:'Near',type:'range',min:1,max:10,step:.1,value:3.5},
+                {attr:'far',label:'Far',type:'range',min:2,max:16,step:.1,value:8},
+            ]
+        },
+        'arianna-inflate': {
+            title:'Inflate', subtitle:'Move vertices along normals', controls:[
+                {attr:'amount',label:'Amount',type:'range',min:-.6,max:.8,step:.01,value:.18},
+            ]
+        },
+        'arianna-lod': {
+            title:'LOD', subtitle:'Automatic geometry detail by distance', controls:[
+                {attr:'near',label:'High ≤',type:'range',min:2,max:8,step:.1,value:4.5},
+                {attr:'mid',label:'Medium ≤',type:'range',min:4,max:12,step:.1,value:7},
+                {attr:'far',label:'Low ≤',type:'range',min:6,max:18,step:.1,value:11},
+            ]
+        },
+        'arianna-mirror': {
+            title:'Mirror', subtitle:'Mirror geometry on an axis', controls:[
+                {attr:'axis',label:'Axis',type:'select',value:'x',options:['x','y','z']},
+                {attr:'merge',label:'Merge',type:'toggle',value:true},
+                {attr:'threshold',label:'Weld ε',type:'range',min:.0001,max:.05,step:.0001,value:.001},
+            ]
+        },
+        'arianna-smooth': {
+            title:'Smooth', subtitle:'Laplacian surface smoothing', controls:[
+                {attr:'iterations',label:'Iterations',type:'range',min:1,max:8,step:1,value:2},
+                {attr:'factor',label:'Factor',type:'range',min:.05,max:.95,step:.05,value:.4},
+            ]
+        },
+        'arianna-snap': {
+            title:'Snap', subtitle:'Quantize transform', controls:[
+                {attr:'pos-grid',label:'Position grid',type:'range',min:.05,max:2,step:.05,value:.5},
+                {attr:'rot-grid-deg',label:'Rotation grid',type:'range',min:1,max:90,step:1,value:15,suffix:'°'},
+            ]
+        },
+        'arianna-subdivision': {
+            title:'Subdivision', subtitle:'Midpoint subdivision surface', controls:[
+                {attr:'iterations',label:'Iterations',type:'range',min:0,max:3,step:1,value:1},
+            ]
+        },
+        'arianna-twist': {
+            title:'Twist', subtitle:'Twist geometry around an axis', controls:[
+                {attr:'angle',label:'Angle',type:'range',min:-6.28,max:6.28,step:.01,value:2.4,suffix:' rad'},
+                {attr:'axis',label:'Axis',type:'select',value:'y',options:['x','y','z']},
+            ]
+        },
+        'arianna-wave': {
+            title:'Wave', subtitle:'Sinusoidal displacement', controls:[
+                {attr:'amplitude',label:'Amplitude',type:'range',min:0,max:.8,step:.01,value:.25},
+                {attr:'frequency',label:'Frequency',type:'range',min:.25,max:10,step:.05,value:4},
+                {attr:'axis',label:'Displace',type:'select',value:'y',options:['x','y','z']},
+                {attr:'direction',label:'Direction',type:'select',value:'x',options:['x','z']},
+                {attr:'animate',label:'Animate',type:'toggle',value:true},
+            ]
+        },
+    });
+
+    function EnsurePanelStyles(): void
+    {
+        if(typeof document === 'undefined' || document.getElementById('arianna-modifier-3d-panel-styles')) return;
+        const style=document.createElement('style');
+        style.id='arianna-modifier-3d-panel-styles';
+        style.textContent=`
+arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,arianna-decimate,arianna-drag,arianna-fade,arianna-inflate,arianna-lod,arianna-mirror,arianna-smooth,arianna-snap,arianna-subdivision,arianna-twist,arianna-wave{box-sizing:border-box;position:absolute;top:14px;right:14px;z-index:25;width:272px;max-height:calc(100% - 28px);overflow:auto;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(24,27,31,.94);box-shadow:0 18px 50px rgba(0,0,0,.32);backdrop-filter:blur(14px);color:#edf0f3;font:12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto}
+.ar-mod3d__head{display:flex;align-items:center;gap:9px;padding:10px 11px;border-bottom:1px solid rgba(255,255,255,.1);cursor:move;user-select:none;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012))}
+.ar-mod3d__titles{min-width:0;flex:1}.ar-mod3d__title{display:block;font-size:12px;font-weight:750;color:#fff}.ar-mod3d__sub{display:block;margin-top:1px;font-size:9px;color:#8f98a2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ar-mod3d__enabled{display:flex;align-items:center;gap:5px;color:#9da6ae;font-size:9px}.ar-mod3d__enabled input{accent-color:#e40c88}
+.ar-mod3d__body{display:grid;gap:9px;padding:11px}.ar-mod3d__row{display:grid;grid-template-columns:86px minmax(0,1fr) 48px;align-items:center;gap:7px}.ar-mod3d__row--select{grid-template-columns:86px minmax(0,1fr)}.ar-mod3d__row--toggle{grid-template-columns:1fr auto}.ar-mod3d__label{color:#aeb6bd;font-size:10px}.ar-mod3d__value{text-align:right;color:#f0f2f4;font:10px ui-monospace,SFMono-Regular,Menlo,monospace}.ar-mod3d__range{width:100%;accent-color:#e40c88}.ar-mod3d__select{width:100%;min-height:28px;border:1px solid #464c53;border-radius:6px;background:#22262b;color:#e8ebee;padding:4px 7px;font:10px system-ui}.ar-mod3d__toggle{accent-color:#e40c88}.ar-mod3d__foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 11px;border-top:1px solid rgba(255,255,255,.09)}.ar-mod3d__badge{color:#8f98a2;font:9px ui-monospace,SFMono-Regular,Menlo,monospace}.ar-mod3d__reset{appearance:none;border:1px solid #4b5158;border-radius:6px;background:#2b3035;color:#d9dde1;padding:5px 8px;font:700 9px system-ui;cursor:pointer}.ar-mod3d__reset:hover{border-color:#e40c88;color:#fff}
+`;
+        document.head.append(style);
+    }
+
+    @Component('arianna-modifier-3d', {}, {
+        Shadow:false,
+        Attributes: ['viewport','for','enabled','disabled'],
+    })
+    export class Modifier3DElement extends HTMLElement
+    {
+        private readonly _AriannaIdentity = (() => {
+            const type='Modifier3DElement';
+            for(const cls of Array.from(this.classList)) if(cls.startsWith('__real-')) this.classList.remove(cls);
+            this.classList.add(type);
+            const g=globalThis as typeof globalThis & {__AriannaComponentIds?:Record<string,number>};
+            const ids=g.__AriannaComponentIds ??= Object.create(null);
+            this.id ||= `${type}-${ids[type]=(ids[type]??0)+1}`;
             return true;
         })();
 
-        constructor()
-        {
-            super();
-        }
-
-        /** @name        template
-         *  @public
-         *  @type        {unknown}
-         *  @description Shared compiler-promotable Template shell. The component keeps its existing imperative
-         *               or behavior-only rendering logic while participating in the compiled Template fast path.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         template = html``;
-
-        /** @name        viewport
-         *  @protected
-         *  @type        {Modifier3D.Interfaces.Viewport3DLike | null}
-         *  @description Component member for viewport.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         protected viewport: Modifier3D.Interfaces.Viewport3DLike | null = null;
-
-        /** @name        target
-         *  @protected
-         *  @type        {Modifier3D.Interfaces.MeshLike | null}
-         *  @description Component member for target.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         protected target: Modifier3D.Interfaces.MeshLike | null = null;
-
-        /** @name        modifier
-         *  @protected
-         *  @type        {Modifier3D | null}
-         *  @description Component member for modifier.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
         protected modifier: Modifier3D | null = null;
 
-        /** Frame-loop unsubscribe handle (returned by viewport.onFrame). */
-        #frameUnsub: (() => void) | null = null;
+        #frameUnsub: (()=>void)|null=null;
+        #baseGeometry: Modifier3D.Interfaces.Geometry3Like|null=null;
+        #baseTransform: {position:Modifier3D.Interfaces.Vec3Like;rotation:Modifier3D.Interfaces.Vec3Like;scale:Modifier3D.Interfaces.Vec3Like;visible:boolean}|null=null;
+        #bound=false;
+        #refreshQueued=false;
+        #panelReady=false;
 
-        /** @name        onConnected
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Connected.
-         *  @param       {object} _opts Parameter.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onConnected(_opts: object = {})
+        constructor(){ super(); }
+
+        onConnected(): void
         {
-            // Modifiers have no chrome — they're pure behavior wiring.
-            // Hide the host so it takes no layout space.
+            EnsurePanelStyles();
+            this.renderPanel();
+            this.bindSoon();
         }
 
-        /**
-         * Resolve the viewport this modifier lives inside.
-         * Default: nearest `arianna-viewport-3d` ancestor.
-         */
+        onCreated(): void { if(this.isConnected) this.onConnected(); }
+        onMount(): void { this.onConnected(); }
+        onBeforeMount(): void {}
+        onBeforeUpdate(): void {}
+        onUpdate(): void {}
+        onBeforeUnmount(): void {}
+
+        onAttributeChanged(): void
+        {
+            if(!this.isConnected) return;
+            this.syncPanel();
+            this.scheduleRefresh();
+        }
+
         protected resolveViewport(): Modifier3D.Interfaces.Viewport3DLike | null
         {
-            /** @name        el
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned el value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const el = this.closest('arianna-viewport-3d');
-            return el ? (el as unknown as Modifier3D.Interfaces.Viewport3DLike) : null;
+            const ref=(this.getAttribute('viewport')??'').trim();
+            if(ref)
+            {
+                const el=document.getElementById(ref);
+                if(el) return el as unknown as Modifier3D.Interfaces.Viewport3DLike;
+            }
+            const ancestor=this.closest('arianna-canvas-3d,arianna-viewport-3d');
+            if(ancestor) return ancestor as unknown as Modifier3D.Interfaces.Viewport3DLike;
+            let sib:Element|null=this.previousElementSibling;
+            while(sib)
+            {
+                if(sib.matches('arianna-canvas-3d,arianna-viewport-3d')) return sib as unknown as Modifier3D.Interfaces.Viewport3DLike;
+                sib=sib.previousElementSibling;
+            }
+            const parent=this.parentElement?.querySelector('arianna-canvas-3d,arianna-viewport-3d');
+            return parent ? parent as unknown as Modifier3D.Interfaces.Viewport3DLike : null;
         }
 
-        /**
-         * Resolve the target mesh.
-         *   1. If `for` attribute set → viewport.findMesh(id)
-         *   2. Else → previous-sibling `arianna-mesh` with a `.mesh` property
-         */
         protected resolveTarget(): Modifier3D.Interfaces.MeshLike | null
         {
-            /** @name        id
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned id value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const id = this.getAttribute('for');
-            if (id && this.viewport)
-                return this.viewport.findMesh(id);
-            // Sibling fallback: walk previous siblings looking for an arianna-mesh
-            /** @name        sib
-             *  @public
-             *  @type        {Element | null}
-             *  @description Namespace-owned sib value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            let sib: Element | null = this.previousElementSibling;
-            while (sib)
-            {
-                if (sib.tagName.toLowerCase() === 'arianna-mesh')
-                {
-                    /** @name        m
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned m value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const m = (sib as unknown as {
-                        /** @name        mesh
-                         *  @public
-                         *  @type        {Modifier3D.Interfaces.MeshLike}
-                         *  @description Component member for mesh.
-                         *  @author      Riccardo Angeli
-                         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                         *  @license     MIT / Commercial (dual license) */
-                        mesh?: Modifier3D.Interfaces.MeshLike;
-                    }).mesh;
-                    if (m)
-                        return m;
-                }
-                sib = sib.previousElementSibling;
-            }
+            const id=(this.getAttribute('for')??'cube').trim() || 'cube';
+            if(this.viewport) return this.viewport.findMesh(id);
             return null;
         }
 
-        /**
-         * Override to construct the concrete modifier. Called once the target
-         * mesh is resolved.
-         */
-        protected createModifier(_mesh: Modifier3D.Interfaces.MeshLike): Modifier3D | null
-        {
-            return null; // Subclass override
-        }
-
-        /**
-         * Override if the modifier needs per-frame `update(camera)` calls.
-         * Return false (default) to skip the frame loop registration.
-         */
+        protected createModifier(_mesh: Modifier3D.Interfaces.MeshLike): Modifier3D | null { return null; }
         protected needsFrameUpdate(): boolean { return false; }
 
-        /**
-         * Per-frame callback invoked by the viewport's render loop. Default impl
-         * calls `modifier.update?.(viewport.camera)` if the method exists.
-         */
-        protected onFrame(_dt: number): void
+        protected onFrame(_dt:number): void
         {
-            /** @name        m
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned m value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const m = this.modifier as Modifier3D & {
-                /** @name        update
-                 *  @public
-                 *  @type        {(cam: Modifier3D.Interfaces.CameraLike) => void}
-                 *  @description Component member for update.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                update?: (cam: Modifier3D.Interfaces.CameraLike) => void;
-            };
-            if (m && typeof m.update === 'function' && this.viewport)
+            const m=this.modifier as Modifier3D & {update?:(cam:Modifier3D.Interfaces.CameraLike,dt?:number)=>void};
+            if(m && typeof m.update==='function' && this.viewport)
             {
-                m.update(this.viewport.camera);
+                m.update(this.viewport.camera,_dt);
                 this.viewport.invalidate?.();
             }
         }
 
-        /** @name        onCreated
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Created.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onCreated() { }
-
-        /** @name        onBeforeMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeMount() { }
-
-        /** @name        onMount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Mount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onMount()
+        protected restoreTarget(): void
         {
-            this.style.display = 'contents';
-            queueMicrotask(() => {
-                this.viewport = this.resolveViewport();
-                if (!this.viewport)
-                {
-                    console.warn(`[${this.tagName.toLowerCase()}] no <arianna-viewport-3d> ancestor`);
-                    return;
-                }
-                this.target = this.resolveTarget();
-                if (!this.target)
-                {
-                    console.warn(`[${this.tagName.toLowerCase()}] no target mesh resolved`);
-                    return;
-                }
-                this.modifier = this.createModifier(this.target);
-                if (!this.modifier)
-                    return;
-                this.modifier.apply();
-                this.viewport.invalidate?.();
-                if (this.needsFrameUpdate() && this.viewport.onFrame)
-                {
-                    this.#frameUnsub = this.viewport.onFrame(dt => this.onFrame(dt));
-                }
+            if(!this.target) return;
+            if(this.#baseGeometry) this.target.geometry=_cloneGeom(this.#baseGeometry);
+            if(this.#baseTransform)
+            {
+                this.target.position={...this.#baseTransform.position};
+                this.target.rotation={...this.#baseTransform.rotation};
+                this.target.scale={...this.#baseTransform.scale};
+                this.target.visible=this.#baseTransform.visible;
+                delete this.target.userData['_arianna_opacity'];
+            }
+        }
+
+        protected refreshModifier(): void
+        {
+            if(!this.#bound || !this.target || !this.viewport) return;
+            this.#frameUnsub?.(); this.#frameUnsub=null;
+            this.modifier?.destroy();
+            this.restoreTarget();
+            this.modifier=this.createModifier(this.target);
+            if(!this.modifier) { this.viewport.invalidate?.(); return; }
+            if(!this.enabled) this.modifier.disable();
+            this.modifier.apply();
+            if(this.enabled && this.needsFrameUpdate() && this.viewport.onFrame)
+                this.#frameUnsub=this.viewport.onFrame(dt=>this.onFrame(dt));
+            this.viewport.invalidate?.();
+            this.dispatchEvent(new CustomEvent('arianna:modifier-3d-change',{bubbles:true,detail:{modifier:this.localName,attributes:Object.fromEntries(Array.from(this.attributes).map(a=>[a.name,a.value]))}}));
+        }
+
+        private scheduleRefresh(): void
+        {
+            if(this.#refreshQueued) return;
+            this.#refreshQueued=true;
+            queueMicrotask(()=>{this.#refreshQueued=false;this.refreshModifier();});
+        }
+
+        private bindSoon(): void
+        {
+            if(this.#bound) return;
+            queueMicrotask(()=>{
+                if(this.#bound || !this.isConnected) return;
+                this.viewport=this.resolveViewport();
+                if(!this.viewport) { console.warn(`[${this.localName}] no Canvas3D/viewport resolved`); return; }
+                this.target=this.resolveTarget();
+                if(!this.target) { console.warn(`[${this.localName}] target mesh not found`); return; }
+                this.#baseGeometry=_cloneGeom(this.target.geometry);
+                this.#baseTransform={position:{...this.target.position},rotation:{...this.target.rotation},scale:{...this.target.scale},visible:this.target.visible};
+                this.#bound=true;
+                this.refreshModifier();
             });
         }
 
-        /** @name        onBeforeUpdate
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Update.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeUpdate() { }
-
-        /** @name        onUpdate
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Update.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUpdate() { }
-
-        /** @name        onBeforeUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Before Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onBeforeUnmount() { }
-
-        /** @name        onUnmount
-         *  @public
-         *  @type        {void}
-         *  @description Component member for on Unmount.
-         *  @returns     {void} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onUnmount()
+        private schema(): PanelSchema
         {
-            if (this.#frameUnsub)
-            {
-                this.#frameUnsub();
-                this.#frameUnsub = null;
-            }
-            this.modifier?.destroy();
-            this.modifier = null;
-            this.target = null;
-            this.viewport = null;
+            return PanelSchemas[this.localName] ?? {title:'Modifier 3D',subtitle:'Declarative modifier',controls:[]};
         }
 
-        /** @name        enabled
-         *  @public
-         *  @type        {boolean}
-         *  @description Component member for enabled.
-         *  @returns     {boolean} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        get enabled(): boolean { return !this.hasAttribute('disabled'); }
+        private ensureDefaults(schema:PanelSchema): void
+        {
+            for(const control of schema.controls)
+            {
+                if(control.type==='toggle')
+                {
+                    if(control.value===true && !this.hasAttribute(control.attr)) this.setAttribute(control.attr,'');
+                    continue;
+                }
+                if(!this.hasAttribute(control.attr) && control.value!==undefined) this.setAttribute(control.attr,String(control.value));
+            }
+            if(!this.hasAttribute('for')) this.setAttribute('for','cube');
+        }
 
-        /** @name        enabled
-         *  @public
-         *  @type        {void}
-         *  @description Component member for enabled.
-         *  @param       {boolean} v Parameter.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        set enabled(v: boolean) { v ? this.removeAttribute('disabled') : this.setAttribute('disabled', ''); }
+        private renderPanel(): void
+        {
+            if(this.#panelReady) { this.syncPanel(); return; }
+            const schema=this.schema();
+            this.ensureDefaults(schema);
+            this.classList.add('Modifier3DPanel');
+            this.replaceChildren();
 
-        /** Programmatic access to the resolved modifier (after mount). */
+            const head=document.createElement('header'); head.className='ar-mod3d__head';
+            const titles=document.createElement('div'); titles.className='ar-mod3d__titles';
+            const title=document.createElement('strong'); title.className='ar-mod3d__title'; title.textContent=schema.title;
+            const sub=document.createElement('span'); sub.className='ar-mod3d__sub'; sub.textContent=schema.subtitle;
+            titles.append(title,sub);
+            const enabledLabel=document.createElement('label'); enabledLabel.className='ar-mod3d__enabled';
+            const enabled=document.createElement('input'); enabled.type='checkbox'; enabled.checked=this.enabled; enabled.dataset.role='enabled';
+            enabled.addEventListener('change',()=>{this.enabled=enabled.checked;this.scheduleRefresh();});
+            enabledLabel.append(enabled,document.createTextNode('Enabled'));
+            head.append(titles,enabledLabel);
+
+            const body=document.createElement('div'); body.className='ar-mod3d__body';
+            for(const control of schema.controls) body.appendChild(this.makeControl(control));
+
+            const foot=document.createElement('footer'); foot.className='ar-mod3d__foot';
+            const badge=document.createElement('span'); badge.className='ar-mod3d__badge'; badge.textContent='AriannA · 3D';
+            const reset=document.createElement('button'); reset.type='button'; reset.className='ar-mod3d__reset'; reset.textContent='Reset';
+            reset.addEventListener('click',()=>{for(const c of schema.controls)this.removeAttribute(c.attr);this.ensureDefaults(schema);this.syncPanel();this.scheduleRefresh();});
+            foot.append(badge,reset);
+            this.append(head,body,foot);
+            this.wirePanelDrag(head);
+            this.#panelReady=true;
+            this.syncPanel();
+        }
+
+        private makeControl(control:PanelControl): HTMLElement
+        {
+            const row=document.createElement('label');
+            row.className=`ar-mod3d__row ar-mod3d__row--${control.type}`;
+            const label=document.createElement('span'); label.className='ar-mod3d__label'; label.textContent=control.label;
+            if(control.type==='range')
+            {
+                const input=document.createElement('input'); input.type='range'; input.className='ar-mod3d__range'; input.dataset.attr=control.attr;
+                if(control.min!==undefined) input.min=String(control.min); if(control.max!==undefined) input.max=String(control.max); if(control.step!==undefined) input.step=String(control.step);
+                const value=document.createElement('span'); value.className='ar-mod3d__value'; value.dataset.valueFor=control.attr;
+                input.addEventListener('input',()=>{this.setAttribute(control.attr,input.value);value.textContent=`${input.value}${control.suffix??''}`;this.scheduleRefresh();});
+                row.append(label,input,value);
+            }
+            else if(control.type==='select')
+            {
+                const select=document.createElement('select'); select.className='ar-mod3d__select'; select.dataset.attr=control.attr;
+                for(const option of control.options??[]){const el=document.createElement('option');el.value=option;el.textContent=option;select.appendChild(el);}
+                select.addEventListener('change',()=>{this.setAttribute(control.attr,select.value);this.scheduleRefresh();});
+                row.append(label,select);
+            }
+            else
+            {
+                const toggle=document.createElement('input'); toggle.type='checkbox'; toggle.className='ar-mod3d__toggle'; toggle.dataset.attr=control.attr;
+                toggle.addEventListener('change',()=>{toggle.checked?this.setAttribute(control.attr,''):this.removeAttribute(control.attr);this.scheduleRefresh();});
+                row.append(label,toggle);
+            }
+            return row;
+        }
+
+        private syncPanel(): void
+        {
+            if(!this.#panelReady) return;
+            const schema=this.schema();
+            const enabled=this.querySelector<HTMLInputElement>('[data-role="enabled"]'); if(enabled) enabled.checked=this.enabled;
+            for(const control of schema.controls)
+            {
+                const input=this.querySelector<HTMLInputElement|HTMLSelectElement>(`[data-attr="${control.attr}"]`);
+                if(!input) continue;
+                if(input instanceof HTMLInputElement && input.type==='checkbox') input.checked=this.hasAttribute(control.attr) && this.getAttribute(control.attr)!=='false';
+                else input.value=this.getAttribute(control.attr) ?? String(control.value ?? '');
+                const value=this.querySelector<HTMLElement>(`[data-value-for="${control.attr}"]`);
+                if(value) value.textContent=`${this.getAttribute(control.attr) ?? control.value ?? ''}${control.suffix??''}`;
+            }
+        }
+
+        private wirePanelDrag(handle:HTMLElement): void
+        {
+            let active=false,dx=0,dy=0;
+            handle.addEventListener('pointerdown',(event)=>{
+                if((event.target as Element).closest('input,button,select,label')) return;
+                active=true; const r=this.getBoundingClientRect(); dx=event.clientX-r.left; dy=event.clientY-r.top;
+                this.style.left=`${this.offsetLeft}px`; this.style.top=`${this.offsetTop}px`; this.style.right='auto';
+                handle.setPointerCapture(event.pointerId);
+            });
+            handle.addEventListener('pointermove',(event)=>{if(!active)return;const p=this.offsetParent as HTMLElement|null;const pr=p?.getBoundingClientRect();if(!pr)return;const maxX=Math.max(0,pr.width-this.offsetWidth),maxY=Math.max(0,pr.height-this.offsetHeight);this.style.left=`${Math.max(0,Math.min(maxX,event.clientX-pr.left-dx))}px`;this.style.top=`${Math.max(0,Math.min(maxY,event.clientY-pr.top-dy))}px`;});
+            const end=()=>{active=false;}; handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);
+        }
+
+        onUnmount(): void
+        {
+            this.#frameUnsub?.(); this.#frameUnsub=null;
+            this.modifier?.destroy(); this.modifier=null;
+            this.restoreTarget();
+            this.target=null; this.viewport=null; this.#bound=false;
+        }
+
+        get enabled(): boolean
+        {
+            const explicit=this.getAttribute('enabled');
+            if(explicit==='false') return false;
+            return !this.hasAttribute('disabled');
+        }
+        set enabled(v:boolean)
+        {
+            if(v){this.removeAttribute('disabled');if(this.getAttribute('enabled')==='false')this.setAttribute('enabled','true');}
+            else this.setAttribute('disabled','');
+        }
         getModifier(): Modifier3D | null { return this.modifier; }
     }
     // ── Programmatic core (plain class — Modifier3D) ─────────────────────────────

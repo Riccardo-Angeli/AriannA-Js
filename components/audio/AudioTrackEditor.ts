@@ -441,7 +441,7 @@ export namespace AudioTrackEditor
                 {
                     // Editor mode: ghost lives above all lanes so cross-track drag is never clipped.
                     const editorRect = editor.getBoundingClientRect();
-                    if(ghost.parentElement !== editor) editor.append(ghost);
+                    if(ghost.parentElement !== editor) editor.appendChild(ghost);
                     ghost.style.left = `${laneRect.left - editorRect.left + previewStart * beatPx}px`;
                     ghost.style.top = `${laneRect.top - editorRect.top + 5}px`;
                     ghost.style.bottom = 'auto';
@@ -909,7 +909,7 @@ export namespace AudioTrackEditor
         new Css.Rule('.AudioTrackEditor-Fill', { Flex: '1 1 auto' }),
         new Css.Rule('.AudioTrackEditor-Ruler', { Background: '#292d31', BorderBottom: '1px solid #101214', Display: 'grid', GridTemplateColumns: '150px minmax(0,1fr)' }),
         new Css.Rule('.AudioTrackEditor-Corner', { BorderRight: '1px solid #111315' }),
-        new Css.Rule('.AudioTrackEditor-RulerLane', { Color: '#929aa2', Font: '9px/1 ui-monospace,SFMono-Regular,Menlo,monospace', Overflow: 'hidden', Position: 'relative' }),
+        new Css.Rule('.AudioTrackEditor-RulerLane', { Color: '#929aa2', Cursor: 'ew-resize', Font: '9px/1 ui-monospace,SFMono-Regular,Menlo,monospace', Overflow: 'hidden', Position: 'relative', TouchAction: 'none', UserSelect: 'none' }),
         new Css.Rule('.AudioTrackEditor-Tick', { BorderLeft: '1px solid #535a61', Bottom: '0', Position: 'absolute', Top: '0' }),
         new Css.Rule('.AudioTrackEditor-TickLabel', { Left: '3px', Position: 'absolute', Top: '6px' }),
         new Css.Rule('.AudioTrackEditor-Body', { AlignItems: 'stretch', Display: 'flex', FlexDirection: 'column', MinHeight: '0', Overflow: 'auto', Position: 'relative', Width: '100%' }),
@@ -953,6 +953,7 @@ export namespace AudioTrackEditor
         private PlaybackStartedAt = 0;
         private PlaybackStartBeat = 0;
         private PlaybackRaf = 0;
+        private SeekingFromRuler = false;
         private PlayButton?: HTMLButtonElement;
 
         constructor(options: Interfaces.AudioTrackEditorOptions = {})
@@ -976,6 +977,10 @@ export namespace AudioTrackEditor
         {
             this.EnsureState();
             this.classList.add('AudioTrackEditor');
+            // Keep every editor overlay anchored to the component itself even when
+            // the scoped stylesheet has not flushed yet during a prototype-promotion drain.
+            this.style.position = 'relative';
+            this.style.overflow = 'hidden';
             if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
             if(!this.hasAttribute('snap')) this.setAttribute('snap', '.25');
             if(!this.hasAttribute('tabindex')) this.tabIndex = 0;
@@ -1024,6 +1029,21 @@ export namespace AudioTrackEditor
             if(this.Time) this.Time.textContent = `${Math.floor(this.PlayheadValue / (this.BeatsPerBar ?? 4)) + 1}.${Math.floor(this.PlayheadValue % (this.BeatsPerBar ?? 4)) + 1}`;
             this.dispatchEvent(new CustomEvent('arianna:editor-playhead', { bubbles: true, composed: true, detail: { beat: this.PlayheadValue, source: this } }));
             return this;
+        }
+
+        private SeekToBeat(beats: number): void
+        {
+            this.setPlayhead(beats);
+            if(!this.Playing) return;
+
+            // Re-anchor synchronously so UpdatePlaybackPosition() follows the seek
+            // immediately, even before the async WebAudio reschedule has completed.
+            if(this.Context)
+            {
+                this.PlaybackStartBeat = this.PlayheadValue ?? 0;
+                this.PlaybackStartedAt = this.Context.currentTime;
+            }
+            void this.Reschedule();
         }
 
         public get playing(): boolean { return this.Playing; }
@@ -1119,7 +1139,7 @@ export namespace AudioTrackEditor
             if(clip.color) part.setAttribute('color', clip.color);
             const lane = target.querySelector<HTMLElement>(':scope > .AudioTrack-Lane');
             if(lane) lane.append(part);
-            else target.append(part);
+            else target.appendChild(part);
             requestAnimationFrame(() =>
             {
                 part.onConnected?.();
@@ -1237,11 +1257,19 @@ export namespace AudioTrackEditor
 
             this.Playhead = document.createElement('div');
             this.Playhead.className = 'AudioTrackEditor-Playhead';
-            this.append(toolbar, ruler, this.Body, this.Playhead);
+            // The playhead belongs to the arrangement body, not to document flow.
+            // Body is already position:relative, so left/top/bottom can never escape
+            // the AudioTrackEditor even if the host stylesheet is installed a frame later.
+            this.Playhead.style.position = 'absolute';
+            this.Playhead.style.top = '0';
+            this.Playhead.style.bottom = '0';
+            this.Playhead.style.pointerEvents = 'none';
+            this.Body.append(this.Playhead);
+            this.replaceChildren(toolbar, ruler, this.Body);
 
-            start.addEventListener('click', () => this.setPlayhead(0));
-            back.addEventListener('click', () => this.setPlayhead((this.PlayheadValue ?? 0) - 1));
-            forward.addEventListener('click', () => this.setPlayhead((this.PlayheadValue ?? 0) + 1));
+            start.addEventListener('click', () => this.SeekToBeat(0));
+            back.addEventListener('click', () => this.SeekToBeat((this.PlayheadValue ?? 0) - 1));
+            forward.addEventListener('click', () => this.SeekToBeat((this.PlayheadValue ?? 0) + 1));
             play.addEventListener('click', () => this.togglePlayback());
             stop.addEventListener('click', () => this.stop());
             cut.addEventListener('click', () => this.cutSelectedPart());
@@ -1249,6 +1277,58 @@ export namespace AudioTrackEditor
             paste.addEventListener('click', () => this.pastePart());
             zoomIn.addEventListener('click', () => this.Zoom(4));
             zoomOut.addEventListener('click', () => this.Zoom(-4));
+
+            const seekFromRulerPointer = (clientX: number): void =>
+            {
+                const rect = lane.getBoundingClientRect();
+                const total = (this.Bars ?? 16) * (this.BeatsPerBar ?? 4);
+                const beat = Math.max(0, Math.min(total, (clientX - rect.left) / (this.BeatPx ?? 28)));
+                this.setPlayhead(beat);
+
+                // While PLAY is running, move the playback clock anchor immediately.
+                // This prevents the RAF loop from snapping the red marker back to the
+                // old time while the user is dragging the ruler.
+                if(this.Playing && this.Context)
+                {
+                    this.PlaybackStartBeat = this.PlayheadValue ?? beat;
+                    this.PlaybackStartedAt = this.Context.currentTime;
+                }
+            };
+
+            lane.addEventListener('pointerdown', event =>
+            {
+                if(event.button !== 0) return;
+                event.preventDefault();
+                event.stopPropagation();
+
+                this.SeekingFromRuler = true;
+                seekFromRulerPointer(event.clientX);
+                this.focus();
+                try { lane.setPointerCapture(event.pointerId); } catch {}
+
+                const move = (moveEvent: PointerEvent): void =>
+                {
+                    if(moveEvent.pointerId !== event.pointerId) return;
+                    seekFromRulerPointer(moveEvent.clientX);
+                };
+
+                const finish = (finishEvent: PointerEvent): void =>
+                {
+                    if(finishEvent.pointerId !== event.pointerId) return;
+                    window.removeEventListener('pointermove', move, true);
+                    window.removeEventListener('pointerup', finish, true);
+                    window.removeEventListener('pointercancel', finish, true);
+                    try { lane.releasePointerCapture(event.pointerId); } catch {}
+                    this.SeekingFromRuler = false;
+
+                    // At release, restart the actual audio sources from the new point.
+                    if(this.Playing) void this.Reschedule();
+                };
+
+                window.addEventListener('pointermove', move, true);
+                window.addEventListener('pointerup', finish, true);
+                window.addEventListener('pointercancel', finish, true);
+            });
 
             this.Body.addEventListener('pointerdown', event =>
             {
@@ -1258,8 +1338,7 @@ export namespace AudioTrackEditor
                 if(!laneTarget) return;
                 const rect = laneTarget.getBoundingClientRect();
                 const beat = Math.max(0, (event.clientX - rect.left) / (this.BeatPx ?? 28));
-                this.setPlayhead(beat);
-                if(this.Playing) void this.Reschedule();
+                this.SeekToBeat(beat);
                 this.focus();
             });
 
@@ -1368,7 +1447,14 @@ export namespace AudioTrackEditor
                 this.Master.connect(this.Context.destination);
             }
             if(this.Context.state === 'suspended') await this.Context.resume();
-            for(const track of this.tracks) track.ensureAudio(this.Context, this.Master!);
+            for(const track of this.tracks)
+            {
+                const audioTrack = track as AudioTrack & {
+                    ensureAudio?: (context: AudioContext, destination: AudioNode) => AudioNode;
+                };
+                if(typeof audioTrack.ensureAudio === 'function')
+                    audioTrack.ensureAudio(this.Context, this.Master!);
+            }
             this.SyncMix();
             return this.Context;
         }
@@ -1391,13 +1477,25 @@ export namespace AudioTrackEditor
             const jobs: Promise<void>[] = [];
             for(const track of this.tracks)
             {
-                const input = track.ensureAudio(context, this.Master!);
+                const audioTrack = track as AudioTrack & {
+                    ensureAudio?: (context: AudioContext, destination: AudioNode) => AudioNode;
+                };
+                const input = typeof audioTrack.ensureAudio === 'function'
+                    ? audioTrack.ensureAudio(context, this.Master!)
+                    : this.Master!;
+
                 for(const part of Array.from(track.querySelectorAll<AudioPart>(':scope > .AudioTrack-Lane > arianna-audio-part, :scope > .AudioTrack-Lane > .AudioPart')))
                 {
                     const src = part.getAttribute('src')?.trim();
                     if(!src) continue;
-                    const partStart = part.start * secondsPerBeat;
-                    const partEnd = (part.start + part.length) * secondsPerBeat;
+
+                    // Attributes are the canonical timing source. Reading them directly
+                    // also makes playback work while a markup child is waiting for its
+                    // prototype promotion in the same observer drain.
+                    const startBeatValue = Math.max(0, Number(part.getAttribute('start') ?? 0) || 0);
+                    const lengthBeatValue = Math.max(.125, Number(part.getAttribute('length') ?? 1) || 1);
+                    const partStart = startBeatValue * secondsPerBeat;
+                    const partEnd = (startBeatValue + lengthBeatValue) * secondsPerBeat;
                     if(partEnd <= startSeconds) continue;
 
                     jobs.push((async () =>
@@ -1441,7 +1539,7 @@ export namespace AudioTrackEditor
 
         private UpdatePlaybackPosition(): void
         {
-            if(!this.Playing || !this.Context) return;
+            if(!this.Playing || !this.Context || this.SeekingFromRuler) return;
             const elapsed = this.Context.currentTime - this.PlaybackStartedAt;
             this.setPlayhead(this.PlaybackStartBeat + elapsed / this.SecondsPerBeat());
         }
@@ -1457,7 +1555,17 @@ export namespace AudioTrackEditor
                     return;
                 }
                 this.UpdatePlaybackPosition();
-                for(const track of this.tracks) track.setMeter(track.meterLevel());
+                for(const track of this.tracks)
+                {
+                    const meterTrack = track as AudioTrack & {
+                        meterLevel?: () => number;
+                        setMeter?: (level: number) => void;
+                    };
+                    const level = typeof meterTrack.meterLevel === 'function'
+                        ? meterTrack.meterLevel()
+                        : 0;
+                    if(typeof meterTrack.setMeter === 'function') meterTrack.setMeter(level);
+                }
                 const total = (this.Bars ?? 16) * (this.BeatsPerBar ?? 4);
                 if((this.PlayheadValue ?? 0) >= total)
                 {
@@ -1471,7 +1579,11 @@ export namespace AudioTrackEditor
 
         private ZeroMeters(): void
         {
-            for(const track of this.tracks) track.setMeter(0);
+            for(const track of this.tracks)
+            {
+                const meterTrack = track as AudioTrack & { setMeter?: (level: number) => void };
+                if(typeof meterTrack.setMeter === 'function') meterTrack.setMeter(0);
+            }
         }
 
         public onUnmount(): void

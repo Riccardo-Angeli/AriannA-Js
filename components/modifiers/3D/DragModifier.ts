@@ -57,7 +57,7 @@ export namespace DragModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-drag', {}, {
-        Attributes: ['for', 'plane', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'plane', 'enabled'],
     })
     export class DragModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

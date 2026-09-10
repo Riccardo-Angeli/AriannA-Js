@@ -39,7 +39,7 @@ export namespace SnapModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-snap', {}, {
-        Attributes: ['for', 'pos-grid', 'rot-grid-deg', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'pos-grid', 'rot-grid-deg', 'enabled'],
     })
     export class SnapModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

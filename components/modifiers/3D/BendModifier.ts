@@ -39,7 +39,7 @@ export namespace BendModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-bend', {}, {
-        Attributes: ['for', 'angle', 'axis', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'angle', 'axis', 'enabled'],
     })
     export class BendModifierElement extends Modifier3DNamespace.Modifier3DElement
     {
@@ -177,61 +177,31 @@ export namespace BendModifier
          *  @license     MIT / Commercial (dual license) */
         apply(): this
         {
-            if (!this.enabled)
-                return this;
-
-            /** @name        g
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned g value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const g = Modifier3DNamespace._cloneGeom(this.mesh.geometry);
-
-            /** @name        vals
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned vals value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const vals = g.vertices.map(v => this.#axis === 'y' ? v.y : this.#axis === 'x' ? v.x : v.z);
-
-            /** @name        vmin
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned vmin value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const vmin = Math.min(...vals), range = (Math.max(...vals) - vmin) || 1;
-            g.vertices = g.vertices.map(v => {
-                /** @name        t
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned t value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const t = ((this.#axis === 'y' ? v.y : this.#axis === 'x' ? v.x : v.z) - vmin) / range;
-
-                /** @name        a
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned a value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const a = t * this.#angle, c = Math.cos(a), s = Math.sin(a);
-                if (this.#axis === 'y')
-                    return { x: c * v.x - s * v.z, y: v.y, z: s * v.x + c * v.z };
-                if (this.#axis === 'x')
-                    return { x: v.x, y: c * v.y - s * v.z, z: s * v.y + c * v.z };
-                return { x: c * v.x - s * v.y, y: s * v.x + c * v.y, z: v.z };
+            if(!this.enabled || Math.abs(this.#angle) < 1e-6) return this;
+            const g=Modifier3DNamespace._cloneGeom(this.mesh.geometry);
+            const axis=this.#axis;
+            const values=g.vertices.map(v=>axis==='x'?v.x:axis==='y'?v.y:v.z);
+            const min=Math.min(...values), max=Math.max(...values), span=(max-min)||1, mid=(min+max)/2;
+            const radius=span/this.#angle;
+            g.vertices=g.vertices.map(v=>{
+                const along=(axis==='x'?v.x:axis==='y'?v.y:v.z)-mid;
+                const theta=(along/span)*this.#angle;
+                const c=Math.cos(theta), s=Math.sin(theta);
+                if(axis==='y')
+                {
+                    const radial=radius+v.x;
+                    return {x:radial*c-radius,y:radial*s,z:v.z};
+                }
+                if(axis==='x')
+                {
+                    const radial=radius+v.y;
+                    return {x:radial*s,y:radial*c-radius,z:v.z};
+                }
+                const radial=radius+v.x;
+                return {x:radial*c-radius,y:v.y,z:radial*s};
             });
             Modifier3DNamespace._recomputeNormals(g);
-            this.mesh.geometry = g;
+            this.mesh.geometry=g;
             return this;
         }
     }

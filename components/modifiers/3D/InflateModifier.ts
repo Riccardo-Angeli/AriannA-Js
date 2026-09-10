@@ -39,7 +39,7 @@ export namespace InflateModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-inflate', {}, {
-        Attributes: ['for', 'amount', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'amount', 'enabled'],
     })
     export class InflateModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

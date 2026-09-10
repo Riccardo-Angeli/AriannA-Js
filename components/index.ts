@@ -68,10 +68,10 @@ export { Button, Switch, Checkbox, Radio, TextField, SearchBar, Dropdown, Rating
 // ── graphics — alias ColorPicker, re-export everything else ────────────────
 export { 
 // 2D
-Canvas2D, BezierEditor, LayersPanel, LinesPalette2D, ToolsPalette, 
+Canvas2D, LineEditor, Align, LayersPanel, LinesPalette2D, ToolsPalette, 
 // 3D
 CameraViewer3D, MaterialsPalette, Modifiers3DPalette, 
 // colors (canonical inputs/ColorPicker — aliasing this one)
-ColorPickerSquare, ColorPickerTile, ColorPickerWheel, LinearGradientEditor, RadialGradientEditor, ShapeGradientEditor, GraphicsColorPicker, } from './graphics/index.ts';
+ColorPickerSquare, ColorPickerTile, ColorPickerWheel, LinearGradientEditor, RadialGradientEditor, ShapeGradientEditor, GraphicsColorPicker, RGBColorPicker, HSLColorPicker, HSVColorPicker, OKHSLColorPicker, OKHSVColorPicker, CMYKColorPicker, XYZColorPicker, CIELABColorPicker, CIELUVColorPicker, CIEUVWColorPicker, } from './graphics/index.ts';
 // Re-export the colour utility functions (not classes)
 export { parseHexRgba, rgbToHex, rgbToHsl, hslToRgb } from './graphics/colors/GraphicsColorPicker.ts';

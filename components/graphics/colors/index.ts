@@ -9,3 +9,17 @@ export type { RGBA, GradientStop, GradientEditorOptions } from './GradientEditor
 export { LinearGradientEditor } from './LinearGradientEditor.ts'; export type { GradientInterp, LinearGradientEditorOptions } from './LinearGradientEditor.ts';
 export { RadialGradientEditor } from './RadialGradientEditor.ts'; export type { RadialShape, RadialSize, RadialGradientEditorOptions } from './RadialGradientEditor.ts';
 export { ShapeGradientEditor } from './ShapeGradientEditor.ts'; export type { ShapeStop, ShapeGradientEditorOptions } from './ShapeGradientEditor.ts';
+
+// Dedicated colour-space pickers (AriannA 2.0)
+export { ColorSpacePickerBase, ColorSpacePickerStyles } from './ColorSpacePickerBase.ts';
+export type { PickerConfig, PickerChannel, PickerGeometry } from './ColorSpacePickerBase.ts';
+export { RGBColorPicker } from './RGBColorPicker.ts';
+export { HSLColorPicker } from './HSLColorPicker.ts';
+export { HSVColorPicker } from './HSVColorPicker.ts';
+export { OKHSLColorPicker } from './OKHSLColorPicker.ts';
+export { OKHSVColorPicker } from './OKHSVColorPicker.ts';
+export { CMYKColorPicker } from './CMYKColorPicker.ts';
+export { XYZColorPicker } from './XYZColorPicker.ts';
+export { CIELABColorPicker } from './CIELABColorPicker.ts';
+export { CIELUVColorPicker } from './CIELUVColorPicker.ts';
+export { CIEUVWColorPicker } from './CIEUVWColorPicker.ts';

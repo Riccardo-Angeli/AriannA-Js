@@ -9,8 +9,6 @@ import { ChannelStrip as ChannelStripModule } from './ChannelStrip.ts';
 import { WaveformEditor as WaveformEditorModule } from './WaveformEditor.ts';
 import { PianoRoll as PianoRollModule } from './PianoRoll.ts';
 import { AudioTrackEditor as AudioTrackEditorModule } from './AudioTrackEditor.ts';
-import AudioPartClass from './AudioPart.ts';
-import AudioTrackClass from './AudioTrack.ts';
 
 export const AudioComponent = AudioComponentModule.AudioComponent;
 export const TransportBar = TransportBarModule.TransportBar;
@@ -19,8 +17,8 @@ export const ChannelStrip = ChannelStripModule.ChannelStrip;
 export const WaveformEditor = WaveformEditorModule.WaveformEditor;
 export const PianoRoll = PianoRollModule.PianoRoll;
 export const AudioTrackEditor = AudioTrackEditorModule.AudioTrackEditor;
-export const AudioTrack = AudioTrackClass;
-export const AudioPart = AudioPartClass;
+export const AudioTrack = AudioTrackEditorModule.AudioTrack;
+export const AudioPart = AudioTrackEditorModule.AudioPart;
 
 export type AudioComponentOptions = AudioComponentModule.AudioComponentOptions;
 export type TransportBarOptions = TransportBarModule.Interfaces.TransportBarOptions;

@@ -1,285 +1,50 @@
-import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
-const html = Templates.Template.Html;
-/**
- * @convention AriannA component namespace merge
- * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
- */
-/**
- * @module    components/navigation/Stepper
- * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026
- * @license   MIT / Commercial (dual license)
- *
- * Stepper — wizard / progress indicator showing ordered steps with current
- * position and completion markers.
- *
- * @example JS
- *   const s = new Stepper();
- *   s.steps   = ['Account', 'Profile', 'Confirm'];
- *   s.current = 1;
- *   s.next();
- *   s.complete(0);
- *
- * @example HTML
- *   <arianna-stepper variant="vertical" current="1"></arianna-stepper>
- *
- * Events:
- *   - arianna:change   detail: { step }
- *
- * Slots:  (none)
- * Attributes:  variant, current
- */
-/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
-   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
-   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
-   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
-   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
-   Map, Effect" with the same name printed twice. */
-const signal = Reactivity.CreateSignal;
-type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
-const { Rule, Stylesheet } = Css;
-type Rule = Css.Rule;
-type Stylesheet = Css.Stylesheet;
-export interface StepperOptions {
-    variant?: 'horizontal' | 'vertical';
-    steps?: string[];
-    current?: number;
-}
-interface StepEntry {
-    index: number;
-    label: string;
-    isDone: boolean;
-    isActive: boolean;
-    isPending: boolean;
-    isLast: boolean;
-    dotText: string;
-    stepClass: string;
-}
+import { Component, Css, Templates } from '../../core/index.ts';
+const html=Templates.Template.Html;const {Rule,Stylesheet}=Css;type Stylesheet=Css.Stylesheet;
+export interface StepperOptions{variant?:'horizontal'|'vertical';steps?:string[];current?:number;clickable?:boolean;}
+interface StepperState{steps:string[];completed:Set<number>;built:boolean;}
+const StepperStates=new WeakMap<HTMLElement,StepperState>();
+const TState=(host:HTMLElement):StepperState=>{let s=StepperStates.get(host);if(!s){s={steps:[],completed:new Set(),built:false};StepperStates.set(host,s);}return s;};
 
-export const Styles: Stylesheet = (() =>
-{
-        return new Stylesheet([
-            new Rule('.Stepper', {
-                '--arianna-bg': '#17181c',
-                '--arianna-bg-2': '#1d1e23',
-                '--arianna-bg-3': '#24262b',
-                '--arianna-text': '#e6e8eb',
-                '--arianna-muted': '#9aa0aa',
-                '--arianna-dim': '#6f7580',
-                '--arianna-border': '#303238',
-                '--arianna-primary': '#e40c88',
-                '--arianna-success': '#26a69a',
-                '--arianna-warning': '#f5a623',
-                '--arianna-danger': '#ef5350',
-                '--bg': '#17181c',
-                '--bg3': '#24262b',
-                '--text': '#e6e8eb',
-                '--muted': '#9aa0aa',
-                '--border': '#303238',
-                '--accent': '#e40c88',
-            }),
-            new Rule('.Stepper[theme="light"]', {
-                '--arianna-bg': '#ffffff',
-                '--arianna-bg-2': '#fbfbfc',
-                '--arianna-bg-3': '#f3f3f5',
-                '--arianna-text': '#1c1e21',
-                '--arianna-muted': '#626873',
-                '--arianna-dim': '#8a8f98',
-                '--arianna-border': '#e2e2e6',
-                '--arianna-primary': '#e40c88',
-                '--arianna-success': '#168a78',
-                '--arianna-warning': '#b66c00',
-                '--arianna-danger': '#c93645',
-                '--bg': '#ffffff',
-                '--bg3': '#f3f3f5',
-                '--text': '#1c1e21',
-                '--muted': '#626873',
-                '--border': '#e2e2e6',
-                '--accent': '#e40c88',
-            }),
-            new Rule('.Stepper', { display: 'flex', alignItems: 'flex-start' }),
-            new Rule('.Stepper[variant="vertical"]', { flexDirection: 'column' }),
-            new Rule('.Stepper:not([variant]))', { flexDirection: 'row' }),
-            new Rule('.Stepper[variant="horizontal"]', { flexDirection: 'row' }),
-            new Rule('.Stepper-Step', {
-                alignItems: 'center',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
-                minWidth: '64px',
-                textAlign: 'center',
-                flex: '1',
-                position: 'relative',
-            }),
-            new Rule('.Stepper-Dot', {
-                alignItems: 'center',
-                background: 'var(--arianna-bg-3, #f3f3f3)',
-                border: '2px solid var(--arianna-border, #d8d8d8)',
-                borderRadius: '50%',
-                color: 'var(--arianna-muted, #8b949e)',
-                display: 'flex',
-                fontSize: '0.7rem',
-                fontWeight: '600',
-                height: '28px',
-                justifyContent: 'center',
-                width: '28px',
-                transition: 'all 0.18s ease',
-            }),
-            new Rule('.Stepper-Step-Active .Stepper-Dot', {
-                background: 'var(--arianna-primary, #1f6feb)',
-                borderColor: 'var(--arianna-primary, #1f6feb)',
-                color: '#ffffff',
-            }),
-            new Rule('.Stepper-Step-Done .Stepper-Dot', {
-                background: 'var(--arianna-success, #2ea043)',
-                borderColor: 'var(--arianna-success, #2ea043)',
-                color: '#ffffff',
-            }),
-            new Rule('.Stepper-Label', {
-                fontSize: '0.72rem',
-                color: 'var(--arianna-muted, #8b949e)',
-            }),
-            new Rule('.Stepper-Step-Active .Stepper-Label', {
-                color: 'var(--arianna-text, #1f2328)',
-                fontWeight: '600',
-            }),
-            // Connector line between adjacent step dots (horizontal default)
-            new Rule('.Stepper-Step:not(:last-child)::after', {
-                content: '""',
-                position: 'absolute',
-                top: '14px',
-                left: '50%',
-                right: '-50%',
-                height: '2px',
-                background: 'var(--arianna-border, #d8d8d8)',
-                zIndex: '-1',
-            }),
-            new Rule('.Stepper[variant="vertical"] .Stepper-Step:not(:last-child)::after', {
-                display: 'none',
-            }),
-            new Rule('.Stepper-Step-Done:not(:last-child)::after', {
-                background: 'var(--arianna-success, #2ea043)',
-            }),
-        ]);
-    
-})();
+export const Styles:Stylesheet=new Stylesheet([
+ new Rule('.Stepper',{'--arianna-bg-3':'#24262b','--arianna-text':'#e6e8eb','--arianna-muted':'#9aa0aa','--arianna-border':'#303238','--arianna-primary':'#e40c88','--arianna-success':'#26a69a',color:'var(--arianna-text)',display:'flex',alignItems:'flex-start',fontFamily:'var(--arianna-font,system-ui,sans-serif)',minWidth:'0',width:'100%'}),
+ new Rule('.Stepper[theme="light"]',{'--arianna-bg-3':'#f3f3f5','--arianna-text':'#1c1e21','--arianna-muted':'#626873','--arianna-border':'#e2e2e6','--arianna-success':'#168a78'}),
+ new Rule('.Stepper[variant="vertical"]',{flexDirection:'column',gap:'6px'}),new Rule('.Stepper:not([variant]),.Stepper[variant="horizontal"]',{flexDirection:'row'}),
+ new Rule('.Stepper-Step',{alignItems:'center',display:'flex',flex:'1',flexDirection:'column',gap:'5px',minWidth:'64px',position:'relative',textAlign:'center'}),new Rule('.Stepper-StepButton',{alignItems:'center',background:'transparent',border:'0',color:'inherit',display:'flex',flexDirection:'column',font:'inherit',gap:'5px',padding:'0'}),new Rule('.Stepper[clickable] .Stepper-StepButton',{cursor:'pointer'}),
+ new Rule('.Stepper-Dot',{alignItems:'center',background:'var(--arianna-bg-3)',border:'2px solid var(--arianna-border)',borderRadius:'50%',color:'var(--arianna-muted)',display:'flex',fontSize:'.7rem',fontWeight:'700',height:'28px',justifyContent:'center',width:'28px',zIndex:'1'}),new Rule('.Stepper-Step-Active .Stepper-Dot',{background:'var(--arianna-primary)',borderColor:'var(--arianna-primary)',color:'#fff'}),new Rule('.Stepper-Step-Done .Stepper-Dot',{background:'var(--arianna-success)',borderColor:'var(--arianna-success)',color:'#fff'}),
+ new Rule('.Stepper-Label',{color:'var(--arianna-muted)',fontSize:'.72rem'}),new Rule('.Stepper-Step-Active .Stepper-Label',{color:'var(--arianna-text)',fontWeight:'700'}),new Rule('.Stepper-Step:not(:last-child)::after',{background:'var(--arianna-border)',content:'""',height:'2px',left:'50%',position:'absolute',right:'-50%',top:'14px'}),new Rule('.Stepper-Step-Done:not(:last-child)::after',{background:'var(--arianna-success)'}),
+ new Rule('.Stepper[variant="vertical"] .Stepper-Step',{alignItems:'flex-start',flex:'none',width:'100%'}),new Rule('.Stepper[variant="vertical"] .Stepper-StepButton',{alignItems:'center',flexDirection:'row'}),new Rule('.Stepper[variant="vertical"] .Stepper-Step:not(:last-child)::after',{display:'none'})
+]);
 
-@Component('arianna-stepper', Styles, {
-    Shadow: false,
-    Attributes: ['variant', 'current', 'theme', 'steps'],
-    Properties: ['steps'],
-})
-export class Stepper extends HTMLElement {
-    /** Compiler-visible AriannA binding factory installed by @Component. */
-    declare signal: <T>(initial?: T) => Components.Binding<T>;
-    /** Compiler-visible AriannA template slot installed by @Component. */
-    declare template: unknown;
-    private _stepsSignal?: Signal<string[]>;
-    public get steps$(): Signal<string[]>
-    {
-        this._stepsSignal ??= signal<string[]>([]);
-        return this._stepsSignal;
-    }
-    private _completedSignal?: Signal<Set<number>>;
-    public get completed$(): Signal<Set<number>>
-    {
-        this._completedSignal ??= signal<Set<number>>(new Set());
-        return this._completedSignal;
-    }
-    onConnected(_opts: StepperOptions = {}) {
-        this.classList.add('Stepper');
-        if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
-        const current = this.signal().attribute('current');
-        const curNum = (): number => parseInt(current.Get() ?? '0', 10) || 0;
-        this.entries = (): StepEntry[] => {
-            const steps = this.steps$.Get();
-            const cur = curNum();
-            const done = this.completed$.Get();
-            return steps.map((label, index) => {
-                const isDone = done.has(index);
-                const isActive = index === cur;
-                const isPending = index > cur && !isDone;
-                let stepClass = 'Stepper-Step';
-                if (isActive)
-                    stepClass += ' Stepper-Step-Active';
-                if (isDone)
-                    stepClass += ' Stepper-Step-Done';
-                if (isPending)
-                    stepClass += ' Stepper-Step-Pending';
-                return {
-                    index, label, isDone, isActive, isPending,
-                    isLast: index === steps.length - 1,
-                    dotText: isDone ? '✓' : String(index + 1),
-                    stepClass,
-                };
-            });
-        };
-        this.template = html `
-            <div :class="entry.stepClass" a-for="entry in this.entries()">
-                <div class="Stepper-Dot">{{ entry.dotText }}</div>
-                <div class="Stepper-Label">{{ entry.label }}</div>
-            </div>
-        `;
-        (this as unknown as {
-            Sheet: Stylesheet | null;
-        }).Sheet = Styles;
-    }
-    set steps(v: string[]) { this.steps$.Set(v ?? []); }
-    get steps(): string[] { return this.steps$.Get(); }
-    next(): this {
-        const cur = this.current;
-        if (cur < this.steps$.Get().length - 1) {
-            const done = new Set(this.completed$.Get());
-            done.add(cur);
-            this.completed$.Set(done);
-            this.setAttribute('current', String(cur + 1));
-            this.dispatchEvent(new CustomEvent('arianna:change', {
-                bubbles: true, detail: { step: cur + 1 },
-            }));
-        }
-        return this;
-    }
-    prev(): this {
-        const cur = this.current;
-        if (cur > 0) {
-            this.setAttribute('current', String(cur - 1));
-            this.dispatchEvent(new CustomEvent('arianna:change', {
-                bubbles: true, detail: { step: cur - 1 },
-            }));
-        }
-        return this;
-    }
-    complete(n: number = this.current): this {
-        const done = new Set(this.completed$.Get());
-        done.add(n);
-        this.completed$.Set(done);
-        return this;
-    }
-    onCreated() { }
-    onBeforeMount() { }
-    onMount() { }
-    onBeforeUpdate() { }
-    onUpdate() { }
-    onBeforeUnmount() { }
-    onUnmount() { }
-    get variant(): 'horizontal' | 'vertical' { return (this.getAttribute('variant') ?? 'horizontal') as never; }
-    set variant(v: 'horizontal' | 'vertical') { this.setAttribute('variant', v); }
-    get current(): number { return parseInt(this.getAttribute('current') ?? '0', 10) || 0; }
-    set current(v: number) { this.setAttribute('current', String(v)); }
-    private entries: () => StepEntry[] = () => [];
-    public static readonly Styles = Styles;
-    static DefaultSheet(): Stylesheet { return Styles; }
+@Component('arianna-stepper',Styles,{Shadow:false,Attributes:['variant','current','theme','steps','clickable'],Properties:['steps']})
+export class Stepper extends HTMLElement{
+ declare template:unknown;
+ onCreated():void{if(this.isConnected)this.onConnected();}
+ onConnected(o:StepperOptions={}):void{
+    const s=TState(this);this.classList.add('Stepper');if(!this.hasAttribute('theme'))this.setAttribute('theme','dark');
+    if(o.steps)s.steps=[...o.steps];if(o.variant)this.variant=o.variant;if(o.current!==undefined)this.current=o.current;if(o.clickable!==undefined)this.toggleAttribute('clickable',o.clickable);
+    const a=this.getAttribute('steps');if(!s.steps.length&&a)try{const v=JSON.parse(a);if(Array.isArray(v))s.steps=v.map(String);}catch{}
+    s.built=true;this.Render();(this as any).Sheet=Styles;
+ }
+ onAttributeChanged(name:string):void{const s=TState(this);if(!s.built)return;if(name==='steps'){const a=this.getAttribute('steps');if(a)try{const v=JSON.parse(a);if(Array.isArray(v))s.steps=v.map(String);}catch{}}this.Render();}
+ private Render():void{
+    const s=TState(this);if(!s.built)return;const f=document.createDocumentFragment();
+    s.steps.forEach((label,index)=>{
+        const done=s.completed.has(index),active=index===this.current;
+        const step=document.createElement('div');step.className='Stepper-Step'+(done?' Stepper-Step-Done':'')+(active?' Stepper-Step-Active':'');
+        const b=document.createElement('button');b.type='button';b.className='Stepper-StepButton';b.disabled=!this.hasAttribute('clickable');
+        const d=document.createElement('div');d.className='Stepper-Dot';d.textContent=done?'✓':String(index+1);
+        const l=document.createElement('div');l.className='Stepper-Label';l.textContent=label;b.append(d,l);
+        b.onclick=()=>{if(this.hasAttribute('clickable'))this.go(index);};step.appendChild(b);f.appendChild(step);
+    });
+    this.replaceChildren(f);
+ }
+ go(i:number):this{const s=TState(this);if(!s.steps.length)return this;i=Math.max(0,Math.min(s.steps.length-1,i));if(i===this.current)return this;this.current=i;this.dispatchEvent(new CustomEvent('arianna:change',{bubbles:true,detail:{step:i}}));return this;}
+ next():this{const s=TState(this),c=this.current;if(c<s.steps.length-1){s.completed.add(c);this.go(c+1);}return this;}prev():this{return this.go(this.current-1);}
+ complete(n:number=this.current):this{const s=TState(this);if(n>=0&&n<s.steps.length)s.completed.add(n);this.Render();return this;}reset():this{const s=TState(this);s.completed.clear();this.current=0;this.Render();return this;}
+ set steps(v:string[]){const s=TState(this);s.steps=Array.isArray(v)?v.map(String):[];s.completed.clear();this.Render();}get steps(){return [...TState(this).steps];}
+ get variant(){return (this.getAttribute('variant')??'horizontal') as 'horizontal'|'vertical';}set variant(v:'horizontal'|'vertical'){this.setAttribute('variant',v);}
+ get current(){return Number(this.getAttribute('current')??0)||0;}set current(v:number){this.setAttribute('current',String(Math.max(0,v)));}
+ static readonly Styles=Styles;static DefaultSheet():Stylesheet{return Styles;}
 }
-/* ──────────────────────────────────────────────────────────────────────────
- * Stepper namespace — public component contracts and module helpers.
- * ────────────────────────────────────────────────────────────────────────── */
-export namespace Stepper {
-    export namespace Interfaces {
-        export interface Options extends StepperOptions {
-        }
-        export interface StepEntryContract extends StepEntry {
-        }
-    }
-}
+export namespace Stepper{export namespace Interfaces{export interface Options extends StepperOptions{}}}
 export default Stepper;

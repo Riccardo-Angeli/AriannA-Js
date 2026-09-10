@@ -1,4 +1,5 @@
 import { MountPaymentTemplate } from './Base.ts';
+import { PaymentProviders } from './Providers.ts';
 /**
  * @module    components/payments/AliPay
  * @author    Riccardo Angeli
@@ -159,7 +160,7 @@ export namespace AliPay
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const ALIPAY_LOGO = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="4" fill="#00a0e9"/><text x="12" y="16" text-anchor="middle" fill="#fff" font-family="-apple-system, sans-serif" font-weight="700" font-size="11">支</text></svg>`;
+    export const ALIPAY_LOGO = PaymentProviders.AliPay.logo;
 
     /** @class       AliPay
      *  @public
@@ -171,7 +172,7 @@ export namespace AliPay
         shadow: false,
         Attributes: ['mode', 'redirect-url', 'qr-url', 'amount', 'currency', 'target'],
     })
-    export class AliPay extends HTMLDivElement
+    export class AliPay extends HTMLElement
     {
         public static readonly Styles = AliPay.DefaultSheet();
         /** Canonical AriannA public DOM identity. */
@@ -216,6 +217,11 @@ export namespace AliPay
         {
             if(this.dataset.ariannaFolderReady === 'true') return;
             (this as any).ALIPAY_LOGO = ALIPAY_LOGO;
+            (this as any).PAYMENT_PROVIDER = PaymentProviders.AliPay;
+            (this as any).PAYMENT_PROVIDER_LOGO = PaymentProviders.AliPay.logo;
+            (this as any).PAYMENT_PROVIDER_NAME = PaymentProviders.AliPay.name;
+            this.style.setProperty('--ar-payment-provider', PaymentProviders.AliPay.color);
+            this.style.setProperty('--ar-payment-contrast', PaymentProviders.AliPay.contrast ?? '#fff');
             /** @name        modeAttr
              *  @public
              *  @type        {inferred}
@@ -290,6 +296,12 @@ export namespace AliPay
             };
             this.onClick = () => { void this.pay(); };
             this.template = html `
+            <section class="ar-payment-provider">
+                <header class="ar-payment-header">
+                    <span class="ar-payment-logo" a-html="this.PAYMENT_PROVIDER_LOGO"></span>
+                    <strong class="ar-payment-name">{{ this.PAYMENT_PROVIDER_NAME }}</strong>
+                </header>
+                <div class="ar-payment-body">
             <div class="ar-alipay" a-if="!this.isQrMode()">
                 <button type="button" class="ar-alipay__btn" @click="this.onClick">
                     <span class="ar-alipay__logo" a-html="this.ALIPAY_LOGO"></span>
@@ -303,6 +315,9 @@ export namespace AliPay
                 </div>
                 <div class="ar-alipay__qr-amount">{{ this.btnLabel() }}</div>
             </div>
+        
+                </div>
+            </section>
         `;
             MountPaymentTemplate(this);
             this.dataset.ariannaFolderReady = 'true';

@@ -177,6 +177,7 @@ export namespace WaveformEditor
             this.Zoom = this.Clamp(Number(this.getAttribute('zoom') ?? ZOOM_DEFAULT), ZOOM_MIN, ZOOM_MAX);
             this.dataset.tool = this.Tool;
             this.Render();
+            this.EnsureAudioRuntime();
             this.SyncTheme();
             this.SyncZoomControls();
             this.Draw();
@@ -238,10 +239,36 @@ export namespace WaveformEditor
             if(self.Tool !== 'select' && self.Tool !== 'draw') self.Tool = 'select';
         }
 
+        /** Ensure prototype-promoted instances have a usable shared Web Audio graph. */
+        private EnsureAudioRuntime(): void
+        {
+            // Prototype promotion can bypass AudioComponent field initializers.
+            // Bind the shared context directly through the protected field: this
+            // keeps declaration emit valid and does not depend on a private/base
+            // lifecycle helper having run first.
+            if(!this._audioCtx)
+                this._audioCtx = AudioComponentModule.AudioComponent.context;
+
+            if(!this.OutputGain || !this.OutputPan || !this._input || !this._output)
+                this._buildAudioGraph();
+        }
+
         protected _buildAudioGraph(): void
         {
+            if(!this._audioCtx)
+                this._audioCtx = AudioComponentModule.AudioComponent.context;
+
+            if(this.OutputGain && this.OutputPan)
+            {
+                this._input = this.OutputGain;
+                this._output = this.OutputPan;
+                return;
+            }
+
             this.OutputGain = this._audioCtx.createGain();
             this.OutputPan = this._audioCtx.createStereoPanner();
+            this.OutputGain.gain.value = 1;
+            this.OutputPan.pan.value = 0;
             this.OutputGain.connect(this.OutputPan);
             this.OutputPan.connect(this._audioCtx.destination);
             this._input = this.OutputGain;
@@ -250,6 +277,7 @@ export namespace WaveformEditor
 
         public async loadFile(source: File | string | ArrayBuffer): Promise<AudioBuffer>
         {
+            this.EnsureAudioRuntime();
             let data: ArrayBuffer;
             if(typeof source === 'string')
             {
@@ -392,7 +420,11 @@ export namespace WaveformEditor
         private async StartPlayback(startNormalized: number, endNormalized: number): Promise<void>
         {
             if(!this.Buffer) return;
-            await AudioComponentModule.AudioComponent.resume().catch(() => undefined);
+            this.EnsureAudioRuntime();
+            // This executes from the toolbar's user gesture. Resume the exact
+            // context used by the editor, not merely an unrelated shared handle.
+            if(this._audioCtx.state !== 'running')
+                await this._audioCtx.resume().catch(() => undefined);
             this.StopSource(false);
 
             const start = this.Clamp(startNormalized, 0, 1);
@@ -402,7 +434,9 @@ export namespace WaveformEditor
 
             const source = this._audioCtx.createBufferSource();
             source.buffer = this.Buffer;
-            if(this._input) source.connect(this._input); else source.connect(this._audioCtx.destination);
+            const audibleInput = this.OutputGain ?? this._input;
+            if(audibleInput) source.connect(audibleInput);
+            else source.connect(this._audioCtx.destination);
 
             this.Current = start;
             this.PlaybackStart = start;
@@ -663,6 +697,9 @@ export namespace WaveformEditor
 
         private Render(): void
         {
+            // WaveformEditor is a single-file editor; it must not embed a mixer ChannelStrip.
+            this.querySelectorAll('arianna-channel-strip, .ChannelStrip')
+                .forEach(node => node.remove());
             if(this.querySelector(':scope > .WaveformEditor-Toolbar')) return;
             this.tabIndex = this.tabIndex >= 0 ? this.tabIndex : 0;
 
@@ -726,7 +763,9 @@ export namespace WaveformEditor
             status.append(this.StatusText, statusFill, this.ScrollInput, density);
             main.append(this.CanvasWrap, status);
             body.append(main);
-            this.append(toolbar, body);
+            // Component children belong to add(); append() is AriannA's
+            // single-parent operation and must never be used as DOM append here.
+            this.add(toolbar, body);
 
             selectTool.addEventListener('click', () => this.setTool('select'));
             drawTool.addEventListener('click', () => this.setTool('draw'));
@@ -738,7 +777,11 @@ export namespace WaveformEditor
                 if(file) void this.loadFile(file).then(() => this.Emit('arianna:waveform-load', { file })).catch(error => this.Emit('arianna:waveform-error', { error }));
                 if(this.FileInput) this.FileInput.value = '';
             });
-            play.addEventListener('click', () => this.togglePlayback());
+            play.addEventListener('click', async () =>
+            {
+                if(this.playing) this.pause();
+                else await this.play();
+            });
             stop.addEventListener('click', () => this.stop());
             back.addEventListener('click', () => this.seek(this.currentTime - 5));
             forward.addEventListener('click', () => this.seek(this.currentTime + 5));

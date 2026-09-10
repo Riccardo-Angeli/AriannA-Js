@@ -1,604 +1,77 @@
-import { Component, Components, Css, Reactivity, Templates } from '../../core/index.ts';
-import type { Interfaces as SchemaInterfaces } from '../../core/definitions/Interfaces.ts';
-const html = Templates.Template.Html;
-/**
- * @convention AriannA component namespace merge
- * Types: <Component>.Types · Interfaces: <Component>.Interfaces · helpers: <Component>.*
- */
-/**
- * @module    components/navigation/Sidebar
- * @author    Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026
- * @license   MIT / Commercial (dual license)
- *
- * Sidebar — resizable, collapsible, accordion navigation panel with optional
- * search. Dedicated with love to Arianna. ♡
- *
- * Resize is handled by an internal `<arianna-resizer>` child (only when
- * `resizable` is true and the sidebar is not collapsed), so the heavy
- * cross-anchor math lives in one place (the Resizer modifier) rather than
- * being re-implemented here.
- *
- * @example JS
- *   const s = new Sidebar();
- *   s.orientation = 'left';
- *   s.width       = 260;
- *   s.sections    = [
- *     { id: 'start', label: 'Getting Started', open: true,
- *       items: [
- *         { id: 'welcome',  label: 'Welcome',      icon: '✦' },
- *         { id: 'install',  label: 'Installation', icon: '⬇' },
- *       ],
- *     },
- *     { id: 'core', label: 'Core Modules',
- *       items: [{ id: 'real', label: 'Real', icon: '🌐' }],
- *     },
- *   ];
- *   s.active = 'welcome';
- *   s.addEventListener('arianna:select', e => router.go(e.detail.item.id));
- *   document.body.append(s);
- *
- * @example HTML
- *   <arianna-sidebar orientation="left" searchable collapsible persist></arianna-sidebar>
- *
- * Events:
- *   - arianna:select    detail: { item, section }
- *   - arianna:collapse  detail: { collapsed }
- *   - arianna:resize    detail: { width }       (bubbles from arianna-resizer)
- *   - arianna:section-toggle  detail: { id, open }
- *
- * Slots:  header, footer
- * Attributes:
- *   orientation, width, min-width, max-width, collapsed-width,
- *   collapsed, collapsible, resizable, searchable, show-toggle,
- *   persist, storage-key, active, aria-label
- */
-/* Reactive.ts replaced Observables, and it is not a rename: the factory is `CreateSignal`, the
-   members went PascalCase (`Get` / `Set`), and `CreateEffect` returns an Effect OBJECT where the old
-   `effect` returned its own disposer — hence the wrapper. The type alias points at the CONTRACT and
-   not at `Reactivity.Signal`, which is the richer class the module also exports: `CreateSignal`
-   returns the contract, so aliasing the class yields "Type 'Signal<T>' is missing … Source, Mutate,
-   Map, Effect" with the same name printed twice. */
-const signal = Reactivity.CreateSignal;
-type Signal<T> = SchemaInterfaces.Reactivity.Signal<T>;
-const { Rule, Stylesheet } = Css;
-type Rule = Css.Rule;
-type Stylesheet = Css.Stylesheet;
-export interface SidebarItem {
-    id: string;
-    label: string;
-    icon?: string;
-    badge?: string | number;
-    disabled?: boolean;
-    class?: string;
-    data?: unknown;
+import { Component, Css, Templates } from '../../core/index.ts';
+const html=Templates.Template.Html;const {Rule,Stylesheet}=Css;type Stylesheet=Css.Stylesheet;
+export interface SidebarItem{id:string;label:string;icon?:string;badge?:string|number;disabled?:boolean;class?:string;data?:unknown;}
+export interface SidebarSection{id:string;label:string;items:SidebarItem[];open?:boolean;icon?:string;}
+export interface SidebarOptions{orientation?:'left'|'right';width?:number;minWidth?:number;maxWidth?:number;collapsedWidth?:number;collapsible?:boolean;collapsed?:boolean;resizable?:boolean;searchable?:boolean;showToggle?:boolean;persist?:boolean;storageKey?:string;ariaLabel?:string;sections?:SidebarSection[];active?:string;}
+interface SidebarState{sections:SidebarSection[];open:Set<string>;query:string;built:boolean;header:Node[];footer:Node[];}
+const SidebarStates=new WeakMap<HTMLElement,SidebarState>();
+const SState=(host:HTMLElement):SidebarState=>{let s=SidebarStates.get(host);if(!s){s={sections:[],open:new Set(),query:'',built:false,header:[],footer:[]};SidebarStates.set(host,s);}return s;};
+
+export const Styles:Stylesheet=new Stylesheet([
+ new Rule('.Sidebar',{'--arianna-bg':'#17181c','--arianna-bg-3':'#24262b','--arianna-text':'#e6e8eb','--arianna-muted':'#9aa0aa','--arianna-border':'#303238','--arianna-primary':'#e40c88',background:'var(--arianna-bg)',border:'1px solid var(--arianna-border)',boxSizing:'border-box',color:'var(--arianna-text)',display:'flex',flexDirection:'column',height:'100%',minHeight:'280px',overflow:'hidden',position:'relative',transition:'width .18s ease',fontFamily:'var(--arianna-font,system-ui,sans-serif)'}),
+ new Rule('.Sidebar[theme="light"]',{'--arianna-bg':'#fff','--arianna-bg-3':'#f3f3f5','--arianna-text':'#1c1e21','--arianna-muted':'#626873','--arianna-border':'#e2e2e6'}),
+ new Rule('.Sidebar-Header',{borderBottom:'1px solid var(--arianna-border)',padding:'10px 12px'}),new Rule('.Sidebar-Header:empty,.Sidebar-Footer:empty',{display:'none'}),new Rule('.Sidebar-Footer',{borderTop:'1px solid var(--arianna-border)',marginTop:'auto',padding:'9px 12px'}),
+ new Rule('.Sidebar-Toggle',{background:'transparent',border:'0',color:'var(--arianna-muted)',cursor:'pointer',height:'30px',padding:'0 12px',textAlign:'right',width:'100%'}),new Rule('.Sidebar-Search-Wrap',{padding:'4px 9px 8px'}),new Rule('.Sidebar-Search',{background:'var(--arianna-bg-3)',border:'1px solid var(--arianna-border)',borderRadius:'5px',boxSizing:'border-box',color:'var(--arianna-text)',font:'inherit',padding:'6px 9px',width:'100%'}),
+ new Rule('.Sidebar-List',{flex:'1',overflowY:'auto',padding:'4px 7px'}),new Rule('.Sidebar-Section',{marginBottom:'4px'}),new Rule('.Sidebar-Section-Header',{alignItems:'center',background:'transparent',border:'0',color:'var(--arianna-muted)',cursor:'pointer',display:'flex',font:'inherit',fontSize:'.7rem',fontWeight:'800',gap:'6px',padding:'6px 8px',textAlign:'left',width:'100%'}),new Rule('.Sidebar-Section-Label',{flex:'1'}),
+ new Rule('.Sidebar-Items',{display:'flex',flexDirection:'column',gap:'2px'}),new Rule('.Sidebar-Item',{alignItems:'center',background:'transparent',border:'1px solid transparent',borderRadius:'5px',color:'var(--arianna-text)',cursor:'pointer',display:'flex',font:'inherit',gap:'9px',padding:'6px 9px',textAlign:'left',width:'100%'}),new Rule('.Sidebar-Item:hover:not(:disabled)',{background:'var(--arianna-bg-3)'}),new Rule('.Sidebar-Item-Active',{background:'rgba(228,12,136,.13)',borderColor:'rgba(228,12,136,.28)',color:'var(--arianna-primary)',fontWeight:'700'}),new Rule('.Sidebar-Item:disabled',{opacity:'.42'}),new Rule('.Sidebar-Item-Label',{flex:'1'}),new Rule('.Sidebar-Item-Badge',{background:'var(--arianna-primary)',borderRadius:'9px',color:'#fff',fontSize:'.65rem',padding:'1px 6px'}),
+ new Rule('.Sidebar-Resize',{bottom:'0',cursor:'ew-resize',position:'absolute',top:'0',width:'6px',right:'-3px',zIndex:'3'}),new Rule('.Sidebar[orientation="right"] .Sidebar-Resize',{left:'-3px',right:'auto'}),
+ new Rule('.Sidebar[collapsed] .Sidebar-Search-Wrap,.Sidebar[collapsed] .Sidebar-Section-Label,.Sidebar[collapsed] .Sidebar-Section-Arrow,.Sidebar[collapsed] .Sidebar-Item-Label,.Sidebar[collapsed] .Sidebar-Item-Badge',{display:'none'})
+]);
+
+@Component('arianna-sidebar',Styles,{Shadow:false,Attributes:['orientation','width','min-width','max-width','collapsed-width','collapsed','collapsible','resizable','searchable','show-toggle','persist','storage-key','active','aria-label','theme','sections'],Properties:['sections']})
+export class Sidebar extends HTMLElement{
+ declare template:unknown;
+ onCreated():void{if(this.isConnected)this.onConnected();}
+ onConnected(o:SidebarOptions={}):void{
+    const s=SState(this);this.classList.add('Sidebar');if(!this.hasAttribute('theme'))this.setAttribute('theme','dark');if(!this.hasAttribute('orientation'))this.setAttribute('orientation','left');
+    this.setAttribute('role','navigation');if(!this.hasAttribute('aria-label'))this.setAttribute('aria-label',o.ariaLabel??'Site navigation');
+    if(!s.built){const c=[...this.childNodes];s.header=c.filter(n=>n instanceof Element&&n.getAttribute('slot')==='header');s.footer=c.filter(n=>n instanceof Element&&n.getAttribute('slot')==='footer');}
+    if(o.sections)this.sections=o.sections;else{const a=this.getAttribute('sections');if(!s.sections.length&&a)try{const v=JSON.parse(a);if(Array.isArray(v))this.sections=v;}catch{}}
+    if(o.orientation)this.orientation=o.orientation;if(o.width!==undefined)this.width=o.width;if(o.active!==undefined)this.active=o.active;if(o.collapsed!==undefined)this.collapsed=o.collapsed;
+    if(this.persist&&!this.hasAttribute('width'))try{const saved=localStorage.getItem(this.storageKey);if(saved)this.setAttribute('width',saved);}catch{}
+    s.built=true;this.ApplyWidth();this.Render();(this as any).Sheet=Styles;
+ }
+ onAttributeChanged(name:string):void{const s=SState(this);if(!s.built)return;if(['width','collapsed','collapsed-width'].includes(name))this.ApplyWidth();if(['active','collapsed','orientation','searchable','show-toggle','resizable'].includes(name))this.Render();}
+ private ApplyWidth():void{this.style.width=(this.collapsed?this.collapsedWidth:this.width)+'px';}
+ private Render():void{
+    const s=SState(this);if(!s.built)return;const f=document.createDocumentFragment();
+    const h=document.createElement('div');h.className='Sidebar-Header';s.header.forEach(n=>h.appendChild(n));f.appendChild(h);
+    if(this.showToggle){const t=document.createElement('button');t.type='button';t.className='Sidebar-Toggle';t.textContent=this.orientation==='left'?(this.collapsed?'▸':'◂'):(this.collapsed?'◂':'▸');t.onclick=()=>this.toggle();f.appendChild(t);}
+    if(this.searchable&&!this.collapsed){const w=document.createElement('div');w.className='Sidebar-Search-Wrap';const i=document.createElement('input');i.className='Sidebar-Search';i.type='search';i.placeholder='Search…';i.value=s.query;i.oninput=()=>{s.query=i.value.toLowerCase().trim();this.Render();};w.appendChild(i);f.appendChild(w);}
+    const list=document.createElement('div');list.className='Sidebar-List';
+    for(const sec of s.sections){
+        const matched=s.query?sec.items.filter(i=>i.label.toLowerCase().includes(s.query)||String(i.badge??'').toLowerCase().includes(s.query)):sec.items;if(s.query&&!matched.length)continue;
+        const open=!!s.query||s.open.has(sec.id);const section=document.createElement('section');section.className='Sidebar-Section';
+        const sh=document.createElement('button');sh.type='button';sh.className='Sidebar-Section-Header';
+        if(sec.icon){const ic=document.createElement('span');ic.textContent=sec.icon;sh.appendChild(ic);}
+        const sl=document.createElement('span');sl.className='Sidebar-Section-Label';sl.textContent=sec.label;sh.appendChild(sl);
+        const ar=document.createElement('span');ar.className='Sidebar-Section-Arrow';ar.textContent=open?'▾':'▸';sh.appendChild(ar);sh.onclick=()=>this.toggleSection(sec.id);section.appendChild(sh);
+        if(open){const items=document.createElement('div');items.className='Sidebar-Items';for(const item of matched){const b=document.createElement('button');b.type='button';b.className='Sidebar-Item'+(item.id===this.active?' Sidebar-Item-Active':'')+(item.class?' '+item.class:'');b.disabled=!!item.disabled;b.title=this.collapsed?item.label:'';if(item.icon){const ic=document.createElement('span');ic.textContent=item.icon;b.appendChild(ic);}const l=document.createElement('span');l.className='Sidebar-Item-Label';l.textContent=item.label;b.appendChild(l);if(item.badge!==undefined){const bd=document.createElement('span');bd.className='Sidebar-Item-Badge';bd.textContent=String(item.badge);b.appendChild(bd);}b.onclick=()=>{if(item.disabled)return;this.active=item.id;this.dispatchEvent(new CustomEvent('arianna:select',{bubbles:true,detail:{item,section:sec}}));};items.appendChild(b);}section.appendChild(items);}
+        list.appendChild(section);
+    }
+    f.appendChild(list);const footer=document.createElement('div');footer.className='Sidebar-Footer';s.footer.forEach(n=>footer.appendChild(n));f.appendChild(footer);
+    if(this.resizable&&!this.collapsed){const g=document.createElement('div');g.className='Sidebar-Resize';g.onpointerdown=e=>this.BeginResize(e,g);f.appendChild(g);}
+    this.replaceChildren(f);
+ }
+ private BeginResize(e:PointerEvent,g:HTMLElement):void{if(e.button!==0)return;e.preventDefault();const sx=e.clientX,sw=this.width,dir=this.orientation==='left'?1:-1;g.setPointerCapture(e.pointerId);const m=(ev:PointerEvent)=>{this.width=Math.max(this.minWidth,Math.min(this.maxWidth,sw+(ev.clientX-sx)*dir));this.dispatchEvent(new CustomEvent('arianna:resize',{bubbles:true,detail:{width:this.width}}));};const u=(ev:PointerEvent)=>{g.removeEventListener('pointermove',m);g.removeEventListener('pointerup',u);g.removeEventListener('pointercancel',u);try{g.releasePointerCapture(ev.pointerId);}catch{}if(this.persist)try{localStorage.setItem(this.storageKey,String(this.width));}catch{}};g.addEventListener('pointermove',m);g.addEventListener('pointerup',u);g.addEventListener('pointercancel',u);}
+ set sections(v:SidebarSection[]){const s=SState(this);s.sections=Array.isArray(v)?v.map(x=>({...x,items:[...(x.items??[])]})):[];s.open=new Set(s.sections.filter(x=>x.open!==false).map(x=>x.id));this.Render();}
+ get sections(){return SState(this).sections.map(x=>({...x,items:[...x.items]}));}
+ collapse():this{this.collapsed=true;this.dispatchEvent(new CustomEvent('arianna:collapse',{bubbles:true,detail:{collapsed:true}}));return this;}expand():this{this.collapsed=false;this.dispatchEvent(new CustomEvent('arianna:collapse',{bubbles:true,detail:{collapsed:false}}));return this;}toggle():this{return this.collapsed?this.expand():this.collapse();}
+ openSection(id:string):this{SState(this).open.add(id);this.Render();return this;}closeSection(id:string):this{SState(this).open.delete(id);this.Render();return this;}toggleSection(id:string):this{const s=SState(this);const was=s.open.has(id);was?s.open.delete(id):s.open.add(id);this.Render();this.dispatchEvent(new CustomEvent('arianna:section-toggle',{bubbles:true,detail:{id,open:!was}}));return this;}search(q:string):this{SState(this).query=(q??'').toLowerCase().trim();this.Render();return this;}setWidth(w:number):this{this.width=w;return this;}
+ get orientation(){return (this.getAttribute('orientation')??'left') as 'left'|'right';}set orientation(v:'left'|'right'){this.setAttribute('orientation',v);}
+ get width(){return Number(this.getAttribute('width')??260)||260;}set width(v:number){this.setAttribute('width',String(Math.max(this.minWidth,Math.min(this.maxWidth,v))));this.ApplyWidth();}
+ get minWidth(){return Number(this.getAttribute('min-width')??160)||160;}set minWidth(v:number){this.setAttribute('min-width',String(v));}
+ get maxWidth(){return Number(this.getAttribute('max-width')??480)||480;}set maxWidth(v:number){this.setAttribute('max-width',String(v));}
+ get collapsedWidth(){return Number(this.getAttribute('collapsed-width')??48)||48;}set collapsedWidth(v:number){this.setAttribute('collapsed-width',String(v));this.ApplyWidth();}
+ get collapsed(){return this.hasAttribute('collapsed');}set collapsed(v:boolean){v?this.setAttribute('collapsed',''):this.removeAttribute('collapsed');}
+ get collapsible(){return this.getAttribute('collapsible')!=='false';}set collapsible(v:boolean){this.setAttribute('collapsible',String(v));}
+ get resizable(){return this.getAttribute('resizable')!=='false';}set resizable(v:boolean){this.setAttribute('resizable',String(v));}
+ get searchable(){return this.getAttribute('searchable')!=='false';}set searchable(v:boolean){this.setAttribute('searchable',String(v));}
+ get showToggle(){return this.getAttribute('show-toggle')!=='false'&&this.collapsible;}
+ get persist(){return this.hasAttribute('persist');}set persist(v:boolean){v?this.setAttribute('persist',''):this.removeAttribute('persist');}
+ get storageKey(){return this.getAttribute('storage-key')??'arianna-sidebar-w';}set storageKey(v:string){this.setAttribute('storage-key',v);}
+ get active(){return this.getAttribute('active')??'';}set active(v:string){v?this.setAttribute('active',v):this.removeAttribute('active');}
+ static readonly Styles=Styles;static DefaultSheet():Stylesheet{return Styles;}
 }
-export interface SidebarSection {
-    id: string;
-    label: string;
-    items: SidebarItem[];
-    open?: boolean;
-    icon?: string;
-}
-export interface SidebarOptions {
-    orientation?: 'left' | 'right';
-    width?: number;
-    minWidth?: number;
-    maxWidth?: number;
-    collapsedWidth?: number;
-    collapsible?: boolean;
-    collapsed?: boolean;
-    resizable?: boolean;
-    searchable?: boolean;
-    showToggle?: boolean;
-    persist?: boolean;
-    storageKey?: string;
-    ariaLabel?: string;
-    sections?: SidebarSection[];
-    active?: string;
-}
-interface FlatSection {
-    section: SidebarSection;
-    isOpen: boolean;
-    items: SidebarItem[];
-    arrowText: string;
-}
-
-export const Styles: Stylesheet = (() =>
-{
-        return new Stylesheet([
-            new Rule('.Sidebar', {
-                '--arianna-bg': '#17181c',
-                '--arianna-bg-2': '#1d1e23',
-                '--arianna-bg-3': '#24262b',
-                '--arianna-text': '#e6e8eb',
-                '--arianna-muted': '#9aa0aa',
-                '--arianna-dim': '#6f7580',
-                '--arianna-border': '#303238',
-                '--arianna-primary': '#e40c88',
-                '--arianna-success': '#26a69a',
-                '--arianna-warning': '#f5a623',
-                '--arianna-danger': '#ef5350',
-                '--bg': '#17181c',
-                '--bg3': '#24262b',
-                '--text': '#e6e8eb',
-                '--muted': '#9aa0aa',
-                '--border': '#303238',
-                '--accent': '#e40c88',
-            }),
-            new Rule('.Sidebar[theme="light"]', {
-                '--arianna-bg': '#ffffff',
-                '--arianna-bg-2': '#fbfbfc',
-                '--arianna-bg-3': '#f3f3f5',
-                '--arianna-text': '#1c1e21',
-                '--arianna-muted': '#626873',
-                '--arianna-dim': '#8a8f98',
-                '--arianna-border': '#e2e2e6',
-                '--arianna-primary': '#e40c88',
-                '--arianna-success': '#168a78',
-                '--arianna-warning': '#b66c00',
-                '--arianna-danger': '#c93645',
-                '--bg': '#ffffff',
-                '--bg3': '#f3f3f5',
-                '--text': '#1c1e21',
-                '--muted': '#626873',
-                '--border': '#e2e2e6',
-                '--accent': '#e40c88',
-            }),
-            new Rule('.Sidebar', {
-                background: 'var(--arianna-bg, #ffffff)',
-                borderStyle: 'solid',
-                borderColor: 'var(--arianna-border, #d8d8d8)',
-                borderWidth: '0',
-                boxSizing: 'border-box',
-                display: 'flex',
-                flexDirection: 'column',
-                flexShrink: '0',
-                height: '100%',
-                minWidth: '0',
-                overflow: 'hidden',
-                position: 'relative',
-                transition: 'width 0.18s ease',
-            }),
-            new Rule('.Sidebar[orientation="left"], .Sidebar:not([orientation]))', { borderRightWidth: '1px' }),
-            new Rule('.Sidebar[orientation="right"]', { borderLeftWidth: '1px' }),
-            // Collapsed state — hide labels, badges, search, section content
-            new Rule('.Sidebar[collapsed] .Sidebar-Search-Wrap', { display: 'none' }),
-            new Rule('.Sidebar[collapsed] .Sidebar-Item-Label', { display: 'none' }),
-            new Rule('.Sidebar[collapsed] .Sidebar-Item-Badge', { display: 'none' }),
-            new Rule('.Sidebar[collapsed] .Sidebar-Section-Label', { display: 'none' }),
-            new Rule('.Sidebar[collapsed] .Sidebar-Section-Arrow', { display: 'none' }),
-            new Rule('.Sidebar[collapsed] .Sidebar-Item', { justifyContent: 'center', padding: '8px 4px' }),
-            // Header / footer
-            new Rule('.Sidebar-Header', {
-                borderBottom: '1px solid var(--arianna-border, #d8d8d8)',
-                flexShrink: '0',
-                padding: '12px 14px',
-            }),
-            new Rule('.Sidebar-Header:empty', { display: 'none', padding: '0', border: 'none' }),
-            new Rule('.Sidebar-Footer', {
-                borderTop: '1px solid var(--arianna-border, #d8d8d8)',
-                flexShrink: '0',
-                marginTop: 'auto',
-                padding: '10px 14px',
-            }),
-            new Rule('.Sidebar-Footer:empty', { display: 'none', padding: '0', border: 'none' }),
-            // Toggle
-            new Rule('.Sidebar-Toggle', {
-                background: 'none',
-                border: 'none',
-                color: 'var(--arianna-muted, #8b949e)',
-                cursor: 'pointer',
-                font: 'inherit',
-                fontSize: '0.68rem',
-                padding: '5px 14px',
-                textAlign: 'right',
-                transition: 'color 0.14s ease',
-                width: '100%',
-            }),
-            new Rule('.Sidebar[orientation="right"] .Sidebar-Toggle', { textAlign: 'left' }),
-            new Rule('.Sidebar-Toggle:hover', { color: 'var(--arianna-text, #1f2328)' }),
-            // Search
-            new Rule('.Sidebar-Search-Wrap', { padding: '4px 10px 8px' }),
-            new Rule('.Sidebar-Search', {
-                background: 'var(--arianna-bg-3, #f3f3f3)',
-                border: '1px solid var(--arianna-border, #d8d8d8)',
-                borderRadius: 'var(--arianna-radius, 5px)',
-                boxSizing: 'border-box',
-                color: 'var(--arianna-text, #1f2328)',
-                font: 'inherit',
-                fontSize: '0.82rem',
-                padding: '6px 10px',
-                width: '100%',
-                outline: 'none',
-            }),
-            new Rule('.Sidebar-Search:focus', { borderColor: 'var(--arianna-primary, #1f6feb)' }),
-            // List + sections
-            new Rule('.Sidebar-List', {
-                flex: '1',
-                overflowY: 'auto',
-                padding: '4px 8px',
-            }),
-            new Rule('.Sidebar-Section', { marginBottom: '4px' }),
-            new Rule('.Sidebar-Section-Header', {
-                alignItems: 'center',
-                background: 'none',
-                border: 'none',
-                color: 'var(--arianna-muted, #8b949e)',
-                cursor: 'pointer',
-                display: 'flex',
-                font: 'inherit',
-                fontSize: '0.7rem',
-                fontWeight: '700',
-                gap: '6px',
-                padding: '6px 8px',
-                textAlign: 'left',
-                textTransform: 'uppercase',
-                width: '100%',
-                letterSpacing: '0.04em',
-            }),
-            new Rule('.Sidebar-Section-Label', { flex: '1' }),
-            new Rule('.Sidebar-Section-Arrow', { fontSize: '0.8rem' }),
-            // Items
-            new Rule('.Sidebar-Items', { display: 'flex', flexDirection: 'column', gap: '2px' }),
-            new Rule('.Sidebar-Item', {
-                alignItems: 'center',
-                background: 'none',
-                border: 'none',
-                borderRadius: 'var(--arianna-radius, 5px)',
-                color: 'var(--arianna-text, #1f2328)',
-                cursor: 'pointer',
-                display: 'flex',
-                font: 'inherit',
-                fontSize: '0.84rem',
-                gap: '10px',
-                padding: '7px 10px',
-                textAlign: 'left',
-                transition: 'background 0.14s ease, color 0.14s ease',
-                width: '100%',
-            }),
-            new Rule('.Sidebar-Item:hover', { background: 'var(--arianna-bg-3, #f3f3f3)' }),
-            new Rule('.Sidebar-Item-Active', {
-                background: 'rgba(31,111,235,0.12)',
-                color: 'var(--arianna-primary, #1f6feb)',
-                fontWeight: '600',
-            }),
-            new Rule('.Sidebar-Item-Disabled', { opacity: '0.45', cursor: 'not-allowed' }),
-            new Rule('.Sidebar-Item-Icon', { flexShrink: '0', fontSize: '1rem', width: '18px', textAlign: 'center' }),
-            new Rule('.Sidebar-Item-Label', { flex: '1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
-            new Rule('.Sidebar-Item-Badge', {
-                background: 'var(--arianna-primary, #1f6feb)',
-                borderRadius: '8px',
-                color: '#ffffff',
-                fontSize: '0.66rem',
-                fontWeight: '600',
-                padding: '1px 6px',
-            }),
-        ]);
-    
-})();
-
-@Component('arianna-sidebar', Styles, {
-    Shadow: false,
-    Attributes: ['orientation', 'width', 'min-width', 'max-width', 'collapsed-width', 'collapsed', 'collapsible', 'resizable', 'searchable', 'show-toggle', 'persist', 'storage-key', 'active', 'aria-label', 'theme', 'sections'],
-    Properties: ['sections'],
-})
-export class Sidebar extends HTMLElement {
-    /** Compiler-visible AriannA binding factory installed by @Component. */
-    declare signal: <T>(initial?: T) => Components.Binding<T>;
-    /** Compiler-visible AriannA template slot installed by @Component. */
-    declare template: unknown;
-    private _sectionsSignal?: Signal<SidebarSection[]>;
-    public get sections$(): Signal<SidebarSection[]>
-    {
-        this._sectionsSignal ??= signal<SidebarSection[]>([]);
-        return this._sectionsSignal;
-    }
-    private _openSecsSignal?: Signal<Set<string>>;
-    public get openSecs$(): Signal<Set<string>>
-    {
-        this._openSecsSignal ??= signal<Set<string>>(new Set());
-        return this._openSecsSignal;
-    }
-    private _querySignal?: Signal<string>;
-    public get query$(): Signal<string>
-    {
-        this._querySignal ??= signal<string>('');
-        return this._querySignal;
-    }
-    onConnected(_opts: SidebarOptions = {}) {
-        this.classList.add('Sidebar');
-        if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
-        this.setAttribute('role', 'navigation');
-        if (!this.hasAttribute('aria-label')) {
-            this.setAttribute('aria-label', 'Site navigation');
-        }
-        const orientation = this.signal().attribute('orientation');
-        const collapsed = this.signal().attribute('collapsed');
-        const active = this.signal().attribute('active');
-        // Restore persisted width on first mount if `persist` is set
-        if (this.hasAttribute('persist')) {
-            const key = this.getAttribute('storage-key') ?? 'arianna-sidebar-w';
-            const saved = localStorage.getItem(key);
-            if (saved && !this.hasAttribute('width')) {
-                this.setAttribute('width', saved);
-            }
-        }
-        // Apply width style reactively
-        const applyWidth = () => {
-            const isCollapsed = collapsed.Get() !== null && this.getAttribute('collapsed') !== null;
-            const w = isCollapsed
-                ? parseInt(this.getAttribute('collapsed-width') ?? '48', 10) || 48
-                : parseInt(this.getAttribute('width') ?? '260', 10) || 260;
-            this.style.width = w + 'px';
-        };
-        applyWidth();
-        this.addEventListener('arianna:attr-width', applyWidth);
-        this.addEventListener('arianna:attr-collapsed', applyWidth);
-        this.addEventListener('arianna:attr-collapsed-width', applyWidth);
-        // Bubble arianna:resize from internal arianna-resizer + persist
-        this.addEventListener('arianna:resize', (e: Event) => {
-            const ev = e as CustomEvent<{
-                width: number;
-            }>;
-            const w = ev.detail?.width;
-            if (typeof w === 'number') {
-                this.setAttribute('width', String(w));
-                if (this.hasAttribute('persist')) {
-                    const key = this.getAttribute('storage-key') ?? 'arianna-sidebar-w';
-                    localStorage.setItem(key, String(w));
-                }
-            }
-        });
-        // Re-render section list when sections / open / query change is
-        // automatic via the Signal reads inside template helpers.
-        this.orient = () => orientation.Get() ?? 'left';
-        this.isCollapsed = () => this.hasAttribute('collapsed');
-        this.isCollapsible = () => this.hasAttribute('collapsible') || !this.hasAttribute('collapsible'); // defaults true
-        this.showToggleBtn = () => {
-            const has = this.getAttribute('show-toggle');
-            return has !== 'false' && this.isCollapsible();
-        };
-        this.isSearchable = () => this.getAttribute('searchable') !== 'false';
-        this.isResizable = () => this.getAttribute('resizable') !== 'false' && !this.isCollapsed();
-        this.toggleIcon = () => {
-            const o = this.orient();
-            const c = this.isCollapsed();
-            if (o === 'left')
-                return c ? '▸' : '◂';
-            if (o === 'right')
-                return c ? '◂' : '▸';
-            return '≡';
-        };
-        this.resizerHandles = () => this.orient() === 'left' ? 'e' : 'w';
-        this.minW = () => parseInt(this.getAttribute('min-width') ?? '160', 10) || 160;
-        this.maxW = () => parseInt(this.getAttribute('max-width') ?? '480', 10) || 480;
-        this.onToggle = () => {
-            const newCol = !this.isCollapsed();
-            if (newCol)
-                this.setAttribute('collapsed', '');
-            else
-                this.removeAttribute('collapsed');
-            this.dispatchEvent(new CustomEvent('arianna:collapse', {
-                bubbles: true, detail: { collapsed: newCol },
-            }));
-        };
-        this.onSearchInput = (e: Event) => {
-            const v = (e.target as HTMLInputElement).value.toLowerCase().trim();
-            this.query$.Set(v);
-        };
-        this.onSectionClick = (sec: SidebarSection) => {
-            const open = new Set(this.openSecs$.Get());
-            const wasOpen = open.has(sec.id);
-            if (wasOpen)
-                open.delete(sec.id);
-            else
-                open.add(sec.id);
-            this.openSecs$.Set(open);
-            this.dispatchEvent(new CustomEvent('arianna:section-toggle', {
-                bubbles: true, detail: { id: sec.id, open: !wasOpen },
-            }));
-        };
-        this.onItemClick = (item: SidebarItem, section: SidebarSection) => {
-            if (item.disabled)
-                return;
-            this.setAttribute('active', item.id);
-            this.dispatchEvent(new CustomEvent('arianna:select', {
-                bubbles: true, detail: { item, section },
-            }));
-        };
-        this.itemClass = (item: SidebarItem): string => {
-            const isActive = item.id === (active.Get() ?? '');
-            const parts = ['Sidebar-Item'];
-            if (isActive)
-                parts.push('Sidebar-Item-Active');
-            if (item.disabled)
-                parts.push('Sidebar-Item-Disabled');
-            if (item.class)
-                parts.push(item.class);
-            return parts.join(' ');
-        };
-        this.flatSections = (): FlatSection[] => {
-            const secs = this.sections$.Get();
-            const open = this.openSecs$.Get();
-            const q = this.query$.Get();
-            return secs
-                .map(sec => {
-                const matched = q
-                    ? sec.items.filter(i => i.label.toLowerCase().includes(q) ||
-                        String(i.badge ?? '').toLowerCase().includes(q))
-                    : sec.items;
-                const isOpen = open.has(sec.id) || !!q;
-                return {
-                    section: sec,
-                    isOpen,
-                    items: matched,
-                    arrowText: isOpen ? '▾' : '▸',
-                };
-            })
-                .filter(fs => !this.query$.Get() || fs.items.length > 0);
-        };
-        this.hasMatches = () => this.flatSections().length > 0;
-        this.template = html `
-            <div class="Sidebar-Header"><slot name="header"></slot></div>
-
-            <button class="Sidebar-Toggle"
-                    a-if="this.showToggleBtn()"
-                    @click="this.onToggle"
-                    aria-label="Toggle sidebar">{{ this.toggleIcon() }}</button>
-
-            <div class="Sidebar-Search-Wrap" a-if="this.isSearchable() && !this.isCollapsed()">
-                <input class="Sidebar-Search"
-                       type="text"
-                       placeholder="Search…"
-                       aria-label="Filter navigation"
-                       @input="this.onSearchInput"/>
-            </div>
-
-            <div class="Sidebar-List">
-                <div class="Sidebar-Section" a-for="fs in this.flatSections()">
-                    <button class="Sidebar-Section-Header"
-                            @click="(e) => this.onSectionClick(fs.section)">
-                        <span class="Sidebar-Section-Icon" a-if="fs.section.icon && !this.isCollapsed()">{{ fs.section.icon }}</span>
-                        <span class="Sidebar-Section-Label" a-if="!this.isCollapsed()">{{ fs.section.label }}</span>
-                        <span class="Sidebar-Section-Arrow" a-if="!this.isCollapsed()" aria-hidden="true">{{ fs.arrowText }}</span>
-                    </button>
-                    <div class="Sidebar-Items" a-if="fs.isOpen">
-                        <button :class="this.itemClass(item)"
-                                a-for="item in fs.items"
-                                :disabled="item.disabled"
-                                :data-id="item.id"
-                                :title="this.isCollapsed() ? item.label : ''"
-                                @click="(e) => this.onItemClick(item, fs.section)">
-                            <span class="Sidebar-Item-Icon" a-if="item.icon" aria-hidden="true">{{ item.icon }}</span>
-                            <span class="Sidebar-Item-Label" a-if="!this.isCollapsed()">{{ item.label }}</span>
-                            <span class="Sidebar-Item-Badge" a-if="item.badge !== undefined && !this.isCollapsed()">{{ item.badge }}</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="Sidebar-Footer"><slot name="footer"></slot></div>
-
-            <arianna-resizer a-if="this.isResizable()"
-                             :handles="this.resizerHandles()"
-                             :min-width="String(this.minW())"
-                             :max-width="String(this.maxW())"
-                             allow-cross="false"></arianna-resizer>
-        `;
-        (this as unknown as {
-            Sheet: Stylesheet | null;
-        }).Sheet = Styles;
-    }
-    // ── Programmatic API (mirrors legacy) ────────────────────────────────────
-    set sections(v: SidebarSection[]) {
-        this.sections$.Set(v ?? []);
-        const open = new Set<string>((v ?? []).filter(s => s.open !== false).map(s => s.id));
-        this.openSecs$.Set(open);
-    }
-    get sections(): SidebarSection[] { return this.sections$.Get(); }
-    collapse(): this { this.setAttribute('collapsed', ''); this.dispatchEvent(new CustomEvent('arianna:collapse', { bubbles: true, detail: { collapsed: true } })); return this; }
-    expand(): this { this.removeAttribute('collapsed'); this.dispatchEvent(new CustomEvent('arianna:collapse', { bubbles: true, detail: { collapsed: false } })); return this; }
-    toggle(): this { return this.hasAttribute('collapsed') ? this.expand() : this.collapse(); }
-    setWidth(w: number): this {
-        const clamped = Math.max(this.minW(), Math.min(this.maxW(), w));
-        this.setAttribute('width', String(clamped));
-        return this;
-    }
-    openSection(id: string): this {
-        const open = new Set(this.openSecs$.Get());
-        open.add(id);
-        this.openSecs$.Set(open);
-        return this;
-    }
-    closeSection(id: string): this {
-        const open = new Set(this.openSecs$.Get());
-        open.delete(id);
-        this.openSecs$.Set(open);
-        return this;
-    }
-    toggleSection(id: string): this {
-        const open = new Set(this.openSecs$.Get());
-        if (open.has(id))
-            open.delete(id);
-        else
-            open.add(id);
-        this.openSecs$.Set(open);
-        return this;
-    }
-    search(q: string): this {
-        this.query$.Set(q.toLowerCase().trim());
-        const input = this.querySelector<HTMLInputElement>('.Sidebar-Search');
-        if (input)
-            input.value = q;
-        return this;
-    }
-    onCreated() { }
-    onBeforeMount() { }
-    onMount() { }
-    onBeforeUpdate() { }
-    onUpdate() { }
-    onBeforeUnmount() { }
-    onUnmount() { }
-    // ── Attr getters/setters ─────────────────────────────────────────────────
-    get orientation(): 'left' | 'right' { return (this.getAttribute('orientation') ?? 'left') as never; }
-    set orientation(v: 'left' | 'right') { this.setAttribute('orientation', v); }
-    get width(): number { return parseInt(this.getAttribute('width') ?? '260', 10); }
-    set width(v: number) { this.setAttribute('width', String(v)); }
-    get minWidth(): number { return this.minW(); }
-    set minWidth(v: number) { this.setAttribute('min-width', String(v)); }
-    get maxWidth(): number { return this.maxW(); }
-    set maxWidth(v: number) { this.setAttribute('max-width', String(v)); }
-    get collapsedWidth(): number { return parseInt(this.getAttribute('collapsed-width') ?? '48', 10); }
-    set collapsedWidth(v: number) { this.setAttribute('collapsed-width', String(v)); }
-    get collapsed(): boolean { return this.hasAttribute('collapsed'); }
-    set collapsed(v: boolean) { v ? this.setAttribute('collapsed', '') : this.removeAttribute('collapsed'); }
-    get collapsible(): boolean { return this.getAttribute('collapsible') !== 'false'; }
-    set collapsible(v: boolean) { this.setAttribute('collapsible', v ? 'true' : 'false'); }
-    get resizable(): boolean { return this.getAttribute('resizable') !== 'false'; }
-    set resizable(v: boolean) { this.setAttribute('resizable', v ? 'true' : 'false'); }
-    get searchable(): boolean { return this.getAttribute('searchable') !== 'false'; }
-    set searchable(v: boolean) { this.setAttribute('searchable', v ? 'true' : 'false'); }
-    get persist(): boolean { return this.hasAttribute('persist'); }
-    set persist(v: boolean) { v ? this.setAttribute('persist', '') : this.removeAttribute('persist'); }
-    get storageKey(): string { return this.getAttribute('storage-key') ?? 'arianna-sidebar-w'; }
-    set storageKey(v: string) { this.setAttribute('storage-key', v); }
-    get active(): string { return this.getAttribute('active') ?? ''; }
-    set active(v: string) { v ? this.setAttribute('active', v) : this.removeAttribute('active'); }
-    // ── Template helpers (set in build) ──────────────────────────────────────
-    private orient: () => string = () => 'left';
-    private isCollapsed: () => boolean = () => false;
-    private isCollapsible: () => boolean = () => true;
-    private showToggleBtn: () => boolean = () => true;
-    private isSearchable: () => boolean = () => true;
-    private isResizable: () => boolean = () => true;
-    private toggleIcon: () => string = () => '◂';
-    private resizerHandles: () => string = () => 'e';
-    private minW: () => number = () => 160;
-    private maxW: () => number = () => 480;
-    private onToggle: () => void = () => { };
-    private onSearchInput: (e: Event) => void = () => { };
-    private onSectionClick: (sec: SidebarSection) => void = () => { };
-    private onItemClick: (item: SidebarItem, section: SidebarSection) => void = () => { };
-    private itemClass: (item: SidebarItem) => string = () => '';
-    private flatSections: () => FlatSection[] = () => [];
-    private hasMatches: () => boolean = () => false;
-    public static readonly Styles = Styles;
-    static DefaultSheet(): Stylesheet { return Styles; }
-}
-/* ──────────────────────────────────────────────────────────────────────────
- * Sidebar namespace — public component contracts and module helpers.
- * ────────────────────────────────────────────────────────────────────────── */
-export namespace Sidebar {
-    export namespace Interfaces {
-        export interface Item extends SidebarItem {
-        }
-        export interface Section extends SidebarSection {
-        }
-        export interface Options extends SidebarOptions {
-        }
-        export interface FlatSectionContract extends FlatSection {
-        }
-    }
-}
+export namespace Sidebar{export namespace Interfaces{export interface Item extends SidebarItem{}export interface Section extends SidebarSection{}export interface Options extends SidebarOptions{}}}
 export default Sidebar;

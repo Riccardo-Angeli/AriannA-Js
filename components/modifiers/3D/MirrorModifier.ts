@@ -57,7 +57,7 @@ export namespace MirrorModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-mirror', {}, {
-        Attributes: ['for', 'axis', 'merge', 'threshold', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'axis', 'merge', 'threshold', 'enabled'],
     })
     export class MirrorModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

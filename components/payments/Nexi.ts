@@ -1,4 +1,5 @@
 import { MountPaymentTemplate } from './Base.ts';
+import { PaymentProviders } from './Providers.ts';
 /**
  * @module    components/payments/Nexi
  * @author    Riccardo Angeli
@@ -131,13 +132,13 @@ export namespace Nexi
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const NEXI_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 94 28" role="img" aria-label="Nexi"><rect width="94" height="28" rx="6" fill="#081E5B"/><text x="47" y="20" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="800" fill="#fff">nexi</text><circle cx="76" cy="8" r="3" fill="#00D0C6"/></svg>`;
+    export const NEXI_LOGO = PaymentProviders.Nexi.logo;
 
     @Component('arianna-nexi', {}, {
         shadow: false,
         Attributes: ['redirect-url', 'amount', 'currency', 'target'],
     })
-    export class Nexi extends HTMLDivElement
+    export class Nexi extends HTMLElement
     {
         public static readonly Styles = Nexi.DefaultSheet();
         /** Canonical AriannA public DOM identity. */
@@ -182,6 +183,11 @@ export namespace Nexi
         {
             if(this.dataset.ariannaFolderReady === 'true') return;
             (this as any).NEXI_LOGO = NEXI_LOGO;
+            (this as any).PAYMENT_PROVIDER = PaymentProviders.Nexi;
+            (this as any).PAYMENT_PROVIDER_LOGO = PaymentProviders.Nexi.logo;
+            (this as any).PAYMENT_PROVIDER_NAME = PaymentProviders.Nexi.name;
+            this.style.setProperty('--ar-payment-provider', PaymentProviders.Nexi.color);
+            this.style.setProperty('--ar-payment-contrast', PaymentProviders.Nexi.contrast ?? '#fff');
             /** @name        amountAttr
              *  @public
              *  @type        {inferred}
@@ -221,10 +227,19 @@ export namespace Nexi
             };
             this.onClick = () => { void this.pay(); };
             this.template = html `
+            <section class="ar-payment-provider">
+                <header class="ar-payment-header">
+                    <span class="ar-payment-logo" a-html="this.PAYMENT_PROVIDER_LOGO"></span>
+                    <strong class="ar-payment-name">{{ this.PAYMENT_PROVIDER_NAME }}</strong>
+                </header>
+                <div class="ar-payment-body">
             <button type="button" class="ar-nexi__btn" @click="this.onClick">
                 <span class="ar-nexi__logo" a-html="this.NEXI_LOGO"></span>
                 <span>{{ this.btnLabel() }}</span>
             </button>
+        
+                </div>
+            </section>
         `;
             MountPaymentTemplate(this);
             this.dataset.ariannaFolderReady = 'true';

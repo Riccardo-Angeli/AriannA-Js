@@ -145,7 +145,7 @@ export namespace ArrayModifier
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
         @Component('arianna-array', {}, {
-        Attributes: ['for', 'count', 'type', 'offset-x', 'offset-y', 'offset-z', 'radius', 'axis', 'enabled'],
+        Attributes: ['disabled', 'viewport', 'for', 'count', 'type', 'offset-x', 'offset-y', 'offset-z', 'radius', 'axis', 'enabled'],
     })
     export class ArrayModifierElement extends Modifier3DNamespace.Modifier3DElement
     {

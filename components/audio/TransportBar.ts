@@ -129,51 +129,15 @@ export namespace TransportBar
         public get volume(): number { return Number(this.getAttribute('volume') ?? 1); }
         public set volume(value: number) { this.setAttribute('volume', String(Math.max(0, Math.min(1, value)))); this.Sync(); }
 
-        public async play(): Promise<void>
-        {
-            if(this.Audio)
-            {
-                await this.Audio.play();
-                return;
-            }
-            if(this.playing) return;
-            this.playing = true;
-            this.Emit('arianna:play');
-        }
-
-        public pause(): void
-        {
-            if(this.Audio)
-            {
-                this.Audio.pause();
-                return;
-            }
-            if(!this.playing) return;
-            this.playing = false;
-            this.Emit('arianna:pause');
-        }
-
-        public togglePlayback(): void
-        {
-            if(this.Audio)
-            {
-                if(this.Audio.paused) void this.play().catch(() => undefined);
-                else this.pause();
-                return;
-            }
-            if(this.playing) this.pause();
-            else void this.play();
-        }
-
         private Render(): void
         {
             if(this.querySelector(':scope > .TransportBar-Time')) return;
 
             const previous = this.Button('⏮', 'previous', 'Previous');
-            const rewind = this.Button('◀◀', 'rewind', 'Rewind');
+            const rewind = this.Button('◀', 'rewind', 'Rewind');
             const play = this.Button('▶', 'play', 'Play / Pause');
             const stop = this.Button('■', 'stop', 'Stop');
-            const forward = this.Button('▶▶', 'forward', 'Forward');
+            const forward = this.Button('▶', 'forward', 'Forward');
             const next = this.Button('⏭', 'next', 'Next');
 
             this.Play = play;
@@ -205,17 +169,34 @@ export namespace TransportBar
             const showStop = this.getAttribute('show-stop') !== 'false';
             const showVolume = this.getAttribute('show-volume') !== 'false';
 
-            if(skip) this.append(previous, rewind);
-            this.append(play);
-            if(showStop) this.append(stop);
-            if(skip) this.append(forward, next);
-            this.append(this.Time, this.Position);
-            if(showVolume) this.append(volumeWrap);
+            if(skip) this.add(previous, rewind);
+            this.add(play);
+            if(showStop) this.add(stop);
+            if(skip) this.add(forward, next);
+            this.add(this.Time, this.Position);
+            if(showVolume) this.add(volumeWrap);
 
             if(this.Bound) return;
             this.Bound = true;
 
-            play.addEventListener('click', () => this.togglePlayback());
+            play.addEventListener('click', () =>
+            {
+                if(this.Audio)
+                {
+                    if(this.Audio.paused)
+                    {
+                        void this.Audio.play().catch(() => undefined);
+                    }
+                    else
+                    {
+                        this.Audio.pause();
+                    }
+                    return;
+                }
+
+                this.playing = !this.playing;
+                this.Emit(this.playing ? 'arianna:play' : 'arianna:pause');
+            });
             stop.addEventListener('click', () =>
             {
                 if(this.Audio)
@@ -269,7 +250,7 @@ export namespace TransportBar
                 audio.hidden = true;
                 audio.preload = 'metadata';
                 this.Audio = audio;
-                this.append(audio);
+                this.add(audio);
 
                 audio.addEventListener('loadedmetadata', () =>
                 {

@@ -1,5 +1,6 @@
 /**
  * @module components/modifiers/2D/Skewer
+ * @description 2D skew modifier supporting drag and programmatic X/Y control.
  */
 
 import { Component, Templates } from '../../../core/index.ts';
@@ -7,11 +8,7 @@ import * as Base from './Base.ts';
 
 export namespace Skewer
 {
-    export namespace Types
-    {
-        export type Axis = 'x' | 'y' | 'both';
-    }
-
+    export namespace Types { export type Axis='x'|'y'|'both'; }
     export namespace Interfaces
     {
         export interface SkewerOptions
@@ -22,268 +19,95 @@ export namespace Skewer
             disabled?: boolean;
         }
     }
+    export type SkewCallback=(element:HTMLElement,skewX:number,skewY:number)=>void;
+    const html=Templates.Template.Html;
 
-    const html = Templates.Template.Html;
-
-    @Component('arianna-skewer', {}, {
-        Shadow: false,
-        Attributes: [
-            'axis',
-            'max-angle',
-            'handle-color',
-            'disabled',
-        ],
+    @Component('arianna-skewer',{}, {
+        Shadow:false,
+        Attributes:['axis','max-angle','handle-color','disabled'],
     })
-    export class Skewer
-        extends Base.Modifier2D.Modifier2D
+    export class Skewer extends Base.Modifier2D.Modifier2D
     {
-        public template = html``;
-        protected EventName = 'skew';
+        public template=html``;
+        protected EventName='skew';
+        public axis:Types.Axis='both';
+        public maxAngle=45;
+        public handleColor='#e40c88';
+        private skew:[number,number]=[0,0];
+        private readonly callbacks=new Set<SkewCallback>();
 
-        #skew: [number, number] =
-            [0, 0];
-
-        protected applyTo(target: HTMLElement): void
+        constructor(target?:Base.Modifier2D.Types.TargetInput,options:Interfaces.SkewerOptions={})
         {
-            if(getComputedStyle(target).position === 'static')
-                target.style.position = 'relative';
-
-            const axis =
-                (this.getAttribute('axis') ?? 'both') as
-                    | 'x'
-                    | 'y'
-                    | 'both';
-
-            const max =
-                Number.parseFloat(
-                    this.getAttribute('max-angle') ?? '45'
-                ) || 45;
-
-            const color =
-                this.getAttribute('handle-color') ??
-                'var(--arianna-primary, #1f6feb)';
-
-            const handle =
-                document.createElement('div');
-
-            handle.className =
-                'ar-skewer-handle';
-
-            handle.style.cssText =
-                `position:absolute;bottom:-10px;right:-10px;width:10px;height:10px;background:${color};border-radius:50%;cursor:crosshair;z-index:9999;touch-action:none;`;
-
-            target.appendChild(handle);
-
-            let pointerId = -1;
-
-            const onDown =
-                (event: PointerEvent): void =>
-            {
-                if(
-                    !this.isEnabled ||
-                    event.button !== 0
-                )
-                    return;
-
-                event.preventDefault();
-                event.stopPropagation();
-
-                pointerId =
-                    event.pointerId;
-
-                const startX =
-                    event.clientX;
-
-                const startY =
-                    event.clientY;
-
-                const [startSkewX, startSkewY] =
-                    this.#skew;
-
-                this.Start({
-                    skewX: startSkewX,
-                    skewY: startSkewY,
-                    pointerId,
-                });
-
-                const onMove =
-                    (
-                        moveEvent: PointerEvent
-                    ): void =>
-                {
-                    if(
-                        moveEvent.pointerId !==
-                        pointerId
-                    )
-                        return;
-
-                    const dx =
-                        (
-                            moveEvent.clientX -
-                            startX
-                        ) /
-                        4;
-
-                    const dy =
-                        (
-                            moveEvent.clientY -
-                            startY
-                        ) /
-                        4;
-
-                    const skewX =
-                        axis !== 'y'
-                            ? Math.max(
-                                -max,
-                                Math.min(
-                                    max,
-                                    startSkewX + dx
-                                )
-                            )
-                            : startSkewX;
-
-                    const skewY =
-                        axis !== 'x'
-                            ? Math.max(
-                                -max,
-                                Math.min(
-                                    max,
-                                    startSkewY + dy
-                                )
-                            )
-                            : startSkewY;
-
-                    this.#skew =
-                        [skewX, skewY];
-
-                    target.style.transform =
-                        `skew(${skewX}deg,${skewY}deg)`;
-
-                    this.Change({
-                        skewX,
-                        skewY,
-                        pointerId,
-                    });
-                };
-
-                const onUp =
-                    (
-                        upEvent: PointerEvent
-                    ): void =>
-                {
-                    if(
-                        upEvent.pointerId !==
-                        pointerId
-                    )
-                        return;
-
-                    handle.removeEventListener(
-                        'pointermove',
-                        onMove
-                    );
-
-                    handle.removeEventListener(
-                        'pointerup',
-                        onUp
-                    );
-
-                    handle.removeEventListener(
-                        'pointercancel',
-                        onUp
-                    );
-
-                    this.End({
-                        skewX: this.#skew[0],
-                        skewY: this.#skew[1],
-                        pointerId,
-                    });
-
-                    pointerId = -1;
-                };
-
-                try
-                {
-                    handle.setPointerCapture(
-                        pointerId
-                    );
-                }
-                catch
-                {
-                }
-
-                handle.addEventListener(
-                    'pointermove',
-                    onMove
-                );
-
-                handle.addEventListener(
-                    'pointerup',
-                    onUp
-                );
-
-                handle.addEventListener(
-                    'pointercancel',
-                    onUp
-                );
-            };
-
-            handle.addEventListener(
-                'pointerdown',
-                onDown
-            );
-
-            this.cleanups.push(
-                () =>
-                {
-                    handle.removeEventListener(
-                        'pointerdown',
-                        onDown
-                    );
-
-                    handle.remove();
-                }
-            );
+            super();
+            if(options.axis) this.axis=options.axis;
+            if(options.maxAngle!==undefined) this.maxAngle=Math.abs(options.maxAngle);
+            if(options.handleColor) this.handleColor=options.handleColor;
+            if(options.disabled) this.disable();
+            if(target!==undefined) this.attach(target);
         }
 
-        public reset(): this
+        private syncAttributes():void
         {
-            if(this.target)
-            {
-                this.Start({
-                    skewX: this.#skew[0],
-                    skewY: this.#skew[1],
-                    programmatic: true,
-                });
+            const a=this.getAttribute('axis'); if(a==='x'||a==='y'||a==='both') this.axis=a;
+            const m=this.getAttribute('max-angle'); if(m!==null && Number.isFinite(+m)) this.maxAngle=Math.abs(+m);
+            this.handleColor=this.getAttribute('handle-color')??this.handleColor;
+        }
 
-                this.#skew =
-                    [0, 0];
+        protected applyTo(target:HTMLElement):void
+        {
+            this.syncAttributes();
+            if(getComputedStyle(target).position==='static') target.style.position='relative';
+            target.style.transformOrigin ||= 'center';
+            const handle=document.createElement('div');
+            handle.className='ar-skewer-handle';
+            handle.style.cssText=`position:absolute;right:-8px;bottom:-8px;width:14px;height:14px;background:${this.handleColor};border-radius:50%;cursor:crosshair;z-index:9999;touch-action:none;box-shadow:0 0 0 2px rgba(255,255,255,.75);`;
+            target.appendChild(handle);
+            let pid=-1,sx=0,sy=0,startX=0,startY=0;
+            const move=(e:PointerEvent)=>{
+                if(e.pointerId!==pid||!this.isEnabled)return;
+                const dx=(e.clientX-sx)/4,dy=(e.clientY-sy)/4;
+                const nx=this.axis==='y'?startX:Math.max(-this.maxAngle,Math.min(this.maxAngle,startX+dx));
+                const ny=this.axis==='x'?startY:Math.max(-this.maxAngle,Math.min(this.maxAngle,startY+dy));
+                this.applySkew(target,nx,ny,false,pid);
+            };
+            const up=(e:PointerEvent)=>{
+                if(e.pointerId!==pid)return;
+                try{handle.releasePointerCapture(pid);}catch{}
+                handle.removeEventListener('pointermove',move); handle.removeEventListener('pointerup',up); handle.removeEventListener('pointercancel',up);
+                this.End({skewX:this.skew[0],skewY:this.skew[1],pointerId:pid},target); pid=-1;
+            };
+            const down=(e:PointerEvent)=>{
+                if(!this.isEnabled||e.button!==0)return;
+                e.preventDefault();e.stopPropagation();pid=e.pointerId;sx=e.clientX;sy=e.clientY;[startX,startY]=this.skew;
+                this.Start({skewX:startX,skewY:startY,pointerId:pid},target);
+                try{handle.setPointerCapture(pid);}catch{}
+                handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
+            };
+            handle.addEventListener('pointerdown',down);
+            this.cleanups.push(()=>{handle.removeEventListener('pointerdown',down);handle.remove();});
+        }
 
-                this.target.style.transform = '';
+        private applySkew(target:HTMLElement,x:number,y:number,programmatic:boolean,pointerId?:number):void
+        {
+            this.skew=[x,y];
+            target.style.transform=`skew(${x}deg, ${y}deg)`;
+            this.Change({skewX:x,skewY:y,programmatic,pointerId},target);
+            for(const cb of this.callbacks) cb(target,x,y);
+        }
 
-                this.Change({
-                    skewX: 0,
-                    skewY: 0,
-                    programmatic: true,
-                });
-
-                this.End({
-                    skewX: 0,
-                    skewY: 0,
-                    programmatic: true,
-                });
-            }
-
+        public onSkew(callback:SkewCallback):this{this.callbacks.add(callback);return this;}
+        public setSkew(x:number,y:number):this
+        {
+            const nx=this.axis==='y'?this.skew[0]:Math.max(-this.maxAngle,Math.min(this.maxAngle,x));
+            const ny=this.axis==='x'?this.skew[1]:Math.max(-this.maxAngle,Math.min(this.maxAngle,y));
+            for(const target of this.targets) this.applySkew(target,nx,ny,true);
             return this;
         }
-
-        public getSkew(): readonly [number, number]
-        {
-            return [...this.#skew] as [number, number];
-        }
+        public reset():this{return this.setSkew(0,0);}
+        public getSkew():readonly[number,number]{return [...this.skew] as [number,number];}
     }
 }
 
-export type SkewerAxis = Skewer.Types.Axis;
-export type SkewerOptions = Skewer.Interfaces.SkewerOptions;
-
+export type SkewerAxis=Skewer.Types.Axis;
+export type SkewerOptions=Skewer.Interfaces.SkewerOptions;
 export default Skewer.Skewer;
