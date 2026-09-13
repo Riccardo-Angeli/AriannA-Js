@@ -1,11 +1,11 @@
 /**
- * @module    components/modifiers/3D/DecimateModifier
+ * @module    components/graphics/3D/modifiers/BendModifier
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description AriannA DecimateModifier component module.
+ * @description AriannA BendModifier component module.
  */
 
 
@@ -24,29 +24,29 @@ declare const Templates: any;
  *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
 
-/** @namespace   DecimateModifier
+/** @namespace   BendModifier
  *  @public
- *  @description Namespace containing DecimateModifier contracts and implementation.
+ *  @description Namespace containing BendModifier contracts and implementation.
  *  @author      Riccardo Angeli
  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
  *  @license     MIT / Commercial (dual license) */
-export namespace DecimateModifier
+export namespace BendModifier
 {
-    /** @class       DecimateModifierElement
+    /** @class       BendModifierElement
      *  @public
-     *  @description AriannA DecimateModifierElement component implementation.
+     *  @description AriannA BendModifierElement component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-        @Component('arianna-decimate', {}, {
-        Attributes: ['disabled', 'viewport', 'for', 'ratio', 'enabled'],
+        @Component('arianna-bend', {}, {
+        Attributes: ['disabled', 'viewport', 'for', 'angle', 'axis', 'enabled'],
     })
-    export class DecimateModifierElement extends Modifier3DNamespace.Modifier3DElement
+    export class BendModifierElement extends Modifier3DNamespace.Modifier3DElement
     {
         /** Canonical AriannA public DOM identity. */
         private readonly _AriannaComponentIdentity = (() =>
         {
-            const type = 'DecimateModifierElement';
+            const type = 'BendModifierElement';
             for(const cls of Array.from(this.classList))
             {
                 if(cls.startsWith('__real-')) this.classList.remove(cls);
@@ -81,60 +81,91 @@ export namespace DecimateModifier
          *  @license     MIT / Commercial (dual license) */
         protected createModifier(mesh: Modifier3DNamespace.Interfaces.MeshLike): Modifier3DNamespace.Modifier3D
         {
-            /** @name        ratio
+            /** @name        angle
              *  @public
              *  @type        {inferred}
-             *  @description Namespace-owned ratio value.
+             *  @description Namespace-owned angle value.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const ratio = parseFloat(this.getAttribute('ratio') ?? '0.5') || 0.5;
-            return new DecimateModifier(mesh, ratio);
+            const angle = parseFloat(this.getAttribute('angle') ?? '0') || 0;
+
+            /** @name        axis
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned axis value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const axis = ((this.getAttribute('axis') ?? 'y') as 'x' | 'y' | 'z');
+            return new BendModifier(mesh, angle, axis);
         }
     }
 
-    /** @class       DecimateModifier
+    /** @class       BendModifier
      *  @public
-     *  @description AriannA DecimateModifier component implementation.
+     *  @description AriannA BendModifier component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export class DecimateModifier extends Modifier3DNamespace.Modifier3D
+    export class BendModifier extends Modifier3DNamespace.Modifier3D
     {
-        /** @name        #ratio
+        /** @name        #angle
          *  @public
          *  @type        {number}
-         *  @description Component member for ratio.
+         *  @description Component member for angle.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #ratio: number;
+        #angle: number;
+
+        /** @name        #axis
+         *  @public
+         *  @type        {'x' | 'y' | 'z'}
+         *  @description Component member for axis.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        #axis: 'x' | 'y' | 'z';
 
         /** @name        constructor
          *  @public
          *  @type        {constructor}
          *  @description Constructs the component for constructor.
          *  @param       {Modifier3DNamespace.Interfaces.MeshLike} mesh Parameter.
-         *  @param       {unknown} ratio Parameter.
+         *  @param       {number} angle Parameter.
+         *  @param       {'x' | 'y' | 'z'} axis Parameter.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, ratio = 0.5)
+        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, angle: number, axis: 'x' | 'y' | 'z' = 'y')
         {
             super(mesh);
-            this.#ratio = Math.max(0.01, Math.min(1, ratio));
+            this.#angle = angle;
+            this.#axis = axis;
         }
 
-        /** @name        setRatio
+        /** @name        setAngle
          *  @public
          *  @type        {this}
-         *  @description Component member for set Ratio.
-         *  @param       {number} r Parameter.
+         *  @description Component member for set Angle.
+         *  @param       {number} a Parameter.
          *  @returns     {this} Result.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        setRatio(r: number): this { this.#ratio = Math.max(0.01, Math.min(1, r)); return this; }
+        setAngle(a: number): this { this.#angle = a; return this; }
+
+        /** @name        setAxis
+         *  @public
+         *  @type        {this}
+         *  @description Component member for set Axis.
+         *  @param       {'x' | 'y' | 'z'} a Parameter.
+         *  @returns     {this} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        setAxis(a: 'x' | 'y' | 'z'): this { this.#axis = a; return this; }
 
         /** @name        apply
          *  @public
@@ -146,51 +177,33 @@ export namespace DecimateModifier
          *  @license     MIT / Commercial (dual license) */
         apply(): this
         {
-            if (!this.enabled)
-                return this;
-
-            /** @name        g
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned g value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const g = Modifier3DNamespace._cloneGeom(this.mesh.geometry);
-
-            /** @name        triCount
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned triCount value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const triCount = g.indices.length / 3;
-
-            /** @name        step
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned step value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const step = Math.max(1, Math.floor(triCount / Math.max(1, Math.floor(triCount * this.#ratio))));
-
-            /** @name        newIdx
-             *  @public
-             *  @type        {number[]}
-             *  @description Namespace-owned newIdx value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const newIdx: number[] = [];
-            for (let i = 0; i < g.indices.length; i += 3 * step)
-                newIdx.push(...g.indices.slice(i, i + 3));
-            g.indices = newIdx;
+            if(!this.enabled || Math.abs(this.#angle) < 1e-6) return this;
+            const g=Modifier3DNamespace._cloneGeom(this.mesh.geometry);
+            const axis=this.#axis;
+            const values=g.vertices.map(v=>axis==='x'?v.x:axis==='y'?v.y:v.z);
+            const min=Math.min(...values), max=Math.max(...values), span=(max-min)||1, mid=(min+max)/2;
+            const radius=span/this.#angle;
+            g.vertices=g.vertices.map(v=>{
+                const along=(axis==='x'?v.x:axis==='y'?v.y:v.z)-mid;
+                const theta=(along/span)*this.#angle;
+                const c=Math.cos(theta), s=Math.sin(theta);
+                if(axis==='y')
+                {
+                    const radial=radius+v.x;
+                    return {x:radial*c-radius,y:radial*s,z:v.z};
+                }
+                if(axis==='x')
+                {
+                    const radial=radius+v.y;
+                    return {x:radial*s,y:radial*c-radius,z:v.z};
+                }
+                const radial=radius+v.x;
+                return {x:radial*c-radius,y:v.y,z:radial*s};
+            });
             Modifier3DNamespace._recomputeNormals(g);
-            this.mesh.geometry = g;
+            this.mesh.geometry=g;
             return this;
         }
     }
 }
-export default DecimateModifier;
+export default BendModifier;

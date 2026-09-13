@@ -1,9 +1,9 @@
 /**
- * @module components/modifiers/2D/Resizer
+ * @module components/graphics/2D/modifiers/Resizer
  * @description Eight-direction drag resizer with visible handles, cross-over resize and size limits.
  */
 
-import { Component, Templates } from '../../../core/index.ts';
+import { Component, Templates } from '../../../../core/index.ts';
 import * as Base from './Base.ts';
 
 export namespace Resizer
@@ -40,6 +40,11 @@ export namespace Resizer
     }
 
     export type ResizeCallback = (element: HTMLElement, width: number, height: number) => void;
+
+    export interface ResizerParameters extends Base.Modifier2D.Parameters.Bag
+    {
+        Width:number; Height:number; Handles:string; MinWidth:number; MinHeight:number; MaxWidth:number|string; MaxHeight:number|string; AllowCross:boolean; HandleColor:string; Enabled:boolean;
+    }
 
     const html = Templates.Template.Html;
 
@@ -95,7 +100,7 @@ export namespace Resizer
     export class Resizer extends Base.Modifier2D.Modifier2D
     {
         public template = html``;
-        protected EventName = 'resize';
+        protected get EventName(): string { return 'resize'; }
 
         public handles: Types.ResizeDirection[] = [...Directions];
         public minWidth = 0;
@@ -105,7 +110,41 @@ export namespace Resizer
         public allowCross = true;
         public handleColor = '#e40c88';
 
-        private readonly resizeCallbacks = new Set<ResizeCallback>();
+        private resizeCallbacks = new Set<ResizeCallback>();
+
+        private ensureRuntime(): void
+        {
+            if(!Array.isArray(this.handles) || this.handles.length === 0) this.handles = [...Directions];
+            this.minWidth ??= 0;
+            this.minHeight ??= 0;
+            this.maxWidth ??= Number.POSITIVE_INFINITY;
+            this.maxHeight ??= Number.POSITIVE_INFINITY;
+            this.allowCross ??= true;
+            this.handleColor ??= '#e40c88';
+            if(!(this.resizeCallbacks instanceof Set)) this.resizeCallbacks = new Set<ResizeCallback>();
+        }
+
+        public get Parameters(): ResizerParameters
+        {
+            this.ensureRuntime();
+            const parseLimit=(value:unknown):number=>{
+                const text=String(value??'').trim().toLowerCase();
+                if(text===''||text==='infinity'||text==='∞')return Number.POSITIVE_INFINITY;
+                const n=Number(text);return Number.isFinite(n)?Math.max(0,n):Number.POSITIVE_INFINITY;
+            };
+            return Base.Modifier2D.CreateParameters<ResizerParameters>(this,'Resizer',[
+                {key:'Width',label:'Width',kind:'number',min:0,step:1,get:()=>this.target?.offsetWidth??0,set:v=>this.setSize(Number(v),this.target?.offsetHeight??0)},
+                {key:'Height',label:'Height',kind:'number',min:0,step:1,get:()=>this.target?.offsetHeight??0,set:v=>this.setSize(this.target?.offsetWidth??0,Number(v))},
+                {key:'Handles',label:'Handles',kind:'text',get:()=>this.handles.join(','),set:v=>{const next=String(v).split(',').map(normalize).filter((x):x is Types.ResizeDirection=>x!==null);if(next.length)this.handles=next;this.refreshAttachments();}},
+                {key:'MinWidth',label:'Min width',kind:'number',min:0,step:1,get:()=>this.minWidth,set:v=>{this.minWidth=Math.max(0,Number(v)||0);}},
+                {key:'MinHeight',label:'Min height',kind:'number',min:0,step:1,get:()=>this.minHeight,set:v=>{this.minHeight=Math.max(0,Number(v)||0);}},
+                {key:'MaxWidth',label:'Max width',kind:'text',get:()=>Number.isFinite(this.maxWidth)?this.maxWidth:'∞',set:v=>{this.maxWidth=parseLimit(v);}},
+                {key:'MaxHeight',label:'Max height',kind:'text',get:()=>Number.isFinite(this.maxHeight)?this.maxHeight:'∞',set:v=>{this.maxHeight=parseLimit(v);}},
+                {key:'AllowCross',label:'Allow cross',kind:'checkbox',get:()=>this.allowCross,set:v=>{this.allowCross=Boolean(v);}},
+                {key:'HandleColor',label:'Handle color',kind:'color',get:()=>this.handleColor,set:v=>{this.handleColor=String(v);this.refreshAttachments();}},
+                {key:'Enabled',label:'Enabled',kind:'checkbox',get:()=>this.enabled,set:v=>{this.enabled=Boolean(v);}},
+            ]);
+        }
 
         constructor(target?: Base.Modifier2D.Types.TargetInput, options: Interfaces.ResizerOptions = {})
         {
@@ -117,6 +156,7 @@ export namespace Resizer
 
         private configure(options: Interfaces.ResizerOptions): void
         {
+            this.ensureRuntime();
             if(options.handles) this.handles = [...options.handles];
             if(options.allowCross !== undefined) this.allowCross = options.allowCross;
             if(options.minWidth !== undefined) this.minWidth = Math.max(0, options.minWidth);
@@ -129,6 +169,7 @@ export namespace Resizer
 
         private syncAttributes(): void
         {
+            this.ensureRuntime();
             const handles = this.getAttribute('handles');
             if(handles)
             {
@@ -366,12 +407,14 @@ export namespace Resizer
 
         public onResize(callback: ResizeCallback): this
         {
+            this.ensureRuntime();
             this.resizeCallbacks.add(callback);
             return this;
         }
 
         public setSize(width: number, height: number): this
         {
+            this.ensureRuntime();
             for(const target of this.targets)
             {
                 const w = Math.max(0, Math.min(this.maxWidth, width));

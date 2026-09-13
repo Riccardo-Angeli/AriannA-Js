@@ -94,31 +94,22 @@ export namespace Chat
         new Css.Rule('.Chat[theme="light"] .Chat-Composer', { Background:'linear-gradient(180deg,#f4f6f7,#dde1e4)', BorderTopColor:'#b9bec3' })
     ]);
 
-    const demoMe:Interfaces.ChatUser={id:'me',name:'AriannA',online:true};
-    const demoConversations:Interfaces.ChatConversation[]=[
-        {id:'design',peer:{id:'livia',name:'Livia',online:true},unread:2,messages:[
-            {id:'m1',author:'livia',text:'The new graphics palette looks much cleaner.',ts:Date.now()-3600000,status:'read'},
-            {id:'m2',author:'me',text:'Perfect. I am keeping the AriannA fuchsia accent and the DAW tonal system.',ts:Date.now()-3500000,status:'read'},
-            {id:'m3',author:'livia',text:'Great — send me the Workflow pass too.',ts:Date.now()-3200000,status:'delivered'}
-        ]},
-        {id:'team',peer:{id:'team',name:'AriannA Team',online:true},messages:[{id:'t1',author:'team',text:'Build is green.',ts:Date.now()-8600000,status:'read'}]},
-        {id:'audio',peer:{id:'audio',name:'Audio Lab'},messages:[{id:'a1',author:'audio',text:'Channel strips approved.',ts:Date.now()-86400000,status:'read'}]}
-    ];
+    const EMPTY_ME:Interfaces.ChatUser={id:'me',name:'',online:false};
 
     @Component('arianna-chat', Styles, { Shadow:false, Attributes:['theme','active'], Properties:['me','conversations'] })
     export class Chat extends HTMLDivElement
     {
         public static readonly Styles=Styles;
         public template=html``;
-        private _me:Interfaces.ChatUser=demoMe;
-        private _conversations:Interfaces.ChatConversation[]=structuredClone(demoConversations);
+        private _me:Interfaces.ChatUser={...EMPTY_ME};
+        private _conversations:Interfaces.ChatConversation[]=[];
         private _active='design';
         private _search='';
 
         private EnsureState():void
         {
-            if(!this._me || typeof this._me !== 'object') this._me=demoMe;
-            if(!Array.isArray(this._conversations)) this._conversations=structuredClone(demoConversations);
+            if(!this._me || typeof this._me !== 'object') this._me={...EMPTY_ME};
+            if(!Array.isArray(this._conversations)) this._conversations=[];
             if(typeof this._active !== 'string') this._active='';
             if(typeof this._search !== 'string') this._search='';
         }
@@ -131,7 +122,7 @@ export namespace Chat
         public onCreated():void { requestAnimationFrame(()=>{if(this.isConnected)this.onConnected();}); }
         public onConnected():void { this.EnsureState(); this.classList.add('Chat'); if(!this.hasAttribute('theme'))this.setAttribute('theme','dark'); this._active=this.getAttribute('active')||this._conversations[0]?.id||''; this.Render(); }
         public onAttributeChanged(name:string):void { this.EnsureState(); if(name==='active')this._active=this.getAttribute('active')||''; if(this.isConnected)this.Render(); }
-        public get me():Interfaces.ChatUser{this.EnsureState();return this._me;} public set me(v:Interfaces.ChatUser){this.EnsureState();this._me=v||demoMe; if(this.isConnected)this.Render();}
+        public get me():Interfaces.ChatUser{this.EnsureState();return this._me;} public set me(v:Interfaces.ChatUser){this.EnsureState();this._me=v||{...EMPTY_ME}; if(this.isConnected)this.Render();}
         public get conversations():Interfaces.ChatConversation[]{this.EnsureState();return this._conversations;} public set conversations(v:Interfaces.ChatConversation[]){this.EnsureState();this._conversations=Array.isArray(v)?v:[]; if(this.isConnected)this.Render();}
         public setMe(u:Interfaces.ChatUser):this{this.me=u;return this;}
         public addConversation(c:Interfaces.ChatConversation):this{this.EnsureState();if(!c||!c.id||!c.peer)return this;this._conversations=[...this._conversations,c]; if(!this._active)this._active=c.id; if(this.isConnected)this.Render();return this;}
@@ -142,7 +133,7 @@ export namespace Chat
 
         private Avatar(user:Interfaces.ChatUser|undefined,cls='Chat-Avatar'):HTMLElement
         {
-            const safe=user??demoMe;
+            const safe=user??EMPTY_ME;
             const a=document.createElement('span');a.className=cls;
             if(safe.avatar){const img=document.createElement('img');img.src=safe.avatar;img.alt='';a.append(img);} else a.textContent=initials(safe.name);return a;
         }

@@ -1,9 +1,9 @@
 /**
- * @module components/modifiers/2D/Mover
+ * @module components/graphics/2D/modifiers/Mover
  * @description Drag-to-move modifier with axis lock, grid snap, bounds and physics placeholders.
  */
 
-import { Component, Templates } from '../../../core/index.ts';
+import { Component, Templates } from '../../../../core/index.ts';
 import * as Base from './Base.ts';
 
 export namespace Mover
@@ -32,6 +32,12 @@ export namespace Mover
 
     export type MoveCallback = (element: HTMLElement, x: number, y: number) => void;
 
+    export interface MoverParameters extends Base.Modifier2D.Parameters.Bag
+    {
+        X:number; Y:number; Axis:Types.Axis; Bounds:Types.Bounds; SnapX:number; SnapY:number;
+        Mass:number; Damping:number; Stiffness:number; HandleSelector:string; Enabled:boolean;
+    }
+
     const html = Templates.Template.Html;
 
     @Component('arianna-mover', {}, {
@@ -44,7 +50,7 @@ export namespace Mover
     export class Mover extends Base.Modifier2D.Modifier2D
     {
         public template = html``;
-        protected EventName = 'move';
+        protected get EventName(): string { return 'move'; }
 
         public handleSelector = '';
         public axis: Types.Axis = 'both';
@@ -57,10 +63,45 @@ export namespace Mover
         public damping = 0.85;
         public stiffness = 0.15;
 
-        private readonly startCallbacks = new Set<MoveCallback>();
-        private readonly moveCallbacks = new Set<MoveCallback>();
-        private readonly snapCallbacks = new Set<MoveCallback>();
-        private readonly endCallbacks = new Set<MoveCallback>();
+        private startCallbacks = new Set<MoveCallback>();
+        private moveCallbacks = new Set<MoveCallback>();
+        private snapCallbacks = new Set<MoveCallback>();
+        private endCallbacks = new Set<MoveCallback>();
+
+        /** Restore class-field defaults after an in-place AriannA markup upgrade. */
+        private ensureRuntime(): void
+        {
+            this.handleSelector ??= '';
+            this.axis ??= 'both';
+            this.bounds ??= 'none';
+            this.snapX ??= 0;
+            this.snapY ??= 0;
+            this.mass ??= 1;
+            this.damping ??= .85;
+            this.stiffness ??= .15;
+            if(!(this.startCallbacks instanceof Set)) this.startCallbacks = new Set<MoveCallback>();
+            if(!(this.moveCallbacks instanceof Set)) this.moveCallbacks = new Set<MoveCallback>();
+            if(!(this.snapCallbacks instanceof Set)) this.snapCallbacks = new Set<MoveCallback>();
+            if(!(this.endCallbacks instanceof Set)) this.endCallbacks = new Set<MoveCallback>();
+        }
+
+        public get Parameters(): MoverParameters
+        {
+            this.ensureRuntime();
+            return Base.Modifier2D.CreateParameters<MoverParameters>(this,'Mover',[
+                {key:'X',label:'X',kind:'number',step:1,get:()=>this.target?.offsetLeft??0,set:v=>this.setPosition(Number(v),this.target?.offsetTop??0)},
+                {key:'Y',label:'Y',kind:'number',step:1,get:()=>this.target?.offsetTop??0,set:v=>this.setPosition(this.target?.offsetLeft??0,Number(v))},
+                {key:'Axis',label:'Axis',kind:'select',options:['both','x','y'],get:()=>this.axis,set:v=>{this.axis=String(v) as Types.Axis;this.setAttribute('axis',this.axis);}},
+                {key:'Bounds',label:'Bounds',kind:'select',options:['parent','none','viewport'],get:()=>this.bounds,set:v=>{this.bounds=String(v) as Types.Bounds;this.setAttribute('bounds',this.bounds);}},
+                {key:'SnapX',label:'Snap X',kind:'number',min:0,step:1,get:()=>this.snapX,set:v=>{this.snapX=Math.max(0,Number(v)||0);this.setAttribute('snap-x',String(this.snapX));}},
+                {key:'SnapY',label:'Snap Y',kind:'number',min:0,step:1,get:()=>this.snapY,set:v=>{this.snapY=Math.max(0,Number(v)||0);this.setAttribute('snap-y',String(this.snapY));}},
+                {key:'Mass',label:'Mass',kind:'number',step:.05,get:()=>this.mass,set:v=>{this.mass=Number(v)||0;this.setAttribute('mass',String(this.mass));}},
+                {key:'Damping',label:'Damping',kind:'number',step:.05,get:()=>this.damping,set:v=>{this.damping=Number(v)||0;this.setAttribute('damping',String(this.damping));}},
+                {key:'Stiffness',label:'Stiffness',kind:'number',step:.05,get:()=>this.stiffness,set:v=>{this.stiffness=Number(v)||0;this.setAttribute('stiffness',String(this.stiffness));}},
+                {key:'HandleSelector',label:'Handle',kind:'text',get:()=>this.handleSelector,set:v=>{this.handleSelector=String(v??'');if(this.handleSelector)this.setAttribute('handle-selector',this.handleSelector);else this.removeAttribute('handle-selector');this.refreshAttachments();}},
+                {key:'Enabled',label:'Enabled',kind:'checkbox',get:()=>this.enabled,set:v=>{this.enabled=Boolean(v);}},
+            ]);
+        }
 
         constructor(target?: Base.Modifier2D.Types.TargetInput, options: Interfaces.MoverOptions = {})
         {
@@ -72,6 +113,7 @@ export namespace Mover
 
         private configure(options: Interfaces.MoverOptions): void
         {
+            this.ensureRuntime();
             if(options.handleSelector !== undefined) this.handleSelector = options.handleSelector;
             if(options.axis !== undefined) this.axis = options.axis;
             if(options.bounds !== undefined) this.bounds = options.bounds;
@@ -85,6 +127,7 @@ export namespace Mover
 
         private syncAttributes(): void
         {
+            this.ensureRuntime();
             const handle = this.getAttribute('handle-selector');
             const axis = this.getAttribute('axis') as Types.Axis | null;
             const bounds = this.getAttribute('bounds') as Types.Bounds | null;
@@ -173,16 +216,27 @@ export namespace Mover
 
                 [x, y] = clamp(x, y);
 
+                /* Canvas2D Snap is the spatial master switch. Turning it off makes
+                 * the effective modifier snap 0 while preserving the configured SnapX/SnapY
+                 * values so turning Snap back on restores the previous behaviour. */
+                const canvas = target.closest('arianna-canvas-2d') as (HTMLElement & { getSnap?:()=>{enabled?:boolean;grid?:boolean} }) | null;
+                const canvasSnapState = typeof canvas?.getSnap === 'function' ? canvas.getSnap() : null;
+                const canvasSnapEnabled = canvasSnapState
+                    ? canvasSnapState.enabled !== false && canvasSnapState.grid !== false
+                    : true;
+                const effectiveSnapX = canvasSnapEnabled ? this.snapX : 0;
+                const effectiveSnapY = canvasSnapEnabled ? this.snapY : 0;
+
                 let snapped = false;
-                if(this.snapX > 0)
+                if(effectiveSnapX > 0)
                 {
-                    const next = Math.round(x / this.snapX) * this.snapX;
+                    const next = Math.round(x / effectiveSnapX) * effectiveSnapX;
                     snapped ||= next !== x;
                     x = next;
                 }
-                if(this.snapY > 0)
+                if(effectiveSnapY > 0)
                 {
-                    const next = Math.round(y / this.snapY) * this.snapY;
+                    const next = Math.round(y / effectiveSnapY) * effectiveSnapY;
                     snapped ||= next !== y;
                     y = next;
                 }
@@ -272,13 +326,14 @@ export namespace Mover
             });
         }
 
-        public onStart(callback: MoveCallback): this { this.startCallbacks.add(callback); return this; }
-        public onMove(callback: MoveCallback): this { this.moveCallbacks.add(callback); return this; }
-        public onSnap(callback: MoveCallback): this { this.snapCallbacks.add(callback); return this; }
-        public onEnd(callback: MoveCallback): this { this.endCallbacks.add(callback); return this; }
+        public onStart(callback: MoveCallback): this { this.ensureRuntime(); this.startCallbacks.add(callback); return this; }
+        public onMove(callback: MoveCallback): this { this.ensureRuntime(); this.moveCallbacks.add(callback); return this; }
+        public onSnap(callback: MoveCallback): this { this.ensureRuntime(); this.snapCallbacks.add(callback); return this; }
+        public onEnd(callback: MoveCallback): this { this.ensureRuntime(); this.endCallbacks.add(callback); return this; }
 
         public setPosition(x: number, y: number): this
         {
+            this.ensureRuntime();
             for(const target of this.targets)
             {
                 target.style.left = `${Math.round(x)}px`;

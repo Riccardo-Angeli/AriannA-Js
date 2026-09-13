@@ -1,28 +1,20 @@
-/**
- * @module components/payments/Sofort
- * @author Riccardo Angeli
- * @version 2.1.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license MIT / Commercial (dual license)
+/** @module components/payments/Sofort
+ * @description Sofort single-button payment component. Credentials/configuration are supplied by the application.
  */
-
-import { HostedPayment } from './HostedPayment.ts';
+import { Component } from '../../core/index.ts';
+import { PaymentButton } from './PaymentButton.ts';
 import { PaymentProviders } from './Providers.ts';
-declare const Component: any;
 
 export namespace Sofort
 {
-    export type SofortOptions = HostedPayment.HostedPaymentOptions;
-    export const Provider = PaymentProviders.Sofort;
+    export namespace Types { export type Mode=PaymentButton.Types.PaymentMode; }
+    export namespace Interfaces { export type SofortOptions=PaymentButton.Interfaces.PaymentButtonOptions; }
+    export const Provider=PaymentProviders.Sofort;
 
-    @Component('arianna-sofort', {}, { shadow:false, Attributes:['amount','currency','reference','checkout-url','api-url','api-token','return-url','customer-email','target'] })
-    export class Sofort extends HostedPayment.HostedPayment
+    @Component('arianna-sofort',PaymentButton.Styles,{Shadow:false,Attributes:['theme','amount','currency','reference','customer-email','label','target','mode','disabled']})
+    export class Sofort extends PaymentButton.PaymentButton
     {
-        onConnected()
-        {
-            if(!this.getProvider()) this.setProvider(Provider);
-            super.onConnected();
-        }
+        protected get Provider(){return Provider;}
     }
 }
 

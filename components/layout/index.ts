@@ -17,7 +17,7 @@
  * Some layout components use modifiers internally:
  *   • Accordion (resizable mode) → <arianna-resizer>
  *   • Window                      → <arianna-mover> + <arianna-resizer>
- * Make sure the modifiers/2D barrel is imported alongside this one when
+ * Make sure the graphics/2D/modifiers barrel is imported alongside this one when
  * mounting those components.
  */
 export { Card } from './Card.ts';

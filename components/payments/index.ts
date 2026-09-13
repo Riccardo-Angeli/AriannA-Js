@@ -1,12 +1,8 @@
-/**
- * @module components/payments
- * @author Riccardo Angeli
- * @copyright Riccardo Angeli 2012-2026
- * @license MIT / Commercial (dual license)
- *
- * Payment component barrel. CreditCard.ts is intentionally preserved unchanged.
+/** @module components/payments
+ * @description Canonical payment barrel. Every provider except PaymentGateway and
+ * CreditCard is a single PaymentButton with API + Mode configuration.
  */
-
+import { PaymentButton as PaymentButtonModule } from './PaymentButton.ts';
 import { ApplePay as ApplePayModule } from './ApplePay.ts';
 import { GooglePay as GooglePayModule } from './GooglePay.ts';
 import { CreditCard as CreditCardModule } from './CreditCard.ts';
@@ -38,55 +34,60 @@ import { MPesa as MPesaModule } from './MPesa.ts';
 import { CashApp as CashAppModule } from './CashApp.ts';
 import { HostedPayment as HostedPaymentModule } from './HostedPayment.ts';
 import { PaymentGateway as PaymentGatewayModule } from './PaymentGateway.ts';
+
 export { PaymentProviders } from './Providers.ts';
 export type { PaymentProviderId, PaymentProviderKind, PaymentProviderConfig, PaymentApiCapability } from './Providers.ts';
 
-export const ApplePay = ApplePayModule.ApplePay;
-export const GooglePay = GooglePayModule.GooglePay;
-export const CreditCard = CreditCardModule.CreditCard;
-export const PayPal = PayPalModule.PayPal;
-export const Stripe = StripeModule.Stripe;
-export const Satispay = SatispayModule.Satispay;
-export const Nexi = NexiModule.Nexi;
-export const AliPay = AliPayModule.AliPay;
-export const WeChatPay = WeChatPayModule.WeChatPay;
-export const AmazonPay = AmazonPayModule.AmazonPay;
-export const Klarna = KlarnaModule.Klarna;
-export const Sofort = SofortModule.Sofort;
-export const Adyen = AdyenModule.Adyen;
-export const Worldline = WorldlineModule.Worldline;
-export const CheckoutCom = CheckoutComModule.CheckoutCom;
-export const SumUp = SumUpModule.SumUp;
-export const Mollie = MollieModule.Mollie;
-export const TWINT = TWINTModule.TWINT;
-export const Ideal = IdealModule.Ideal;
-export const Bancontact = BancontactModule.Bancontact;
-export const BLIK = BLIKModule.BLIK;
-export const Trustly = TrustlyModule.Trustly;
-export const Wero = WeroModule.Wero;
-export const SEPA = SEPAModule.SEPA;
-export const Pix = PixModule.Pix;
-export const UPI = UPIModule.UPI;
-export const MercadoPago = MercadoPagoModule.MercadoPago;
-export const MPesa = MPesaModule.MPesa;
-export const CashApp = CashAppModule.CashApp;
-export const HostedPayment = HostedPaymentModule.HostedPayment;
-export const PaymentGateway = PaymentGatewayModule.PaymentGateway;
+export const PaymentButton=PaymentButtonModule.PaymentButton;
+export const ApplePay=ApplePayModule.ApplePay;
+export const GooglePay=GooglePayModule.GooglePay;
+export const CreditCard=CreditCardModule.CreditCard;
+export const PayPal=PayPalModule.PayPal;
+export const Stripe=StripeModule.Stripe;
+export const Satispay=SatispayModule.Satispay;
+export const Nexi=NexiModule.Nexi;
+export const AliPay=AliPayModule.AliPay;
+export const WeChatPay=WeChatPayModule.WeChatPay;
+export const AmazonPay=AmazonPayModule.AmazonPay;
+export const Klarna=KlarnaModule.Klarna;
+export const Sofort=SofortModule.Sofort;
+export const Adyen=AdyenModule.Adyen;
+export const Worldline=WorldlineModule.Worldline;
+export const CheckoutCom=CheckoutComModule.CheckoutCom;
+export const SumUp=SumUpModule.SumUp;
+export const Mollie=MollieModule.Mollie;
+export const TWINT=TWINTModule.TWINT;
+export const Ideal=IdealModule.Ideal;
+export const Bancontact=BancontactModule.Bancontact;
+export const BLIK=BLIKModule.BLIK;
+export const Trustly=TrustlyModule.Trustly;
+export const Wero=WeroModule.Wero;
+export const SEPA=SEPAModule.SEPA;
+export const Pix=PixModule.Pix;
+export const UPI=UPIModule.UPI;
+export const MercadoPago=MercadoPagoModule.MercadoPago;
+export const MPesa=MPesaModule.MPesa;
+export const CashApp=CashAppModule.CashApp;
+export const HostedPayment=HostedPaymentModule.HostedPayment;
+export const PaymentGateway=PaymentGatewayModule.PaymentGateway;
 
-export type ApplePayOptions = ApplePayModule.Interfaces.ApplePayOptions;
-export type GooglePayOptions = GooglePayModule.Interfaces.GooglePayOptions;
-export type CardBrand = CreditCardModule.Types.CardBrand;
-export type CardData = CreditCardModule.Interfaces.CardData;
-export type CreditCardOptions = CreditCardModule.Interfaces.CreditCardOptions;
-export type PayPalOptions = PayPalModule.Interfaces.PayPalOptions;
-export type StripeOptions = StripeModule.Interfaces.StripeOptions;
-export type SatispayOptions = SatispayModule.Interfaces.SatispayOptions;
-export type NexiOptions = NexiModule.Interfaces.NexiOptions;
-export type AliPayMode = AliPayModule.Types.AliPayMode;
-export type AliPayOptions = AliPayModule.Interfaces.AliPayOptions;
-export type HostedPaymentOptions = HostedPaymentModule.HostedPaymentOptions;
-export type PaymentRequest = HostedPaymentModule.PaymentRequest;
-export type PaymentResult = HostedPaymentModule.PaymentResult;
-export type PaymentMethodId = PaymentGatewayModule.Types.PaymentMethodId;
-export type PaymentGatewayMethodConfig = PaymentGatewayModule.Interfaces.PaymentGatewayMethodConfig;
-export type PaymentGatewayOptions = PaymentGatewayModule.Interfaces.PaymentGatewayOptions;
+export type PaymentMode=PaymentButtonModule.Types.PaymentMode;
+export type PaymentAPI=PaymentButtonModule.Interfaces.PaymentAPI;
+export type PaymentButtonOptions=PaymentButtonModule.Interfaces.PaymentButtonOptions;
+export type PaymentRequest=PaymentButtonModule.Interfaces.PaymentRequest;
+export type PaymentResult=PaymentButtonModule.Interfaces.PaymentResult;
+export type ApplePayOptions=ApplePayModule.Interfaces.ApplePayOptions;
+export type GooglePayOptions=GooglePayModule.Interfaces.GooglePayOptions;
+export type CardBrand=CreditCardModule.Types.CardBrand;
+export type CardData=CreditCardModule.Interfaces.CardData;
+export type CreditCardOptions=CreditCardModule.Interfaces.CreditCardOptions;
+export type PayPalOptions=PayPalModule.Interfaces.PayPalOptions;
+export type StripeOptions=StripeModule.Interfaces.StripeOptions;
+export type SatispayOptions=SatispayModule.Interfaces.SatispayOptions;
+export type NexiOptions=NexiModule.Interfaces.NexiOptions;
+export type AliPayMode=AliPayModule.Types.AliPayMode;
+export type AliPayOptions=AliPayModule.Interfaces.AliPayOptions;
+export type HostedPaymentOptions=HostedPaymentModule.HostedPaymentOptions;
+export type PaymentMethodId=PaymentGatewayModule.Types.PaymentMethodId;
+export type PaymentGatewayMethodConfig=PaymentGatewayModule.Interfaces.PaymentGatewayMethodConfig;
+export type PaymentGatewayOptions=PaymentGatewayModule.Interfaces.PaymentGatewayOptions;

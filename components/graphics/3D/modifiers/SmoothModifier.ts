@@ -1,11 +1,11 @@
 /**
- * @module    components/modifiers/3D/BendModifier
+ * @module    components/graphics/3D/modifiers/SmoothModifier
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description AriannA BendModifier component module.
+ * @description AriannA SmoothModifier component module.
  */
 
 
@@ -24,29 +24,29 @@ declare const Templates: any;
  *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
 
-/** @namespace   BendModifier
+/** @namespace   SmoothModifier
  *  @public
- *  @description Namespace containing BendModifier contracts and implementation.
+ *  @description Namespace containing SmoothModifier contracts and implementation.
  *  @author      Riccardo Angeli
  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
  *  @license     MIT / Commercial (dual license) */
-export namespace BendModifier
+export namespace SmoothModifier
 {
-    /** @class       BendModifierElement
+    /** @class       SmoothModifierElement
      *  @public
-     *  @description AriannA BendModifierElement component implementation.
+     *  @description AriannA SmoothModifierElement component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-        @Component('arianna-bend', {}, {
-        Attributes: ['disabled', 'viewport', 'for', 'angle', 'axis', 'enabled'],
+        @Component('arianna-smooth', {}, {
+        Attributes: ['disabled', 'viewport', 'for', 'iterations', 'factor', 'enabled'],
     })
-    export class BendModifierElement extends Modifier3DNamespace.Modifier3DElement
+    export class SmoothModifierElement extends Modifier3DNamespace.Modifier3DElement
     {
         /** Canonical AriannA public DOM identity. */
         private readonly _AriannaComponentIdentity = (() =>
         {
-            const type = 'BendModifierElement';
+            const type = 'SmoothModifierElement';
             for(const cls of Array.from(this.classList))
             {
                 if(cls.startsWith('__real-')) this.classList.remove(cls);
@@ -81,91 +81,69 @@ export namespace BendModifier
          *  @license     MIT / Commercial (dual license) */
         protected createModifier(mesh: Modifier3DNamespace.Interfaces.MeshLike): Modifier3DNamespace.Modifier3D
         {
-            /** @name        angle
+            /** @name        iterations
              *  @public
              *  @type        {inferred}
-             *  @description Namespace-owned angle value.
+             *  @description Namespace-owned iterations value.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const angle = parseFloat(this.getAttribute('angle') ?? '0') || 0;
+            const iterations = parseInt(this.getAttribute('iterations') ?? '3', 10) || 3;
 
-            /** @name        axis
+            /** @name        factor
              *  @public
              *  @type        {inferred}
-             *  @description Namespace-owned axis value.
+             *  @description Namespace-owned factor value.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const axis = ((this.getAttribute('axis') ?? 'y') as 'x' | 'y' | 'z');
-            return new BendModifier(mesh, angle, axis);
+            const factor = parseFloat(this.getAttribute('factor') ?? '0.5') || 0.5;
+            return new SmoothModifier(mesh, iterations, factor);
         }
     }
 
-    /** @class       BendModifier
+    /** @class       SmoothModifier
      *  @public
-     *  @description AriannA BendModifier component implementation.
+     *  @description AriannA SmoothModifier component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export class BendModifier extends Modifier3DNamespace.Modifier3D
+    export class SmoothModifier extends Modifier3DNamespace.Modifier3D
     {
-        /** @name        #angle
+        /** @name        #iterations
          *  @public
          *  @type        {number}
-         *  @description Component member for angle.
+         *  @description Component member for iterations.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #angle: number;
+        #iterations: number;
 
-        /** @name        #axis
+        /** @name        #factor
          *  @public
-         *  @type        {'x' | 'y' | 'z'}
-         *  @description Component member for axis.
+         *  @type        {number}
+         *  @description Component member for factor.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #axis: 'x' | 'y' | 'z';
+        #factor: number;
 
         /** @name        constructor
          *  @public
          *  @type        {constructor}
          *  @description Constructs the component for constructor.
          *  @param       {Modifier3DNamespace.Interfaces.MeshLike} mesh Parameter.
-         *  @param       {number} angle Parameter.
-         *  @param       {'x' | 'y' | 'z'} axis Parameter.
+         *  @param       {unknown} iterations Parameter.
+         *  @param       {unknown} factor Parameter.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, angle: number, axis: 'x' | 'y' | 'z' = 'y')
+        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, iterations = 3, factor = 0.5)
         {
             super(mesh);
-            this.#angle = angle;
-            this.#axis = axis;
+            this.#iterations = iterations;
+            this.#factor = factor;
         }
-
-        /** @name        setAngle
-         *  @public
-         *  @type        {this}
-         *  @description Component member for set Angle.
-         *  @param       {number} a Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        setAngle(a: number): this { this.#angle = a; return this; }
-
-        /** @name        setAxis
-         *  @public
-         *  @type        {this}
-         *  @description Component member for set Axis.
-         *  @param       {'x' | 'y' | 'z'} a Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        setAxis(a: 'x' | 'y' | 'z'): this { this.#axis = a; return this; }
 
         /** @name        apply
          *  @public
@@ -177,33 +155,72 @@ export namespace BendModifier
          *  @license     MIT / Commercial (dual license) */
         apply(): this
         {
-            if(!this.enabled || Math.abs(this.#angle) < 1e-6) return this;
-            const g=Modifier3DNamespace._cloneGeom(this.mesh.geometry);
-            const axis=this.#axis;
-            const values=g.vertices.map(v=>axis==='x'?v.x:axis==='y'?v.y:v.z);
-            const min=Math.min(...values), max=Math.max(...values), span=(max-min)||1, mid=(min+max)/2;
-            const radius=span/this.#angle;
-            g.vertices=g.vertices.map(v=>{
-                const along=(axis==='x'?v.x:axis==='y'?v.y:v.z)-mid;
-                const theta=(along/span)*this.#angle;
-                const c=Math.cos(theta), s=Math.sin(theta);
-                if(axis==='y')
-                {
-                    const radial=radius+v.x;
-                    return {x:radial*c-radius,y:radial*s,z:v.z};
-                }
-                if(axis==='x')
-                {
-                    const radial=radius+v.y;
-                    return {x:radial*s,y:radial*c-radius,z:v.z};
-                }
-                const radial=radius+v.x;
-                return {x:radial*c-radius,y:v.y,z:radial*s};
-            });
+            if (!this.enabled)
+                return this;
+
+            /** @name        g
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned g value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const g = Modifier3DNamespace._cloneGeom(this.mesh.geometry);
+
+            /** @name        adj
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned adj value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const adj = g.vertices.map(() => new Set<number>());
+            for (let i = 0; i < g.indices.length; i += 3)
+            {
+                /** @name        [a, b, c]
+                 *  @public
+                 *  @type        {inferred}
+                 *  @description Namespace-owned [a, b, c] value.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license) */
+                const [a, b, c] = g.indices.slice(i, i + 3);
+                adj[a].add(b);
+                adj[a].add(c);
+                adj[b].add(a);
+                adj[b].add(c);
+                adj[c].add(a);
+                adj[c].add(b);
+            }
+            for (let iter = 0; iter < this.#iterations; iter++)
+            {
+                g.vertices = g.vertices.map((v, i) => {
+                    /** @name        ns
+                     *  @public
+                     *  @type        {inferred}
+                     *  @description Namespace-owned ns value.
+                     *  @author      Riccardo Angeli
+                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                     *  @license     MIT / Commercial (dual license) */
+                    const ns = Array.from(adj[i]);
+                    if (!ns.length)
+                        return v;
+
+                    /** @name        avg
+                     *  @public
+                     *  @type        {inferred}
+                     *  @description Namespace-owned avg value.
+                     *  @author      Riccardo Angeli
+                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                     *  @license     MIT / Commercial (dual license) */
+                    const avg = Modifier3DNamespace._vScale(ns.reduce((s, ni) => Modifier3DNamespace._vAdd(s, g.vertices[ni]), { x: 0, y: 0, z: 0 }), 1 / ns.length);
+                    return Modifier3DNamespace._vLerp(v, avg, this.#factor);
+                });
+            }
             Modifier3DNamespace._recomputeNormals(g);
-            this.mesh.geometry=g;
+            this.mesh.geometry = g;
             return this;
         }
     }
 }
-export default BendModifier;
+export default SmoothModifier;

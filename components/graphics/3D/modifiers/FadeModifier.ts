@@ -1,11 +1,11 @@
 /**
- * @module    components/modifiers/3D/LODModifier
+ * @module    components/graphics/3D/modifiers/FadeModifier
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description AriannA LODModifier component module.
+ * @description AriannA FadeModifier component module.
  */
 
 
@@ -24,65 +24,29 @@ declare const Templates: any;
  *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
 
-/** @namespace   LODModifier
+/** @namespace   FadeModifier
  *  @public
- *  @description Namespace containing LODModifier contracts and implementation.
+ *  @description Namespace containing FadeModifier contracts and implementation.
  *  @author      Riccardo Angeli
  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
  *  @license     MIT / Commercial (dual license) */
-export namespace LODModifier
+export namespace FadeModifier
 {
-    /** @namespace   Interfaces
+    /** @class       FadeModifierElement
      *  @public
-     *  @description Namespace containing Interfaces contracts and implementation.
+     *  @description AriannA FadeModifierElement component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export namespace Interfaces
-    {
-        /** @interface   LODLevel
-         *  @public
-         *  @description LODLevel contract for this component.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        export interface LODLevel
-        {
-            /** @name        distance
-             *  @public
-             *  @type        {number}
-             *  @description Component member for distance.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            distance: number;
-
-            /** @name        geometry
-             *  @public
-             *  @type        {Modifier3DNamespace.Interfaces.Geometry3Like}
-             *  @description Component member for geometry.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            geometry: Modifier3DNamespace.Interfaces.Geometry3Like;
-        }
-    }
-
-    /**
-     * Declarative form. **Second-pass TODO**: parse child `<arianna-lod-level>`
-     * elements to read geometry references. For now the element registers itself
-     * with an empty levels array; consumers must call `getModifier().setLevels()`
-     * after the viewport's asset registry is available.
-     */
-        @Component('arianna-lod', {}, {
-        Attributes: ['disabled','viewport','for','near','mid','far','enabled'],
+        @Component('arianna-fade', {}, {
+        Attributes: ['disabled', 'viewport', 'for', 'near', 'far', 'enabled'],
     })
-    export class LODModifierElement extends Modifier3DNamespace.Modifier3DElement
+    export class FadeModifierElement extends Modifier3DNamespace.Modifier3DElement
     {
         /** Canonical AriannA public DOM identity. */
         private readonly _AriannaComponentIdentity = (() =>
         {
-            const type = 'LODModifierElement';
+            const type = 'FadeModifierElement';
             for(const cls of Array.from(this.classList))
             {
                 if(cls.startsWith('__real-')) this.classList.remove(cls);
@@ -117,15 +81,24 @@ export namespace LODModifier
          *  @license     MIT / Commercial (dual license) */
         protected createModifier(mesh: Modifier3DNamespace.Interfaces.MeshLike): Modifier3DNamespace.Modifier3D
         {
-            const high=Modifier3DNamespace._cloneGeom(mesh.geometry);
-            const simplify=(source:Modifier3DNamespace.Interfaces.Geometry3Like,ratio:number):Modifier3DNamespace.Interfaces.Geometry3Like=>{
-                const out=Modifier3DNamespace._cloneGeom(source); const tri=Math.max(1,Math.floor(out.indices.length/3*ratio)); const step=Math.max(1,Math.floor((out.indices.length/3)/tri)); const idx:number[]=[]; for(let i=0;i<out.indices.length;i+=3*step)idx.push(...out.indices.slice(i,i+3)); out.indices=idx; Modifier3DNamespace._recomputeNormals(out); return out;
-            };
-            const medium=simplify(high,.42), low=simplify(high,.12);
-            const near=parseFloat(this.getAttribute('near')??'4.5')||4.5;
-            const mid=parseFloat(this.getAttribute('mid')??'7')||7;
-            const far=parseFloat(this.getAttribute('far')??'11')||11;
-            return new LODModifier(mesh,[{distance:near,geometry:high},{distance:mid,geometry:medium},{distance:far,geometry:low}]);
+            /** @name        near
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned near value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const near = parseFloat(this.getAttribute('near') ?? '10') || 10;
+
+            /** @name        far
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned far value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const far = parseFloat(this.getAttribute('far') ?? '50') || 50;
+            return new FadeModifier(mesh, near, far);
         }
 
         /** @name        needsFrameUpdate
@@ -139,61 +112,56 @@ export namespace LODModifier
         protected needsFrameUpdate(): boolean { return true; }
     }
 
-    /** @class       LODModifier
+    /** @class       FadeModifier
      *  @public
-     *  @description AriannA LODModifier component implementation.
+     *  @description AriannA FadeModifier component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export class LODModifier extends Modifier3DNamespace.Modifier3D
+    export class FadeModifier extends Modifier3DNamespace.Modifier3D
     {
-        /** @name        #levels
+        /** @name        #near
          *  @public
-         *  @type        {LODModifier.Interfaces.LODLevel[]}
-         *  @description Component member for levels.
+         *  @type        {number}
+         *  @description Component member for near.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #levels: Interfaces.LODLevel[];
+        #near: number;
 
-        /** @name        #current
+        /** @name        #far
          *  @public
-         *  @type        {unknown}
-         *  @description Component member for current.
+         *  @type        {number}
+         *  @description Component member for far.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #current = -1;
+        #far: number;
+
+        /** @name        #onFade
+         *  @public
+         *  @type        {((mesh: Modifier3DNamespace.Interfaces.MeshLike, opacity: number) => void) | null}
+         *  @description Component member for on Fade.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        #onFade: ((mesh: Modifier3DNamespace.Interfaces.MeshLike, opacity: number) => void) | null = null;
 
         /** @name        constructor
          *  @public
          *  @type        {constructor}
          *  @description Constructs the component for constructor.
          *  @param       {Modifier3DNamespace.Interfaces.MeshLike} mesh Parameter.
-         *  @param       {LODModifier.Interfaces.LODLevel[]} levels Parameter.
+         *  @param       {unknown} near Parameter.
+         *  @param       {unknown} far Parameter.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, levels: Interfaces.LODLevel[])
+        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, near = 10, far = 50)
         {
             super(mesh);
-            this.#levels = [...levels].sort((a, b) => a.distance - b.distance);
-        }
-
-        /** @name        setLevels
-         *  @public
-         *  @type        {this}
-         *  @description Component member for set Levels.
-         *  @param       {LODModifier.Interfaces.LODLevel[]} levels Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        setLevels(levels: Interfaces.LODLevel[]): this
-        {
-            this.#levels = [...levels].sort((a, b) => a.distance - b.distance);
-            this.#current = -1;
-            return this;
+            this.#near = near;
+            this.#far = far;
         }
 
         /** @name        apply
@@ -217,7 +185,7 @@ export namespace LODModifier
          *  @license     MIT / Commercial (dual license) */
         update(camera: Modifier3DNamespace.Interfaces.CameraLike): this
         {
-            if (!this.enabled || this.#levels.length === 0)
+            if (!this.enabled)
                 return this;
 
             /** @name        d
@@ -229,29 +197,31 @@ export namespace LODModifier
              *  @license     MIT / Commercial (dual license) */
             const d = Modifier3DNamespace._vLen(Modifier3DNamespace._vSub(this.mesh.position, camera.position));
 
-            /** @name        best
+            /** @name        opacity
              *  @public
              *  @type        {inferred}
-             *  @description Namespace-owned best value.
+             *  @description Namespace-owned opacity value.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            let best = this.#levels.length - 1;
-            for (let i = 0; i < this.#levels.length; i++)
-            {
-                if (d <= this.#levels[i].distance)
-                {
-                    best = i;
-                    break;
-                }
-            }
-            if (best !== this.#current)
-            {
-                this.#current = best;
-                this.mesh.geometry = this.#levels[best].geometry;
-            }
+            const opacity = 1 - Math.max(0, Math.min(1, (d - this.#near) / (this.#far - this.#near)));
+            this.mesh.visible = opacity > 0.01;
+            // Three.Material.opacity sits on material; we stash for material readers.
+            (this.mesh.userData as Record<string, unknown>)['_arianna_opacity'] = opacity;
+            this.#onFade?.(this.mesh, opacity);
             return this;
         }
+
+        /** @name        onFade
+         *  @public
+         *  @type        {this}
+         *  @description Component member for on Fade.
+         *  @param       {(mesh: Modifier3DNamespace.Interfaces.MeshLike, opacity: number) => void} cb Parameter.
+         *  @returns     {this} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        onFade(cb: (mesh: Modifier3DNamespace.Interfaces.MeshLike, opacity: number) => void): this { this.#onFade = cb; return this; }
     }
 }
-export default LODModifier;
+export default FadeModifier;

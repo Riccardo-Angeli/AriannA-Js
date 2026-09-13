@@ -270,6 +270,8 @@ export namespace Canvas2D
             this._grid.subdivisions=Math.max(1,Math.round(Number(this._grid.subdivisions)||1));
             this._grid.majorEvery=Math.max(1,Math.round(Number(this._grid.majorEvery)||1));
             this.ApplyGrid();
+            this.SyncToolbar();
+            this.UpdateStatus();
             return this;
         }
 
@@ -282,6 +284,13 @@ export namespace Canvas2D
             else Object.assign(this._snap,value);
 
             this._snap.threshold=Math.max(0,Number(this._snap.threshold)||0);
+            this.SyncToolbar();
+            this.UpdateStatus();
+            this.dispatchEvent(new CustomEvent('arianna:snap-change',{
+                bubbles:true,
+                composed:true,
+                detail:{...this._snap, effectiveStep:this._snap.enabled && this._snap.grid ? this._grid.size/Math.max(1,this._grid.subdivisions) : 0, source:this}
+            }));
             return this;
         }
 
@@ -407,7 +416,7 @@ export namespace Canvas2D
             snapButton.className='Canvas2D-Button';snapButton.textContent='Snap';
             snapButton.title='Toggle snap';
             snapButton.dataset.role='snap';
-            snapButton.onclick=()=>{this.setSnap({enabled:!this._snap.enabled});this.SyncToolbar();};
+            snapButton.onclick=()=>this.setSnap({enabled:!this._snap.enabled});
 
             const zoom=document.createElement('div');
             zoom.className='Canvas2D-Zoom';this._zoomLabel=zoom;

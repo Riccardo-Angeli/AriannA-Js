@@ -1,5 +1,5 @@
 /**
- * @module    components/modifiers/3D/Base
+ * @module    components/graphics/3D/modifiers/Base
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
@@ -473,7 +473,7 @@ export namespace Modifier3D
             ]
         },
         'arianna-drag': {
-            title:'Drag', subtitle:'Move the cube on a plane', controls:[
+            title:'Drag', subtitle:'Move the target mesh on a plane', controls:[
                 {attr:'plane',label:'Plane',type:'select',value:'xz',options:['xz','xy','yz']},
             ]
         },
@@ -545,10 +545,30 @@ export namespace Modifier3D
 arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,arianna-decimate,arianna-drag,arianna-fade,arianna-inflate,arianna-lod,arianna-mirror,arianna-smooth,arianna-snap,arianna-subdivision,arianna-twist,arianna-wave{box-sizing:border-box;position:absolute;top:14px;right:14px;z-index:25;width:272px;max-height:calc(100% - 28px);overflow:auto;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(24,27,31,.94);box-shadow:0 18px 50px rgba(0,0,0,.32);backdrop-filter:blur(14px);color:#edf0f3;font:12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto}
 .ar-mod3d__head{display:flex;align-items:center;gap:9px;padding:10px 11px;border-bottom:1px solid rgba(255,255,255,.1);cursor:move;user-select:none;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012))}
 .ar-mod3d__titles{min-width:0;flex:1}.ar-mod3d__title{display:block;font-size:12px;font-weight:750;color:#fff}.ar-mod3d__sub{display:block;margin-top:1px;font-size:9px;color:#8f98a2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ar-mod3d__enabled{display:flex;align-items:center;gap:5px;color:#9da6ae;font-size:9px}.ar-mod3d__enabled input{accent-color:#e40c88}
-.ar-mod3d__body{display:grid;gap:9px;padding:11px}.ar-mod3d__row{display:grid;grid-template-columns:86px minmax(0,1fr) 48px;align-items:center;gap:7px}.ar-mod3d__row--select{grid-template-columns:86px minmax(0,1fr)}.ar-mod3d__row--toggle{grid-template-columns:1fr auto}.ar-mod3d__label{color:#aeb6bd;font-size:10px}.ar-mod3d__value{text-align:right;color:#f0f2f4;font:10px ui-monospace,SFMono-Regular,Menlo,monospace}.ar-mod3d__range{width:100%;accent-color:#e40c88}.ar-mod3d__select{width:100%;min-height:28px;border:1px solid #464c53;border-radius:6px;background:#22262b;color:#e8ebee;padding:4px 7px;font:10px system-ui}.ar-mod3d__toggle{accent-color:#e40c88}.ar-mod3d__foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 11px;border-top:1px solid rgba(255,255,255,.09)}.ar-mod3d__badge{color:#8f98a2;font:9px ui-monospace,SFMono-Regular,Menlo,monospace}.ar-mod3d__reset{appearance:none;border:1px solid #4b5158;border-radius:6px;background:#2b3035;color:#d9dde1;padding:5px 8px;font:700 9px system-ui;cursor:pointer}.ar-mod3d__reset:hover{border-color:#e40c88;color:#fff}
+.ar-mod3d__body{display:grid;gap:9px;padding:11px}.ar-mod3d__row{display:grid;grid-template-columns:86px minmax(0,1fr) 48px;align-items:center;gap:7px}.ar-mod3d__row--select{grid-template-columns:86px minmax(0,1fr)}.ar-mod3d__row--toggle{grid-template-columns:1fr auto}.ar-mod3d__label{color:#aeb6bd;font-size:10px}.ar-mod3d__value{box-sizing:border-box;width:100%;min-width:0;text-align:right;color:#f0f2f4;font:10px ui-monospace,SFMono-Regular,Menlo,monospace;background:#171b1e;border:1px solid #464c53;border-radius:5px;padding:4px 5px}.ar-mod3d__range{width:100%;accent-color:#e40c88}.ar-mod3d__resize{position:absolute;z-index:50;background:transparent;border:0;pointer-events:auto;touch-action:none;user-select:none}.ar-mod3d__resize[data-edge="n"]{left:12px;right:12px;top:0;height:8px;cursor:n-resize}.ar-mod3d__resize[data-edge="s"]{left:12px;right:12px;bottom:0;height:8px;cursor:s-resize}.ar-mod3d__resize[data-edge="e"]{right:0;top:12px;bottom:12px;width:8px;cursor:e-resize}.ar-mod3d__resize[data-edge="w"]{left:0;top:12px;bottom:12px;width:8px;cursor:w-resize}.ar-mod3d__resize[data-edge="ne"]{right:0;top:0;width:14px;height:14px;cursor:ne-resize}.ar-mod3d__resize[data-edge="nw"]{left:0;top:0;width:14px;height:14px;cursor:nw-resize}.ar-mod3d__resize[data-edge="se"]{right:0;bottom:0;width:14px;height:14px;cursor:se-resize}.ar-mod3d__resize[data-edge="sw"]{left:0;bottom:0;width:14px;height:14px;cursor:sw-resize}.ar-mod3d__select{width:100%;min-height:28px;border:1px solid #464c53;border-radius:6px;background:#22262b;color:#e8ebee;padding:4px 7px;font:10px system-ui}.ar-mod3d__toggle{accent-color:#e40c88}.ar-mod3d__foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 11px;border-top:1px solid rgba(255,255,255,.09)}.ar-mod3d__badge{color:#8f98a2;font:9px ui-monospace,SFMono-Regular,Menlo,monospace}.ar-mod3d__reset{appearance:none;border:1px solid #4b5158;border-radius:6px;background:#2b3035;color:#d9dde1;padding:5px 8px;font:700 9px system-ui;cursor:pointer}.ar-mod3d__reset:hover{border-color:#e40c88;color:#fff}
 `;
         document.head.append(style);
     }
+
+    interface ModifierElementRuntime
+    {
+        viewport:Modifier3D.Interfaces.Viewport3DLike|null;
+        target:Modifier3D.Interfaces.MeshLike|null;
+        modifier:Modifier3D|null;
+        frameUnsub:(()=>void)|null;
+        baseGeometry:Modifier3D.Interfaces.Geometry3Like|null;
+        baseTransform:{position:Modifier3D.Interfaces.Vec3Like;rotation:Modifier3D.Interfaces.Vec3Like;scale:Modifier3D.Interfaces.Vec3Like;visible:boolean}|null;
+        bound:boolean;
+        refreshQueued:boolean;
+        panelReady:boolean;
+    }
+    const ModifierElementStates=new WeakMap<HTMLElement,ModifierElementRuntime>();
+    const ElementState=(host:HTMLElement):ModifierElementRuntime=>
+    {
+        let s=ModifierElementStates.get(host);
+        if(!s){s={viewport:null,target:null,modifier:null,frameUnsub:null,baseGeometry:null,baseTransform:null,bound:false,refreshQueued:false,panelReady:false};ModifierElementStates.set(host,s);}
+        return s;
+    };
 
     @Component('arianna-modifier-3d', {}, {
         Shadow:false,
@@ -556,37 +576,24 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
     })
     export class Modifier3DElement extends HTMLElement
     {
-        private readonly _AriannaIdentity = (() => {
-            const type='Modifier3DElement';
-            for(const cls of Array.from(this.classList)) if(cls.startsWith('__real-')) this.classList.remove(cls);
-            this.classList.add(type);
-            const g=globalThis as typeof globalThis & {__AriannaComponentIds?:Record<string,number>};
-            const ids=g.__AriannaComponentIds ??= Object.create(null);
-            this.id ||= `${type}-${ids[type]=(ids[type]??0)+1}`;
-            return true;
-        })();
-
         template = html``;
-        protected viewport: Modifier3D.Interfaces.Viewport3DLike | null = null;
-        protected target: Modifier3D.Interfaces.MeshLike | null = null;
-        protected modifier: Modifier3D | null = null;
-
-        #frameUnsub: (()=>void)|null=null;
-        #baseGeometry: Modifier3D.Interfaces.Geometry3Like|null=null;
-        #baseTransform: {position:Modifier3D.Interfaces.Vec3Like;rotation:Modifier3D.Interfaces.Vec3Like;scale:Modifier3D.Interfaces.Vec3Like;visible:boolean}|null=null;
-        #bound=false;
-        #refreshQueued=false;
-        #panelReady=false;
-
-        constructor(){ super(); }
+        protected get viewport():Modifier3D.Interfaces.Viewport3DLike|null{return ElementState(this).viewport;}
+        protected set viewport(v:Modifier3D.Interfaces.Viewport3DLike|null){ElementState(this).viewport=v;}
+        protected get target():Modifier3D.Interfaces.MeshLike|null{return ElementState(this).target;}
+        protected set target(v:Modifier3D.Interfaces.MeshLike|null){ElementState(this).target=v;}
+        protected get modifier():Modifier3D|null{return ElementState(this).modifier;}
+        protected set modifier(v:Modifier3D|null){ElementState(this).modifier=v;}
 
         onConnected(): void
         {
             EnsurePanelStyles();
+            const type=this.constructor.name||'Modifier3DElement';
+            for(const cls of Array.from(this.classList))if(cls.startsWith('__real-'))this.classList.remove(cls);
+            this.classList.add(type,'Modifier3DPanel');
+            if(!this.id){const g=globalThis as typeof globalThis&{__AriannaComponentIds?:Record<string,number>};const ids=g.__AriannaComponentIds??=Object.create(null);this.id=`${type}-${ids[type]=(ids[type]??0)+1}`;}
             this.renderPanel();
             this.bindSoon();
         }
-
         onCreated(): void { if(this.isConnected) this.onConnected(); }
         onMount(): void { this.onConnected(); }
         onBeforeMount(): void {}
@@ -604,226 +611,114 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
         protected resolveViewport(): Modifier3D.Interfaces.Viewport3DLike | null
         {
             const ref=(this.getAttribute('viewport')??'').trim();
-            if(ref)
-            {
-                const el=document.getElementById(ref);
-                if(el) return el as unknown as Modifier3D.Interfaces.Viewport3DLike;
-            }
+            if(ref){const el=document.getElementById(ref);if(el)return el as unknown as Modifier3D.Interfaces.Viewport3DLike;}
             const ancestor=this.closest('arianna-canvas-3d,arianna-viewport-3d');
-            if(ancestor) return ancestor as unknown as Modifier3D.Interfaces.Viewport3DLike;
+            if(ancestor)return ancestor as unknown as Modifier3D.Interfaces.Viewport3DLike;
             let sib:Element|null=this.previousElementSibling;
-            while(sib)
-            {
-                if(sib.matches('arianna-canvas-3d,arianna-viewport-3d')) return sib as unknown as Modifier3D.Interfaces.Viewport3DLike;
-                sib=sib.previousElementSibling;
-            }
+            while(sib){if(sib.matches('arianna-canvas-3d,arianna-viewport-3d'))return sib as unknown as Modifier3D.Interfaces.Viewport3DLike;sib=sib.previousElementSibling;}
             const parent=this.parentElement?.querySelector('arianna-canvas-3d,arianna-viewport-3d');
-            return parent ? parent as unknown as Modifier3D.Interfaces.Viewport3DLike : null;
+            return parent?parent as unknown as Modifier3D.Interfaces.Viewport3DLike:null;
         }
-
         protected resolveTarget(): Modifier3D.Interfaces.MeshLike | null
         {
-            const id=(this.getAttribute('for')??'cube').trim() || 'cube';
-            if(this.viewport) return this.viewport.findMesh(id);
-            return null;
+            const id=(this.getAttribute('for')??'').trim();if(id)return this.viewport?.findMesh(id)??null;const children=(this.viewport as unknown as {scene?:{children?:Modifier3D.Interfaces.MeshLike[]}})?.scene?.children??[];return children.length===1?children[0]??null:null;
         }
-
         protected createModifier(_mesh: Modifier3D.Interfaces.MeshLike): Modifier3D | null { return null; }
         protected needsFrameUpdate(): boolean { return false; }
-
-        protected onFrame(_dt:number): void
+        protected onFrame(dt:number): void
         {
-            const m=this.modifier as Modifier3D & {update?:(cam:Modifier3D.Interfaces.CameraLike,dt?:number)=>void};
-            if(m && typeof m.update==='function' && this.viewport)
-            {
-                m.update(this.viewport.camera,_dt);
-                this.viewport.invalidate?.();
-            }
+            const m=this.modifier as Modifier3D&{update?:(cam:Modifier3D.Interfaces.CameraLike,dt?:number)=>void};
+            if(m&&typeof m.update==='function'&&this.viewport){m.update(this.viewport.camera,dt);this.viewport.invalidate?.();}
         }
-
         protected restoreTarget(): void
         {
-            if(!this.target) return;
-            if(this.#baseGeometry) this.target.geometry=_cloneGeom(this.#baseGeometry);
-            if(this.#baseTransform)
-            {
-                this.target.position={...this.#baseTransform.position};
-                this.target.rotation={...this.#baseTransform.rotation};
-                this.target.scale={...this.#baseTransform.scale};
-                this.target.visible=this.#baseTransform.visible;
-                delete this.target.userData['_arianna_opacity'];
-            }
+            const s=ElementState(this);if(!s.target)return;
+            if(s.baseGeometry)s.target.geometry=_cloneGeom(s.baseGeometry);
+            if(s.baseTransform){s.target.position={...s.baseTransform.position};s.target.rotation={...s.baseTransform.rotation};s.target.scale={...s.baseTransform.scale};s.target.visible=s.baseTransform.visible;delete s.target.userData['_arianna_opacity'];}
         }
-
         protected refreshModifier(): void
         {
-            if(!this.#bound || !this.target || !this.viewport) return;
-            this.#frameUnsub?.(); this.#frameUnsub=null;
-            this.modifier?.destroy();
-            this.restoreTarget();
-            this.modifier=this.createModifier(this.target);
-            if(!this.modifier) { this.viewport.invalidate?.(); return; }
-            if(!this.enabled) this.modifier.disable();
-            this.modifier.apply();
-            if(this.enabled && this.needsFrameUpdate() && this.viewport.onFrame)
-                this.#frameUnsub=this.viewport.onFrame(dt=>this.onFrame(dt));
-            this.viewport.invalidate?.();
-            this.dispatchEvent(new CustomEvent('arianna:modifier-3d-change',{bubbles:true,detail:{modifier:this.localName,attributes:Object.fromEntries(Array.from(this.attributes).map(a=>[a.name,a.value]))}}));
+            const s=ElementState(this);if(!s.bound||!s.target||!s.viewport)return;
+            s.frameUnsub?.();s.frameUnsub=null;s.modifier?.destroy();this.restoreTarget();
+            s.modifier=this.createModifier(s.target);if(!s.modifier){s.viewport.invalidate?.();return;}
+            if(!this.enabled)s.modifier.disable();s.modifier.apply();
+            if(this.enabled&&this.needsFrameUpdate()&&s.viewport.onFrame)s.frameUnsub=s.viewport.onFrame(dt=>this.onFrame(dt));
+            s.viewport.invalidate?.();this.dispatchEvent(new CustomEvent('arianna:modifier-3d-change',{bubbles:true,detail:{modifier:this.localName,attributes:Object.fromEntries(Array.from(this.attributes).map(a=>[a.name,a.value]))}}));
         }
-
         private scheduleRefresh(): void
         {
-            if(this.#refreshQueued) return;
-            this.#refreshQueued=true;
-            queueMicrotask(()=>{this.#refreshQueued=false;this.refreshModifier();});
+            const s=ElementState(this);if(s.refreshQueued)return;s.refreshQueued=true;queueMicrotask(()=>{s.refreshQueued=false;this.refreshModifier();});
         }
-
         private bindSoon(): void
         {
-            if(this.#bound) return;
-            queueMicrotask(()=>{
-                if(this.#bound || !this.isConnected) return;
-                this.viewport=this.resolveViewport();
-                if(!this.viewport) { console.warn(`[${this.localName}] no Canvas3D/viewport resolved`); return; }
-                this.target=this.resolveTarget();
-                if(!this.target) { console.warn(`[${this.localName}] target mesh not found`); return; }
-                this.#baseGeometry=_cloneGeom(this.target.geometry);
-                this.#baseTransform={position:{...this.target.position},rotation:{...this.target.rotation},scale:{...this.target.scale},visible:this.target.visible};
-                this.#bound=true;
-                this.refreshModifier();
-            });
+            const s=ElementState(this);if(s.bound)return;
+            queueMicrotask(()=>{const state=ElementState(this);if(state.bound||!this.isConnected)return;state.viewport=this.resolveViewport();if(!state.viewport){console.warn(`[${this.localName}] no Canvas3D/viewport resolved`);return;}state.target=this.resolveTarget();if(!state.target){console.warn(`[${this.localName}] target mesh not found`);return;}state.baseGeometry=_cloneGeom(state.target.geometry);state.baseTransform={position:{...state.target.position},rotation:{...state.target.rotation},scale:{...state.target.scale},visible:state.target.visible};state.bound=true;this.refreshModifier();});
         }
-
-        private schema(): PanelSchema
-        {
-            return PanelSchemas[this.localName] ?? {title:'Modifier 3D',subtitle:'Declarative modifier',controls:[]};
-        }
-
+        private schema(): PanelSchema{return PanelSchemas[this.localName]??{title:'Modifier 3D',subtitle:'Declarative modifier',controls:[]};}
         private ensureDefaults(schema:PanelSchema): void
         {
-            for(const control of schema.controls)
-            {
-                if(control.type==='toggle')
-                {
-                    if(control.value===true && !this.hasAttribute(control.attr)) this.setAttribute(control.attr,'');
-                    continue;
-                }
-                if(!this.hasAttribute(control.attr) && control.value!==undefined) this.setAttribute(control.attr,String(control.value));
-            }
-            if(!this.hasAttribute('for')) this.setAttribute('for','cube');
+            for(const control of schema.controls){if(control.type==='toggle'){if(control.value===true&&!this.hasAttribute(control.attr))this.setAttribute(control.attr,'');continue;}if(!this.hasAttribute(control.attr)&&control.value!==undefined)this.setAttribute(control.attr,String(control.value));}
         }
-
         private renderPanel(): void
         {
-            if(this.#panelReady) { this.syncPanel(); return; }
-            const schema=this.schema();
-            this.ensureDefaults(schema);
-            this.classList.add('Modifier3DPanel');
-            this.replaceChildren();
-
-            const head=document.createElement('header'); head.className='ar-mod3d__head';
-            const titles=document.createElement('div'); titles.className='ar-mod3d__titles';
-            const title=document.createElement('strong'); title.className='ar-mod3d__title'; title.textContent=schema.title;
-            const sub=document.createElement('span'); sub.className='ar-mod3d__sub'; sub.textContent=schema.subtitle;
-            titles.append(title,sub);
-            const enabledLabel=document.createElement('label'); enabledLabel.className='ar-mod3d__enabled';
-            const enabled=document.createElement('input'); enabled.type='checkbox'; enabled.checked=this.enabled; enabled.dataset.role='enabled';
-            enabled.addEventListener('change',()=>{this.enabled=enabled.checked;this.scheduleRefresh();});
-            enabledLabel.append(enabled,document.createTextNode('Enabled'));
-            head.append(titles,enabledLabel);
-
-            const body=document.createElement('div'); body.className='ar-mod3d__body';
-            for(const control of schema.controls) body.appendChild(this.makeControl(control));
-
-            const foot=document.createElement('footer'); foot.className='ar-mod3d__foot';
-            const badge=document.createElement('span'); badge.className='ar-mod3d__badge'; badge.textContent='AriannA · 3D';
-            const reset=document.createElement('button'); reset.type='button'; reset.className='ar-mod3d__reset'; reset.textContent='Reset';
-            reset.addEventListener('click',()=>{for(const c of schema.controls)this.removeAttribute(c.attr);this.ensureDefaults(schema);this.syncPanel();this.scheduleRefresh();});
-            foot.append(badge,reset);
-            this.append(head,body,foot);
-            this.wirePanelDrag(head);
-            this.#panelReady=true;
-            this.syncPanel();
+            const state=ElementState(this);if(state.panelReady){this.syncPanel();return;}
+            const schema=this.schema();this.ensureDefaults(schema);this.replaceChildren();
+            const head=document.createElement('header');head.className='ar-mod3d__head';const titles=document.createElement('div');titles.className='ar-mod3d__titles';const title=document.createElement('strong');title.className='ar-mod3d__title';title.textContent=schema.title;const sub=document.createElement('span');sub.className='ar-mod3d__sub';sub.textContent=schema.subtitle;titles.append(title,sub);
+            const enabledLabel=document.createElement('label');enabledLabel.className='ar-mod3d__enabled';const enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=this.enabled;enabled.dataset.role='enabled';enabled.addEventListener('change',()=>{this.enabled=enabled.checked;this.scheduleRefresh();});enabledLabel.append(enabled,document.createTextNode('Enabled'));head.append(titles,enabledLabel);
+            const body=document.createElement('div');body.className='ar-mod3d__body';for(const control of schema.controls)body.appendChild(this.makeControl(control));
+            const foot=document.createElement('footer');foot.className='ar-mod3d__foot';const badge=document.createElement('span');badge.className='ar-mod3d__badge';badge.textContent='AriannA · 3D';const reset=document.createElement('button');reset.type='button';reset.className='ar-mod3d__reset';reset.textContent='Reset';reset.addEventListener('click',()=>{for(const c of schema.controls)this.removeAttribute(c.attr);this.ensureDefaults(schema);this.syncPanel();this.scheduleRefresh();});foot.append(badge,reset);this.append(head,body,foot);this.wirePanelDrag(head);this.installPanelResize();state.panelReady=true;this.syncPanel();
         }
-
         private makeControl(control:PanelControl): HTMLElement
         {
-            const row=document.createElement('label');
-            row.className=`ar-mod3d__row ar-mod3d__row--${control.type}`;
-            const label=document.createElement('span'); label.className='ar-mod3d__label'; label.textContent=control.label;
-            if(control.type==='range')
-            {
-                const input=document.createElement('input'); input.type='range'; input.className='ar-mod3d__range'; input.dataset.attr=control.attr;
-                if(control.min!==undefined) input.min=String(control.min); if(control.max!==undefined) input.max=String(control.max); if(control.step!==undefined) input.step=String(control.step);
-                const value=document.createElement('span'); value.className='ar-mod3d__value'; value.dataset.valueFor=control.attr;
-                input.addEventListener('input',()=>{this.setAttribute(control.attr,input.value);value.textContent=`${input.value}${control.suffix??''}`;this.scheduleRefresh();});
-                row.append(label,input,value);
+            const row=document.createElement('label');row.className=`ar-mod3d__row ar-mod3d__row--${control.type}`;const label=document.createElement('span');label.className='ar-mod3d__label';label.textContent=control.label;
+            if(control.type==='range'){
+                const input=document.createElement('input');input.type='range';input.className='ar-mod3d__range';input.dataset.attr=control.attr;if(control.min!==undefined)input.min=String(control.min);if(control.max!==undefined)input.max=String(control.max);if(control.step!==undefined)input.step=String(control.step);
+                const value=document.createElement('input');value.type='number';value.className='ar-mod3d__value';value.dataset.valueFor=control.attr;if(control.min!==undefined)value.min=String(control.min);if(control.max!==undefined)value.max=String(control.max);if(control.step!==undefined)value.step=String(control.step);
+                const apply=(raw:string)=>{const n=Number(raw);if(!Number.isFinite(n))return;input.value=String(n);value.value=String(n);this.setAttribute(control.attr,String(n));this.scheduleRefresh();};
+                input.addEventListener('input',()=>apply(input.value));value.addEventListener('input',()=>apply(value.value));value.addEventListener('change',()=>apply(value.value));row.append(label,input,value);return row;
             }
-            else if(control.type==='select')
-            {
-                const select=document.createElement('select'); select.className='ar-mod3d__select'; select.dataset.attr=control.attr;
-                for(const option of control.options??[]){const el=document.createElement('option');el.value=option;el.textContent=option;select.appendChild(el);}
-                select.addEventListener('change',()=>{this.setAttribute(control.attr,select.value);this.scheduleRefresh();});
-                row.append(label,select);
-            }
-            else
-            {
-                const toggle=document.createElement('input'); toggle.type='checkbox'; toggle.className='ar-mod3d__toggle'; toggle.dataset.attr=control.attr;
-                toggle.addEventListener('change',()=>{toggle.checked?this.setAttribute(control.attr,''):this.removeAttribute(control.attr);this.scheduleRefresh();});
-                row.append(label,toggle);
-            }
-            return row;
+            if(control.type==='select'){row.classList.add('ar-mod3d__row--select');const select=document.createElement('select');select.className='ar-mod3d__select';select.dataset.attr=control.attr;for(const option of control.options??[]){const o=document.createElement('option');o.value=option;o.textContent=option;select.appendChild(o);}select.addEventListener('change',()=>{this.setAttribute(control.attr,select.value);this.scheduleRefresh();});row.append(label,select);return row;}
+            row.classList.add('ar-mod3d__row--toggle');const toggle=document.createElement('input');toggle.type='checkbox';toggle.className='ar-mod3d__toggle';toggle.dataset.attr=control.attr;toggle.addEventListener('change',()=>{if(toggle.checked)this.setAttribute(control.attr,'');else this.removeAttribute(control.attr);this.scheduleRefresh();});row.append(label,toggle);return row;
         }
-
         private syncPanel(): void
         {
-            if(!this.#panelReady) return;
-            const schema=this.schema();
-            const enabled=this.querySelector<HTMLInputElement>('[data-role="enabled"]'); if(enabled) enabled.checked=this.enabled;
-            for(const control of schema.controls)
-            {
-                const input=this.querySelector<HTMLInputElement|HTMLSelectElement>(`[data-attr="${control.attr}"]`);
-                if(!input) continue;
-                if(input instanceof HTMLInputElement && input.type==='checkbox') input.checked=this.hasAttribute(control.attr) && this.getAttribute(control.attr)!=='false';
-                else input.value=this.getAttribute(control.attr) ?? String(control.value ?? '');
-                const value=this.querySelector<HTMLElement>(`[data-value-for="${control.attr}"]`);
-                if(value) value.textContent=`${this.getAttribute(control.attr) ?? control.value ?? ''}${control.suffix??''}`;
-            }
+            const schema=this.schema();const enabled=this.querySelector<HTMLInputElement>('[data-role="enabled"]');if(enabled)enabled.checked=this.enabled;
+            for(const control of schema.controls){const input=this.querySelector<HTMLInputElement|HTMLSelectElement>(`[data-attr="${control.attr}"]`);if(!input)continue;if(input instanceof HTMLInputElement&&input.type==='checkbox')input.checked=this.hasAttribute(control.attr)&&this.getAttribute(control.attr)!=='false';else input.value=this.getAttribute(control.attr)??String(control.value??'');const value=this.querySelector<HTMLInputElement>(`[data-value-for="${control.attr}"]`);if(value)value.value=String(this.getAttribute(control.attr)??control.value??'');}
         }
-
         private wirePanelDrag(handle:HTMLElement): void
         {
-            let active=false,dx=0,dy=0;
-            handle.addEventListener('pointerdown',(event)=>{
-                if((event.target as Element).closest('input,button,select,label')) return;
-                active=true; const r=this.getBoundingClientRect(); dx=event.clientX-r.left; dy=event.clientY-r.top;
-                this.style.left=`${this.offsetLeft}px`; this.style.top=`${this.offsetTop}px`; this.style.right='auto';
-                handle.setPointerCapture(event.pointerId);
-            });
-            handle.addEventListener('pointermove',(event)=>{if(!active)return;const p=this.offsetParent as HTMLElement|null;const pr=p?.getBoundingClientRect();if(!pr)return;const maxX=Math.max(0,pr.width-this.offsetWidth),maxY=Math.max(0,pr.height-this.offsetHeight);this.style.left=`${Math.max(0,Math.min(maxX,event.clientX-pr.left-dx))}px`;this.style.top=`${Math.max(0,Math.min(maxY,event.clientY-pr.top-dy))}px`;});
-            const end=()=>{active=false;}; handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);
+            let active=false,dx=0,dy=0;handle.addEventListener('pointerdown',(event)=>{if((event.target as Element).closest('input,button,select,label'))return;active=true;const r=this.getBoundingClientRect();dx=event.clientX-r.left;dy=event.clientY-r.top;this.style.left=`${this.offsetLeft}px`;this.style.top=`${this.offsetTop}px`;this.style.right='auto';handle.setPointerCapture(event.pointerId);});handle.addEventListener('pointermove',(event)=>{if(!active)return;const p=this.offsetParent as HTMLElement|null,pr=p?.getBoundingClientRect();if(!pr)return;const maxX=Math.max(0,pr.width-this.offsetWidth),maxY=Math.max(0,pr.height-this.offsetHeight);this.style.left=`${Math.max(0,Math.min(maxX,event.clientX-pr.left-dx))}px`;this.style.top=`${Math.max(0,Math.min(maxY,event.clientY-pr.top-dy))}px`;});const end=()=>{active=false;};handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);
         }
-
+        private installPanelResize(): void
+        {
+            const edges=['n','ne','e','se','s','sw','w','nw'] as const;
+            for(const edge of edges)
+            {
+                const handle=document.createElement('span');handle.className='ar-mod3d__resize';handle.dataset.edge=edge;handle.setAttribute('aria-hidden','true');
+                let pid=-1,startX=0,startY=0,startLeft=0,startTop=0,startWidth=0,startHeight=0;
+                const move=(event:PointerEvent)=>{
+                    if(event.pointerId!==pid)return;
+                    const parent=this.offsetParent as HTMLElement|null,pr=parent?.getBoundingClientRect();if(!pr)return;
+                    const dx=event.clientX-startX,dy=event.clientY-startY;let left=startLeft,top=startTop,width=startWidth,height=startHeight;
+                    if(edge.includes('e'))width=Math.max(220,startWidth+dx);
+                    if(edge.includes('s'))height=Math.max(140,startHeight+dy);
+                    if(edge.includes('w')){width=Math.max(220,startWidth-dx);left=startLeft+(startWidth-width);}
+                    if(edge.includes('n')){height=Math.max(140,startHeight-dy);top=startTop+(startHeight-height);}
+                    left=Math.max(0,left);top=Math.max(0,top);width=Math.min(width,Math.max(220,pr.width-left));height=Math.min(height,Math.max(140,pr.height-top));
+                    this.style.left=`${Math.round(left)}px`;this.style.top=`${Math.round(top)}px`;this.style.right='auto';this.style.width=`${Math.round(width)}px`;this.style.height=`${Math.round(height)}px`;this.style.maxHeight='none';
+                };
+                const end=(event:PointerEvent)=>{if(event.pointerId!==pid)return;try{handle.releasePointerCapture(pid);}catch{}handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',end);handle.removeEventListener('pointercancel',end);pid=-1;};
+                handle.addEventListener('pointerdown',(event)=>{if(event.button!==0)return;event.preventDefault();event.stopPropagation();pid=event.pointerId;startX=event.clientX;startY=event.clientY;startLeft=this.offsetLeft;startTop=this.offsetTop;startWidth=this.offsetWidth;startHeight=this.offsetHeight;this.style.left=`${startLeft}px`;this.style.top=`${startTop}px`;this.style.right='auto';this.style.width=`${startWidth}px`;this.style.height=`${startHeight}px`;this.style.maxHeight='none';try{handle.setPointerCapture(pid);}catch{}handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);});
+                this.appendChild(handle);
+            }
+        }
         onUnmount(): void
         {
-            this.#frameUnsub?.(); this.#frameUnsub=null;
-            this.modifier?.destroy(); this.modifier=null;
-            this.restoreTarget();
-            this.target=null; this.viewport=null; this.#bound=false;
+            const s=ElementState(this);s.frameUnsub?.();s.frameUnsub=null;s.modifier?.destroy();s.modifier=null;this.restoreTarget();s.target=null;s.viewport=null;s.bound=false;
         }
-
-        get enabled(): boolean
-        {
-            const explicit=this.getAttribute('enabled');
-            if(explicit==='false') return false;
-            return !this.hasAttribute('disabled');
-        }
-        set enabled(v:boolean)
-        {
-            if(v){this.removeAttribute('disabled');if(this.getAttribute('enabled')==='false')this.setAttribute('enabled','true');}
-            else this.setAttribute('disabled','');
-        }
-        getModifier(): Modifier3D | null { return this.modifier; }
+        get enabled(): boolean{const explicit=this.getAttribute('enabled');if(explicit==='false')return false;return !this.hasAttribute('disabled');}
+        set enabled(v:boolean){if(v){this.removeAttribute('disabled');if(this.getAttribute('enabled')==='false')this.setAttribute('enabled','true');}else this.setAttribute('disabled','');}
+        getModifier(): Modifier3D | null { return ElementState(this).modifier; }
     }
     // ── Programmatic core (plain class — Modifier3D) ─────────────────────────────
     /**

@@ -297,34 +297,9 @@ export namespace Kanban
         private EnsureDefaults(): void
         {
             if(typeof this._query !== 'string') this._query = '';
-            if(!this._columns)
-            {
-                this._columns = [
-                    { id: 'backlog', title: 'Backlog', accent: '#7f8793' },
-                    { id: 'progress', title: 'In Progress', limit: 4, accent: '#2f7bdc' },
-                    { id: 'review', title: 'Review', limit: 3, accent: '#9a67d8' },
-                    { id: 'done', title: 'Done', accent: '#4aa86d' }
-                ];
-            }
-            if(!this._actors)
-            {
-                this._actors = [
-                    { id: 'ra', name: 'Riccardo', initials: 'RA', color: '#e40c88', status: 'online' },
-                    { id: 'ar', name: 'Arianna', initials: 'AR', color: '#4d8fff', status: 'online' },
-                    { id: 'qa', name: 'QA', initials: 'QA', color: '#7a63d2', status: 'busy' }
-                ];
-            }
-            if(!this._tasks)
-            {
-                this._tasks = [
-                    { id: 'a-21', key: 'ARI-21', columnId: 'backlog', title: 'Keyboard navigation for board', type: 'story', priority: 'medium', labels: ['UX'], assigneeIds: ['ar'], storyPoints: 3, order: 0 },
-                    { id: 'a-18', key: 'ARI-18', columnId: 'backlog', title: 'Persist board filters in workspace', type: 'task', priority: 'low', labels: ['State'], assigneeIds: ['qa'], storyPoints: 2, order: 1 },
-                    { id: 'a-15', key: 'ARI-15', columnId: 'progress', title: 'Release candidate component audit', type: 'epic', priority: 'highest', labels: ['2.0', 'Release'], assigneeIds: ['ra', 'qa'], storyPoints: 8, comments: 5, order: 0 },
-                    { id: 'a-16', key: 'ARI-16', columnId: 'progress', title: 'Graphics theme parity', type: 'task', priority: 'high', labels: ['Graphics'], assigneeIds: ['ra'], storyPoints: 5, order: 1 },
-                    { id: 'a-12', key: 'ARI-12', columnId: 'review', title: 'Composite runtime constructor properties', type: 'bug', priority: 'high', labels: ['Runtime'], assigneeIds: ['qa'], comments: 2, order: 0 },
-                    { id: 'a-07', key: 'ARI-7', columnId: 'done', title: 'AudioTrackEditor light theme', type: 'bug', priority: 'medium', labels: ['Audio'], assigneeIds: ['ra'], storyPoints: 3, subtasks: 4, completedSubtasks: 4, order: 0 }
-                ];
-            }
+            if(!Array.isArray(this._columns)) this._columns = [];
+            if(!Array.isArray(this._actors)) this._actors = [];
+            if(!Array.isArray(this._tasks)) this._tasks = [];
         }
 
         private RenderIfConnected(): void

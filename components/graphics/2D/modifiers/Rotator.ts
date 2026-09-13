@@ -1,9 +1,9 @@
 /**
- * @module components/modifiers/2D/Rotator
+ * @module components/graphics/2D/modifiers/Rotator
  * @description Drag-to-rotate modifier with configurable angle snapping.
  */
 
-import { Component, Templates } from '../../../core/index.ts';
+import { Component, Templates } from '../../../../core/index.ts';
 import * as Base from './Base.ts';
 
 export namespace Rotator
@@ -21,6 +21,8 @@ export namespace Rotator
     }
 
     export type RotateCallback = (element: HTMLElement, angle: number) => void;
+    export interface RotatorParameters extends Base.Modifier2D.Parameters.Bag
+    { Angle:number; Snap:number; HandleOffset:number; HandleSize:number; HandleColor:string; Enabled:boolean; }
     const html = Templates.Template.Html;
 
     @Component('arianna-rotator', {}, {
@@ -30,14 +32,38 @@ export namespace Rotator
     export class Rotator extends Base.Modifier2D.Modifier2D
     {
         public template = html``;
-        protected EventName = 'rotate';
+        protected get EventName(): string { return 'rotate'; }
 
         public handleOffset = 24;
         public handleColor = '#e40c88';
         public handleSize = 14;
         public snap = 0;
         private angle = 0;
-        private readonly callbacks = new Set<RotateCallback>();
+        private callbacks = new Set<RotateCallback>();
+
+        private ensureRuntime(): void
+        {
+            this.handleOffset ??= 24;
+            this.handleColor ??= '#e40c88';
+            this.handleSize ??= 14;
+            this.snap ??= 0;
+            this.angle ??= 0;
+            if(!(this.callbacks instanceof Set)) this.callbacks = new Set<RotateCallback>();
+        }
+
+        public get Parameters(): RotatorParameters
+        {
+            this.ensureRuntime();
+            return Base.Modifier2D.CreateParameters<RotatorParameters>(this,'Rotator',[
+                {key:'Angle',label:'Angle',kind:'number',step:1,get:()=>this.getAngle(),set:v=>this.setAngle(Number(v)||0)},
+                {key:'Snap',label:'Snap',kind:'number',min:0,step:1,get:()=>this.snap,set:v=>{this.snap=Math.max(0,Number(v)||0);}},
+                {key:'HandleOffset',label:'Handle offset',kind:'number',min:0,step:1,get:()=>this.handleOffset,set:v=>{this.handleOffset=Math.max(0,Number(v)||0);this.refreshAttachments();}},
+                {key:'HandleSize',label:'Handle size',kind:'number',min:4,step:1,get:()=>this.handleSize,set:v=>{this.handleSize=Math.max(4,Number(v)||4);this.refreshAttachments();}},
+                {key:'HandleColor',label:'Handle color',kind:'color',get:()=>this.handleColor,set:v=>{this.handleColor=String(v);this.refreshAttachments();}},
+                {key:'Enabled',label:'Enabled',kind:'checkbox',get:()=>this.enabled,set:v=>{this.enabled=Boolean(v);}},
+                {key:'Reset',label:'Reset angle',kind:'button',action:()=>this.setAngle(0)},
+            ]);
+        }
 
         constructor(target?: Base.Modifier2D.Types.TargetInput, options: Interfaces.RotatorOptions = {})
         {
@@ -52,6 +78,7 @@ export namespace Rotator
 
         private syncAttributes(): void
         {
+            this.ensureRuntime();
             const number = (name:string,current:number) => {
                 const raw=this.getAttribute(name); if(raw===null) return current;
                 const n=Number.parseFloat(raw); return Number.isFinite(n)?n:current;
@@ -121,10 +148,11 @@ export namespace Rotator
             });
         }
 
-        public onRotate(callback: RotateCallback): this { this.callbacks.add(callback); return this; }
+        public onRotate(callback: RotateCallback): this { this.ensureRuntime(); this.callbacks.add(callback); return this; }
 
         public setAngle(angle:number): this
         {
+            this.ensureRuntime();
             this.angle = this.snap>0 ? Math.round(angle/this.snap)*this.snap : angle;
             for(const target of this.targets)
             {
@@ -135,7 +163,7 @@ export namespace Rotator
             return this;
         }
 
-        public getAngle(): number { return this.angle; }
+        public getAngle(): number { this.ensureRuntime(); return this.angle; }
     }
 }
 

@@ -172,7 +172,7 @@ export namespace CodeEditor
          *  @license     MIT / Commercial (dual license) */
         template = html``;
 
-        /** @name        #RulesJavaScript
+        /** @name        RulesJavaScript
          *  @public
          *  @readonly
          *  @static
@@ -184,7 +184,7 @@ export namespace CodeEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static readonly #RulesJavaScript: ReadonlyArray<{
+        private static readonly RulesJavaScript: ReadonlyArray<{
             /** @name        kind
              *  @public
              *  @type        {string}
@@ -219,7 +219,7 @@ export namespace CodeEditor
             { kind: 'newline', re: /^\n/ }
         ];
 
-        /** @name        #RulesCss
+        /** @name        RulesCss
          *  @public
          *  @readonly
          *  @static
@@ -231,7 +231,7 @@ export namespace CodeEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static readonly #RulesCss: ReadonlyArray<{
+        private static readonly RulesCss: ReadonlyArray<{
             /** @name        kind
              *  @public
              *  @type        {string}
@@ -265,7 +265,7 @@ export namespace CodeEditor
             { kind: 'newline', re: /^\n/ }
         ];
 
-        /** @name        #RulesHtml
+        /** @name        RulesHtml
          *  @public
          *  @readonly
          *  @static
@@ -277,7 +277,7 @@ export namespace CodeEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static readonly #RulesHtml: ReadonlyArray<{
+        private static readonly RulesHtml: ReadonlyArray<{
             /** @name        kind
              *  @public
              *  @type        {string}
@@ -307,7 +307,7 @@ export namespace CodeEditor
             { kind: 'space', re: /^[ \t\n]+/ }
         ];
 
-        /** @name        #RulesJson
+        /** @name        RulesJson
          *  @public
          *  @readonly
          *  @static
@@ -319,7 +319,7 @@ export namespace CodeEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static readonly #RulesJson: ReadonlyArray<{
+        private static readonly RulesJson: ReadonlyArray<{
             /** @name        kind
              *  @public
              *  @type        {string}
@@ -345,7 +345,7 @@ export namespace CodeEditor
             { kind: 'space', re: /^[ \t\n]+/ }
         ];
 
-        /** @name        #RulesFor
+        /** @name        RulesFor
          *  @public
          *  @static
          *  @type        {ReadonlyArray<
@@ -363,7 +363,7 @@ export namespace CodeEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static #RulesFor(language: Types.Language): ReadonlyArray<
+        private static RulesFor(language: Types.Language): ReadonlyArray<
         {
             /** @name        kind
              *  @public
@@ -389,19 +389,19 @@ export namespace CodeEditor
                 case 'ts':
                 case 'jsx':
                 case 'tsx':
-                    return CodeEditor.#RulesJavaScript;
+                    return CodeEditor.RulesJavaScript;
                 case 'html':
-                    return CodeEditor.#RulesHtml;
+                    return CodeEditor.RulesHtml;
                 case 'css':
-                    return CodeEditor.#RulesCss;
+                    return CodeEditor.RulesCss;
                 case 'json':
-                    return CodeEditor.#RulesJson;
+                    return CodeEditor.RulesJson;
                 default:
                     return [];
             }
         }
 
-        /** @name        #Tokenize
+        /** @name        Tokenize
          *  @public
          *  @static
          *  @type        {Array<
@@ -420,7 +420,7 @@ export namespace CodeEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static #Tokenize(source: string, language: Types.Language): Array<
+        private static Tokenize(source: string, language: Types.Language): Array<
         {
             /** @name        kind
              *  @public
@@ -447,7 +447,7 @@ export namespace CodeEditor
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const rules = CodeEditor.#RulesFor(language);
+            const rules = CodeEditor.RulesFor(language);
             if (rules.length === 0)
             {
                 return [
@@ -596,7 +596,7 @@ export namespace CodeEditor
             return output;
         }
 
-        /** @name        #Escape
+        /** @name        Escape
          *  @public
          *  @static
          *  @type        {string}
@@ -606,7 +606,7 @@ export namespace CodeEditor
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        static #Escape(value: string): string
+        private static Escape(value: string): string
         {
             return value
                 .replace(/&/g, '&amp;')
@@ -615,7 +615,7 @@ export namespace CodeEditor
         }
 
         /** Normalize external / fluent language writes without ever exposing the Signal itself. */
-        static #NormalizeLanguage(value: unknown): Types.Language
+        private static NormalizeLanguage(value: unknown): Types.Language
         {
             switch (String(value ?? '').toLowerCase())
             {
@@ -893,7 +893,7 @@ export namespace CodeEditor
                 (typeof ownLanguage === 'string' ? ownLanguage : undefined) ??
                 attrLang ??
                 'ts';
-            const initialLanguage = CodeEditor.#NormalizeLanguage(initialLanguageRaw);
+            const initialLanguage = CodeEditor.NormalizeLanguage(initialLanguageRaw);
 
             this._valueSignal = new Reactivity.Signal(String(initialValue ?? ''));
             this._languageSignal = new Reactivity.Signal(initialLanguage);
@@ -934,7 +934,7 @@ export namespace CodeEditor
                     }
                     else
                     {
-                        const language = CodeEditor.#NormalizeLanguage(next);
+                        const language = CodeEditor.NormalizeLanguage(next);
                         this._languageSignal.Set(language);
                         if (this._code) this._render();
                     }
@@ -1504,7 +1504,7 @@ export namespace CodeEditor
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const tokens = CodeEditor.#Tokenize(src, this.language.Get());
+            const tokens = CodeEditor.Tokenize(src, this.language.Get());
 
             /** @name        html
              *  @public
@@ -1526,7 +1526,7 @@ export namespace CodeEditor
                     html += t.text;
                     continue;
                 }
-                html += `<span class="tk-${t.kind}">${CodeEditor.#Escape(t.text)}</span>`;
+                html += `<span class="tk-${t.kind}">${CodeEditor.Escape(t.text)}</span>`;
             }
             if (!src.endsWith('\n'))
                 html += '\n';
@@ -2601,7 +2601,7 @@ export namespace CodeEditor
             if (!this.__fieldsInitialized) return;
             if (name === 'language')
             {
-                this.Language = CodeEditor.#NormalizeLanguage(value);
+                this.Language = CodeEditor.NormalizeLanguage(value);
             }
         }
 

@@ -1,13 +1,14 @@
 /**
  * @module components/graphics/3D/Canvas3D
  * @author Riccardo Angeli
- * @version 2.0.0
+ * @version 3.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license MIT / Commercial (dual license)
  *
- * @description Minimal interactive 3D canvas for AriannA examples: one rendered cube,
- * orbit rotation and wheel zoom. It intentionally contains no modifier UI. Modifier
- * components are independent floating siblings and bind through viewport="..." + for="cube".
+ * @description
+ * Generic AriannA 3D viewport. Canvas3D owns only scene/camera/rendering/orbit/view
+ * behavior. It NEVER seeds demo geometry. Applications and Playground examples add
+ * meshes explicitly through addMesh()/scene.add().
  */
 import { Component, Css, Templates } from '../../../core/index.ts';
 const html=Templates.Template.Html;
@@ -19,6 +20,28 @@ export namespace Canvas3D
     export interface Mesh3 { geometry:Geometry3; position:Vec3; rotation:Vec3; scale:Vec3; visible:boolean; userData:Record<string,unknown>; updateMatrix?():void; }
     export interface Scene3 { children:Mesh3[]; add(obj:Mesh3):void; remove(obj:Mesh3):void; }
     export interface Camera3 { position:Vec3; }
+    export type ViewPreset='perspective'|'front'|'right'|'top';
+
+    interface RuntimeState
+    {
+        scene:Scene3;
+        camera:Camera3;
+        canvas?:HTMLCanvasElement;
+        ctx:CanvasRenderingContext2D|null;
+        meshes:Map<string,Mesh3>;
+        frameCallbacks:Set<(dt:number)=>void>;
+        raf:number;
+        last:number;
+        resizeObserver:ResizeObserver|null;
+        yaw:number;
+        pitch:number;
+        distance:number;
+        dragging:boolean;
+        px:number;
+        py:number;
+        started:boolean;
+        wiredCanvas?:HTMLCanvasElement;
+    }
 
     const cloneGeometry=(g:Geometry3):Geometry3=>({vertices:g.vertices.map(v=>({...v})),normals:g.normals.map(v=>({...v})),indices:[...g.indices],clone(){return cloneGeometry(this);}});
     const norm=(v:Vec3):Vec3=>{const l=Math.hypot(v.x,v.y,v.z)||1;return{x:v.x/l,y:v.y/l,z:v.z/l};};
@@ -26,111 +49,175 @@ export namespace Canvas3D
     const cross=(a:Vec3,b:Vec3):Vec3=>({x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x});
     const dot=(a:Vec3,b:Vec3)=>a.x*b.x+a.y*b.y+a.z*b.z;
 
-    function CubeGeometry(size=1.7,segments=7):Geometry3
+    const Runtime=new WeakMap<HTMLElement,RuntimeState>();
+    const State=(host:HTMLElement):RuntimeState=>
     {
-        const h=size/2,vertices:Vec3[]=[],normals:Vec3[]=[],indices:number[]=[];
-        const addFace=(origin:Vec3,u:Vec3,v:Vec3,n:Vec3)=>{
-            const start=vertices.length;
-            for(let y=0;y<=segments;y++)for(let x=0;x<=segments;x++){
-                const a=x/segments,b=y/segments;
-                vertices.push({x:origin.x+u.x*a+v.x*b,y:origin.y+u.y*a+v.y*b,z:origin.z+u.z*a+v.z*b}); normals.push({...n});
-            }
-            const row=segments+1;
-            for(let y=0;y<segments;y++)for(let x=0;x<segments;x++){const a=start+y*row+x,b=a+1,c=a+row+1,d=a+row;indices.push(a,b,c,a,c,d);}
-        };
-        addFace({x:-h,y:-h,z:h},{x:size,y:0,z:0},{x:0,y:size,z:0},{x:0,y:0,z:1});
-        addFace({x:h,y:-h,z:-h},{x:-size,y:0,z:0},{x:0,y:size,z:0},{x:0,y:0,z:-1});
-        addFace({x:-h,y:h,z:h},{x:size,y:0,z:0},{x:0,y:0,z:-size},{x:0,y:1,z:0});
-        addFace({x:-h,y:-h,z:-h},{x:size,y:0,z:0},{x:0,y:0,z:size},{x:0,y:-1,z:0});
-        addFace({x:h,y:-h,z:h},{x:0,y:0,z:-size},{x:0,y:size,z:0},{x:1,y:0,z:0});
-        addFace({x:-h,y:-h,z:-h},{x:0,y:0,z:size},{x:0,y:size,z:0},{x:-1,y:0,z:0});
-        const g:Geometry3={vertices,normals,indices,clone(){return cloneGeometry(this);}}; return g;
-    }
+        let s=Runtime.get(host);
+        if(!s)
+        {
+            const scene:Scene3={children:[],add(obj){if(!scene.children.includes(obj))scene.children.push(obj);},remove(obj){const i=scene.children.indexOf(obj);if(i>=0)scene.children.splice(i,1);}};
+            s={scene,camera:{position:{x:3.5,y:2.5,z:4.5}},ctx:null,meshes:new Map(),frameCallbacks:new Set(),raf:0,last:0,resizeObserver:null,yaw:.72,pitch:.42,distance:4.6,dragging:false,px:0,py:0,started:false};
+            Runtime.set(host,s);
+        }
+        return s;
+    };
 
     export const Styles=new Css.Stylesheet([
         new Css.Rule('arianna-canvas-3d,.Canvas3D',{Background:'#13161a',Border:'1px solid #30363d',BorderRadius:'10px',BoxSizing:'border-box',Display:'block',Height:'520px',MaxWidth:'100%',MinHeight:'260px',MinWidth:'0',Overflow:'hidden',Position:'relative',Width:'100%'}),
         new Css.Rule('.Canvas3D-Canvas',{Cursor:'grab',Display:'block',Height:'100%',TouchAction:'none',Width:'100%'}),
         new Css.Rule('.Canvas3D-Canvas:active',{Cursor:'grabbing'}),
+        new Css.Rule('.Canvas3D-Toolbar',{AlignItems:'center',BackdropFilter:'blur(12px)',Background:'rgba(26,30,35,.82)',Border:'1px solid rgba(255,255,255,.10)',BorderRadius:'7px',Display:'flex',Gap:'4px',Left:'12px',Padding:'5px',Position:'absolute',Top:'12px',ZIndex:'12'}),
+        new Css.Rule('.Canvas3D-Button',{Appearance:'none',Background:'#292e34',Border:'1px solid #454c54',BorderRadius:'5px',Color:'#c9d0d6',Cursor:'pointer',Font:'700 9px/1 system-ui',Height:'25px',Padding:'0 8px'}),
+        new Css.Rule('.Canvas3D-Button[data-active="true"]',{BorderColor:'#e40c88',Color:'#ff69bb'}),
+        new Css.Rule('.Canvas3D-Axes',{Bottom:'12px',Color:'#8d969e',Font:'9px ui-monospace,monospace',Position:'absolute',Right:'12px',ZIndex:'10'}),
         new Css.Rule('arianna-canvas-3d[theme="light"],.Canvas3D[theme="light"]',{Background:'#eef1f4',BorderColor:'#c4cbd1'}),
+        new Css.Rule('arianna-canvas-3d[theme="light"] .Canvas3D-Toolbar',{Background:'rgba(255,255,255,.86)',BorderColor:'rgba(0,0,0,.12)'}),
+        new Css.Rule('arianna-canvas-3d[theme="light"] .Canvas3D-Button',{Background:'#f4f5f6',BorderColor:'#c5cbd0',Color:'#3b4248'}),
     ]);
 
-    @Component('arianna-canvas-3d',Styles,{Shadow:false,Attributes:['theme','color','mesh-id','orbit','zoom','yaw','pitch','cube-x','cube-y','cube-z','cube-rotation-x','cube-rotation-y','cube-rotation-z']})
+    @Component('arianna-canvas-3d',Styles,{Shadow:false,Attributes:['theme','color','orbit','zoom','yaw','pitch','view','show-toolbar']})
     export class Canvas3D extends HTMLElement
     {
         public static readonly Styles=Styles;
         public template=html``;
-        public scene:Scene3;
-        public camera:Camera3={position:{x:3.5,y:2.5,z:4.5}};
-        public canvas?:HTMLCanvasElement;
-        private ctx:CanvasRenderingContext2D|null=null;
-        private meshes=new Map<string,Mesh3>();
-        private frameCallbacks=new Set<(dt:number)=>void>();
-        private raf=0; private last=0; private resizeObserver:ResizeObserver|null=null;
-        private yaw=.72; private pitch=.42; private distance=4.6; private dragging=false; private px=0; private py=0;
 
-        constructor()
+        public get scene():Scene3{return State(this).scene;}
+        public get camera():Camera3{return State(this).camera;}
+        public get canvas():HTMLCanvasElement|undefined{return State(this).canvas;}
+
+        public onCreated():void{if(this.isConnected)this.onConnected();}
+        public onMount():void{this.onConnected();}
+        public onConnected():void
         {
-            super();
-            this.scene={children:[],add:(obj)=>{if(!this.scene.children.includes(obj))this.scene.children.push(obj);},remove:(obj)=>{const i=this.scene.children.indexOf(obj);if(i>=0)this.scene.children.splice(i,1);}};
+            const s=State(this);
+            this.classList.add('Canvas3D');
+            if(!this.hasAttribute('theme'))this.setAttribute('theme','dark');
+            if(!this.hasAttribute('view'))this.setAttribute('view','perspective');
+            if(s.started){this.syncToolbar();return;}
+
+            s.yaw=this.numberAttr('yaw',.72);s.pitch=this.numberAttr('pitch',.42);s.distance=this.numberAttr('zoom',4.6);
+            this.applyView(this.getView(),false);
+
+            const canvas=document.createElement('canvas');canvas.className='Canvas3D-Canvas';
+            const toolbar=this.buildToolbar();
+            const axes=document.createElement('div');axes.className='Canvas3D-Axes';axes.textContent='X · Y · Z';
+            this.replaceChildren(canvas,toolbar,axes);
+            s.canvas=canvas;s.ctx=canvas.getContext('2d');s.started=true;
+
+            this.wireOrbit();
+            s.resizeObserver=new ResizeObserver(()=>this.resize());s.resizeObserver.observe(this);this.resize();
+            s.last=performance.now();s.raf=requestAnimationFrame(t=>this.loop(t));
+            this.syncToolbar();
+        }
+        public onUnmount():void
+        {
+            const s=State(this);cancelAnimationFrame(s.raf);s.resizeObserver?.disconnect();s.resizeObserver=null;s.frameCallbacks.clear();s.canvas=undefined;s.ctx=null;s.wiredCanvas=undefined;s.meshes.clear();s.scene.children.length=0;s.started=false;
+        }
+        public onAttributeChanged(name?:string):void
+        {
+            const s=State(this);if(!s.started)return;
+            if(name==='view')this.applyView(this.getView(),false);
+            if(name==='yaw')s.yaw=this.numberAttr('yaw',s.yaw);
+            if(name==='pitch')s.pitch=this.numberAttr('pitch',s.pitch);
+            if(name==='zoom')s.distance=this.numberAttr('zoom',s.distance);
+            this.syncToolbar();
         }
 
-        onCreated():void{if(this.isConnected)this.onConnected();}
-        onConnected():void
+        /** Register a caller-owned mesh with this viewport. */
+        public addMesh(id:string,mesh:Mesh3):Mesh3
         {
-            if(this.canvas) return;
-            this.classList.add('Canvas3D'); if(!this.hasAttribute('theme'))this.setAttribute('theme','dark');
-            this.yaw=parseFloat(this.getAttribute('yaw')??'.72')||.72; this.pitch=parseFloat(this.getAttribute('pitch')??'.42')||.42; this.distance=parseFloat(this.getAttribute('zoom')??'4.6')||4.6;
-            const canvas=document.createElement('canvas'); canvas.className='Canvas3D-Canvas'; this.replaceChildren(canvas); this.canvas=canvas; this.ctx=canvas.getContext('2d');
-            this.createCube(); this.wireOrbit(); this.resizeObserver=new ResizeObserver(()=>this.resize()); this.resizeObserver.observe(this); this.resize();
-            this.last=performance.now(); this.raf=requestAnimationFrame(t=>this.loop(t));
+            const key=String(id||'').trim();if(!key)throw new Error('[Canvas3D] addMesh requires a non-empty id');
+            const s=State(this),existing=s.meshes.get(key);if(existing&&existing!==mesh)s.scene.remove(existing);
+            mesh.userData??={};mesh.userData.id=key;
+            if(mesh.userData.__ariannaInitialGeometry===undefined)mesh.userData.__ariannaInitialGeometry=mesh.geometry.clone();
+            if(mesh.userData.__ariannaInitialTransform===undefined)mesh.userData.__ariannaInitialTransform={position:{...mesh.position},rotation:{...mesh.rotation},scale:{...mesh.scale},visible:mesh.visible};
+            s.meshes.set(key,mesh);s.scene.add(mesh);return mesh;
         }
-        onMount():void{this.onConnected();}
-        onUnmount():void{cancelAnimationFrame(this.raf);this.resizeObserver?.disconnect();this.resizeObserver=null;this.frameCallbacks.clear();this.canvas=undefined;this.ctx=null;this.meshes.clear();this.scene.children.length=0;}
-        onAttributeChanged():void{if(!this.canvas)return;this.syncAttributes();this.invalidate();}
+        public removeMesh(source:string|Mesh3):this
+        {
+            const s=State(this),mesh=typeof source==='string'?s.meshes.get(source)??null:source;if(!mesh)return this;
+            s.scene.remove(mesh);for(const [id,item] of [...s.meshes])if(item===mesh)s.meshes.delete(id);return this;
+        }
+        public clearMeshes():this{const s=State(this);s.scene.children.length=0;s.meshes.clear();return this;}
+        public findMesh(id:string):Mesh3|null{return State(this).meshes.get(id)??null;}
+        public getMeshes():ReadonlyArray<Mesh3>{return [...State(this).scene.children];}
+        public cloneMesh(source:string|Mesh3):Mesh3|null
+        {
+            const mesh=typeof source==='string'?this.findMesh(source):source;if(!mesh)return null;
+            return {geometry:mesh.geometry.clone(),position:{...mesh.position},rotation:{...mesh.rotation},scale:{...mesh.scale},visible:mesh.visible,userData:{...mesh.userData}};
+        }
+        public resetMesh(source:string|Mesh3):this
+        {
+            const mesh=typeof source==='string'?this.findMesh(source):source;if(!mesh)return this;
+            const initialGeometry=mesh.userData.__ariannaInitialGeometry as Geometry3|undefined;
+            const initial=mesh.userData.__ariannaInitialTransform as {position:Vec3;rotation:Vec3;scale:Vec3;visible:boolean}|undefined;
+            if(initialGeometry)mesh.geometry=initialGeometry.clone();
+            if(initial){mesh.position={...initial.position};mesh.rotation={...initial.rotation};mesh.scale={...initial.scale};mesh.visible=initial.visible;}
+            delete mesh.userData['_arianna_opacity'];return this;
+        }
+        public onFrame(cb:(dt:number)=>void):()=>void{const s=State(this);s.frameCallbacks.add(cb);return()=>s.frameCallbacks.delete(cb);}
+        public invalidate():void{/* Continuous render loop: retained for modifier viewport contract. */}
 
-        private createCube():void
+        public getView():ViewPreset
         {
-            const id=this.getAttribute('mesh-id')||'cube';
-            const cube:Mesh3={geometry:CubeGeometry(),position:{x:0,y:0,z:0},rotation:{x:0,y:0,z:0},scale:{x:1,y:1,z:1},visible:true,userData:{color:this.getAttribute('color')||'#8f9aa6'}};
-            this.meshes.set(id,cube); this.scene.add(cube); this.syncAttributes();
+            const v=this.getAttribute('view');return v==='front'||v==='right'||v==='top'?v:'perspective';
         }
-        private syncAttributes():void
+        public setView(view:ViewPreset):this
         {
-            const cube=this.findMesh(this.getAttribute('mesh-id')||'cube'); if(!cube)return;
-            const num=(name:string,fallback:number)=>{const v=parseFloat(this.getAttribute(name)??String(fallback));return Number.isFinite(v)?v:fallback;};
-            cube.position.x=num('cube-x',cube.position.x);cube.position.y=num('cube-y',cube.position.y);cube.position.z=num('cube-z',cube.position.z);
-            cube.rotation.x=num('cube-rotation-x',cube.rotation.x);cube.rotation.y=num('cube-rotation-y',cube.rotation.y);cube.rotation.z=num('cube-rotation-z',cube.rotation.z);
-            cube.userData.color=this.getAttribute('color')||cube.userData.color||'#8f9aa6';
+            if(this.getAttribute('view')!==view)this.setAttribute('view',view);else this.applyView(view,false);
+            return this;
         }
-        public findMesh(id:string):Mesh3|null{return this.meshes.get(id)??null;}
-        public getCube():Mesh3|null{return this.findMesh(this.getAttribute('mesh-id')||'cube');}
-        public resetCube():this{const cube=this.getCube();if(cube){cube.geometry=CubeGeometry();cube.position={x:0,y:0,z:0};cube.rotation={x:0,y:0,z:0};cube.scale={x:1,y:1,z:1};cube.visible=true;cube.userData={color:this.getAttribute('color')||'#8f9aa6'};this.syncAttributes();}return this;}
-        public onFrame(cb:(dt:number)=>void):()=>void{this.frameCallbacks.add(cb);return()=>this.frameCallbacks.delete(cb);}
-        public invalidate():void{}
+        public resetView():this{return this.setView('perspective');}
 
+        private numberAttr(name:string,fallback:number):number{const n=parseFloat(this.getAttribute(name)??String(fallback));return Number.isFinite(n)?n:fallback;}
+        private applyView(view:ViewPreset,reflect=true):void
+        {
+            const s=State(this);
+            if(view==='front'){s.yaw=0;s.pitch=0;}
+            else if(view==='right'){s.yaw=Math.PI/2;s.pitch=0;}
+            else if(view==='top'){s.yaw=0;s.pitch=1.24;}
+            else{s.yaw=.72;s.pitch=.42;}
+            if(reflect&&this.getAttribute('view')!==view)this.setAttribute('view',view);
+            this.syncToolbar();
+        }
+        private buildToolbar():HTMLElement
+        {
+            const bar=document.createElement('div');bar.className='Canvas3D-Toolbar';
+            for(const view of ['perspective','front','right','top'] as ViewPreset[])
+            {
+                const b=document.createElement('button');b.type='button';b.className='Canvas3D-Button';b.dataset.view=view;b.textContent=view==='perspective'?'Perspective':view[0].toUpperCase()+view.slice(1);b.onclick=()=>this.setView(view);bar.appendChild(b);
+            }
+            const reset=document.createElement('button');reset.type='button';reset.className='Canvas3D-Button';reset.textContent='Reset View';reset.onclick=()=>this.resetView();bar.appendChild(reset);
+            return bar;
+        }
+        private syncToolbar():void
+        {
+            const bar=this.querySelector<HTMLElement>('.Canvas3D-Toolbar');if(!bar)return;
+            bar.style.display=this.getAttribute('show-toolbar')==='false'?'none':'flex';
+            const current=this.getView();bar.querySelectorAll<HTMLElement>('[data-view]').forEach(b=>b.dataset.active=String(b.dataset.view===current));
+        }
         private resize():void
         {
-            if(!this.canvas)return; const dpr=Math.min(2,window.devicePixelRatio||1),r=this.getBoundingClientRect(); const w=Math.max(1,Math.round(r.width*dpr)),h=Math.max(1,Math.round(r.height*dpr)); if(this.canvas.width!==w)this.canvas.width=w;if(this.canvas.height!==h)this.canvas.height=h;
+            const canvas=State(this).canvas;if(!canvas)return;const dpr=Math.min(2,window.devicePixelRatio||1),r=this.getBoundingClientRect();const w=Math.max(1,Math.round(r.width*dpr)),h=Math.max(1,Math.round(r.height*dpr));if(canvas.width!==w)canvas.width=w;if(canvas.height!==h)canvas.height=h;
         }
         private wireOrbit():void
         {
-            if(!this.canvas)return; const c=this.canvas;
-            c.addEventListener('pointerdown',e=>{if(this.getAttribute('orbit')==='false')return;this.dragging=true;this.px=e.clientX;this.py=e.clientY;c.setPointerCapture(e.pointerId);});
-            c.addEventListener('pointermove',e=>{if(!this.dragging||this.getAttribute('orbit')==='false')return;this.yaw+=(e.clientX-this.px)*.009;this.pitch=Math.max(-1.25,Math.min(1.25,this.pitch+(e.clientY-this.py)*.009));this.px=e.clientX;this.py=e.clientY;});
-            const up=()=>this.dragging=false;c.addEventListener('pointerup',up);c.addEventListener('pointercancel',up);
-            c.addEventListener('wheel',e=>{e.preventDefault();this.distance=Math.max(2.2,Math.min(12,this.distance*Math.exp(e.deltaY*.0012)));},{passive:false});
+            const s=State(this),c=s.canvas;if(!c||s.wiredCanvas===c)return;s.wiredCanvas=c;
+            c.addEventListener('pointerdown',e=>{if(this.getAttribute('orbit')==='false')return;s.dragging=true;s.px=e.clientX;s.py=e.clientY;c.setPointerCapture(e.pointerId);});
+            c.addEventListener('pointermove',e=>{if(!s.dragging||this.getAttribute('orbit')==='false')return;s.yaw+=(e.clientX-s.px)*.009;s.pitch=Math.max(-1.25,Math.min(1.25,s.pitch+(e.clientY-s.py)*.009));s.px=e.clientX;s.py=e.clientY;if(this.getAttribute('view')!=='perspective')this.setAttribute('view','perspective');});
+            const up=()=>s.dragging=false;c.addEventListener('pointerup',up);c.addEventListener('pointercancel',up);
+            c.addEventListener('wheel',e=>{e.preventDefault();s.distance=Math.max(2.2,Math.min(12,s.distance*Math.exp(e.deltaY*.0012)));},{passive:false});
         }
         private loop(time:number):void
         {
-            const dt=Math.min(.05,Math.max(0,(time-this.last)/1000));this.last=time;
-            for(const cb of [...this.frameCallbacks]){try{cb(dt);}catch(error){console.warn('[Canvas3D] frame callback',error);}}
-            this.render(); this.raf=requestAnimationFrame(t=>this.loop(t));
+            const s=State(this);if(!s.started)return;const dt=Math.min(.05,Math.max(0,(time-s.last)/1000));s.last=time;
+            for(const cb of [...s.frameCallbacks]){try{cb(dt);}catch(error){console.warn('[Canvas3D] frame callback',error);}}
+            this.render();s.raf=requestAnimationFrame(t=>this.loop(t));
         }
-
         private transform(v:Vec3,m:Mesh3):Vec3
         {
             let x=v.x*m.scale.x,y=v.y*m.scale.y,z=v.z*m.scale.z;
-            let c=Math.cos(m.rotation.x),s=Math.sin(m.rotation.x);[y,z]=[y*c-z*s,y*s+z*c]; c=Math.cos(m.rotation.y);s=Math.sin(m.rotation.y);[x,z]=[x*c+z*s,-x*s+z*c]; c=Math.cos(m.rotation.z);s=Math.sin(m.rotation.z);[x,y]=[x*c-y*s,x*s+y*c];
+            let c=Math.cos(m.rotation.x),s=Math.sin(m.rotation.x);[y,z]=[y*c-z*s,y*s+z*c];c=Math.cos(m.rotation.y);s=Math.sin(m.rotation.y);[x,z]=[x*c+z*s,-x*s+z*c];c=Math.cos(m.rotation.z);s=Math.sin(m.rotation.z);[x,y]=[x*c-y*s,x*s+y*c];
             return{x:x+m.position.x,y:y+m.position.y,z:z+m.position.z};
         }
         private color(hex:string,shade:number,alpha:number):string
@@ -139,16 +226,17 @@ export namespace Canvas3D
         }
         private render():void
         {
-            const canvas=this.canvas,ctx=this.ctx;if(!canvas||!ctx)return;const w=canvas.width,h=canvas.height,dpr=Math.min(2,window.devicePixelRatio||1);
+            const s=State(this),canvas=s.canvas,ctx=s.ctx;if(!canvas||!ctx)return;const w=canvas.width,h=canvas.height,dpr=Math.min(2,window.devicePixelRatio||1);
             const light=this.getAttribute('theme')==='light';const grad=ctx.createLinearGradient(0,0,0,h);grad.addColorStop(0,light?'#f5f7f9':'#20252b');grad.addColorStop(1,light?'#dfe4e8':'#111418');ctx.fillStyle=grad;ctx.fillRect(0,0,w,h);
-            const cp=Math.cos(this.pitch);this.camera.position={x:this.distance*Math.sin(this.yaw)*cp,y:this.distance*Math.sin(this.pitch),z:this.distance*Math.cos(this.yaw)*cp};
-            const target={x:0,y:0,z:0},forward=norm(sub(target,this.camera.position)),right=norm(cross(forward,{x:0,y:1,z:0})),up=cross(right,forward),focal=(h/dpr)*.82*dpr;
+            const cp=Math.cos(s.pitch);s.camera.position={x:s.distance*Math.sin(s.yaw)*cp,y:s.distance*Math.sin(s.pitch),z:s.distance*Math.cos(s.yaw)*cp};
+            const target={x:0,y:0,z:0},forward=norm(sub(target,s.camera.position)),right=norm(cross(forward,{x:0,y:1,z:0})),up=cross(right,forward),focal=(h/dpr)*.82*dpr;
             type Tri={p:[{x:number;y:number;z:number},{x:number;y:number;z:number},{x:number;y:number;z:number}];depth:number;shade:number;color:string;alpha:number};const tris:Tri[]=[];
-            for(const mesh of this.scene.children){if(!mesh.visible)continue;const g=mesh.geometry,opacity=Number(mesh.userData['_arianna_opacity']??1),base=String(mesh.userData.color??this.getAttribute('color')??'#8f9aa6');const projected=g.vertices.map(v=>{const world=this.transform(v,mesh),rel=sub(world,this.camera.position),z=dot(rel,forward);return{x:w/2+focal*dot(rel,right)/Math.max(.08,z),y:h/2-focal*dot(rel,up)/Math.max(.08,z),z,world};});for(let i=0;i<g.indices.length;i+=3){const ia=g.indices[i],ib=g.indices[i+1],ic=g.indices[i+2],a=projected[ia],b=projected[ib],c=projected[ic];if(!a||!b||!c||a.z<=.08||b.z<=.08||c.z<=.08)continue;const wa=a.world,wb=b.world,wc=c.world,n=norm(cross(sub(wb,wa),sub(wc,wa))),ld=norm({x:-.45,y:.75,z:.6}),shade=.42+.58*Math.max(0,dot(n,ld));tris.push({p:[a,b,c],depth:(a.z+b.z+c.z)/3,shade,color:base,alpha:opacity});}}
+            for(const mesh of s.scene.children){if(!mesh.visible)continue;const g=mesh.geometry,opacity=Number(mesh.userData['_arianna_opacity']??1),base=String(mesh.userData.color??this.getAttribute('color')??'#8f9aa6');const projected=g.vertices.map(v=>{const world=this.transform(v,mesh),rel=sub(world,s.camera.position),z=dot(rel,forward);return{x:w/2+focal*dot(rel,right)/Math.max(.08,z),y:h/2-focal*dot(rel,up)/Math.max(.08,z),z,world};});for(let i=0;i<g.indices.length;i+=3){const ia=g.indices[i],ib=g.indices[i+1],ic=g.indices[i+2],a=projected[ia],b=projected[ib],c=projected[ic];if(!a||!b||!c||a.z<=.08||b.z<=.08||c.z<=.08)continue;const wa=a.world,wb=b.world,wc=c.world,n=norm(cross(sub(wb,wa),sub(wc,wa))),ld=norm({x:-.45,y:.75,z:.6}),shade=.42+.58*Math.max(0,dot(n,ld));tris.push({p:[a,b,c],depth:(a.z+b.z+c.z)/3,shade,color:base,alpha:opacity});}}
             tris.sort((a,b)=>b.depth-a.depth);ctx.lineJoin='round';for(const tri of tris){ctx.beginPath();ctx.moveTo(tri.p[0].x,tri.p[0].y);ctx.lineTo(tri.p[1].x,tri.p[1].y);ctx.lineTo(tri.p[2].x,tri.p[2].y);ctx.closePath();ctx.fillStyle=this.color(tri.color,tri.shade,tri.alpha);ctx.fill();ctx.strokeStyle=light?'rgba(35,40,45,.10)':'rgba(255,255,255,.055)';ctx.lineWidth=.7*dpr;ctx.stroke();}
         }
     }
 }
 export type Canvas3DMesh=Canvas3D.Mesh3;
 export type Canvas3DGeometry=Canvas3D.Geometry3;
+export type Canvas3DViewPreset=Canvas3D.ViewPreset;
 export default Canvas3D.Canvas3D;

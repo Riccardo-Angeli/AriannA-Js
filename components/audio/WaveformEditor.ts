@@ -6,7 +6,6 @@
  * @license MIT / Commercial (dual license)
  *
  * WaveLab-style destructive single-file waveform editor.
- * Default demo source: /devtools/playground/assets/audio/VivaldiSummer.mp3
  */
 import { Component, Css, Templates } from '../../core/index.ts';
 import { AudioComponent as AudioComponentModule } from './AudioComponent.ts';
@@ -146,7 +145,7 @@ export namespace WaveformEditor
         private Zoom = ZOOM_DEFAULT;
         private Tool: Tool = 'select';
         private Scroll = 0;
-        private LoadedName = 'Vivaldi · Summer';
+        private LoadedName = 'Audio';
         private Resize?: ResizeObserver;
 
         constructor(options: Interfaces.WaveformEditorOptions = {})
@@ -169,8 +168,6 @@ export namespace WaveformEditor
             super.onConnected();
             this.classList.add('WaveformEditor');
             if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
-            if(!this.hasAttribute('src')) this.setAttribute('src', '/devtools/playground/assets/audio/VivaldiSummer.mp3');
-            if(!this.hasAttribute('name')) this.setAttribute('name', 'Vivaldi · Summer');
             if(this.hasAttribute('width')) this.style.width = `${Number(this.getAttribute('width')) || 860}px`;
             if(this.hasAttribute('height')) this.style.minHeight = `${Number(this.getAttribute('height')) || 468}px`;
             if(!this.hasAttribute('zoom')) this.setAttribute('zoom', String(ZOOM_DEFAULT));
@@ -235,7 +232,7 @@ export namespace WaveformEditor
             if(!Number.isFinite(self.End)) self.End = .58;
             if(!Number.isFinite(self.Zoom) || (self.Zoom ?? 0) < ZOOM_MIN) self.Zoom = ZOOM_DEFAULT;
             if(!Number.isFinite(self.Scroll)) self.Scroll = 0;
-            if(typeof self.LoadedName !== 'string' || !self.LoadedName) self.LoadedName = 'Vivaldi · Summer';
+            if(typeof self.LoadedName !== 'string' || !self.LoadedName) self.LoadedName = this.getAttribute('name') || 'Audio';
             if(self.Tool !== 'select' && self.Tool !== 'draw') self.Tool = 'select';
         }
 
@@ -1143,16 +1140,11 @@ export namespace WaveformEditor
 
             if(!buffer)
             {
-                context.strokeStyle = wave;
-                context.lineWidth = Math.max(1, scale);
+                context.strokeStyle = light ? '#c9ced3' : '#41484e';
+                context.lineWidth = Math.max(1, scale * .5);
                 context.beginPath();
-                const middle = height / 2;
-                for(let x = 0; x < width; x++)
-                {
-                    const sample = Math.sin(x * .042) * .36 + Math.sin(x * .013) * .19 + Math.sin(x * .117) * .08;
-                    const y = middle - sample * height * .42;
-                    if(x === 0) context.moveTo(x, y); else context.lineTo(x, y);
-                }
+                context.moveTo(0, height / 2);
+                context.lineTo(width, height / 2);
                 context.stroke();
                 return;
             }
@@ -1247,7 +1239,7 @@ export namespace WaveformEditor
         private NameFromUrl(url: string): string
         {
             const tail = url.split('/').pop()?.split('?')[0] || 'Audio';
-            return decodeURIComponent(tail).replace(/VivaldiSummer/i, 'Vivaldi · Summer');
+            return decodeURIComponent(tail) || 'Audio';
         }
 
         private Emit(type: string, detail: Record<string, unknown> = {}): void

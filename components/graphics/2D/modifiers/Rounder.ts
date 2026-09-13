@@ -1,9 +1,9 @@
 /**
- * @module components/modifiers/2D/Rounder
+ * @module components/graphics/2D/modifiers/Rounder
  * @description Border-radius modifier with uniform or independent corner controls.
  */
 
-import { Component, Templates } from '../../../core/index.ts';
+import { Component, Templates } from '../../../../core/index.ts';
 import * as Base from './Base.ts';
 
 export namespace Rounder
@@ -30,6 +30,8 @@ export namespace Rounder
         }
     }
     export type RoundCallback=(element:HTMLElement,radius:number,corner:Corner|'all')=>void;
+    export interface RounderParameters extends Base.Modifier2D.Parameters.Bag
+    { Radius:number; TopLeft:number; TopRight:number; BottomLeft:number; BottomRight:number; Max:number; HandleColor:string; Corners:string; Enabled:boolean; }
     const html=Templates.Template.Html;
     const Corners:Corner[]=['top-left','top-right','bottom-left','bottom-right'];
     const attrToCorner:Record<string,Corner>={topLeft:'top-left',topRight:'top-right',bottomLeft:'bottom-left',bottomRight:'bottom-right'};
@@ -51,13 +53,42 @@ export namespace Rounder
     export class Rounder extends Base.Modifier2D.Modifier2D
     {
         public template=html``;
-        protected EventName='round';
+        protected get EventName():string{return'round';}
         public max=100;
         public handleColor='#e40c88';
         public corners:Corner[]=[...Corners];
         private state:Record<Corner,number>={'top-left':0,'top-right':0,'bottom-left':0,'bottom-right':0};
         private perCorner=false;
-        private readonly callbacks=new Set<RoundCallback>();
+        private callbacks=new Set<RoundCallback>();
+
+        private ensureRuntime():void
+        {
+            this.max??=100;this.handleColor??='#e40c88';
+            if(!Array.isArray(this.corners)||!this.corners.length)this.corners=[...Corners];
+            if(!this.state||typeof this.state!=='object')this.state={'top-left':0,'top-right':0,'bottom-left':0,'bottom-right':0};
+            for(const corner of Corners) if(!Number.isFinite(this.state[corner])) this.state[corner]=0;
+            this.perCorner??=false;
+            if(!(this.callbacks instanceof Set))this.callbacks=new Set<RoundCallback>();
+        }
+
+        public get Parameters():RounderParameters
+        {
+            this.ensureRuntime();
+            const corner=(c:Corner)=>this.state[c];
+            const setCorner=(c:Corner,v:unknown)=>{this.setCorner(c,Number(v)||0);this.refreshAttachments();};
+            return Base.Modifier2D.CreateParameters<RounderParameters>(this,'Rounder',[
+                {key:'Radius',label:'Radius',kind:'number',min:0,step:1,get:()=>corner('top-left'),set:v=>{this.setRadius(Number(v)||0);this.refreshAttachments();}},
+                {key:'TopLeft',label:'Top left',kind:'number',min:0,step:1,get:()=>corner('top-left'),set:v=>setCorner('top-left',v)},
+                {key:'TopRight',label:'Top right',kind:'number',min:0,step:1,get:()=>corner('top-right'),set:v=>setCorner('top-right',v)},
+                {key:'BottomLeft',label:'Bottom left',kind:'number',min:0,step:1,get:()=>corner('bottom-left'),set:v=>setCorner('bottom-left',v)},
+                {key:'BottomRight',label:'Bottom right',kind:'number',min:0,step:1,get:()=>corner('bottom-right'),set:v=>setCorner('bottom-right',v)},
+                {key:'Max',label:'Max radius',kind:'number',min:0,step:1,get:()=>this.max,set:v=>{this.max=Math.max(0,Number(v)||0);}},
+                {key:'HandleColor',label:'Handle color',kind:'color',get:()=>this.handleColor,set:v=>{this.handleColor=String(v);this.refreshAttachments();}},
+                {key:'Corners',label:'Corners',kind:'text',get:()=>this.corners.join(','),set:v=>{const cs=String(v).split(',').map(x=>x.trim()).filter((x):x is Corner=>Corners.includes(x as Corner));if(cs.length)this.corners=cs;this.refreshAttachments();}},
+                {key:'Enabled',label:'Enabled',kind:'checkbox',get:()=>this.enabled,set:v=>{this.enabled=Boolean(v);}},
+                {key:'Reset',label:'Reset corners',kind:'button',action:()=>{this.setRadius(0);this.refreshAttachments();}},
+            ]);
+        }
 
         constructor(target?:Base.Modifier2D.Types.TargetInput,options:Interfaces.RounderOptions={})
         {
@@ -68,6 +99,7 @@ export namespace Rounder
 
         private configure(options:Interfaces.RounderOptions):void
         {
+            this.ensureRuntime();
             const uniform=options.r??options.radius;
             if(uniform!==undefined) for(const c of Corners)this.state[c]=Math.max(0,uniform);
             for(const [name,corner] of Object.entries(attrToCorner))
@@ -83,6 +115,7 @@ export namespace Rounder
 
         private syncAttributes():void
         {
+            this.ensureRuntime();
             const max=this.getAttribute('max');if(max!==null&&Number.isFinite(+max))this.max=Math.max(0,+max);
             this.handleColor=this.getAttribute('handle-color')??this.handleColor;
             const selected=this.getAttribute('corners');
@@ -146,21 +179,23 @@ export namespace Rounder
             handle.addEventListener('pointerdown',down);this.cleanups.push(()=>{handle.removeEventListener('pointerdown',down);handle.remove();});
         }
 
-        public onRound(callback:RoundCallback):this{this.callbacks.add(callback);return this;}
+        public onRound(callback:RoundCallback):this{this.ensureRuntime();this.callbacks.add(callback);return this;}
         public setRadius(radius:number):this
         {
+            this.ensureRuntime();
             const r=Math.max(0,Math.min(this.max,radius));for(const c of Corners)this.state[c]=r;this.perCorner=false;
             for(const target of this.targets){this.render(target);this.Change({radius:r,corner:'all',programmatic:true},target);for(const cb of this.callbacks)cb(target,r,'all');}
             return this;
         }
         public setCorner(corner:Corner,radius:number):this
         {
+            this.ensureRuntime();
             const r=Math.max(0,Math.min(this.max,radius));this.state[corner]=r;this.perCorner=true;
             for(const target of this.targets){this.render(target);this.Change({radius:r,corner,programmatic:true},target);for(const cb of this.callbacks)cb(target,r,corner);}
             return this;
         }
         public setCorners(values:Partial<Record<Corner,number>>):this{for(const [corner,radius] of Object.entries(values))if(typeof radius==='number')this.setCorner(corner as Corner,radius);return this;}
-        public getCorners():Readonly<Record<Corner,number>>{return{...this.state};}
+        public getCorners():Readonly<Record<Corner,number>>{this.ensureRuntime();return{...this.state};}
     }
 }
 

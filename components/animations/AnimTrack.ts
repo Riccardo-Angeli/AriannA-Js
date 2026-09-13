@@ -169,8 +169,8 @@ export namespace AnimTrack
             this.EnsureState();
             this.classList.add('AnimTrack');
             this.classList.toggle('AnimTrack-Standalone', !this.closest('arianna-keyframe-editor, .KeyframeEditor'));
-            if(!this.hasAttribute('name')) this.setAttribute('name', 'X Location');
-            if(!this.hasAttribute('group')) this.setAttribute('group', 'position');
+            if(!this.hasAttribute('name')) this.setAttribute('name', 'Track');
+            if(!this.hasAttribute('group')) this.setAttribute('group', 'custom');
             if(!this.hasAttribute('frame-start')) this.setAttribute('frame-start', '0');
             if(!this.hasAttribute('frame-end')) this.setAttribute('frame-end', '50');
             if(!this.hasAttribute('frame-step')) this.setAttribute('frame-step', '10');
@@ -448,7 +448,7 @@ export namespace AnimTrack
             lane.addEventListener('pointercancel', finishDrag);
 
             /* Double-clicking an empty lane creates a keyframe at that frame.
-               This makes the standalone demo genuinely editable without extra UI. */
+               This keeps standalone usage editable without requiring external control UI. */
             lane.addEventListener('dblclick', event =>
             {
                 if(this.hasAttribute('locked') || keyframeFromTarget(event.target)) return;

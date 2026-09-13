@@ -1,28 +1,20 @@
-/**
- * @module components/payments/Trustly
- * @author Riccardo Angeli
- * @version 2.1.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license MIT / Commercial (dual license)
+/** @module components/payments/Trustly
+ * @description Trustly single-button payment component. Credentials/configuration are supplied by the application.
  */
-
-import { HostedPayment } from './HostedPayment.ts';
+import { Component } from '../../core/index.ts';
+import { PaymentButton } from './PaymentButton.ts';
 import { PaymentProviders } from './Providers.ts';
-declare const Component: any;
 
 export namespace Trustly
 {
-    export type TrustlyOptions = HostedPayment.HostedPaymentOptions;
-    export const Provider = PaymentProviders.Trustly;
+    export namespace Types { export type Mode=PaymentButton.Types.PaymentMode; }
+    export namespace Interfaces { export type TrustlyOptions=PaymentButton.Interfaces.PaymentButtonOptions; }
+    export const Provider=PaymentProviders.Trustly;
 
-    @Component('arianna-trustly', {}, { shadow:false, Attributes:['amount','currency','reference','checkout-url','api-url','api-token','return-url','customer-email','target'] })
-    export class Trustly extends HostedPayment.HostedPayment
+    @Component('arianna-trustly',PaymentButton.Styles,{Shadow:false,Attributes:['theme','amount','currency','reference','customer-email','label','target','mode','disabled']})
+    export class Trustly extends PaymentButton.PaymentButton
     {
-        onConnected()
-        {
-            if(!this.getProvider()) this.setProvider(Provider);
-            super.onConnected();
-        }
+        protected get Provider(){return Provider;}
     }
 }
 

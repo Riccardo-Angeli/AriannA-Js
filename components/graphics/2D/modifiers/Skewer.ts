@@ -1,9 +1,9 @@
 /**
- * @module components/modifiers/2D/Skewer
+ * @module components/graphics/2D/modifiers/Skewer
  * @description 2D skew modifier supporting drag and programmatic X/Y control.
  */
 
-import { Component, Templates } from '../../../core/index.ts';
+import { Component, Templates } from '../../../../core/index.ts';
 import * as Base from './Base.ts';
 
 export namespace Skewer
@@ -20,6 +20,8 @@ export namespace Skewer
         }
     }
     export type SkewCallback=(element:HTMLElement,skewX:number,skewY:number)=>void;
+    export interface SkewerParameters extends Base.Modifier2D.Parameters.Bag
+    { SkewX:number; SkewY:number; Axis:Types.Axis; MaxAngle:number; HandleColor:string; Enabled:boolean; }
     const html=Templates.Template.Html;
 
     @Component('arianna-skewer',{}, {
@@ -29,12 +31,33 @@ export namespace Skewer
     export class Skewer extends Base.Modifier2D.Modifier2D
     {
         public template=html``;
-        protected EventName='skew';
+        protected get EventName():string{return'skew';}
         public axis:Types.Axis='both';
         public maxAngle=45;
         public handleColor='#e40c88';
         private skew:[number,number]=[0,0];
-        private readonly callbacks=new Set<SkewCallback>();
+        private callbacks=new Set<SkewCallback>();
+
+        private ensureRuntime():void
+        {
+            this.axis??='both';this.maxAngle??=45;this.handleColor??='#e40c88';
+            if(!Array.isArray(this.skew)||this.skew.length!==2)this.skew=[0,0];
+            if(!(this.callbacks instanceof Set))this.callbacks=new Set<SkewCallback>();
+        }
+
+        public get Parameters():SkewerParameters
+        {
+            this.ensureRuntime();
+            return Base.Modifier2D.CreateParameters<SkewerParameters>(this,'Skewer',[
+                {key:'SkewX',label:'Skew X',kind:'number',step:1,get:()=>this.skew[0],set:v=>this.setSkew(Number(v)||0,this.skew[1])},
+                {key:'SkewY',label:'Skew Y',kind:'number',step:1,get:()=>this.skew[1],set:v=>this.setSkew(this.skew[0],Number(v)||0)},
+                {key:'Axis',label:'Axis',kind:'select',options:['both','x','y'],get:()=>this.axis,set:v=>{this.axis=String(v) as Types.Axis;}},
+                {key:'MaxAngle',label:'Max angle',kind:'number',min:0,step:1,get:()=>this.maxAngle,set:v=>{this.maxAngle=Math.abs(Number(v)||0);}},
+                {key:'HandleColor',label:'Handle color',kind:'color',get:()=>this.handleColor,set:v=>{this.handleColor=String(v);this.refreshAttachments();}},
+                {key:'Enabled',label:'Enabled',kind:'checkbox',get:()=>this.enabled,set:v=>{this.enabled=Boolean(v);}},
+                {key:'Reset',label:'Reset skew',kind:'button',action:()=>this.reset()},
+            ]);
+        }
 
         constructor(target?:Base.Modifier2D.Types.TargetInput,options:Interfaces.SkewerOptions={})
         {
@@ -48,6 +71,7 @@ export namespace Skewer
 
         private syncAttributes():void
         {
+            this.ensureRuntime();
             const a=this.getAttribute('axis'); if(a==='x'||a==='y'||a==='both') this.axis=a;
             const m=this.getAttribute('max-angle'); if(m!==null && Number.isFinite(+m)) this.maxAngle=Math.abs(+m);
             this.handleColor=this.getAttribute('handle-color')??this.handleColor;
@@ -95,16 +119,17 @@ export namespace Skewer
             for(const cb of this.callbacks) cb(target,x,y);
         }
 
-        public onSkew(callback:SkewCallback):this{this.callbacks.add(callback);return this;}
+        public onSkew(callback:SkewCallback):this{this.ensureRuntime();this.callbacks.add(callback);return this;}
         public setSkew(x:number,y:number):this
         {
+            this.ensureRuntime();
             const nx=this.axis==='y'?this.skew[0]:Math.max(-this.maxAngle,Math.min(this.maxAngle,x));
             const ny=this.axis==='x'?this.skew[1]:Math.max(-this.maxAngle,Math.min(this.maxAngle,y));
             for(const target of this.targets) this.applySkew(target,nx,ny,true);
             return this;
         }
         public reset():this{return this.setSkew(0,0);}
-        public getSkew():readonly[number,number]{return [...this.skew] as [number,number];}
+        public getSkew():readonly[number,number]{this.ensureRuntime();return [...this.skew] as [number,number];}
     }
 }
 

@@ -1,28 +1,20 @@
-/**
- * @module components/payments/Worldline
- * @author Riccardo Angeli
- * @version 2.1.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license MIT / Commercial (dual license)
+/** @module components/payments/Worldline
+ * @description Worldline single-button payment component. Credentials/configuration are supplied by the application.
  */
-
-import { HostedPayment } from './HostedPayment.ts';
+import { Component } from '../../core/index.ts';
+import { PaymentButton } from './PaymentButton.ts';
 import { PaymentProviders } from './Providers.ts';
-declare const Component: any;
 
 export namespace Worldline
 {
-    export type WorldlineOptions = HostedPayment.HostedPaymentOptions;
-    export const Provider = PaymentProviders.Worldline;
+    export namespace Types { export type Mode=PaymentButton.Types.PaymentMode; }
+    export namespace Interfaces { export type WorldlineOptions=PaymentButton.Interfaces.PaymentButtonOptions; }
+    export const Provider=PaymentProviders.Worldline;
 
-    @Component('arianna-worldline', {}, { shadow:false, Attributes:['amount','currency','reference','checkout-url','api-url','api-token','return-url','customer-email','target'] })
-    export class Worldline extends HostedPayment.HostedPayment
+    @Component('arianna-worldline',PaymentButton.Styles,{Shadow:false,Attributes:['theme','amount','currency','reference','customer-email','label','target','mode','disabled']})
+    export class Worldline extends PaymentButton.PaymentButton
     {
-        onConnected()
-        {
-            if(!this.getProvider()) this.setProvider(Provider);
-            super.onConnected();
-        }
+        protected get Provider(){return Provider;}
     }
 }
 

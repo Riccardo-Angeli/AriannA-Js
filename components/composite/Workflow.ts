@@ -80,79 +80,7 @@ export namespace NodeEditor
         }
     }
 
-    /*
-     * The first four entries intentionally remain the original demo set so the
-     * seeded workflow does not regress. Additional schemas populate the new
-     * Playground-style left module pane.
-     */
-    const demoSchemas: Interfaces.NodeSchema[] = [
-        {
-            type: 'trigger', name: 'Manual trigger', category: 'Trigger',
-            color: '#f26c5e', icon: '▶',
-            inputs: [], outputs: [{ id: 'out', type: 'json' }],
-            description: 'Starts the workflow manually.'
-        },
-        {
-            type: 'filter', name: 'Filter data', category: 'Transform',
-            color: '#8b5cf6', icon: '⌁',
-            inputs: [{ id: 'in', type: 'json' }], outputs: [{ id: 'out', type: 'json' }],
-            description: 'Keeps matching items.'
-        },
-        {
-            type: 'agent', name: 'AI Agent', category: 'AI',
-            color: '#e40c88', icon: '✦',
-            inputs: [{ id: 'in', type: 'json' }], outputs: [{ id: 'out', type: 'json' }],
-            description: 'Runs an AriannA agent.'
-        },
-        {
-            type: 'mail', name: 'Send message', category: 'Action',
-            color: '#2aa7a1', icon: '✉',
-            inputs: [{ id: 'in', type: 'json' }], outputs: [{ id: 'out', type: 'json' }],
-            description: 'Sends the final result.'
-        },
-        {
-            type: 'llm', name: 'Chat Model', category: 'AI',
-            color: '#e40c88', icon: '◈',
-            inputs: [{ id: 'prompt', type: 'string', label: 'Prompt' }],
-            outputs: [{ id: 'out', type: 'json' }],
-            description: 'Calls a chat / reasoning model.'
-        },
-        {
-            type: 'prompt', name: 'Prompt', category: 'AI',
-            color: '#bf4ee8', icon: '¶',
-            inputs: [{ id: 'in', type: 'json' }],
-            outputs: [{ id: 'prompt', type: 'string' }],
-            description: 'Builds a prompt from workflow data.'
-        },
-        {
-            type: 'memory', name: 'Memory', category: 'AI',
-            color: '#6d7de8', icon: '▤',
-            inputs: [{ id: 'in', type: 'json' }],
-            outputs: [{ id: 'out', type: 'json' }],
-            description: 'Stores and retrieves agent context.'
-        },
-        {
-            type: 'tool', name: 'AI Tool', category: 'AI',
-            color: '#4d9de0', icon: '⌘',
-            inputs: [{ id: 'in', type: 'json' }],
-            outputs: [{ id: 'out', type: 'json' }],
-            description: 'Exposes an action or service to an agent.'
-        },
-        {
-            type: 'code', name: 'Code', category: 'Transform',
-            color: '#d7a23d', icon: '</>',
-            inputs: [{ id: 'in', type: 'json' }],
-            outputs: [{ id: 'out', type: 'json' }],
-            description: 'Transforms data with code.'
-        },
-        {
-            type: 'http', name: 'HTTP Request', category: 'Action',
-            color: '#3aa0d8', icon: '↗',
-            inputs: [{ id: 'in', type: 'json' }],
-            outputs: [{ id: 'out', type: 'json' }],
-            description: 'Calls an HTTP endpoint.'
-        }
-    ];
+    // No built-in node catalog: applications and Playground provide schemas explicitly.
 
     export const Styles = new Css.Stylesheet([
         new Css.Rule('.NodeEditor', {
@@ -414,7 +342,7 @@ export namespace NodeEditor
         public static readonly Styles = Styles;
         public template = html``;
 
-        private _schemas: Interfaces.NodeSchema[] = structuredClone(demoSchemas);
+        private _schemas: Interfaces.NodeSchema[] = [];
         private _nodes: Interfaces.NodeInstance[] = [];
         private _wires: Interfaces.WireInstance[] = [];
         private _state: Types.RunState = 'idle';
@@ -424,7 +352,7 @@ export namespace NodeEditor
 
         private EnsureState(): void
         {
-            if(!Array.isArray(this._schemas)) this._schemas = structuredClone(demoSchemas);
+            if(!Array.isArray(this._schemas)) this._schemas = [];
             if(!Array.isArray(this._nodes)) this._nodes = [];
             if(!Array.isArray(this._wires)) this._wires = [];
             if(this._state !== 'idle' && this._state !== 'running' && this._state !== 'paused') this._state = 'idle';
@@ -457,7 +385,6 @@ export namespace NodeEditor
             this.EnsureState();
             this.classList.add('NodeEditor');
             if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
-            if(this._nodes.length === 0 && this._schemas.length > 0) this.Seed();
             this.Render();
         }
 

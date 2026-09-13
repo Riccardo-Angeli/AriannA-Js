@@ -6,7 +6,7 @@
  *
  * AriannA Components 2.0 — top-level barrel.
  *
- * # Folder map (18 modules)
+ * # Folder map (17 modules)
  *
  *   animations/   — Blender-style Action Editor + F-Curves + Onion
  *   audio/        — Web Audio widgets
@@ -23,7 +23,8 @@
  *                   (Chip re-exported as InputChip)
  *   layout/       — containers, panels, windows, table
  *   maps/         — multi-provider maps
- *   modifiers/    — 2D + 3D modifiers
+ *   graphics/2D/modifiers/ — 2D modifiers
+ *   graphics/3D/modifiers/ — 3D modifiers
  *   navigation/   — header, sidebar, menu, etc.
  *   payments/     — gateway + providers
  *   project/      — Kanban / project work surfaces
@@ -51,7 +52,9 @@ export * from './composite/index.ts';
 export * from './display/index.ts'; // canonical Chip
 export * from './layout/index.ts'; // canonical Table (also exposed via data/Table re-export)
 export * from './maps/index.ts';
-export * from './modifiers/index.ts';
+// Modifiers now live under graphics/{2D,3D}/modifiers, but remain top-level exports.
+export * from './graphics/2D/modifiers/index.ts';
+export * from './graphics/3D/modifiers/index.ts';
 export * from './navigation/index.ts';
 export * from './payments/index.ts';
 export * from './project/index.ts';
@@ -68,9 +71,9 @@ export { Button, Switch, Checkbox, Radio, TextField, SearchBar, Dropdown, Rating
 // ── graphics — alias ColorPicker, re-export everything else ────────────────
 export { 
 // 2D
-Canvas2D, LineEditor, Align, LayersPanel, LinesPalette2D, ToolsPalette, 
+Canvas2D, LineEditor, Align, Layer, Layers, LayersPanel, LinesPalette2D, ToolsPalette, 
 // 3D
-CameraViewer3D, MaterialsPalette, Modifiers3DPalette, 
+Canvas3D, Csg, MaterialsPalette, Modifiers3DPalette, 
 // colors (canonical inputs/ColorPicker — aliasing this one)
 ColorPickerSquare, ColorPickerTile, ColorPickerWheel, LinearGradientEditor, RadialGradientEditor, ShapeGradientEditor, GraphicsColorPicker, RGBColorPicker, HSLColorPicker, HSVColorPicker, OKHSLColorPicker, OKHSVColorPicker, CMYKColorPicker, XYZColorPicker, CIELABColorPicker, CIELUVColorPicker, CIEUVWColorPicker, } from './graphics/index.ts';
 // Re-export the colour utility functions (not classes)

@@ -9,8 +9,6 @@
  */
 
 import { Component, Css } from '../../core/index.ts';
-import '../modifiers/2D/Mover.ts';
-import '../modifiers/2D/Resizer.ts';
 
 export namespace WindowComponent
 {
@@ -756,13 +754,15 @@ export namespace WindowComponent
         }
 
         /**
-         * Use the real Modifier2D components directly.
+         * Use the real Modifier2D components through their autonomous tags.
          *
-         * Because Window is Shadow:false, arianna-mover can resolve the titlebar
-         * through handle-selector and both modifiers naturally target their
-         * parentElement (this Window).
-         */
-        /**
+         * IMPORTANT: Window must not statically import Mover/Resizer here.
+         * Modifier2D/Base imports Window to build Parameters.Window; importing the
+         * modifiers back from Window would create Base -> Window -> Modifier -> Base
+         * and leave Modifier2D undefined while a bundle is evaluating. The normal
+         * Components barrel registers the modifier tags, and activateModifier()
+         * waits one frame for AriannA's in-place upgrade before binding.
+         *
          * Dynamic modifiers normally mount through AriannA's lifecycle.
          * If the observer has not mounted one by the next frame, invoke its
          * public lifecycle hook once so it binds to this Window.
@@ -831,6 +831,15 @@ export namespace WindowComponent
                 resizer.setAttribute(
                     'handles',
                     'n,ne,e,se,s,sw,w,nw'
+                );
+
+                /*
+                 * Window resizing keeps the full invisible hit-area/cursors,
+                 * but does not draw the pink Resizer markers.
+                 */
+                resizer.setAttribute(
+                    'handle-color',
+                    'transparent'
                 );
 
                 resizer.setAttribute(

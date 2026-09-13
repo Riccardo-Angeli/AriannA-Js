@@ -1,28 +1,20 @@
-/**
- * @module components/payments/AmazonPay
- * @author Riccardo Angeli
- * @version 2.1.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license MIT / Commercial (dual license)
+/** @module components/payments/AmazonPay
+ * @description AmazonPay single-button payment component. Credentials/configuration are supplied by the application.
  */
-
-import { HostedPayment } from './HostedPayment.ts';
+import { Component } from '../../core/index.ts';
+import { PaymentButton } from './PaymentButton.ts';
 import { PaymentProviders } from './Providers.ts';
-declare const Component: any;
 
 export namespace AmazonPay
 {
-    export type AmazonPayOptions = HostedPayment.HostedPaymentOptions;
-    export const Provider = PaymentProviders.AmazonPay;
+    export namespace Types { export type Mode=PaymentButton.Types.PaymentMode; }
+    export namespace Interfaces { export type AmazonPayOptions=PaymentButton.Interfaces.PaymentButtonOptions; }
+    export const Provider=PaymentProviders.AmazonPay;
 
-    @Component('arianna-amazon-pay', {}, { shadow:false, Attributes:['amount','currency','reference','checkout-url','api-url','api-token','return-url','customer-email','target'] })
-    export class AmazonPay extends HostedPayment.HostedPayment
+    @Component('arianna-amazon-pay',PaymentButton.Styles,{Shadow:false,Attributes:['theme','amount','currency','reference','customer-email','label','target','mode','disabled']})
+    export class AmazonPay extends PaymentButton.PaymentButton
     {
-        onConnected()
-        {
-            if(!this.getProvider()) this.setProvider(Provider);
-            super.onConnected();
-        }
+        protected get Provider(){return Provider;}
     }
 }
 

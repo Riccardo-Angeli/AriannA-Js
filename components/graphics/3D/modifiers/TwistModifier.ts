@@ -1,11 +1,11 @@
 /**
- * @module    components/modifiers/3D/InflateModifier
+ * @module    components/graphics/3D/modifiers/TwistModifier
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description AriannA InflateModifier component module.
+ * @description AriannA TwistModifier component module.
  */
 
 
@@ -24,29 +24,29 @@ declare const Templates: any;
  *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
 
-/** @namespace   InflateModifier
+/** @namespace   TwistModifier
  *  @public
- *  @description Namespace containing InflateModifier contracts and implementation.
+ *  @description Namespace containing TwistModifier contracts and implementation.
  *  @author      Riccardo Angeli
  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
  *  @license     MIT / Commercial (dual license) */
-export namespace InflateModifier
+export namespace TwistModifier
 {
-    /** @class       InflateModifierElement
+    /** @class       TwistModifierElement
      *  @public
-     *  @description AriannA InflateModifierElement component implementation.
+     *  @description AriannA TwistModifierElement component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-        @Component('arianna-inflate', {}, {
-        Attributes: ['disabled', 'viewport', 'for', 'amount', 'enabled'],
+        @Component('arianna-twist', {}, {
+        Attributes: ['disabled', 'viewport', 'for', 'angle', 'axis', 'enabled'],
     })
-    export class InflateModifierElement extends Modifier3DNamespace.Modifier3DElement
+    export class TwistModifierElement extends Modifier3DNamespace.Modifier3DElement
     {
         /** Canonical AriannA public DOM identity. */
         private readonly _AriannaComponentIdentity = (() =>
         {
-            const type = 'InflateModifierElement';
+            const type = 'TwistModifierElement';
             for(const cls of Array.from(this.classList))
             {
                 if(cls.startsWith('__real-')) this.classList.remove(cls);
@@ -81,56 +81,91 @@ export namespace InflateModifier
          *  @license     MIT / Commercial (dual license) */
         protected createModifier(mesh: Modifier3DNamespace.Interfaces.MeshLike): Modifier3DNamespace.Modifier3D
         {
-            /** @name        amount
+            /** @name        angle
              *  @public
              *  @type        {inferred}
-             *  @description Namespace-owned amount value.
+             *  @description Namespace-owned angle value.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const amount = parseFloat(this.getAttribute('amount') ?? '0.1') || 0.1;
-            return new InflateModifier(mesh, amount);
+            const angle = parseFloat(this.getAttribute('angle') ?? '0') || 0;
+
+            /** @name        axis
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned axis value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const axis = ((this.getAttribute('axis') ?? 'y') as 'x' | 'y' | 'z');
+            return new TwistModifier(mesh, angle, axis);
         }
     }
 
-    /** @class       InflateModifier
+    /** @class       TwistModifier
      *  @public
-     *  @description AriannA InflateModifier component implementation.
+     *  @description AriannA TwistModifier component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export class InflateModifier extends Modifier3DNamespace.Modifier3D
+    export class TwistModifier extends Modifier3DNamespace.Modifier3D
     {
-        /** @name        #amount
+        /** @name        #angle
          *  @public
          *  @type        {number}
-         *  @description Component member for amount.
+         *  @description Component member for angle.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #amount: number;
+        #angle: number;
+
+        /** @name        #axis
+         *  @public
+         *  @type        {'x' | 'y' | 'z'}
+         *  @description Component member for axis.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        #axis: 'x' | 'y' | 'z';
 
         /** @name        constructor
          *  @public
          *  @type        {constructor}
          *  @description Constructs the component for constructor.
          *  @param       {Modifier3DNamespace.Interfaces.MeshLike} mesh Parameter.
-         *  @param       {unknown} amount Parameter.
+         *  @param       {number} angle Parameter.
+         *  @param       {'x' | 'y' | 'z'} axis Parameter.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, amount = 0.1) { super(mesh); this.#amount = amount; }
+        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, angle: number, axis: 'x' | 'y' | 'z' = 'y')
+        {
+            super(mesh);
+            this.#angle = angle;
+            this.#axis = axis;
+        }
 
-        /** @name        setAmount
+        /** @name        setAngle
          *  @public
          *  @type        {this}
-         *  @description Component member for set Amount.
+         *  @description Component member for set Angle.
          *  @param       {number} a Parameter.
          *  @returns     {this} Result.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        setAmount(a: number): this { this.#amount = a; return this; }
+        setAngle(a: number): this { this.#angle = a; return this; }
+
+        /** @name        setAxis
+         *  @public
+         *  @type        {this}
+         *  @description Component member for set Axis.
+         *  @param       {'x' | 'y' | 'z'} a Parameter.
+         *  @returns     {this} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        setAxis(a: 'x' | 'y' | 'z'): this { this.#axis = a; return this; }
 
         /** @name        apply
          *  @public
@@ -153,12 +188,52 @@ export namespace InflateModifier
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
             const g = Modifier3DNamespace._cloneGeom(this.mesh.geometry);
-            Modifier3DNamespace._recomputeNormals(g);
-            g.vertices = g.vertices.map((v, i) => Modifier3DNamespace._vAdd(v, Modifier3DNamespace._vScale(g.normals[i] ?? Modifier3DNamespace._v3(0, 1, 0), this.#amount)));
+
+            /** @name        vals
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned vals value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const vals = g.vertices.map(v => this.#axis === 'y' ? v.y : this.#axis === 'x' ? v.x : v.z);
+
+            /** @name        vmin
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned vmin value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const vmin = Math.min(...vals), range = (Math.max(...vals) - vmin) || 1;
+            g.vertices = g.vertices.map(v => {
+                /** @name        t
+                 *  @public
+                 *  @type        {inferred}
+                 *  @description Namespace-owned t value.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license) */
+                const t = ((this.#axis === 'y' ? v.y : this.#axis === 'x' ? v.x : v.z) - vmin) / range;
+
+                /** @name        a
+                 *  @public
+                 *  @type        {inferred}
+                 *  @description Namespace-owned a value.
+                 *  @author      Riccardo Angeli
+                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+                 *  @license     MIT / Commercial (dual license) */
+                const a = t * this.#angle, c = Math.cos(a), s = Math.sin(a);
+                if (this.#axis === 'y')
+                    return { x: c * v.x - s * v.z, y: v.y, z: s * v.x + c * v.z };
+                if (this.#axis === 'x')
+                    return { x: v.x, y: c * v.y - s * v.z, z: s * v.y + c * v.z };
+                return { x: c * v.x - s * v.y, y: s * v.x + c * v.y, z: v.z };
+            });
             Modifier3DNamespace._recomputeNormals(g);
             this.mesh.geometry = g;
             return this;
         }
     }
 }
-export default InflateModifier;
+export default TwistModifier;

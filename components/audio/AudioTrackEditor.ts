@@ -208,7 +208,6 @@ export namespace AudioTrackEditor
         public onConnected(): void
         {
             this.classList.add('AudioPart');
-            if(!this.hasAttribute('src')) this.setAttribute('src', '/devtools/playground/assets/audio/VivaldiSummer.mp3');
             this.style.setProperty('--AudioPart-Color', this.getAttribute('color') || '#df756d');
             if(!this.hasAttribute('tabindex')) this.tabIndex = 0;
             this.Render();

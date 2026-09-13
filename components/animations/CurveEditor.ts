@@ -139,7 +139,7 @@ export namespace CurveEditor
         {
             this.EnsureState();
             this.classList.add('CurveEditor');
-            if(!this.hasAttribute('channel')) this.setAttribute('channel', 'X Location');
+            if(!this.hasAttribute('channel')) this.setAttribute('channel', 'Channel');
             if(!this.hasAttribute('height')) this.setAttribute('height', '300');
             if(!this.hasAttribute('tabindex')) this.tabIndex = 0;
             this.Render();
@@ -173,7 +173,7 @@ export namespace CurveEditor
         private EnsureState(): void
         {
             if(!Array.isArray(this._samples)) this._samples = [];
-            if(typeof this._playhead !== 'number' || !Number.isFinite(this._playhead)) this._playhead = 24;
+            if(typeof this._playhead !== 'number' || !Number.isFinite(this._playhead)) this._playhead = 0;
             if(typeof this._showHandles !== 'boolean') this._showHandles = true;
             if(this._drag === undefined) this._drag = null;
         }
@@ -286,7 +286,7 @@ export namespace CurveEditor
             if(!select) return;
             const current = this.getAttribute('channel') ?? '';
             const channels = Array.from(new Set((this._samples ?? []).map(sample => sample.channel).filter((value): value is string => Boolean(value))));
-            if(!channels.length) channels.push(current || 'X Location');
+            if(!channels.length) channels.push(current || 'Channel');
             select.replaceChildren(...channels.map(name =>
             {
                 const option = document.createElement('option');

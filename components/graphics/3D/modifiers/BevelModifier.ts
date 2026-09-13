@@ -1,5 +1,5 @@
 /**
- * @module    components/modifiers/3D/BevelModifier
+ * @module    components/graphics/3D/modifiers/BevelModifier
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved

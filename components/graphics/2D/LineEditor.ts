@@ -81,13 +81,7 @@ export namespace LineEditor
         marquee: { a: Interfaces.Vec2; b: Interfaces.Vec2 } | null;
     }
 
-    const DEFAULT: Interfaces.Anchor[] = [
-        { p:{x:74,y:210},  out:{x:48,y:-95}, interpolation:'bezier', mode:'smooth' },
-        { p:{x:230,y:126}, in:{x:-66,y:54}, out:{x:64,y:38}, interpolation:'bezier', mode:'smooth' },
-        { p:{x:390,y:190}, in:{x:-58,y:-66}, out:{x:55,y:-48}, interpolation:'bezier', mode:'smooth' },
-        { p:{x:540,y:82},  in:{x:-70,y:56}, interpolation:'linear', mode:'smooth' }
-    ];
-
+    const DEFAULT: Interfaces.Anchor[] = [];
     const Runtime = new WeakMap<HTMLElement, State>();
 
     const stateOf = (host: HTMLElement): State =>
@@ -97,7 +91,7 @@ export namespace LineEditor
         {
             state = {
                 anchors: structuredClone(DEFAULT),
-                selected: new Set([0]),
+                selected: new Set(),
                 mode: 'select',
                 interpolation: 'bezier',
                 preview: null,

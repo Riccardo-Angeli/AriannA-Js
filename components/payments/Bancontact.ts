@@ -1,28 +1,20 @@
-/**
- * @module components/payments/Bancontact
- * @author Riccardo Angeli
- * @version 2.1.0
- * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
- * @license MIT / Commercial (dual license)
+/** @module components/payments/Bancontact
+ * @description Bancontact single-button payment component. Credentials/configuration are supplied by the application.
  */
-
-import { HostedPayment } from './HostedPayment.ts';
+import { Component } from '../../core/index.ts';
+import { PaymentButton } from './PaymentButton.ts';
 import { PaymentProviders } from './Providers.ts';
-declare const Component: any;
 
 export namespace Bancontact
 {
-    export type BancontactOptions = HostedPayment.HostedPaymentOptions;
-    export const Provider = PaymentProviders.Bancontact;
+    export namespace Types { export type Mode=PaymentButton.Types.PaymentMode; }
+    export namespace Interfaces { export type BancontactOptions=PaymentButton.Interfaces.PaymentButtonOptions; }
+    export const Provider=PaymentProviders.Bancontact;
 
-    @Component('arianna-bancontact', {}, { shadow:false, Attributes:['amount','currency','reference','checkout-url','api-url','api-token','return-url','customer-email','target'] })
-    export class Bancontact extends HostedPayment.HostedPayment
+    @Component('arianna-bancontact',PaymentButton.Styles,{Shadow:false,Attributes:['theme','amount','currency','reference','customer-email','label','target','mode','disabled']})
+    export class Bancontact extends PaymentButton.PaymentButton
     {
-        onConnected()
-        {
-            if(!this.getProvider()) this.setProvider(Provider);
-            super.onConnected();
-        }
+        protected get Provider(){return Provider;}
     }
 }
 

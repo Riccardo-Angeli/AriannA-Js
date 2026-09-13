@@ -645,16 +645,16 @@ export namespace KeyframeEditor
         {
             if(group === 'rotation') return 'Rotation';
             if(group === 'scale') return 'Scale';
-            if(group === 'position') return 'Cube';
+            if(group === 'position') return 'Position';
             return 'Custom';
         }
 
         private DefaultTracks(): Interfaces.TrackDefinition[]
         {
             return [
-                { folder: 'Cube', name: 'X Location', channel: 'loc-x', group: 'position' },
-                { folder: 'Cube', name: 'Y Location', channel: 'loc-y', group: 'position' },
-                { folder: 'Cube', name: 'Z Location', channel: 'loc-z', group: 'position' },
+                { folder: 'Position', name: 'X Location', channel: 'loc-x', group: 'position' },
+                { folder: 'Position', name: 'Y Location', channel: 'loc-y', group: 'position' },
+                { folder: 'Position', name: 'Z Location', channel: 'loc-z', group: 'position' },
                 { folder: 'Rotation', name: 'X Rotation', channel: 'rot-x', group: 'rotation' },
                 { folder: 'Rotation', name: 'Y Rotation', channel: 'rot-y', group: 'rotation' },
                 { folder: 'Scale', name: 'X Scale', channel: 'scale-x', group: 'scale' },

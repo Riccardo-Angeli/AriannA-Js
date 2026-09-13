@@ -6,7 +6,7 @@
  * @license   MIT / Commercial (dual license)
  *
  * @description Reference-quality piano-roll editor. The visual language and
- * interaction model intentionally mirror the AriannA Reference demo: dark
+ * interaction model intentionally mirror the AriannA reference style: dark
  * transport/tool bar, DAW-style ruler, piano keyboard, editable MIDI notes,
  * velocity lane, playhead and MIDI event monitor.
  */

@@ -4,7 +4,7 @@
  */
 
 import { Component, Css, Templates } from '../../core/index.ts';
-import MoverComponent from '../modifiers/2D/Mover.ts';
+import MoverComponent from '../graphics/2D/modifiers/Mover.ts';
 
 const html = Templates.Template.Html;
 

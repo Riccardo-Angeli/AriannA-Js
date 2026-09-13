@@ -1,5 +1,5 @@
 /**
- * @module    components/modifiers/3D
+ * @module    components/graphics/3D/modifiers
  * @author    Riccardo Angeli
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)

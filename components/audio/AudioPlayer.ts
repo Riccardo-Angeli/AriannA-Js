@@ -87,8 +87,6 @@ export namespace AudioPlayer
             super.onConnected();
             this.classList.add('AudioPlayer');
             if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
-            if(!this.hasAttribute('src')) this.setAttribute('src', '/devtools/playground/assets/audio/VivaldiSummer.mp3');
-            if(!this.hasAttribute('label')) this.setAttribute('label', 'Vivaldi · Summer');
             this.Render();
             this.SyncSource();
         }

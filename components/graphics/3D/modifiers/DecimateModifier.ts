@@ -1,11 +1,11 @@
 /**
- * @module    components/modifiers/3D/FadeModifier
+ * @module    components/graphics/3D/modifiers/DecimateModifier
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description AriannA FadeModifier component module.
+ * @description AriannA DecimateModifier component module.
  */
 
 
@@ -24,29 +24,29 @@ declare const Templates: any;
  *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
 
-/** @namespace   FadeModifier
+/** @namespace   DecimateModifier
  *  @public
- *  @description Namespace containing FadeModifier contracts and implementation.
+ *  @description Namespace containing DecimateModifier contracts and implementation.
  *  @author      Riccardo Angeli
  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
  *  @license     MIT / Commercial (dual license) */
-export namespace FadeModifier
+export namespace DecimateModifier
 {
-    /** @class       FadeModifierElement
+    /** @class       DecimateModifierElement
      *  @public
-     *  @description AriannA FadeModifierElement component implementation.
+     *  @description AriannA DecimateModifierElement component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-        @Component('arianna-fade', {}, {
-        Attributes: ['disabled', 'viewport', 'for', 'near', 'far', 'enabled'],
+        @Component('arianna-decimate', {}, {
+        Attributes: ['disabled', 'viewport', 'for', 'ratio', 'enabled'],
     })
-    export class FadeModifierElement extends Modifier3DNamespace.Modifier3DElement
+    export class DecimateModifierElement extends Modifier3DNamespace.Modifier3DElement
     {
         /** Canonical AriannA public DOM identity. */
         private readonly _AriannaComponentIdentity = (() =>
         {
-            const type = 'FadeModifierElement';
+            const type = 'DecimateModifierElement';
             for(const cls of Array.from(this.classList))
             {
                 if(cls.startsWith('__real-')) this.classList.remove(cls);
@@ -81,88 +81,60 @@ export namespace FadeModifier
          *  @license     MIT / Commercial (dual license) */
         protected createModifier(mesh: Modifier3DNamespace.Interfaces.MeshLike): Modifier3DNamespace.Modifier3D
         {
-            /** @name        near
+            /** @name        ratio
              *  @public
              *  @type        {inferred}
-             *  @description Namespace-owned near value.
+             *  @description Namespace-owned ratio value.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const near = parseFloat(this.getAttribute('near') ?? '10') || 10;
-
-            /** @name        far
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned far value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const far = parseFloat(this.getAttribute('far') ?? '50') || 50;
-            return new FadeModifier(mesh, near, far);
+            const ratio = parseFloat(this.getAttribute('ratio') ?? '0.5') || 0.5;
+            return new DecimateModifier(mesh, ratio);
         }
-
-        /** @name        needsFrameUpdate
-         *  @protected
-         *  @type        {boolean}
-         *  @description Component member for needs Frame Update.
-         *  @returns     {boolean} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        protected needsFrameUpdate(): boolean { return true; }
     }
 
-    /** @class       FadeModifier
+    /** @class       DecimateModifier
      *  @public
-     *  @description AriannA FadeModifier component implementation.
+     *  @description AriannA DecimateModifier component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export class FadeModifier extends Modifier3DNamespace.Modifier3D
+    export class DecimateModifier extends Modifier3DNamespace.Modifier3D
     {
-        /** @name        #near
+        /** @name        #ratio
          *  @public
          *  @type        {number}
-         *  @description Component member for near.
+         *  @description Component member for ratio.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #near: number;
-
-        /** @name        #far
-         *  @public
-         *  @type        {number}
-         *  @description Component member for far.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #far: number;
-
-        /** @name        #onFade
-         *  @public
-         *  @type        {((mesh: Modifier3DNamespace.Interfaces.MeshLike, opacity: number) => void) | null}
-         *  @description Component member for on Fade.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #onFade: ((mesh: Modifier3DNamespace.Interfaces.MeshLike, opacity: number) => void) | null = null;
+        #ratio: number;
 
         /** @name        constructor
          *  @public
          *  @type        {constructor}
          *  @description Constructs the component for constructor.
          *  @param       {Modifier3DNamespace.Interfaces.MeshLike} mesh Parameter.
-         *  @param       {unknown} near Parameter.
-         *  @param       {unknown} far Parameter.
+         *  @param       {unknown} ratio Parameter.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, near = 10, far = 50)
+        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, ratio = 0.5)
         {
             super(mesh);
-            this.#near = near;
-            this.#far = far;
+            this.#ratio = Math.max(0.01, Math.min(1, ratio));
         }
+
+        /** @name        setRatio
+         *  @public
+         *  @type        {this}
+         *  @description Component member for set Ratio.
+         *  @param       {number} r Parameter.
+         *  @returns     {this} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        setRatio(r: number): this { this.#ratio = Math.max(0.01, Math.min(1, r)); return this; }
 
         /** @name        apply
          *  @public
@@ -172,56 +144,53 @@ export namespace FadeModifier
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        apply(): this { return this; }
-
-        /** @name        update
-         *  @public
-         *  @type        {this}
-         *  @description Component member for update.
-         *  @param       {Modifier3DNamespace.Interfaces.CameraLike} camera Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        update(camera: Modifier3DNamespace.Interfaces.CameraLike): this
+        apply(): this
         {
             if (!this.enabled)
                 return this;
 
-            /** @name        d
+            /** @name        g
              *  @public
              *  @type        {inferred}
-             *  @description Namespace-owned d value.
+             *  @description Namespace-owned g value.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const d = Modifier3DNamespace._vLen(Modifier3DNamespace._vSub(this.mesh.position, camera.position));
+            const g = Modifier3DNamespace._cloneGeom(this.mesh.geometry);
 
-            /** @name        opacity
+            /** @name        triCount
              *  @public
              *  @type        {inferred}
-             *  @description Namespace-owned opacity value.
+             *  @description Namespace-owned triCount value.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const opacity = 1 - Math.max(0, Math.min(1, (d - this.#near) / (this.#far - this.#near)));
-            this.mesh.visible = opacity > 0.01;
-            // Three.Material.opacity sits on material; we stash for material readers.
-            (this.mesh.userData as Record<string, unknown>)['_arianna_opacity'] = opacity;
-            this.#onFade?.(this.mesh, opacity);
+            const triCount = g.indices.length / 3;
+
+            /** @name        step
+             *  @public
+             *  @type        {inferred}
+             *  @description Namespace-owned step value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const step = Math.max(1, Math.floor(triCount / Math.max(1, Math.floor(triCount * this.#ratio))));
+
+            /** @name        newIdx
+             *  @public
+             *  @type        {number[]}
+             *  @description Namespace-owned newIdx value.
+             *  @author      Riccardo Angeli
+             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+             *  @license     MIT / Commercial (dual license) */
+            const newIdx: number[] = [];
+            for (let i = 0; i < g.indices.length; i += 3 * step)
+                newIdx.push(...g.indices.slice(i, i + 3));
+            g.indices = newIdx;
+            Modifier3DNamespace._recomputeNormals(g);
+            this.mesh.geometry = g;
             return this;
         }
-
-        /** @name        onFade
-         *  @public
-         *  @type        {this}
-         *  @description Component member for on Fade.
-         *  @param       {(mesh: Modifier3DNamespace.Interfaces.MeshLike, opacity: number) => void} cb Parameter.
-         *  @returns     {this} Result.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        onFade(cb: (mesh: Modifier3DNamespace.Interfaces.MeshLike, opacity: number) => void): this { this.#onFade = cb; return this; }
     }
 }
-export default FadeModifier;
+export default DecimateModifier;

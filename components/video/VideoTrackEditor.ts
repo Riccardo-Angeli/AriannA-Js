@@ -561,7 +561,7 @@ class VideoTrackEditorElement extends HTMLElement {
             track,
             start: Math.max(0, numberValue(clip.start, 0)),
             duration,
-            source: clip.source || this.getAttribute('source') || './assets/video/arianna-sample-h264.mp4',
+            source: clip.source || this.getAttribute('source') || '',
             name: clip.name || `Clip ${index + 1}`,
             sourceIn: Math.max(0, numberValue(clip.sourceIn, 0)),
             color: clip.color || this.clipColor(track),

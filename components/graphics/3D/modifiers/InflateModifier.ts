@@ -1,11 +1,11 @@
 /**
- * @module    components/modifiers/3D/SmoothModifier
+ * @module    components/graphics/3D/modifiers/InflateModifier
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description AriannA SmoothModifier component module.
+ * @description AriannA InflateModifier component module.
  */
 
 
@@ -24,29 +24,29 @@ declare const Templates: any;
  *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
 
-/** @namespace   SmoothModifier
+/** @namespace   InflateModifier
  *  @public
- *  @description Namespace containing SmoothModifier contracts and implementation.
+ *  @description Namespace containing InflateModifier contracts and implementation.
  *  @author      Riccardo Angeli
  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
  *  @license     MIT / Commercial (dual license) */
-export namespace SmoothModifier
+export namespace InflateModifier
 {
-    /** @class       SmoothModifierElement
+    /** @class       InflateModifierElement
      *  @public
-     *  @description AriannA SmoothModifierElement component implementation.
+     *  @description AriannA InflateModifierElement component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-        @Component('arianna-smooth', {}, {
-        Attributes: ['disabled', 'viewport', 'for', 'iterations', 'factor', 'enabled'],
+        @Component('arianna-inflate', {}, {
+        Attributes: ['disabled', 'viewport', 'for', 'amount', 'enabled'],
     })
-    export class SmoothModifierElement extends Modifier3DNamespace.Modifier3DElement
+    export class InflateModifierElement extends Modifier3DNamespace.Modifier3DElement
     {
         /** Canonical AriannA public DOM identity. */
         private readonly _AriannaComponentIdentity = (() =>
         {
-            const type = 'SmoothModifierElement';
+            const type = 'InflateModifierElement';
             for(const cls of Array.from(this.classList))
             {
                 if(cls.startsWith('__real-')) this.classList.remove(cls);
@@ -81,69 +81,56 @@ export namespace SmoothModifier
          *  @license     MIT / Commercial (dual license) */
         protected createModifier(mesh: Modifier3DNamespace.Interfaces.MeshLike): Modifier3DNamespace.Modifier3D
         {
-            /** @name        iterations
+            /** @name        amount
              *  @public
              *  @type        {inferred}
-             *  @description Namespace-owned iterations value.
+             *  @description Namespace-owned amount value.
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const iterations = parseInt(this.getAttribute('iterations') ?? '3', 10) || 3;
-
-            /** @name        factor
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned factor value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const factor = parseFloat(this.getAttribute('factor') ?? '0.5') || 0.5;
-            return new SmoothModifier(mesh, iterations, factor);
+            const amount = parseFloat(this.getAttribute('amount') ?? '0.1') || 0.1;
+            return new InflateModifier(mesh, amount);
         }
     }
 
-    /** @class       SmoothModifier
+    /** @class       InflateModifier
      *  @public
-     *  @description AriannA SmoothModifier component implementation.
+     *  @description AriannA InflateModifier component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export class SmoothModifier extends Modifier3DNamespace.Modifier3D
+    export class InflateModifier extends Modifier3DNamespace.Modifier3D
     {
-        /** @name        #iterations
+        /** @name        #amount
          *  @public
          *  @type        {number}
-         *  @description Component member for iterations.
+         *  @description Component member for amount.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        #iterations: number;
-
-        /** @name        #factor
-         *  @public
-         *  @type        {number}
-         *  @description Component member for factor.
-         *  @author      Riccardo Angeli
-         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-         *  @license     MIT / Commercial (dual license) */
-        #factor: number;
+        #amount: number;
 
         /** @name        constructor
          *  @public
          *  @type        {constructor}
          *  @description Constructs the component for constructor.
          *  @param       {Modifier3DNamespace.Interfaces.MeshLike} mesh Parameter.
-         *  @param       {unknown} iterations Parameter.
-         *  @param       {unknown} factor Parameter.
+         *  @param       {unknown} amount Parameter.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
-        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, iterations = 3, factor = 0.5)
-        {
-            super(mesh);
-            this.#iterations = iterations;
-            this.#factor = factor;
-        }
+        constructor(mesh: Modifier3DNamespace.Interfaces.MeshLike, amount = 0.1) { super(mesh); this.#amount = amount; }
+
+        /** @name        setAmount
+         *  @public
+         *  @type        {this}
+         *  @description Component member for set Amount.
+         *  @param       {number} a Parameter.
+         *  @returns     {this} Result.
+         *  @author      Riccardo Angeli
+         *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
+         *  @license     MIT / Commercial (dual license) */
+        setAmount(a: number): this { this.#amount = a; return this; }
 
         /** @name        apply
          *  @public
@@ -166,61 +153,12 @@ export namespace SmoothModifier
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
             const g = Modifier3DNamespace._cloneGeom(this.mesh.geometry);
-
-            /** @name        adj
-             *  @public
-             *  @type        {inferred}
-             *  @description Namespace-owned adj value.
-             *  @author      Riccardo Angeli
-             *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-             *  @license     MIT / Commercial (dual license) */
-            const adj = g.vertices.map(() => new Set<number>());
-            for (let i = 0; i < g.indices.length; i += 3)
-            {
-                /** @name        [a, b, c]
-                 *  @public
-                 *  @type        {inferred}
-                 *  @description Namespace-owned [a, b, c] value.
-                 *  @author      Riccardo Angeli
-                 *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                 *  @license     MIT / Commercial (dual license) */
-                const [a, b, c] = g.indices.slice(i, i + 3);
-                adj[a].add(b);
-                adj[a].add(c);
-                adj[b].add(a);
-                adj[b].add(c);
-                adj[c].add(a);
-                adj[c].add(b);
-            }
-            for (let iter = 0; iter < this.#iterations; iter++)
-            {
-                g.vertices = g.vertices.map((v, i) => {
-                    /** @name        ns
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned ns value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const ns = Array.from(adj[i]);
-                    if (!ns.length)
-                        return v;
-
-                    /** @name        avg
-                     *  @public
-                     *  @type        {inferred}
-                     *  @description Namespace-owned avg value.
-                     *  @author      Riccardo Angeli
-                     *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
-                     *  @license     MIT / Commercial (dual license) */
-                    const avg = Modifier3DNamespace._vScale(ns.reduce((s, ni) => Modifier3DNamespace._vAdd(s, g.vertices[ni]), { x: 0, y: 0, z: 0 }), 1 / ns.length);
-                    return Modifier3DNamespace._vLerp(v, avg, this.#factor);
-                });
-            }
+            Modifier3DNamespace._recomputeNormals(g);
+            g.vertices = g.vertices.map((v, i) => Modifier3DNamespace._vAdd(v, Modifier3DNamespace._vScale(g.normals[i] ?? Modifier3DNamespace._v3(0, 1, 0), this.#amount)));
             Modifier3DNamespace._recomputeNormals(g);
             this.mesh.geometry = g;
             return this;
         }
     }
 }
-export default SmoothModifier;
+export default InflateModifier;

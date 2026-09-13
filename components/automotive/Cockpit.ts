@@ -141,15 +141,13 @@ export namespace Cockpit {
 
         private defaultState(): Interfaces.CockpitState {
             return {
-                identity:{make:'AriannA',model:'GT',trim:'Touring',modelYear:2026,powertrain:'ice',drivetrain:'awd'},
-                motion:{speed:0,speedUnit:'km/h',rpm:700,rpmMax:8000,gear:'P',odometer:31518,tripA:248.3,heading:28,altitude:118},
-                powertrain:{engineRunning:true,engineTemp:91,oilTemp:96,oilPressure:2.4,transmissionTemp:82,power:12,powerUnit:'kW',torque:84,torqueUnit:'Nm'},
-                energy:{fuelLevel:72,fuelRange:610,fuelConsumption:7.4,fuelConsumptionUnit:'l/100km'},
-                chassis:{tires:[{position:'FL',pressure:2.48,pressureUnit:'bar',temperature:49},{position:'FR',pressure:2.48,pressureUnit:'bar',temperature:50},{position:'RL',pressure:2.58,pressureUnit:'bar',temperature:44},{position:'RR',pressure:2.48,pressureUnit:'bar',temperature:43}]},
-                adas:{laneKeep:'standby',adaptiveCruise:'standby',speedLimit:90,handsOnWheel:true,autonomousLevel:2},
-                navigation:{active:false,compass:'N'}, climate:{ambientTemp:34,cabinTemp:22,driverTemp:21,passengerTemp:21,auto:true,ac:true},
-                occupants:{driverPresent:true,driverBelt:true}, body:{parkingBrake:true,autoHold:false,headlights:'auto'}, connectivity:{online:true,gps:true,cellular:true,bluetooth:true},
-                driveMode:'comfort',ready:true,connected:true,warnings:[],indicators:[],metrics:[]
+                identity:{},
+                motion:{speed:0,speedUnit:'km/h',rpm:0,rpmMax:8000,gear:'P',odometer:0,tripA:0},
+                powertrain:{},
+                energy:{fuelLevel:0,fuelRange:0},
+                chassis:{tires:[]},
+                adas:{}, navigation:{active:false}, climate:{}, occupants:{}, body:{}, connectivity:{},
+                driveMode:'normal',ready:false,connected:false,warnings:[],gauges:[],indicators:[],metrics:[]
             };
         }
 
@@ -162,11 +160,11 @@ export namespace Cockpit {
             const top=document.createElement('div'); top.className='Cockpit-TopLine';
             const leftWarn=document.createElement('div'); leftWarn.className='Cockpit-WarningIcons'; leftWarn.style.justifyContent='flex-start';
             if(s.body?.parkingBrake){const x=document.createElement('span');x.className='Cockpit-WarningIcon';x.textContent='Ⓟ';leftWarn.appendChild(x);} if(s.occupants?.driverPresent&&!s.occupants?.driverBelt){const x=document.createElement('span');x.className='Cockpit-WarningIcon';x.textContent='♟';leftWarn.appendChild(x);}
-            const center=document.createElement('div'); center.className='Cockpit-TopCenter'; const time=document.createElement('span');time.className='Cockpit-TopValue';time.textContent=this.getAttribute('time')||'17:24'; const temp=document.createElement('span');temp.className='Cockpit-TopValue';temp.textContent=`${Math.round(climate.ambientTemp ?? 20)}°C`; center.append(time,temp);
+            const center=document.createElement('div'); center.className='Cockpit-TopCenter'; const time=document.createElement('span');time.className='Cockpit-TopValue';time.textContent=this.getAttribute('time')||'--:--'; const temp=document.createElement('span');temp.className='Cockpit-TopValue';temp.textContent=climate.ambientTemp==null?'--°C':`${Math.round(climate.ambientTemp)}°C`; center.append(time,temp);
             const rightWarn=document.createElement('div');rightWarn.className='Cockpit-WarningIcons'; if(s.body?.doorFL||s.body?.doorFR||s.body?.doorRL||s.body?.doorRR){const x=document.createElement('span');x.className='Cockpit-WarningIcon';x.textContent='▯';rightWarn.appendChild(x);} top.append(leftWarn,center,rightWarn); cluster.appendChild(top);
 
             const main=document.createElement('div'); main.className='Cockpit-Main';
-            main.append(this.dial('speed',speedPct,String(Math.round(speed)),motion.speedUnit||'km/h',String(motion.gear||'P'),`C  ${Math.round(powertrain.engineTemp ?? 90)}°`, '#4d9de0'));
+            main.append(this.dial('speed',speedPct,String(Math.round(speed)),motion.speedUnit||'km/h',String(motion.gear||'P'),powertrain.engineTemp==null?'C  --°':`C  ${Math.round(powertrain.engineTemp)}°`, '#4d9de0'));
             main.append(this.centerVehicle(tires,s));
             main.append(this.dial('rpm',rpmPct,(rpm/1000).toFixed(1),'×1000 r/min',`ODO ${Math.round(motion.odometer ?? 0)} km`,`E     F  ${Math.round(energy.fuelLevel ?? 0)}%`, '#e40c88'));
             cluster.appendChild(main);
