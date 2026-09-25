@@ -471,6 +471,7 @@ export interface RectOptions     { x?: number; y?: number; width?: number; heigh
 export interface EllipseOptions  { cx?: number; cy?: number; rx?: number; ry?: number; style?: Style2D; }
 export interface LineOptions     { x1?: number; y1?: number; x2?: number; y2?: number; style?: Style2D; }
 export interface PolygonOptions  { points?: [number, number][]; closed?: boolean; style?: Style2D; }
+export interface PolylineOptions { points?: [number, number][]; style?: Style2D; }
 export interface PathOptions     { d?: string; style?: Style2D; }
 export interface TextOptions     { text?: string; x?: number; y?: number; fontSize?: number; fontFamily?: string; fontWeight?: string; textAnchor?: 'start' | 'middle' | 'end'; dominantBaseline?: string; style?: Style2D; }
 export interface ImageOptions    { href?: string; x?: number; y?: number; width?: number; height?: number; style?: Style2D; }
@@ -679,6 +680,21 @@ export class Polygon extends Shape2D
     }
 
     clone(): Polygon { return new Polygon({ points: this.points.map(p => [...p] as [number,number]), closed: this.closed, style: { ...this.style } }); }
+}
+
+/** An explicitly open polygonal chain. Kept distinct for serialization/tooling. */
+export class Polyline extends Polygon
+{
+    constructor(opts: PolylineOptions = {}) {
+        super({ points: opts.points, closed: false, style: opts.style });
+    }
+
+    clone(): Polyline {
+        return new Polyline({
+            points: this.points.map(p => [...p] as [number, number]),
+            style: { ...this.style },
+        });
+    }
 }
 
 export class Path extends Shape2D
@@ -1297,6 +1313,114 @@ export class PathBuilder
     }
 }
 
+// ── Primitive factories / registry ───────────────────────────────────────────
+
+export interface PrimitiveParameter2D {
+    default: number;
+    min?: number;
+    max?: number;
+    step?: number;
+}
+
+export interface PrimitiveDescriptor2D<T extends Shape2D = Shape2D> {
+    readonly name: string;
+    readonly parameters: Readonly<Record<string, PrimitiveParameter2D>>;
+    create(options?: Record<string, unknown>): T;
+}
+
+const _primitive2DRegistry = new Map<string, PrimitiveDescriptor2D>();
+
+const _numberOption = (options: Record<string, unknown>, key: string, fallback: number): number => {
+    const value = Number(options[key]);
+    return Number.isFinite(value) ? value : fallback;
+};
+
+export function regularPolygon(
+    cx = 0,
+    cy = 0,
+    radius = 50,
+    sides = 6,
+    rotation = -Math.PI / 2,
+    style?: Style2D,
+): Polygon {
+    const count = Math.max(3, Math.floor(sides));
+    const points = Array.from({ length: count }, (_, index): [number, number] => {
+        const angle = rotation + index * Math.PI * 2 / count;
+        return [cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius];
+    });
+    return new Polygon({ points, closed: true, style });
+}
+
+export function star(
+    cx = 0,
+    cy = 0,
+    outerRadius = 50,
+    innerRadius = 25,
+    points = 5,
+    rotation = -Math.PI / 2,
+    style?: Style2D,
+): Polygon {
+    const count = Math.max(2, Math.floor(points));
+    const vertices = Array.from({ length: count * 2 }, (_, index): [number, number] => {
+        const radius = index % 2 === 0 ? outerRadius : innerRadius;
+        const angle = rotation + index * Math.PI / count;
+        return [cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius];
+    });
+    return new Polygon({ points: vertices, closed: true, style });
+}
+
+export function arc(
+    cx = 0,
+    cy = 0,
+    radius = 50,
+    startAngle = 0,
+    endAngle = Math.PI,
+    antiClockwise = false,
+    style?: Style2D,
+): Path {
+    return new PathBuilder()
+        .arcAround(cx, cy, radius, startAngle, endAngle, antiClockwise)
+        .toPath(style);
+}
+
+export const Primitives2D = Object.freeze({
+    register<T extends Shape2D>(descriptor: PrimitiveDescriptor2D<T>): void {
+        const name = descriptor.name.trim().toLowerCase();
+        if (!name) throw new TypeError('Two.Primitives.register: descriptor.name is required');
+        _primitive2DRegistry.set(name, descriptor as PrimitiveDescriptor2D);
+    },
+    unregister(name: string): boolean {
+        return _primitive2DRegistry.delete(name.trim().toLowerCase());
+    },
+    has(name: string): boolean {
+        return _primitive2DRegistry.has(name.trim().toLowerCase());
+    },
+    get(name: string): PrimitiveDescriptor2D | undefined {
+        return _primitive2DRegistry.get(name.trim().toLowerCase());
+    },
+    names(): string[] {
+        return [..._primitive2DRegistry.keys()];
+    },
+    create(name: string, options: Record<string, unknown> = {}): Shape2D {
+        const descriptor = _primitive2DRegistry.get(name.trim().toLowerCase());
+        if (!descriptor) throw new RangeError(`Two.Primitives: unknown primitive "${name}"`);
+        return descriptor.create(options);
+    },
+});
+
+const _styleOption = (options: Record<string, unknown>): Style2D | undefined =>
+    options.style && typeof options.style === 'object' ? options.style as Style2D : undefined;
+
+Primitives2D.register({ name: 'circle', parameters: { r: { default: 50, min: 0, step: 1 } }, create: o => new Circle({ cx: _numberOption(o ?? {}, 'cx', 0), cy: _numberOption(o ?? {}, 'cy', 0), r: _numberOption(o ?? {}, 'r', 50), style: _styleOption(o ?? {}) }) });
+Primitives2D.register({ name: 'rect', parameters: { width: { default: 100, min: 0, step: 1 }, height: { default: 60, min: 0, step: 1 }, rx: { default: 0, min: 0, step: 1 }, ry: { default: 0, min: 0, step: 1 } }, create: o => new Rect({ x: _numberOption(o ?? {}, 'x', 0), y: _numberOption(o ?? {}, 'y', 0), width: _numberOption(o ?? {}, 'width', 100), height: _numberOption(o ?? {}, 'height', 60), rx: _numberOption(o ?? {}, 'rx', 0), ry: _numberOption(o ?? {}, 'ry', 0), style: _styleOption(o ?? {}) }) });
+Primitives2D.register({ name: 'ellipse', parameters: { rx: { default: 60, min: 0, step: 1 }, ry: { default: 40, min: 0, step: 1 } }, create: o => new Ellipse({ cx: _numberOption(o ?? {}, 'cx', 0), cy: _numberOption(o ?? {}, 'cy', 0), rx: _numberOption(o ?? {}, 'rx', 60), ry: _numberOption(o ?? {}, 'ry', 40), style: _styleOption(o ?? {}) }) });
+Primitives2D.register({ name: 'line', parameters: {}, create: o => new Line({ x1: _numberOption(o ?? {}, 'x1', 0), y1: _numberOption(o ?? {}, 'y1', 0), x2: _numberOption(o ?? {}, 'x2', 100), y2: _numberOption(o ?? {}, 'y2', 0), style: _styleOption(o ?? {}) }) });
+Primitives2D.register({ name: 'polyline', parameters: {}, create: o => new Polyline({ points: Array.isArray(o?.points) ? o.points as [number, number][] : [], style: _styleOption(o ?? {}) }) });
+Primitives2D.register({ name: 'polygon', parameters: {}, create: o => new Polygon({ points: Array.isArray(o?.points) ? o.points as [number, number][] : [], closed: true, style: _styleOption(o ?? {}) }) });
+Primitives2D.register({ name: 'regular-polygon', parameters: { radius: { default: 50, min: 0, step: 1 }, sides: { default: 6, min: 3, max: 64, step: 1 }, rotation: { default: -Math.PI / 2, step: 0.01 } }, create: o => regularPolygon(_numberOption(o ?? {}, 'cx', 0), _numberOption(o ?? {}, 'cy', 0), _numberOption(o ?? {}, 'radius', 50), _numberOption(o ?? {}, 'sides', 6), _numberOption(o ?? {}, 'rotation', -Math.PI / 2), _styleOption(o ?? {})) });
+Primitives2D.register({ name: 'star', parameters: { outerRadius: { default: 50, min: 0, step: 1 }, innerRadius: { default: 25, min: 0, step: 1 }, points: { default: 5, min: 2, max: 64, step: 1 }, rotation: { default: -Math.PI / 2, step: 0.01 } }, create: o => star(_numberOption(o ?? {}, 'cx', 0), _numberOption(o ?? {}, 'cy', 0), _numberOption(o ?? {}, 'outerRadius', 50), _numberOption(o ?? {}, 'innerRadius', 25), _numberOption(o ?? {}, 'points', 5), _numberOption(o ?? {}, 'rotation', -Math.PI / 2), _styleOption(o ?? {})) });
+Primitives2D.register({ name: 'arc', parameters: { radius: { default: 50, min: 0, step: 1 }, startAngle: { default: 0, step: 0.01 }, endAngle: { default: Math.PI, step: 0.01 } }, create: o => arc(_numberOption(o ?? {}, 'cx', 0), _numberOption(o ?? {}, 'cy', 0), _numberOption(o ?? {}, 'radius', 50), _numberOption(o ?? {}, 'startAngle', 0), _numberOption(o ?? {}, 'endAngle', Math.PI), Boolean(o?.antiClockwise), _styleOption(o ?? {})) });
+
 // ── Axis helpers (D3-style) ───────────────────────────────────────────────────
 
 export interface ScaleLinear {
@@ -1456,6 +1580,7 @@ export const Two = {
     Ellipse,
     Line,
     Polygon,
+    Polyline,
     Path,
     Text: Text2D,
     Image: Image2D,
@@ -1468,6 +1593,10 @@ export const Two = {
     // Path builder
     PathBuilder,
     path: () => new PathBuilder(),
+    regularPolygon,
+    star,
+    arc,
+    Primitives: Primitives2D,
 
     // Scales (D3-style)
     scaleLinear,

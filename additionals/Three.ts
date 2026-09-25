@@ -795,6 +795,148 @@ export namespace Three
         }
     }
 
+    export class CircleGeometry extends BufferGeometry
+    {
+        constructor(radius = 1, segments = 32, thetaStart = 0, thetaLength = Math.PI * 2)
+        {
+            super();
+            const count = Math.max(3, Math.floor(segments));
+            const pos: number[] = [0,0,0], nrm: number[] = [0,0,1], uv: number[] = [.5,.5], idx: number[] = [];
+            for (let i=0;i<=count;i++) {
+                const a=thetaStart+thetaLength*i/count, x=Math.cos(a)*radius, y=Math.sin(a)*radius;
+                pos.push(x,y,0); nrm.push(0,0,1); uv.push(.5+x/(2*radius||1),.5+y/(2*radius||1));
+            }
+            for (let i=1;i<=count;i++) idx.push(0,i,i+1);
+            this.setPositions(pos).setNormals(nrm).setUVs(uv).setIndices(idx);
+        }
+    }
+
+    export class RingGeometry extends BufferGeometry
+    {
+        constructor(innerRadius = .5, outerRadius = 1, segments = 32, thetaStart = 0, thetaLength = Math.PI * 2)
+        {
+            super();
+            const count=Math.max(3,Math.floor(segments));
+            const inner=Math.max(0,Math.min(innerRadius,outerRadius)), outer=Math.max(innerRadius,outerRadius);
+            const pos:number[]=[],nrm:number[]=[],uv:number[]=[],idx:number[]=[];
+            for(let i=0;i<=count;i++){
+                const a=thetaStart+thetaLength*i/count,c=Math.cos(a),s=Math.sin(a);
+                pos.push(c*inner,s*inner,0,c*outer,s*outer,0);nrm.push(0,0,1,0,0,1);
+                uv.push(.5+c*inner/(2*outer||1),.5+s*inner/(2*outer||1),.5+c*.5,.5+s*.5);
+            }
+            for(let i=0;i<count;i++){const a=i*2,b=a+2;idx.push(a,b,a+1,b,b+1,a+1);}
+            this.setPositions(pos).setNormals(nrm).setUVs(uv).setIndices(idx);
+        }
+    }
+
+    export class CapsuleGeometry extends BufferGeometry
+    {
+        constructor(radius = .5, length = 1, capSegments = 8, radialSegments = 24)
+        {
+            super();
+            const caps=Math.max(2,Math.floor(capSegments)),radial=Math.max(3,Math.floor(radialSegments)),half=Math.max(0,length)/2;
+            const pos:number[]=[],nrm:number[]=[],uv:number[]=[],idx:number[]=[];
+            const rings:{phi:number;yOffset:number}[]=[];
+            for(let j=0;j<=caps;j++)rings.push({phi:j/caps*Math.PI/2,yOffset:half});
+            for(let j=0;j<=caps;j++)rings.push({phi:Math.PI/2+j/caps*Math.PI/2,yOffset:-half});
+            rings.forEach((ring,j)=>{
+                const sp=Math.sin(ring.phi),cp=Math.cos(ring.phi);
+                for(let i=0;i<=radial;i++){
+                    const a=i/radial*Math.PI*2,x=sp*Math.cos(a),z=sp*Math.sin(a);
+                    pos.push(x*radius,ring.yOffset+cp*radius,z*radius);nrm.push(x,cp,z);uv.push(i/radial,1-j/(rings.length-1));
+                }
+            });
+            for(let j=0;j<rings.length-1;j++)for(let i=0;i<radial;i++){
+                const a=j*(radial+1)+i,b=a+radial+1;idx.push(a,b,a+1,b,b+1,a+1);
+            }
+            this.setPositions(pos).setNormals(nrm).setUVs(uv).setIndices(idx);
+        }
+    }
+
+    type PolyVertex = readonly [number,number,number];
+    type PolyFace = readonly number[];
+
+    const _normalizeVertex=(v:PolyVertex):[number,number,number]=>{
+        const length=Math.hypot(v[0],v[1],v[2])||1;return[v[0]/length,v[1]/length,v[2]/length];
+    };
+
+    const _polyhedronGeometry=(vertices:readonly PolyVertex[],faces:readonly PolyFace[],radius:number):BufferGeometry=>{
+        const pos:number[]=[],nrm:number[]=[],uv:number[]=[],idx:number[]=[];
+        for(const face of faces){
+            if(face.length<3)continue;
+            const ordered=[...face];
+            const va=vertices[ordered[0]],vb=vertices[ordered[1]],vc=vertices[ordered[2]];
+            const ab:[number,number,number]=[vb[0]-va[0],vb[1]-va[1],vb[2]-va[2]],ac:[number,number,number]=[vc[0]-va[0],vc[1]-va[1],vc[2]-va[2]];
+            const cross:[number,number,number]=[ab[1]*ac[2]-ab[2]*ac[1],ab[2]*ac[0]-ab[0]*ac[2],ab[0]*ac[1]-ab[1]*ac[0]];
+            const center=ordered.reduce((out,index)=>[out[0]+vertices[index][0],out[1]+vertices[index][1],out[2]+vertices[index][2]] as [number,number,number],[0,0,0] as [number,number,number]);
+            if(cross[0]*center[0]+cross[1]*center[1]+cross[2]*center[2]<0)ordered.reverse();
+            for(let i=1;i<ordered.length-1;i++){
+                const tri=[ordered[0],ordered[i],ordered[i+1]],base=pos.length/3;
+                const scaled=tri.map(index=>{const n=_normalizeVertex(vertices[index]);return[n[0]*radius,n[1]*radius,n[2]*radius] as [number,number,number];});
+                const e1=[scaled[1][0]-scaled[0][0],scaled[1][1]-scaled[0][1],scaled[1][2]-scaled[0][2]],e2=[scaled[2][0]-scaled[0][0],scaled[2][1]-scaled[0][1],scaled[2][2]-scaled[0][2]];
+                const normal=_normalizeVertex([e1[1]*e2[2]-e1[2]*e2[1],e1[2]*e2[0]-e1[0]*e2[2],e1[0]*e2[1]-e1[1]*e2[0]]);
+                for(const p of scaled){pos.push(...p);nrm.push(...normal);uv.push(.5+Math.atan2(p[2],p[0])/(Math.PI*2),.5-Math.asin(Math.max(-1,Math.min(1,p[1]/(radius||1))))/Math.PI);}
+                idx.push(base,base+1,base+2);
+            }
+        }
+        return new BufferGeometry().setPositions(pos).setNormals(nrm).setUVs(uv).setIndices(idx);
+    };
+
+    const _installGeometry=(target:BufferGeometry,source:BufferGeometry):void=>{
+        target.setPositions(source.positions).setNormals(source.normals).setUVs(source.uvs).setIndices(source.indices);
+    };
+
+    const _tetraVertices:PolyVertex[]=[[1,1,1],[-1,-1,1],[-1,1,-1],[1,-1,-1]];
+    const _tetraFaces:PolyFace[]=[[0,2,1],[0,1,3],[0,3,2],[1,2,3]];
+    const _octaVertices:PolyVertex[]=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+    const _octaFaces:PolyFace[]=[[0,2,4],[4,2,1],[1,2,5],[5,2,0],[0,4,3],[4,1,3],[1,5,3],[5,0,3]];
+    const _phi=(1+Math.sqrt(5))/2;
+    const _icosaVertices:PolyVertex[]=[[-1,_phi,0],[1,_phi,0],[-1,-_phi,0],[1,-_phi,0],[0,-1,_phi],[0,1,_phi],[0,-1,-_phi],[0,1,-_phi],[_phi,0,-1],[_phi,0,1],[-_phi,0,-1],[-_phi,0,1]];
+    const _icosaFaces:PolyFace[]=[[0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],[1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],[3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],[4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]];
+
+    const _dodecaData=():{vertices:PolyVertex[];faces:PolyFace[]}=>{
+        const vertices=_icosaFaces.map(face=>_normalizeVertex(face.reduce((sum,index)=>[sum[0]+_icosaVertices[index][0],sum[1]+_icosaVertices[index][1],sum[2]+_icosaVertices[index][2]] as [number,number,number],[0,0,0] as [number,number,number])));
+        const faces:PolyFace[]=[];
+        _icosaVertices.forEach((vertex,vertexIndex)=>{
+            const normal=_normalizeVertex(vertex),reference=Math.abs(normal[1])<.9?[0,1,0] as PolyVertex:[1,0,0] as PolyVertex;
+            const u=_normalizeVertex([normal[1]*reference[2]-normal[2]*reference[1],normal[2]*reference[0]-normal[0]*reference[2],normal[0]*reference[1]-normal[1]*reference[0]]);
+            const v:[number,number,number]=[normal[1]*u[2]-normal[2]*u[1],normal[2]*u[0]-normal[0]*u[2],normal[0]*u[1]-normal[1]*u[0]];
+            const incident=_icosaFaces.map((face,index)=>face.includes(vertexIndex)?index:-1).filter(index=>index>=0);
+            incident.sort((a,b)=>Math.atan2(vertices[a][0]*v[0]+vertices[a][1]*v[1]+vertices[a][2]*v[2],vertices[a][0]*u[0]+vertices[a][1]*u[1]+vertices[a][2]*u[2])-Math.atan2(vertices[b][0]*v[0]+vertices[b][1]*v[1]+vertices[b][2]*v[2],vertices[b][0]*u[0]+vertices[b][1]*u[1]+vertices[b][2]*u[2]));
+            faces.push(incident);
+        });
+        return{vertices,faces};
+    };
+
+    export class TetrahedronGeometry extends BufferGeometry { constructor(radius=1){super();_installGeometry(this,_polyhedronGeometry(_tetraVertices,_tetraFaces,radius));} }
+    export class OctahedronGeometry extends BufferGeometry { constructor(radius=1){super();_installGeometry(this,_polyhedronGeometry(_octaVertices,_octaFaces,radius));} }
+    export class IcosahedronGeometry extends BufferGeometry { constructor(radius=1){super();_installGeometry(this,_polyhedronGeometry(_icosaVertices,_icosaFaces,radius));} }
+    export class DodecahedronGeometry extends BufferGeometry { constructor(radius=1){super();const data=_dodecaData();_installGeometry(this,_polyhedronGeometry(data.vertices,data.faces,radius));} }
+
+    export interface PrimitiveParameter3D { default:number;min?:number;max?:number;step?:number; }
+    export interface PrimitiveDescriptor3D { readonly name:string;readonly parameters:Readonly<Record<string,PrimitiveParameter3D>>;create(options?:Record<string,number>):BufferGeometry; }
+    const _primitive3DRegistry=new Map<string,PrimitiveDescriptor3D>();
+    const _n3=(options:Record<string,number>|undefined,key:string,fallback:number):number=>{const value=Number(options?.[key]);return Number.isFinite(value)?value:fallback;};
+    export const Primitives=Object.freeze({
+        register(descriptor:PrimitiveDescriptor3D):void{const name=descriptor.name.trim().toLowerCase();if(!name)throw new TypeError('Three.Primitives.register: descriptor.name is required');_primitive3DRegistry.set(name,descriptor);},
+        unregister(name:string):boolean{return _primitive3DRegistry.delete(name.trim().toLowerCase());},
+        has(name:string):boolean{return _primitive3DRegistry.has(name.trim().toLowerCase());},
+        get(name:string):PrimitiveDescriptor3D|undefined{return _primitive3DRegistry.get(name.trim().toLowerCase());},
+        names():string[]{return[..._primitive3DRegistry.keys()];},
+        create(name:string,options:Record<string,number>={}):BufferGeometry{const descriptor=_primitive3DRegistry.get(name.trim().toLowerCase());if(!descriptor)throw new RangeError(`Three.Primitives: unknown primitive "${name}"`);return descriptor.create(options);},
+    });
+
+    Primitives.register({name:'plane',parameters:{width:{default:1,min:0,step:.1},height:{default:1,min:0,step:.1}},create:o=>new PlaneGeometry(_n3(o,'width',1),_n3(o,'height',1))});
+    Primitives.register({name:'box',parameters:{width:{default:1,min:0,step:.1},height:{default:1,min:0,step:.1},depth:{default:1,min:0,step:.1}},create:o=>new BoxGeometry(_n3(o,'width',1),_n3(o,'height',1),_n3(o,'depth',1))});
+    Primitives.register({name:'sphere',parameters:{radius:{default:1,min:0,step:.1},widthSegments:{default:32,min:3,max:128,step:1},heightSegments:{default:16,min:2,max:64,step:1}},create:o=>new SphereGeometry(_n3(o,'radius',1),_n3(o,'widthSegments',32),_n3(o,'heightSegments',16))});
+    Primitives.register({name:'cylinder',parameters:{radiusTop:{default:.5,min:0,step:.1},radiusBottom:{default:.5,min:0,step:.1},height:{default:1,min:0,step:.1}},create:o=>new CylinderGeometry(_n3(o,'radiusTop',.5),_n3(o,'radiusBottom',.5),_n3(o,'height',1))});
+    Primitives.register({name:'cone',parameters:{radius:{default:1,min:0,step:.1},height:{default:2,min:0,step:.1}},create:o=>new ConeGeometry(_n3(o,'radius',1),_n3(o,'height',2))});
+    Primitives.register({name:'torus',parameters:{radius:{default:1,min:0,step:.1},tube:{default:.4,min:0,step:.05}},create:o=>new TorusGeometry(_n3(o,'radius',1),_n3(o,'tube',.4))});
+    Primitives.register({name:'circle',parameters:{radius:{default:1,min:0,step:.1},segments:{default:32,min:3,max:128,step:1}},create:o=>new CircleGeometry(_n3(o,'radius',1),_n3(o,'segments',32))});
+    Primitives.register({name:'ring',parameters:{innerRadius:{default:.5,min:0,step:.1},outerRadius:{default:1,min:0,step:.1},segments:{default:32,min:3,max:128,step:1}},create:o=>new RingGeometry(_n3(o,'innerRadius',.5),_n3(o,'outerRadius',1),_n3(o,'segments',32))});
+    Primitives.register({name:'capsule',parameters:{radius:{default:.5,min:0,step:.1},length:{default:1,min:0,step:.1},capSegments:{default:8,min:2,max:64,step:1},radialSegments:{default:24,min:3,max:128,step:1}},create:o=>new CapsuleGeometry(_n3(o,'radius',.5),_n3(o,'length',1),_n3(o,'capSegments',8),_n3(o,'radialSegments',24))});
+    for(const [name,Geometry] of [['tetrahedron',TetrahedronGeometry],['octahedron',OctahedronGeometry],['icosahedron',IcosahedronGeometry],['dodecahedron',DodecahedronGeometry]] as const)Primitives.register({name,parameters:{radius:{default:1,min:0,step:.1}},create:o=>new Geometry(_n3(o,'radius',1))});
+
 // ── Materials ─────────────────────────────────────────────────────────────────
 
     export interface MaterialOptions
