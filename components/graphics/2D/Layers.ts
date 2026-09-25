@@ -70,7 +70,8 @@ export namespace LayersPanel
         new Css.Rule('.LayersPanel-Eye,.LayersPanel-Lock,.LayersPanel-Toggle',{Appearance:'none',Background:'transparent',Border:'0',Color:'#aeb6bd',Cursor:'pointer',Font:'10px/1 system-ui',Padding:'0'}),
         new Css.Rule('.LayersPanel-Color',{Background:'var(--layer-color)',Height:'18px',Width:'3px'}),
         new Css.Rule('.LayersPanel-Name',{FontSize:'9px',Overflow:'hidden',TextOverflow:'ellipsis',WhiteSpace:'nowrap'}),
-        new Css.Rule('.LayersPanel-Target',{Border:'1px solid #8d969e',BorderRadius:'50%',Height:'7px',Width:'7px'}),
+        new Css.Rule('.LayersPanel-Target',{Appearance:'none',Padding:'0',Background:'transparent',Cursor:'pointer',Border:'1px solid #8d969e',BorderRadius:'50%',Height:'8px',Width:'8px'}),
+        new Css.Rule('.LayersPanel-Target[aria-pressed="true"]',{Background:'#e40c88',BorderColor:'#e40c88'}),
         new Css.Rule('.LayersPanel-Footer',{AlignItems:'center',Background:'#24282c',BorderTop:'1px solid #111417',Display:'flex',Gap:'5px',JustifyContent:'flex-end',Padding:'6px'}),
         new Css.Rule('.LayersPanel-Action',{Appearance:'none',Background:'linear-gradient(180deg,#40464b,#2d3236)',Border:'1px solid #15181a',BorderRadius:'3px',Color:'#cbd1d5',Cursor:'pointer',Font:'700 9px/1 system-ui',Height:'25px',MinWidth:'28px'}),
         new Css.Rule('arianna-layers[theme="light"],arianna-layers-panel[theme="light"],.LayersPanel[theme="light"]',{Background:'#f1f3f4',BorderColor:'#b9bec3',Color:'#30363b'}),
@@ -215,12 +216,13 @@ export namespace LayersPanel
             for(const layer of flat)
             {
                 const row=document.createElement('div');row.className='LayersPanel-Row';row.style.setProperty('--depth',String(layer.depth));row.dataset.selected=String(layer.id===state.selected);row.onclick=()=>this.selectLayer(layer.id);
-                const eye=document.createElement('button');eye.type='button';eye.className='LayersPanel-Eye';eye.textContent=layer.visible===false?'○':'◉';eye.onclick=event=>{event.stopPropagation();this.toggleVisibility(layer.id);};
+                const eye=document.createElement('button');eye.type='button';eye.className='LayersPanel-Eye';eye.title=layer.visible===false?'Show layer':'Hide layer';eye.setAttribute('aria-label',eye.title);eye.setAttribute('aria-pressed',String(layer.visible!==false));
+                eye.innerHTML='<svg viewBox="0 0 20 16" width="15" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8Q10 -3 19 8Q10 19 1 8Z"/><circle cx="10" cy="8" r="2.5"/>'+(layer.visible===false?'<path d="M2 1L18 15"/>':'')+'</svg>';eye.onclick=event=>{event.stopPropagation();this.toggleVisibility(layer.id);};
                 const toggle=document.createElement('button');toggle.type='button';toggle.className='LayersPanel-Toggle';toggle.textContent=layer.children?.length?(layer.expanded===false?'›':'⌄'):'';toggle.onclick=event=>{event.stopPropagation();this.toggleExpand(layer.id);};
                 const color=document.createElement('span');color.className='LayersPanel-Color';color.style.setProperty('--layer-color',layer.color||'#e40c88');
                 const name=document.createElement('span');name.className='LayersPanel-Name';name.textContent=layer.name;name.ondblclick=event=>{event.stopPropagation();const next=prompt('Layer name',layer.name);if(next)this.setName(layer.id,next);};
                 const lock=document.createElement('button');lock.type='button';lock.className='LayersPanel-Lock';lock.textContent=layer.locked?'🔒':'·';lock.onclick=event=>{event.stopPropagation();this.toggleLock(layer.id);};
-                const target=document.createElement('span');target.className='LayersPanel-Target';row.append(eye,toggle,color,name,lock,target);list.appendChild(row);
+                const target=document.createElement('button');target.type='button';target.className='LayersPanel-Target';target.title='Select '+layer.name;target.setAttribute('aria-label',target.title);target.setAttribute('aria-pressed',String(layer.id===state.selected));target.onclick=event=>{event.stopPropagation();this.selectLayer(layer.id);};row.append(eye,toggle,color,name,lock,target);list.appendChild(row);
             }
             const foot=document.createElement('footer');foot.className='LayersPanel-Footer';
             const action=(label:string,fn:()=>void)=>{const button=document.createElement('button');button.type='button';button.className='LayersPanel-Action';button.textContent=label;button.onclick=fn;foot.appendChild(button);};

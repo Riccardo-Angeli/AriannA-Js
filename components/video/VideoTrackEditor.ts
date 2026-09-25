@@ -3,6 +3,39 @@
  * @version 2.0.0
  * @description AriannA nonlinear video editor with DaVinci-style tracks, clip drag/trim, transport and preview.
  */
+
+/** Two independent scale controls. Native viewport scrollbars remain responsible for panning. */
+function syncTimelineScales(host: HTMLElement, xAttribute: string, x: number, yAttribute: string, y: number, nested = false): void {
+    let controls = host.querySelector<HTMLElement>(':scope > .Timeline-ScaleControls');
+    if(nested) { controls?.remove(); host.style.paddingBottom = ''; host.style.paddingRight = ''; return; }
+    host.style.position = 'relative';
+    host.style.paddingBottom = '30px'; host.style.paddingRight = '30px';
+    if(!controls) {
+        controls = document.createElement('div'); controls.className = 'Timeline-ScaleControls';
+        controls.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:25';
+        const make = (axis: string, attribute: string, min: number, max: number) => {
+            const input = document.createElement('input'); input.type = 'range';
+            input.dataset.axis = axis; input.min = String(min); input.max = String(max); input.step = '1';
+            input.setAttribute('aria-label', axis === 'x' ? 'Horizontal timeline scale' : 'Vertical track height');
+            input.title = axis === 'x' ? 'Horizontal zoom' : 'Track height';
+            input.style.cssText = 'position:absolute;pointer-events:auto;accent-color:#e40c88;margin:0;cursor:pointer;touch-action:none;';
+            input.style.cssText += axis === 'x' ? 'right:34px;bottom:4px;width:112px;height:22px' : 'right:4px;bottom:34px;width:22px;height:80px;max-height:calc(100% - 38px);writing-mode:vertical-lr;direction:rtl';
+            if(axis === 'y') input.setAttribute('aria-orientation','vertical');
+            input.addEventListener('pointerdown', event => event.stopPropagation());
+            input.addEventListener('keydown', event => event.stopPropagation());
+            input.addEventListener('input', () => host.setAttribute(attribute,input.value));
+            controls!.appendChild(input);
+        };
+        make('x',xAttribute, xAttribute === 'beat-px' ? 8 : 10, xAttribute === 'beat-px' ? 160 : 240);
+        make('y',yAttribute,48,240);
+        host.appendChild(controls);
+    }
+    for(const [axis,value] of [['x',x],['y',y]] as const) {
+        const input=controls.querySelector<HTMLInputElement>(`[data-axis="${axis}"]`)!;
+        input.min=String(Math.min(Number(input.min),value)); input.max=String(Math.max(Number(input.max),value));
+        input.value=String(value); input.setAttribute('aria-valuetext',`${Math.round(value)} pixels`);
+    }
+}
 import { Component, Css, Templates, Real } from '../../core/index.ts';
 import './VideoPart.ts';
 import './VideoTrack.ts';
@@ -30,6 +63,7 @@ export interface VideoTrackEditorOptions {
     duration?: number;
     tracks?: number;
     pixelsPerSecond?: number;
+    trackHeight?: number;
     snap?: number;
     snapMs?: number;
     framerate?: number;
@@ -91,6 +125,7 @@ function applyOptions(element: HTMLElement, options: VideoTrackEditorOptions = {
     if(options.theme) element.setAttribute('theme', options.theme);
     if(options.duration != null) element.setAttribute('duration', String(options.duration));
     if(options.tracks != null) element.setAttribute('tracks', String(options.tracks));
+    if(options.trackHeight != null) element.setAttribute('track-height',String(options.trackHeight));
     if(options.pixelsPerSecond != null) element.setAttribute('pixels-per-second', String(options.pixelsPerSecond));
     if(options.snap != null) element.setAttribute('snap', String(options.snap));
     if(options.snapMs != null) element.setAttribute('snap-ms', String(options.snapMs));
@@ -145,7 +180,7 @@ export const VideoTrackEditorStyles = new Css.Stylesheet([
 
 @Component('arianna-video-track-editor', VideoTrackEditorStyles, {
     Shadow: false,
-    Attributes: ['theme','duration','time','tracks','pixels-per-second','snap','snap-ms','framerate','title','source','magnetic-snap']
+    Attributes: ['theme','duration','time','tracks','pixels-per-second','snap','snap-ms','framerate','title','source','magnetic-snap','track-height']
 })
 class VideoTrackEditorElement extends HTMLElement {
     public static readonly Styles = VideoTrackEditorStyles;
@@ -174,7 +209,8 @@ class VideoTrackEditorElement extends HTMLElement {
 
     public onAttributeChanged(name: string): void {
         if(!this.isConnected) return;
-        if(['duration','tracks','pixels-per-second','framerate','theme'].includes(name)) this.renderTimeline();
+        if(['duration','tracks','framerate','theme'].includes(name)) this.renderTimeline();
+        if(name === 'pixels-per-second' || name === 'track-height') this.syncScale();
         if(name === 'time') this.playhead = numberValue(this.getAttribute('time'), this.playhead);
         this.syncPlayhead(false);
     }
@@ -359,6 +395,7 @@ class VideoTrackEditorElement extends HTMLElement {
         const tracks = document.createElement('div'); tracks.className = 'VideoTrackEditor-Tracks';
         for(let index = 0; index < this.trackCount; index++) {
             const track = document.createElement('arianna-video-track') as VideoTrack;
+            track.setAttribute('height',String(this.trackHeight));
             track.setAttribute('index', String(index));
             track.setAttribute('name', `V${index + 1} · ${index === 0 ? 'Main' : index === 1 ? 'B-Roll' : 'Overlay'}`);
             track.setAttribute('theme', this.getAttribute('theme') === 'light' ? 'light' : 'dark');
@@ -393,6 +430,7 @@ class VideoTrackEditorElement extends HTMLElement {
 
         const playhead = document.createElement('div'); playhead.className = 'VideoTrackEditor-Playhead'; playhead.dataset.role = 'playhead'; state.playheadNode = playhead;
         content.replaceChildren(ruler, tracks, playhead);
+        this.syncScale();
         this.syncPlayhead(false);
         this.syncInspector();
         this.syncPreview(false);
@@ -455,6 +493,27 @@ class VideoTrackEditorElement extends HTMLElement {
             if(event.key === 'ArrowRight') { event.preventDefault(); event.shiftKey ? this.nextEdit() : this.nextFrame(); }
         });
         if(!this.hasAttribute('tabindex')) this.tabIndex = 0;
+    }
+
+    public get trackHeight(): number { return clamp(numberValue(this.getAttribute('track-height'),82) || 82,48,240); }
+    public set trackHeight(value: number) { this.setAttribute('track-height',String(value)); }
+    private syncScale(): void {
+        const state=stateFor(this); if(!state.content || !state.timeline) return;
+        syncTimelineScales(this,'pixels-per-second',this.pixelsPerSecond,'track-height',this.trackHeight);
+        state.timeline.style.height='300px'; state.timeline.style.minHeight='0'; state.timeline.style.overflow='auto';
+        state.timeline.style.scrollbarGutter='stable';
+        state.content.style.width=`${Math.max(720,HeaderWidth+this.duration*this.pixelsPerSecond)}px`;
+        const lane=state.content.querySelector<HTMLElement>('.VideoTrackEditor-RulerLane');
+        if(lane) {
+            lane.style.width=`${this.duration*this.pixelsPerSecond}px`;
+            const step=this.duration<=20?1:this.duration<=60?2:5;
+            Array.from(lane.children).forEach((tick,index)=>(tick as HTMLElement).style.left=`${index*step*this.pixelsPerSecond}px`);
+        }
+        for(const track of this.tracks) {
+            if(track.getAttribute('height')!==String(this.trackHeight)) track.setAttribute('height',String(this.trackHeight));
+            if(track.getAttribute('pixels-per-second')!==String(this.pixelsPerSecond)) track.setAttribute('pixels-per-second',String(this.pixelsPerSecond));
+        }
+        this.syncPlayhead(false);
     }
 
     private syncModelFromDOM(emit = true): void {

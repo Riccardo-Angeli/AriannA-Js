@@ -1,5 +1,5 @@
 /** @module components/graphics/2D/Canvas2D */
-import { Component, Css, Templates } from '../../../core/index.ts';
+import { Component, Css, Templates, Real } from '../../../core/index.ts';
 
 const html = Templates.Template.Html;
 const CanvasTemplate = html``;
@@ -119,6 +119,7 @@ export namespace Canvas2D
             Color:'var(--arianna-text-muted,#8f979f)',Display:'flex',
             FontSize:'8px',Gap:'12px',Padding:'0 8px'
         }),
+        new Css.Rule('.Canvas2D-Status .Canvas2D-Button',{Height:'20px'}),
         new Css.Rule('.Canvas2D[theme="light"]',{
             Background:'#eef0f2',BorderColor:'#b9bec3',Color:'#25292d'
         }),
@@ -238,6 +239,48 @@ export namespace Canvas2D
             this.EnsureState();
             if(!this._world) this.Build();
             return this._world!;
+        }
+
+        /** Canvas owns the drawing surface. Behaviours receive independent child layers. */
+        public get drawingSurface():SVGSVGElement
+        {
+            const world=this.world;
+            let svg=world.querySelector<SVGSVGElement>(':scope > svg[data-canvas-surface]');
+            if(!svg) {
+                svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+                svg.setAttribute('data-canvas-surface','');
+                svg.setAttribute('viewBox','0 0 520 300');
+                svg.setAttribute('preserveAspectRatio','none');
+                svg.style.cssText='position:absolute;inset:0;width:100%;height:100%;overflow:visible;touch-action:none';
+                world.appendChild(svg);
+            }
+            return svg;
+        }
+
+        /** Shared pointer surface used by mode-aware selection behaviours. */
+        public get selectionSurface():SVGSVGElement{return this.drawingSurface;}
+
+        public createDrawingLayer():SVGGElement
+        {
+            const layer=document.createElementNS('http://www.w3.org/2000/svg','g');
+            this.drawingSurface.appendChild(layer);
+            return layer;
+        }
+
+        public removeDrawingLayer(layer:SVGGElement):void
+        {
+            if(layer.parentNode===this.drawingSurface) layer.remove();
+        }
+
+        /** Add content to the world, attaching canvas behaviours through their public contract. */
+        public add(...items:Parameters<Real['add']>):this {
+            const world=this.world;
+            Component.RealFacet(world).add(...items);
+            for(const child of Array.from(world.children)) {
+                const behaviour=child as HTMLElement & {attach?:(canvas:Canvas2D)=>unknown};
+                if(typeof behaviour.attach==='function')behaviour.attach(this);
+            }
+            return this;
         }
 
         public get viewport():Interfaces.ViewportState
@@ -440,6 +483,8 @@ export namespace Canvas2D
 
             const status=document.createElement('footer');
             status.className='Canvas2D-Status';this._status=status;
+            const statusText=document.createElement('span');statusText.className='Canvas2D-StatusText';
+            status.appendChild(statusText);
 
             shell.append(toolbar,stage,status);
             this.replaceChildren(shell);
@@ -519,7 +564,9 @@ export namespace Canvas2D
         {
             this.EnsureState();
             if(!this._status)return;
-            this._status.textContent=
+            const statusText=this._status.querySelector('.Canvas2D-StatusText');
+            if(!statusText)return;
+            statusText.textContent=
                 `X ${Math.round(this._pan.x)}  Y ${Math.round(this._pan.y)} · `+
                 `Grid ${this._grid.enabled?`${this._grid.size}px / ${this._grid.subdivisions}`:'off'} · `+
                 `Snap ${this._snap.enabled?'on':'off'}`;

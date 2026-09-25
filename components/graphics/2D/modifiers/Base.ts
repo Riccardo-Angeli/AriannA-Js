@@ -140,21 +140,33 @@ export namespace Modifier2D
 
     const ParameterWindowStyles = () => new Css.Stylesheet([
         new Css.Rule('.ModifierParametersWindow', {
-            Height:'auto', MinHeight:'0', Width:'258px', MinWidth:'238px',
+            Height:'auto', MinHeight:'120px', Width:'258px', MinWidth:'238px',
+            Background:'#202226', Color:'#e5e8ed', Border:'1px solid #44474e', BoxShadow:'0 12px 32px #0006',
             BorderRadius:'8px', Overflow:'hidden', ZIndex:'35',
         }),
-        new Css.Rule('.ModifierParametersWindow .WindowComponent-Titlebar', {
-            Height:'32px', MinHeight:'32px', Padding:'0 8px',
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows .WindowComponent-Titlebar', {
+            Height:'32px', MinHeight:'32px', Padding:'0 8px', Background:'#2a2d32', Color:'#e5e8ed', BorderBottom:'1px solid #44474e',
         }),
-        new Css.Rule('.ModifierParametersWindow .WindowComponent-Title', {
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows .WindowComponent-Title', {
             FontSize:'10px', FontWeight:'800', LetterSpacing:'.01em',
         }),
-        new Css.Rule('.ModifierParametersWindow .WindowComponent-Traffic, .ModifierParametersWindow .WindowComponent-Chrome', {
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows .WindowComponent-Traffic, .ModifierParametersWindow.WindowComponent.Windows .WindowComponent-Chrome-Btn-Maximize, .ModifierParametersWindow.WindowComponent.Windows .WindowComponent-Chrome-Btn-Close', {
             Display:'none',
         }),
-        new Css.Rule('.ModifierParametersWindow .WindowComponent-Body', {
-            Padding:'8px', Overflow:'visible',
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows .WindowComponent-Body', {
+            Padding:'8px', Overflow:'auto', MinHeight:'0', Flex:'1 1 auto', Background:'#202226',
         }),
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows .WindowComponent-Chrome', {
+            Display:'flex', Gap:'0', Background:'transparent',
+        }),
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows .WindowComponent-Chrome-Btn-Minimize', {
+            Background:'transparent',Color:'inherit',Border:'1px solid #555961',BorderRadius:'4px',Width:'24px',Height:'22px',Padding:'0',FontSize:'12px',
+        }),
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows', {Background:'#202226',Color:'#e5e8ed',Border:'1px solid #44474e',BorderRadius:'8px'}),
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows .WindowComponent-Titlebar', {Background:'#2a2d32',Color:'#e5e8ed',BorderBottom:'1px solid #44474e'}),
+        new Css.Rule('.ModifierParametersWindow.WindowComponent[minimized]', {MinWidth:'170px',MinHeight:'36px'}),
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows[data-theme="light"]', {Background:'#f1f2f4',Color:'#30343a',BorderColor:'#bfc3c9'}),
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows[data-theme="light"] .WindowComponent-Titlebar', {Background:'#e5e7eb',Color:'#30343a',BorderBottomColor:'#bfc3c9'}),
         new Css.Rule('.ModifierParametersWindow-Form', {
             Display:'grid', Gap:'6px',
         }),
@@ -184,10 +196,10 @@ export namespace Modifier2D
         new Css.Rule('.ModifierParametersWindow[data-theme="light"]', {
             Background:'#f0f2f4', BorderColor:'#b9bec3', Color:'#25292d',
         }),
-        new Css.Rule('.ModifierParametersWindow[data-theme="light"] .WindowComponent-Titlebar', {
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows[data-theme="light"] .WindowComponent-Titlebar', {
             Background:'linear-gradient(180deg,#fff,#e1e4e7)', BorderBottom:'1px solid #b9bec3', Color:'#25292d',
         }),
-        new Css.Rule('.ModifierParametersWindow[data-theme="light"] .WindowComponent-Body', {
+        new Css.Rule('.ModifierParametersWindow.WindowComponent.Windows[data-theme="light"] .WindowComponent-Body', {
             Background:'#f4f5f6', Color:'#25292d',
         }),
         new Css.Rule('.ModifierParametersWindow[data-theme="light"] .ModifierParametersWindow-Label', {
@@ -212,22 +224,33 @@ export namespace Modifier2D
      * The Window is deliberately lazy so AriannA's in-place custom-element upgrade
      * does not depend on constructor / field initialisers having executed.
      */
-    export function CreateParameters<T extends Record<string, unknown>>(
-        owner: Modifier2D,
-        title: string,
-        definitions: Parameters.Definition[]
-    ): T & Parameters.Bag
+    const StyledWindows=new WeakSet<HTMLElement>();
+    /** Reuse the modifier skin for independent 2D inspector windows. */
+    export function StyleWindow(window:Parameters.ParameterWindow,theme:'dark'|'light'='dark'):Parameters.ParameterWindow
     {
-        const existing = ParameterBags.get(owner);
-        if(existing)
-            return existing as T & Parameters.Bag;
-
-        const window = new WindowComponent.WindowComponent() as Parameters.ParameterWindow;
+        window.dataset.theme=theme;
+        if(StyledWindows.has(window))return window;
+        StyledWindows.add(window);
         window.classList.add('ModifierParametersWindow');
         window.setAttribute('variant', 'windows');
-        window.setAttribute('title', `${title} Parameters`);
-        window.setAttribute('resizable', 'false');
-        window.dataset.theme = 'dark';
+        window.setAttribute('resizable', 'true');
+        window.setAttribute('min-width','238');
+        window.setAttribute('min-height','120');
+        window.dataset.theme = theme;
+        window.addEventListener('click', event => {
+            const target=event.target as Element|null;
+            const button=target?.closest<HTMLButtonElement>('.WindowComponent-Chrome-Btn-Minimize');
+            if(!button)return;
+            event.preventDefault();event.stopImmediatePropagation();
+            if(window.hasAttribute('minimized')) {
+                window.restore();window.setAttribute('resizable','true');
+                button.textContent='─';button.title='Minimize';button.setAttribute('aria-label','Minimize');
+            } else {
+                window.minimize();window.setAttribute('resizable','false');
+                button.textContent='▣';button.title='Restore';button.setAttribute('aria-label','Restore');
+            }
+        },true);
+
         let windowStyle = ParameterWindowStyles();
         Object.defineProperty(window, 'Style', {
             enumerable: true,
@@ -239,6 +262,23 @@ export namespace Modifier2D
                 windowStyle = value;
             },
         });
+
+        return window;
+    }
+
+    export function CreateParameters<T extends Record<string, unknown>>(
+        owner: Modifier2D,
+        title: string,
+        definitions: Parameters.Definition[]
+    ): T & Parameters.Bag
+    {
+        const existing = ParameterBags.get(owner);
+        if(existing)
+            return existing as T & Parameters.Bag;
+
+        const window = new WindowComponent.WindowComponent() as Parameters.ParameterWindow;
+        StyleWindow(window);
+        window.setAttribute('title', `${title} Parameters`);
 
         const form = document.createElement('div');
         form.className = 'ModifierParametersWindow-Form';
@@ -386,6 +426,8 @@ export namespace Modifier2D
     })
     export class Modifier2D extends HTMLElement
     {
+        public static StyleWindow(window:Parameters.ParameterWindow,theme:'dark'|'light'='dark'):Parameters.ParameterWindow { return StyleWindow(window,theme); }
+
         public template = html``;
 
         /**

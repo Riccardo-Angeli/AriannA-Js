@@ -1,6 +1,14 @@
 export * from './Canvas3D.ts';
+export { default as Grid3D } from './Grid3D.ts';
+export type { Grid3DOptions, Grid3DHit } from './Grid3D.ts';
+export { default as Selection3D } from './Selection3D.ts';
+export type { Selection3DMode, Selection3DResult, Selection3DItem } from './Selection3D.ts';
+export { default as Tools3D } from './Tools3D.ts';
+export type { Tools3DOptions } from './Tools3D.ts';
 export { Csg, CsgComponent } from './Csg.ts';
 export type { CsgOperation, CsgMode, CsgOperand } from './Csg.ts';
 export * from './MaterialsPalette.ts';
+export { MaterialsPalette as Materials } from './MaterialsPalette.ts';
 export * from './Modifiers3DPalette.ts';
+export { Modifiers3DPalette as Modifiers3D } from './Modifiers3DPalette.ts';
 export * from './modifiers/index.ts';

@@ -2,6 +2,39 @@
  * @module components/audio/AudioTrackEditor
  * @version 2.0.0
  */
+
+/** Two independent scale controls. Native viewport scrollbars remain responsible for panning. */
+function syncTimelineScales(host: HTMLElement, xAttribute: string, x: number, yAttribute: string, y: number, nested = false): void {
+    let controls = host.querySelector<HTMLElement>(':scope > .Timeline-ScaleControls');
+    if(nested) { controls?.remove(); host.style.paddingBottom = ''; host.style.paddingRight = ''; return; }
+    host.style.position = 'relative';
+    host.style.paddingBottom = '30px'; host.style.paddingRight = '30px';
+    if(!controls) {
+        controls = document.createElement('div'); controls.className = 'Timeline-ScaleControls';
+        controls.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:25';
+        const make = (axis: string, attribute: string, min: number, max: number) => {
+            const input = document.createElement('input'); input.type = 'range';
+            input.dataset.axis = axis; input.min = String(min); input.max = String(max); input.step = '1';
+            input.setAttribute('aria-label', axis === 'x' ? 'Horizontal timeline scale' : 'Vertical track height');
+            input.title = axis === 'x' ? 'Horizontal zoom' : 'Track height';
+            input.style.cssText = 'position:absolute;pointer-events:auto;accent-color:#e40c88;margin:0;cursor:pointer;touch-action:none;';
+            input.style.cssText += axis === 'x' ? 'right:34px;bottom:4px;width:112px;height:22px' : 'right:4px;bottom:34px;width:22px;height:80px;max-height:calc(100% - 38px);writing-mode:vertical-lr;direction:rtl';
+            if(axis === 'y') input.setAttribute('aria-orientation','vertical');
+            input.addEventListener('pointerdown', event => event.stopPropagation());
+            input.addEventListener('keydown', event => event.stopPropagation());
+            input.addEventListener('input', () => host.setAttribute(attribute,input.value));
+            controls!.appendChild(input);
+        };
+        make('x',xAttribute, xAttribute === 'beat-px' ? 8 : 10, xAttribute === 'beat-px' ? 160 : 240);
+        make('y',yAttribute,48,240);
+        host.appendChild(controls);
+    }
+    for(const [axis,value] of [['x',x],['y',y]] as const) {
+        const input=controls.querySelector<HTMLInputElement>(`[data-axis="${axis}"]`)!;
+        input.min=String(Math.min(Number(input.min),value)); input.max=String(Math.max(Number(input.max),value));
+        input.value=String(value); input.setAttribute('aria-valuetext',`${Math.round(value)} pixels`);
+    }
+}
 import { Component, Css, Templates } from '../../core/index.ts';
 
 const html = Templates.Template.Html;
@@ -127,6 +160,7 @@ export namespace AudioTrackEditor
             color?: string;
             theme?: Types.Theme;
             beatPx?: number;
+            trackHeight?: number;
             snap?: number;
         }
 
@@ -136,6 +170,7 @@ export namespace AudioTrackEditor
             bars?: number;
             beatsPerBar?: number;
             beatPx?: number;
+            trackHeight?: number;
             bpm?: number;
             theme?: Types.Theme;
         }
@@ -425,7 +460,7 @@ export namespace AudioTrackEditor
                 const editor = this.closest('arianna-audio-track-editor, .AudioTrackEditor') as HTMLElement | null;
                 const totalBeats = editor
                     ? (Number(editor.getAttribute('bars') ?? 16) || 16) * (Number(editor.getAttribute('beats-per-bar') ?? 4) || 4)
-                    : Math.max(drag.length, laneRect.width / beatPx);
+                    : Math.max(drag.length, Math.max(laneRect.width,lane.scrollWidth) / beatPx);
                 const maxStart = Math.max(0, totalBeats - drag.length);
 
                 previewStart = Math.max(0, Math.min(maxStart, this.Snap(raw)));
@@ -479,7 +514,7 @@ export namespace AudioTrackEditor
                         // works reliably in Safari/WebKit as well as Chromium/Firefox.
                         const lane = this.closest('.AudioTrack-Lane') as HTMLElement | null;
                         const laneRect = lane?.getBoundingClientRect();
-                        const totalBeats = laneRect ? Math.max(drag.length, laneRect.width / beatPx) : Number.POSITIVE_INFINITY;
+                        const totalBeats = laneRect ? Math.max(drag.length, Math.max(laneRect.width,lane?.scrollWidth??0) / beatPx) : Number.POSITIVE_INFINITY;
                         const maxStart = Number.isFinite(totalBeats) ? Math.max(0, totalBeats - drag.length) : Number.POSITIVE_INFINITY;
                         this.start = Math.max(0, Math.min(maxStart, this.Snap(drag.start + delta)));
                         this.Emit('arianna:audio-part-change', { mode: 'move' });
@@ -679,7 +714,7 @@ export namespace AudioTrackEditor
 
     @Component('arianna-audio-track', AudioTrackStyles, {
         Shadow: false,
-        Attributes: ['name', 'muted', 'soloed', 'color', 'theme', 'beat-px', 'snap']
+        Attributes: ['name', 'muted', 'soloed', 'color', 'theme', 'beat-px', 'snap', 'track-height']
     })
     export class AudioTrack extends HTMLElement
     {
@@ -701,6 +736,7 @@ export namespace AudioTrackEditor
             if(options.color) this.setAttribute('color', options.color);
             if(options.theme) this.setAttribute('theme', options.theme);
             if(options.beatPx != null) this.setAttribute('beat-px', String(options.beatPx));
+            if(options.trackHeight != null) this.setAttribute('track-height', String(options.trackHeight));
             if(options.snap != null) this.setAttribute('snap', String(options.snap));
         }
 
@@ -717,6 +753,7 @@ export namespace AudioTrackEditor
             this.Render();
             this.BindControls();
             this.Sync();
+            this.SyncScale();
         }
 
         public onAttributeChanged(name: string): void
@@ -732,8 +769,10 @@ export namespace AudioTrackEditor
             {
                 this.style.setProperty('--AudioTrack-Color', this.getAttribute('color') || '#df756d');
             }
+            else if(name === 'track-height') this.SyncScale();
             else if(name === 'beat-px')
             {
+                this.SyncScale();
                 this.ApplyGrid();
                 this.querySelectorAll<HTMLElement>(':scope > .AudioTrack-Lane > arianna-audio-part, :scope > .AudioTrack-Lane > .AudioPart')
                     .forEach(part => (part as AudioPart).onConnected?.());
@@ -809,6 +848,19 @@ export namespace AudioTrackEditor
         public setMeter(level: number): void
         {
             if(this.MeterFill) this.MeterFill.style.width = `${Math.max(0, Math.min(1, level)) * 100}%`;
+        }
+
+        public get trackHeight(): number { return Math.max(48,Math.min(240,Number(this.getAttribute('track-height')) || 64)); }
+        public set trackHeight(value: number) { this.setAttribute('track-height',String(value)); }
+        private SyncScale(): void {
+            const nested=!!this.closest('arianna-audio-track-editor');
+            syncTimelineScales(this,'beat-px',this.beatPx,'track-height',this.trackHeight,nested);
+            this.style.minWidth='0';
+            if(this.Lane) {
+                this.Lane.style.height=`${this.trackHeight}px`; this.Lane.style.minHeight='0';
+                this.Lane.style.overflow=nested?'hidden':'auto';
+                this.Lane.style.scrollbarGutter='stable';
+            }
         }
 
         private ApplyGrid(): void
@@ -927,7 +979,7 @@ export namespace AudioTrackEditor
 
     @Component('arianna-audio-track-editor', AudioTrackEditorStyles, {
         Shadow: false,
-        Attributes: ['tracks', 'bars', 'beats-per-bar', 'beat-px', 'bpm', 'snap', 'theme']
+        Attributes: ['tracks', 'bars', 'beats-per-bar', 'beat-px', 'bpm', 'snap', 'theme', 'track-height']
     })
     export class AudioTrackEditor extends HTMLElement
     {
@@ -963,6 +1015,7 @@ export namespace AudioTrackEditor
             if(options.bars != null) this.setAttribute('bars', String(options.bars));
             if(options.beatsPerBar != null) this.setAttribute('beats-per-bar', String(options.beatsPerBar));
             if(options.beatPx != null) this.setAttribute('beat-px', String(options.beatPx));
+            if(options.trackHeight != null) this.setAttribute('track-height', String(options.trackHeight));
             if(options.bpm != null) this.setAttribute('bpm', String(options.bpm));
             if(options.theme) this.setAttribute('theme', options.theme);
         }
@@ -989,6 +1042,7 @@ export namespace AudioTrackEditor
             this.Bpm = Math.max(20, Math.min(400, Number(this.getAttribute('bpm') ?? 120) || 120));
             this.style.setProperty('--AudioTrackEditor-BeatPx', `${this.BeatPx}px`);
             this.Render();
+            this.SyncScale();
             this.ApplyTheme();
             this.SyncMix();
         }
@@ -1010,13 +1064,36 @@ export namespace AudioTrackEditor
                     track.setAttribute('beat-px', String(this.BeatPx));
                     track.querySelectorAll<AudioPart>('arianna-audio-part, .AudioPart').forEach(part => part.onConnected?.());
                 }
+                this.SyncScale();
                 this.setPlayhead(this.PlayheadValue ?? 0);
             }
+            else if(name === 'track-height') this.SyncScale();
             else if(name === 'snap')
             {
                 const snap = this.getAttribute('snap') || '.25';
                 for(const track of this.tracks) track.setAttribute('snap', snap);
             }
+        }
+
+        public get trackHeight(): number { return Math.max(48,Math.min(240,Number(this.getAttribute('track-height')) || 64)); }
+        public set trackHeight(value: number) { this.setAttribute('track-height',String(value)); }
+        private SyncScale(): void {
+            if(!this.Body) return;
+            const px=this.BeatPx??28, total=(this.Bars??16)*(this.BeatsPerBar??4)*px;
+            syncTimelineScales(this,'beat-px',px,'track-height',this.trackHeight);
+            this.Body.style.height='300px'; this.Body.style.minHeight='0'; this.Body.style.overflow='auto';
+            this.Body.style.scrollbarGutter='stable';
+            for(const track of this.tracks) {
+                if(track.getAttribute('track-height')!==String(this.trackHeight)) track.setAttribute('track-height',String(this.trackHeight));
+                track.style.flex='0 0 auto'; track.style.width=`${150+total}px`; track.style.minWidth='100%';
+            }
+            const ruler=this.querySelector<HTMLElement>('.AudioTrackEditor-RulerLane');
+            if(ruler) {
+                ruler.style.width=`${total}px`; ruler.style.transform=`translateX(${-this.Body.scrollLeft}px)`;
+                Array.from(ruler.children).forEach((tick,index)=>(tick as HTMLElement).style.left=`${index*(this.BeatsPerBar??4)*px}px`);
+            }
+            const rulerHost=this.querySelector<HTMLElement>('.AudioTrackEditor-Ruler');
+            if(rulerHost) rulerHost.style.overflow='hidden';
         }
 
         public setPlayhead(beats: number): this
@@ -1252,6 +1329,7 @@ export namespace AudioTrackEditor
 
             this.Body = document.createElement('div');
             this.Body.className = 'AudioTrackEditor-Body';
+            this.Body.addEventListener('scroll',()=>{const ruler=this.querySelector<HTMLElement>('.AudioTrackEditor-RulerLane');if(ruler)ruler.style.transform=`translateX(${-this.Body!.scrollLeft}px)`;});
             existing.forEach(track => this.Body?.append(track));
 
             this.Playhead = document.createElement('div');
@@ -1395,7 +1473,7 @@ export namespace AudioTrackEditor
         private Zoom(delta: number): void
         {
             this.EnsureState();
-            this.BeatPx = Math.max(12, Math.min(72, (this.BeatPx ?? 28) + delta));
+            this.BeatPx = Math.max(8, Math.min(160, (this.BeatPx ?? 28) + delta));
             this.setAttribute('beat-px', String(this.BeatPx));
             this.style.setProperty('--AudioTrackEditor-BeatPx', `${this.BeatPx}px`);
             for(const part of this.querySelectorAll<AudioPart>('arianna-audio-part, .AudioPart')) part.onConnected?.();
@@ -1405,6 +1483,7 @@ export namespace AudioTrackEditor
                 ruler.style.width = `${(this.Bars ?? 16) * (this.BeatsPerBar ?? 4) * this.BeatPx}px`;
                 Array.from(ruler.children).forEach((tick, index) => (tick as HTMLElement).style.left = `${index * (this.BeatsPerBar ?? 4) * this.BeatPx!}px`);
             }
+            this.SyncScale();
             this.setPlayhead(this.PlayheadValue ?? 0);
         }
 

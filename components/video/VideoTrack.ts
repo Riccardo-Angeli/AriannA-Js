@@ -1,10 +1,43 @@
 /**
  * @module components/video/VideoTrack
  * @version 2.0.0
- * @description DaVinci-style standalone video track for AriannA 2.0.
+ * @description DaVinci-style video track. Owns VideoPart children exactly as AudioTrack owns AudioPart children.
  */
-import { Component, Css, Templates, Real } from '../../core/index.ts';
-import { applyVideoPartOptions, EnsureVideoPartVisual } from './VideoPart.ts';
+
+/** Two independent scale controls. Native viewport scrollbars remain responsible for panning. */
+function syncTimelineScales(host: HTMLElement, xAttribute: string, x: number, yAttribute: string, y: number, nested = false): void {
+    let controls = host.querySelector<HTMLElement>(':scope > .Timeline-ScaleControls');
+    if(nested) { controls?.remove(); host.style.paddingBottom = ''; host.style.paddingRight = ''; return; }
+    host.style.position = 'relative';
+    host.style.paddingBottom = '30px'; host.style.paddingRight = '30px';
+    if(!controls) {
+        controls = document.createElement('div'); controls.className = 'Timeline-ScaleControls';
+        controls.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:25';
+        const make = (axis: string, attribute: string, min: number, max: number) => {
+            const input = document.createElement('input'); input.type = 'range';
+            input.dataset.axis = axis; input.min = String(min); input.max = String(max); input.step = '1';
+            input.setAttribute('aria-label', axis === 'x' ? 'Horizontal timeline scale' : 'Vertical track height');
+            input.title = axis === 'x' ? 'Horizontal zoom' : 'Track height';
+            input.style.cssText = 'position:absolute;pointer-events:auto;accent-color:#e40c88;margin:0;cursor:pointer;touch-action:none;';
+            input.style.cssText += axis === 'x' ? 'right:34px;bottom:4px;width:112px;height:22px' : 'right:4px;bottom:34px;width:22px;height:80px;max-height:calc(100% - 38px);writing-mode:vertical-lr;direction:rtl';
+            if(axis === 'y') input.setAttribute('aria-orientation','vertical');
+            input.addEventListener('pointerdown', event => event.stopPropagation());
+            input.addEventListener('keydown', event => event.stopPropagation());
+            input.addEventListener('input', () => host.setAttribute(attribute,input.value));
+            controls!.appendChild(input);
+        };
+        make('x',xAttribute, xAttribute === 'beat-px' ? 8 : 10, xAttribute === 'beat-px' ? 160 : 240);
+        make('y',yAttribute,48,240);
+        host.appendChild(controls);
+    }
+    for(const [axis,value] of [['x',x],['y',y]] as const) {
+        const input=controls.querySelector<HTMLInputElement>(`[data-axis="${axis}"]`)!;
+        input.min=String(Math.min(Number(input.min),value)); input.max=String(Math.max(Number(input.max),value));
+        input.value=String(value); input.setAttribute('aria-valuetext',`${Math.round(value)} pixels`);
+    }
+}
+import { Component, Css, Templates } from '../../core/index.ts';
+import { VideoPart as VideoPartConstructor, EnsureVideoPartVisual } from './VideoPart.ts';
 import type { VideoPart, VideoPartOptions, VideoPartSnapshot, VideoTheme } from './VideoPart.ts';
 
 export interface VideoTrackOptions {
@@ -18,6 +51,7 @@ export interface VideoTrackOptions {
     pixelsPerSecond?: number;
     snap?: number;
     framerate?: number;
+    parts?: VideoTrackPartInput[];
 }
 
 export interface VideoTrackSnapshot {
@@ -31,15 +65,28 @@ export interface VideoTrackSnapshot {
 }
 
 const html = Templates.Template.Html;
-const Runtime = new WeakMap<HTMLElement, { bound: boolean; observer?: MutationObserver }>();
+const Runtime = new WeakMap<HTMLElement, { bound: boolean; observer?: MutationObserver; observedLane?: HTMLElement }>();
+
+export type VideoTrackPartInput = VideoPart | VideoPartOptions;
+
+function isVideoPartElement(value: unknown): value is VideoPart {
+    return typeof HTMLElement !== 'undefined'
+        && value instanceof HTMLElement
+        && value.localName === 'arianna-video-part';
+}
 
 function numberValue(value: unknown, fallback = 0): number {
+    if(value == null || (typeof value === 'string' && value.trim() === '')) return fallback;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function boolAttribute(element: Element, name: string, value: boolean): void {
     element.toggleAttribute(name, !!value);
+}
+
+function setAttributeIfChanged(element: Element, name: string, value: string): void {
+    if(element.getAttribute(name) !== value) element.setAttribute(name, value);
 }
 
 function applyOptions(element: HTMLElement, options: VideoTrackOptions = {}): void {
@@ -53,6 +100,7 @@ function applyOptions(element: HTMLElement, options: VideoTrackOptions = {}): vo
     if(options.pixelsPerSecond != null) element.setAttribute('pixels-per-second', String(options.pixelsPerSecond));
     if(options.snap != null) element.setAttribute('snap', String(options.snap));
     if(options.framerate != null) element.setAttribute('framerate', String(options.framerate));
+    if(options.parts != null) (element as VideoTrack).parts = options.parts;
 }
 
 export const VideoTrackStyles = new Css.Stylesheet([
@@ -90,19 +138,24 @@ export const VideoTrackStyles = new Css.Stylesheet([
     Shadow: false,
     Attributes: ['index','name','color','theme','locked','hidden-track','height','pixels-per-second','snap','framerate']
 })
-export class VideoTrackElement extends HTMLElement {
+export class VideoTrack extends HTMLElement {
     public static readonly Styles = VideoTrackStyles;
     public template = html``;
 
-    public onCreated(): void { if(this.isConnected) this.onConnected(); }
+    public onCreated(): void { this.initialize(); }
 
     public onConnected(): void {
+        this.initialize();
+    }
+
+    private initialize(): void {
         this.classList.add('VideoTrack');
         if(!this.hasAttribute('theme')) {
             const parentTheme = this.closest('arianna-video-track-editor')?.getAttribute('theme');
             this.setAttribute('theme', parentTheme === 'light' ? 'light' : 'dark');
         }
         this.style.setProperty('--VideoTrack-Color', this.color);
+        this.applyCriticalLayout();
         this.renderTrack();
         this.syncDimensions();
         this.syncChildren();
@@ -142,20 +195,34 @@ export class VideoTrackElement extends HTMLElement {
         return Array.from(lane.querySelectorAll<VideoPart>(':scope > arianna-video-part'));
     }
 
+    public set parts(value: VideoTrackPartInput[]) {
+        const parts = Array.isArray(value) ? [...value] : [];
+        this.clear();
+        parts.forEach(part => this.addPart(part));
+    }
+
     public setOptions(options: VideoTrackOptions): this { applyOptions(this, options); return this; }
 
-    public addPart(partOrOptions: VideoPart | VideoPartOptions = {}): VideoPart {
-        const isElement = typeof HTMLElement !== 'undefined' && partOrOptions instanceof HTMLElement;
-        const part = isElement
-            ? this.ensureVideoPart(partOrOptions as unknown as HTMLElement)
-            : new Real('arianna-video-part').render() as VideoPart;
-        if(!isElement) applyVideoPartOptions(part, partOrOptions as VideoPartOptions);
-        part.setAttribute('theme', this.theme);
-        this.applyTimingToPart(part);
-        const lane = this.querySelector<HTMLElement>('.VideoTrack-Lane');
-        (lane ?? this).appendChild(part);
-        EnsureVideoPartVisual(part as unknown as HTMLElement);
-        queueMicrotask(() => { this.syncChildren(); this.refresh(); });
+    public addPart(partOrOptions: VideoTrackPartInput = {}): VideoPart {
+        /*
+         * Same ownership model as AudioTrack:
+         * VideoTrack owns VideoPart children, VideoTrackEditor owns VideoTrack children.
+         * A part is always mounted into this track's lane and is synchronously promoted
+         * through the canonical VideoPart constructor path before its visual is synced.
+         */
+        const part = isVideoPartElement(partOrOptions)
+            ? partOrOptions
+            : new VideoPartConstructor(partOrOptions as VideoPartOptions);
+
+        const lane = this.ensureLane();
+        lane.appendChild(part);
+        this.mountPart(part, lane);
+
+        queueMicrotask(() => {
+            this.syncChildren();
+            this.refresh();
+        });
+
         this.emit('arianna:video-track-change', { kind: 'add', part });
         return part;
     }
@@ -195,52 +262,123 @@ export class VideoTrackElement extends HTMLElement {
     }
 
     private renderTrack(): void {
-        if(this.querySelector(':scope > .VideoTrack-Header')) return;
-        const existingParts = Array.from(this.querySelectorAll<HTMLElement>(':scope > arianna-video-part'))
-            .map(part => this.ensureVideoPart(part));
+        if(this.querySelector(':scope > .VideoTrack-Header')) {
+            this.syncChildren();
+            return;
+        }
+
+        /*
+         * IMPORTANT:
+         * Capture declarative <arianna-video-part> children BEFORE replacing
+         * the track surface, exactly like AudioTrack captures AudioPart children.
+         * Do not render/promote them until they are inside the final lane: their
+         * timing/theme owner is the VideoTrack, not the temporary parser position.
+         */
+        const existingParts = Array.from(
+            this.querySelectorAll<HTMLElement>(':scope > arianna-video-part')
+        );
+
         const header = document.createElement('div');
         header.className = 'VideoTrack-Header';
+
         const stripe = document.createElement('span');
         stripe.className = 'VideoTrack-Color';
+
         const name = document.createElement('span');
         name.className = 'VideoTrack-Name';
+
         const buttons = document.createElement('span');
         buttons.className = 'VideoTrack-Buttons';
-        buttons.append(this.button('V', 'visible', 'Track visibility'), this.button('L', 'lock', 'Lock track'));
+        buttons.append(
+            this.button('V', 'visible', 'Track visibility'),
+            this.button('L', 'lock', 'Lock track')
+        );
+
         const meta = document.createElement('span');
         meta.className = 'VideoTrack-Meta';
+
         header.append(stripe, name, buttons, meta);
+
         const lane = document.createElement('div');
         lane.className = 'VideoTrack-Lane';
-        existingParts.forEach(part => lane.appendChild(part));
+
         this.replaceChildren(header, lane);
+
+        existingParts.forEach(part => {
+            lane.appendChild(part);
+            this.mountPart(part, lane);
+        });
     }
 
-    private ensureVideoPart(part: HTMLElement): VideoPart {
-        EnsureVideoPartVisual(part);
-        return part as unknown as VideoPart;
+    private ensureLane(): HTMLElement {
+        this.renderTrack();
+        let lane = this.querySelector<HTMLElement>(':scope > .VideoTrack-Lane');
+        if(!lane) {
+            lane = document.createElement('div');
+            lane.className = 'VideoTrack-Lane';
+            this.appendChild(lane);
+        }
+        return lane;
+    }
+
+    private mountPart(raw: HTMLElement, lane = this.ensureLane()): VideoPart {
+        if(raw.parentElement !== lane)
+            lane.appendChild(raw);
+
+        // Existing nodes are promoted in place by AriannA's document observer.
+        // `new Real(raw)` merely creates another facade for the same node, so
+        // doing it on every child synchronization leaks facades and amplifies
+        // lifecycle/attribute work without changing the node's prototype.
+        const part = raw as VideoPart;
+
+        setAttributeIfChanged(part, 'theme', this.theme);
+        this.applyTimingToPart(part);
+        EnsureVideoPartVisual(part as unknown as HTMLElement);
+
+        /*
+         * Match AudioTrack's lifecycle contract. A declarative VideoPart can be
+         * moved into the lane before AriannA's observer promotes its prototype.
+         * This second pass runs after promotion and repairs any frame/handle
+         * markup that was restored during the upgrade.
+         */
+        queueMicrotask(() => {
+            if(part.parentElement !== lane || !part.isConnected) return;
+            part.onConnected?.();
+            EnsureVideoPartVisual(part as unknown as HTMLElement);
+        });
+        return part;
     }
 
     private bindTrack(): void {
         const state = Runtime.get(this) ?? { bound: false };
-        if(state.bound) return;
-        state.bound = true;
         Runtime.set(this, state);
 
-        this.addEventListener('click', event => {
-            const button = (event.target as HTMLElement).closest('.VideoTrack-Button') as HTMLButtonElement | null;
-            if(!button) return;
-            event.stopPropagation();
-            if(button.dataset.action === 'lock') this.locked = !this.locked;
-            if(button.dataset.action === 'visible') this.visible = !this.visible;
-            this.refresh();
-            this.emit('arianna:video-track-change', { kind: button.dataset.action });
-        });
+        if(!state.bound) {
+            state.bound = true;
+            this.addEventListener('click', event => {
+                const button = (event.target as HTMLElement).closest('.VideoTrack-Button') as HTMLButtonElement | null;
+                if(!button) return;
+                event.stopPropagation();
+                if(button.dataset.action === 'lock') this.locked = !this.locked;
+                if(button.dataset.action === 'visible') this.visible = !this.visible;
+                this.refresh();
+                this.emit('arianna:video-track-change', { kind: button.dataset.action });
+            });
+        }
 
-        const lane = this.querySelector<HTMLElement>('.VideoTrack-Lane');
-        if(lane && typeof MutationObserver !== 'undefined') {
+        const lane = this.querySelector<HTMLElement>(':scope > .VideoTrack-Lane');
+        if(lane && lane !== state.observedLane && typeof MutationObserver !== 'undefined') {
             state.observer?.disconnect();
-            state.observer = new MutationObserver(() => { this.syncChildren(); this.refresh(); });
+            state.observedLane = lane;
+            state.observer = new MutationObserver(() => {
+                this.syncChildren();
+                this.refresh();
+            });
+
+            // Watch both the public declarative surface and the internal lane.
+            // Appending <arianna-video-part> directly to a live VideoTrack is
+            // therefore equivalent to track.addPart(part).
+            state.observer.observe(this, { childList: true });
             state.observer.observe(lane, { childList: true });
         }
     }
@@ -270,52 +408,56 @@ export class VideoTrackElement extends HTMLElement {
         this.style.minHeight = `${height}px`;
         this.style.setProperty('--VideoTrack-Pps', `${this.pixelsPerSecond}px`);
         const lane = this.querySelector<HTMLElement>('.VideoTrack-Lane');
-        if(lane) lane.style.minHeight = `${height}px`;
+        if(lane) {
+            lane.style.position = 'relative';
+            lane.style.display = 'block';
+            lane.style.width = '100%';
+            lane.style.minHeight = '0'; lane.style.height = `${height}px`;
+            lane.style.overflow = this.closest('arianna-video-track-editor') ? 'hidden' : 'auto';
+            lane.style.scrollbarGutter = 'stable';
+        }
         this.syncChildren();
+        syncTimelineScales(this,'pixels-per-second',this.pixelsPerSecond,'height',height,!!this.closest('arianna-video-track-editor'));
+    }
+
+    private applyCriticalLayout(): void {
+        this.style.position = 'relative';
+        this.style.display = 'grid';
+        this.style.gridTemplateColumns = '154px minmax(0,1fr)';
+        this.style.width = '100%';
+        this.style.boxSizing = 'border-box';
     }
 
     private syncChildren(): void {
-        this.parts.forEach(part => {
-            part.setAttribute('theme', this.theme);
-            this.applyTimingToPart(part);
-            EnsureVideoPartVisual(part as unknown as HTMLElement);
-        });
+        const lane = this.querySelector<HTMLElement>(':scope > .VideoTrack-Lane');
+        if(!lane) return;
+
+        // Public/declarative additions may arrive after the track has rendered.
+        // Move them into the lane without cloning: VideoPart remains the unit.
+        const directParts = Array.from(
+            this.querySelectorAll<HTMLElement>(':scope > arianna-video-part')
+        );
+        directParts.forEach(part => lane.appendChild(part));
+
+        const parts = Array.from(
+            lane.querySelectorAll<HTMLElement>(':scope > arianna-video-part')
+        );
+        parts.forEach(part => this.mountPart(part, lane));
     }
 
     private applyTimingToPart(part: HTMLElement): void {
-        part.setAttribute('pixels-per-second', String(this.pixelsPerSecond));
+        setAttributeIfChanged(part, 'pixels-per-second', String(this.pixelsPerSecond));
         const editor = this.closest('arianna-video-track-editor');
         const snap = editor?.getAttribute('snap') ?? this.getAttribute('snap');
         const framerate = editor?.getAttribute('framerate') ?? this.getAttribute('framerate');
-        if(snap != null) part.setAttribute('snap', snap);
-        if(framerate != null) part.setAttribute('framerate', framerate);
+        if(snap != null) setAttributeIfChanged(part, 'snap', snap);
+        if(framerate != null) setAttributeIfChanged(part, 'framerate', framerate);
     }
 
     private emit(type: string, detail: Record<string, unknown> = {}): void {
         this.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true, detail: { ...detail, track: this, source: this } }));
     }
 }
-
-/** Public instance type of the AriannA-upgraded video track element. */
-export type VideoTrack = VideoTrackElement;
-
-type VideoTrackConstructor = {
-    new(options?: VideoTrackOptions): VideoTrackElement;
-    readonly prototype: VideoTrackElement;
-    readonly Styles: Css.Stylesheet;
-};
-
-/* Direct construction follows the same synchronous AriannA path as Real. */
-export const VideoTrack = new Proxy(
-    VideoTrackElement as unknown as VideoTrackConstructor,
-    {
-        construct(_target, args): VideoTrackElement {
-            const element = new Real('arianna-video-track').render() as VideoTrackElement;
-            applyOptions(element, (args[0] ?? {}) as VideoTrackOptions);
-            return element;
-        }
-    }
-) as VideoTrackConstructor;
 
 export const VideoTrackComponent = VideoTrack;
 export default VideoTrack;

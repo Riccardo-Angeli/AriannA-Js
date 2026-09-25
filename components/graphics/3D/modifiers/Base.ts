@@ -209,6 +209,14 @@ export namespace Modifier3D
             updateMatrix?(): void;
         }
 
+        /** Structural selection contract; avoids coupling modifiers to Selection3D. */
+        export interface SelectionLike
+        {
+            mode:'vertex'|'edge'|'polygon'|'face'|'object';
+            items:Array<{mesh:MeshLike;vertexIndices:number[];polygonIndices:number[];edge?:[number,number];faceId?:number}>;
+            objects:MeshLike[];
+        }
+
         /** @interface   SceneLike
          *  @public
          *  @description SceneLike contract for this component.
@@ -561,12 +569,13 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
         bound:boolean;
         refreshQueued:boolean;
         panelReady:boolean;
+        selection:Modifier3D.Interfaces.SelectionLike|null;
     }
     const ModifierElementStates=new WeakMap<HTMLElement,ModifierElementRuntime>();
     const ElementState=(host:HTMLElement):ModifierElementRuntime=>
     {
         let s=ModifierElementStates.get(host);
-        if(!s){s={viewport:null,target:null,modifier:null,frameUnsub:null,baseGeometry:null,baseTransform:null,bound:false,refreshQueued:false,panelReady:false};ModifierElementStates.set(host,s);}
+        if(!s){s={viewport:null,target:null,modifier:null,frameUnsub:null,baseGeometry:null,baseTransform:null,bound:false,refreshQueued:false,panelReady:false,selection:null};ModifierElementStates.set(host,s);}
         return s;
     };
 
@@ -583,6 +592,14 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
         protected set target(v:Modifier3D.Interfaces.MeshLike|null){ElementState(this).target=v;}
         protected get modifier():Modifier3D|null{return ElementState(this).modifier;}
         protected set modifier(v:Modifier3D|null){ElementState(this).modifier=v;}
+        public get selection():Modifier3D.Interfaces.SelectionLike|null{return ElementState(this).selection;}
+        public set selection(value:Modifier3D.Interfaces.SelectionLike|null)
+        {
+            const s=ElementState(this),mesh=value?.items[0]?.mesh??value?.objects[0]??null;s.selection=value;
+            if(!mesh||mesh===s.target)return;
+            s.frameUnsub?.();s.modifier?.destroy();this.restoreTarget();s.target=mesh;
+            s.baseGeometry=_cloneGeom(mesh.geometry);s.baseTransform={position:{...mesh.position},rotation:{...mesh.rotation},scale:{...mesh.scale},visible:mesh.visible};s.bound=!!s.viewport;this.refreshModifier();
+        }
 
         onConnected(): void
         {
@@ -766,6 +783,8 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
         protected enabled = true;
+        /** Optional topology selection. Existing object modifiers may ignore it. */
+        public selection:Interfaces.SelectionLike|null=null;
 
         /** @name        cleanups
          *  @protected

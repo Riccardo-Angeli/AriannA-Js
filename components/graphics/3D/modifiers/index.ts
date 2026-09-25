@@ -17,12 +17,15 @@ import { SubdivisionModifier as SubdivisionModifierNamespace } from './Subdivisi
 import { SmoothModifier as SmoothModifierNamespace } from './SmoothModifier.ts';
 import { MirrorModifier as MirrorModifierNamespace } from './MirrorModifier.ts';
 import { SnapModifier as SnapModifierNamespace } from './SnapModifier.ts';
+import Snappable3D from './Snappable3D.ts';
 import { WaveModifier as WaveModifierNamespace } from './WaveModifier.ts';
 import { BillboardModifier as BillboardModifierNamespace } from './BillboardModifier.ts';
 import { FadeModifier as FadeModifierNamespace } from './FadeModifier.ts';
 import { LODModifier as LODModifierNamespace } from './LODModifier.ts';
 import { DragModifier as DragModifierNamespace } from './DragModifier.ts';
 import { ArrayModifier as ArrayModifierNamespace } from './ArrayModifier.ts';
+import { RevolveModifier as RevolveModifierNamespace } from './RevolveModifier.ts';
+import { CrossSection as CrossSectionNamespace } from './CrossSection.ts';
 
 export const Modifier3D = BaseNamespace.Modifier3D;
 export const Modifier3DElement = BaseNamespace.Modifier3DElement;
@@ -43,6 +46,7 @@ export type MeshLike = BaseNamespace.Interfaces.MeshLike;
 export type SceneLike = BaseNamespace.Interfaces.SceneLike;
 export type CameraLike = BaseNamespace.Interfaces.CameraLike;
 export type Viewport3DLike = BaseNamespace.Interfaces.Viewport3DLike;
+export type ModifierSelection3D = BaseNamespace.Interfaces.SelectionLike;
 
 export const BendModifier = BendModifierNamespace.BendModifier;
 export const BendModifierElement = BendModifierNamespace.BendModifierElement;
@@ -71,6 +75,8 @@ export type MirrorAxis = MirrorModifierNamespace.Types.MirrorAxis;
 
 export const SnapModifier = SnapModifierNamespace.SnapModifier;
 export const SnapModifierElement = SnapModifierNamespace.SnapModifierElement;
+export { Snappable3D };
+export type { Snappable3DOptions, SnapResult3D } from './Snappable3D.ts';
 
 export const WaveModifier = WaveModifierNamespace.WaveModifier;
 export const WaveModifierElement = WaveModifierNamespace.WaveModifierElement;
@@ -93,8 +99,16 @@ export type DragCallback3D = DragModifierNamespace.Types.DragCallback3D;
 export const ArrayModifier = ArrayModifierNamespace.ArrayModifier;
 export const ArrayModifierElement = ArrayModifierNamespace.ArrayModifierElement;
 export type ArrayModifierOptions = ArrayModifierNamespace.Interfaces.ArrayModifierOptions;
+export const RevolveModifier = RevolveModifierNamespace.RevolveModifier;
+export const RevolveModifierElement = RevolveModifierNamespace.RevolveModifierElement;
+export type RevolveProfilePoint = RevolveModifierNamespace.Interfaces.ProfilePoint;
+export type RevolveOptions = RevolveModifierNamespace.Interfaces.RevolveOptions;
+export const CrossSection = CrossSectionNamespace.CrossSection;
+export type CrossSectionPlane = CrossSectionNamespace.Plane;
+export type CrossSectionSegment = CrossSectionNamespace.Segment;
 
-export const Modifiers3D =
+
+export const Modifiers3DRegistry =
 {
     BendModifier,
     TwistModifier,
@@ -105,12 +119,15 @@ export const Modifiers3D =
     SmoothModifier,
     MirrorModifier,
     SnapModifier,
+    Snappable3D,
     WaveModifier,
     BillboardModifier,
     FadeModifier,
     LODModifier,
     DragModifier,
     ArrayModifier,
+    RevolveModifier,
+    CrossSection,
 };
 
-export default Modifiers3D;
+export default Modifiers3DRegistry;

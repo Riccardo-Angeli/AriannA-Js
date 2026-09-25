@@ -16,10 +16,11 @@ const html=Templates.Template.Html;
 export namespace Canvas3D
 {
     export interface Vec3 { x:number; y:number; z:number; }
-    export interface Geometry3 { vertices:Vec3[]; normals:Vec3[]; indices:number[]; clone():Geometry3; }
+    export interface Geometry3 { vertices:Vec3[]; normals:Vec3[]; indices:number[];faceIds?:number[]; clone():Geometry3; }
     export interface Mesh3 { geometry:Geometry3; position:Vec3; rotation:Vec3; scale:Vec3; visible:boolean; userData:Record<string,unknown>; updateMatrix?():void; }
     export interface Scene3 { children:Mesh3[]; add(obj:Mesh3):void; remove(obj:Mesh3):void; }
     export interface Camera3 { position:Vec3; }
+    export interface Ray3 { origin:Vec3;direction:Vec3; }
     export type ViewPreset='perspective'|'front'|'right'|'top';
 
     interface RuntimeState
@@ -41,9 +42,10 @@ export namespace Canvas3D
         py:number;
         started:boolean;
         wiredCanvas?:HTMLCanvasElement;
+        behaviours:Set<HTMLElement>;
     }
 
-    const cloneGeometry=(g:Geometry3):Geometry3=>({vertices:g.vertices.map(v=>({...v})),normals:g.normals.map(v=>({...v})),indices:[...g.indices],clone(){return cloneGeometry(this);}});
+    const cloneGeometry=(g:Geometry3):Geometry3=>({vertices:g.vertices.map(v=>({...v})),normals:g.normals.map(v=>({...v})),indices:[...g.indices],faceIds:g.faceIds?[...g.faceIds]:undefined,clone(){return cloneGeometry(this);}});
     const norm=(v:Vec3):Vec3=>{const l=Math.hypot(v.x,v.y,v.z)||1;return{x:v.x/l,y:v.y/l,z:v.z/l};};
     const sub=(a:Vec3,b:Vec3):Vec3=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
     const cross=(a:Vec3,b:Vec3):Vec3=>({x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x});
@@ -56,7 +58,7 @@ export namespace Canvas3D
         if(!s)
         {
             const scene:Scene3={children:[],add(obj){if(!scene.children.includes(obj))scene.children.push(obj);},remove(obj){const i=scene.children.indexOf(obj);if(i>=0)scene.children.splice(i,1);}};
-            s={scene,camera:{position:{x:3.5,y:2.5,z:4.5}},ctx:null,meshes:new Map(),frameCallbacks:new Set(),raf:0,last:0,resizeObserver:null,yaw:.72,pitch:.42,distance:4.6,dragging:false,px:0,py:0,started:false};
+            s={scene,camera:{position:{x:3.5,y:2.5,z:4.5}},ctx:null,meshes:new Map(),frameCallbacks:new Set(),raf:0,last:0,resizeObserver:null,yaw:.72,pitch:.42,distance:4.6,dragging:false,px:0,py:0,started:false,behaviours:new Set()};
             Runtime.set(host,s);
         }
         return s;
@@ -101,17 +103,18 @@ export namespace Canvas3D
             const canvas=document.createElement('canvas');canvas.className='Canvas3D-Canvas';
             const toolbar=this.buildToolbar();
             const axes=document.createElement('div');axes.className='Canvas3D-Axes';axes.textContent='X · Y · Z';
-            this.replaceChildren(canvas,toolbar,axes);
+            this.replaceChildren(canvas,toolbar,axes,...s.behaviours);
             s.canvas=canvas;s.ctx=canvas.getContext('2d');s.started=true;
 
             this.wireOrbit();
             s.resizeObserver=new ResizeObserver(()=>this.resize());s.resizeObserver.observe(this);this.resize();
             s.last=performance.now();s.raf=requestAnimationFrame(t=>this.loop(t));
             this.syncToolbar();
+            for(const behaviour of s.behaviours)(behaviour as HTMLElement&{attach?:(canvas:Canvas3D)=>unknown}).attach?.(this);
         }
         public onUnmount():void
         {
-            const s=State(this);cancelAnimationFrame(s.raf);s.resizeObserver?.disconnect();s.resizeObserver=null;s.frameCallbacks.clear();s.canvas=undefined;s.ctx=null;s.wiredCanvas=undefined;s.meshes.clear();s.scene.children.length=0;s.started=false;
+            const s=State(this);for(const behaviour of s.behaviours)(behaviour as HTMLElement&{detach?:()=>unknown}).detach?.();cancelAnimationFrame(s.raf);s.resizeObserver?.disconnect();s.resizeObserver=null;s.frameCallbacks.clear();s.canvas=undefined;s.ctx=null;s.wiredCanvas=undefined;s.meshes.clear();s.scene.children.length=0;s.started=false;
         }
         public onAttributeChanged(name?:string):void
         {
@@ -158,6 +161,32 @@ export namespace Canvas3D
         public onFrame(cb:(dt:number)=>void):()=>void{const s=State(this);s.frameCallbacks.add(cb);return()=>s.frameCallbacks.delete(cb);}
         public invalidate():void{/* Continuous render loop: retained for modifier viewport contract. */}
 
+        /** Add independent behaviours such as Grid3D, Selection3D and SelectionRectangle. */
+        public add(...behaviours:HTMLElement[]):this
+        {
+            const s=State(this);
+            for(const behaviour of behaviours){s.behaviours.add(behaviour);if(s.started){this.appendChild(behaviour);(behaviour as HTMLElement&{attach?:(canvas:Canvas3D)=>unknown}).attach?.(this);}}
+            return this;
+        }
+        public removeBehaviour(behaviour:HTMLElement):this{State(this).behaviours.delete(behaviour);(behaviour as HTMLElement&{detach?:()=>unknown}).detach?.();behaviour.remove();return this;}
+        public get selectionSurface():HTMLCanvasElement{const canvas=State(this).canvas;if(!canvas)throw new Error('[Canvas3D] connect the canvas before attaching selection behaviours');return canvas;}
+
+        public localToWorld(point:Vec3,mesh:Mesh3):Vec3{return this.transform(point,mesh);}
+        public projectWorld(point:Vec3):{x:number;y:number;z:number;visible:boolean}
+        {
+            const s=State(this),rect=this.getBoundingClientRect();this.updateCamera();const basis=this.cameraBasis(),rel=sub(point,s.camera.position),z=dot(rel,basis.forward),focal=rect.height*.82;
+            return{x:rect.width/2+focal*dot(rel,basis.right)/Math.max(.0001,z),y:rect.height/2-focal*dot(rel,basis.up)/Math.max(.0001,z),z,visible:z>.0001};
+        }
+        public rayFromClient(clientX:number,clientY:number):Ray3
+        {
+            const s=State(this),rect=this.selectionSurface.getBoundingClientRect();this.updateCamera();const basis=this.cameraBasis(),focal=rect.height*.82,x=clientX-rect.left-rect.width/2,y=clientY-rect.top-rect.height/2;
+            return{origin:{...s.camera.position},direction:norm({x:basis.forward.x+basis.right.x*x/focal-basis.up.x*y/focal,y:basis.forward.y+basis.right.y*x/focal-basis.up.y*y/focal,z:basis.forward.z+basis.right.z*x/focal-basis.up.z*y/focal})};
+        }
+        public createSelectionVolume(rect:{left:number;top:number;right:number;bottom:number}):{rays:Ray3[]}
+        {
+            const bounds=this.selectionSurface.getBoundingClientRect();return{rays:[[rect.left,rect.top],[rect.right,rect.top],[rect.right,rect.bottom],[rect.left,rect.bottom]].map(([x,y])=>this.rayFromClient(bounds.left+x,bounds.top+y))};
+        }
+
         public getView():ViewPreset
         {
             const v=this.getAttribute('view');return v==='front'||v==='right'||v==='top'?v:'perspective';
@@ -170,6 +199,8 @@ export namespace Canvas3D
         public resetView():this{return this.setView('perspective');}
 
         private numberAttr(name:string,fallback:number):number{const n=parseFloat(this.getAttribute(name)??String(fallback));return Number.isFinite(n)?n:fallback;}
+        private updateCamera():void{const s=State(this),cp=Math.cos(s.pitch);s.camera.position={x:s.distance*Math.sin(s.yaw)*cp,y:s.distance*Math.sin(s.pitch),z:s.distance*Math.cos(s.yaw)*cp};}
+        private cameraBasis():{forward:Vec3;right:Vec3;up:Vec3}{const s=State(this),forward=norm(sub({x:0,y:0,z:0},s.camera.position)),right=norm(cross(forward,{x:0,y:1,z:0}));return{forward,right,up:cross(right,forward)};}
         private applyView(view:ViewPreset,reflect=true):void
         {
             const s=State(this);
@@ -203,7 +234,7 @@ export namespace Canvas3D
         private wireOrbit():void
         {
             const s=State(this),c=s.canvas;if(!c||s.wiredCanvas===c)return;s.wiredCanvas=c;
-            c.addEventListener('pointerdown',e=>{if(this.getAttribute('orbit')==='false')return;s.dragging=true;s.px=e.clientX;s.py=e.clientY;c.setPointerCapture(e.pointerId);});
+            c.addEventListener('pointerdown',e=>{if(this.getAttribute('orbit')==='false'||c.dataset.selection3dActive==='true')return;s.dragging=true;s.px=e.clientX;s.py=e.clientY;c.setPointerCapture(e.pointerId);});
             c.addEventListener('pointermove',e=>{if(!s.dragging||this.getAttribute('orbit')==='false')return;s.yaw+=(e.clientX-s.px)*.009;s.pitch=Math.max(-1.25,Math.min(1.25,s.pitch+(e.clientY-s.py)*.009));s.px=e.clientX;s.py=e.clientY;if(this.getAttribute('view')!=='perspective')this.setAttribute('view','perspective');});
             const up=()=>s.dragging=false;c.addEventListener('pointerup',up);c.addEventListener('pointercancel',up);
             c.addEventListener('wheel',e=>{e.preventDefault();s.distance=Math.max(2.2,Math.min(12,s.distance*Math.exp(e.deltaY*.0012)));},{passive:false});
@@ -228,8 +259,7 @@ export namespace Canvas3D
         {
             const s=State(this),canvas=s.canvas,ctx=s.ctx;if(!canvas||!ctx)return;const w=canvas.width,h=canvas.height,dpr=Math.min(2,window.devicePixelRatio||1);
             const light=this.getAttribute('theme')==='light';const grad=ctx.createLinearGradient(0,0,0,h);grad.addColorStop(0,light?'#f5f7f9':'#20252b');grad.addColorStop(1,light?'#dfe4e8':'#111418');ctx.fillStyle=grad;ctx.fillRect(0,0,w,h);
-            const cp=Math.cos(s.pitch);s.camera.position={x:s.distance*Math.sin(s.yaw)*cp,y:s.distance*Math.sin(s.pitch),z:s.distance*Math.cos(s.yaw)*cp};
-            const target={x:0,y:0,z:0},forward=norm(sub(target,s.camera.position)),right=norm(cross(forward,{x:0,y:1,z:0})),up=cross(right,forward),focal=(h/dpr)*.82*dpr;
+            this.updateCamera();const {forward,right,up}=this.cameraBasis(),focal=(h/dpr)*.82*dpr;
             type Tri={p:[{x:number;y:number;z:number},{x:number;y:number;z:number},{x:number;y:number;z:number}];depth:number;shade:number;color:string;alpha:number};const tris:Tri[]=[];
             for(const mesh of s.scene.children){if(!mesh.visible)continue;const g=mesh.geometry,opacity=Number(mesh.userData['_arianna_opacity']??1),base=String(mesh.userData.color??this.getAttribute('color')??'#8f9aa6');const projected=g.vertices.map(v=>{const world=this.transform(v,mesh),rel=sub(world,s.camera.position),z=dot(rel,forward);return{x:w/2+focal*dot(rel,right)/Math.max(.08,z),y:h/2-focal*dot(rel,up)/Math.max(.08,z),z,world};});for(let i=0;i<g.indices.length;i+=3){const ia=g.indices[i],ib=g.indices[i+1],ic=g.indices[i+2],a=projected[ia],b=projected[ib],c=projected[ic];if(!a||!b||!c||a.z<=.08||b.z<=.08||c.z<=.08)continue;const wa=a.world,wb=b.world,wc=c.world,n=norm(cross(sub(wb,wa),sub(wc,wa))),ld=norm({x:-.45,y:.75,z:.6}),shade=.42+.58*Math.max(0,dot(n,ld));tris.push({p:[a,b,c],depth:(a.z+b.z+c.z)/3,shade,color:base,alpha:opacity});}}
             tris.sort((a,b)=>b.depth-a.depth);ctx.lineJoin='round';for(const tri of tris){ctx.beginPath();ctx.moveTo(tri.p[0].x,tri.p[0].y);ctx.lineTo(tri.p[1].x,tri.p[1].y);ctx.lineTo(tri.p[2].x,tri.p[2].y);ctx.closePath();ctx.fillStyle=this.color(tri.color,tri.shade,tri.alpha);ctx.fill();ctx.strokeStyle=light?'rgba(35,40,45,.10)':'rgba(255,255,255,.055)';ctx.lineWidth=.7*dpr;ctx.stroke();}

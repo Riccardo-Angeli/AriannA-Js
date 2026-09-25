@@ -6,14 +6,22 @@
  * @license MIT / Commercial (dual license)
  *
  * @description
- * Production-oriented 2D line / polyline / spline editor.
+ * Canvas-independent line / polyline / spline behaviour.
+ * Usage: const editor = new LineEditor({ canvas, stroke: { color:'#e40c88', width:2 } });
+ * Canvas implements Interfaces.CanvasTarget; no Canvas2D or Window implementation is imported.
+ * Use attach(canvas), detach(), dispose(); the canvas and other layers are never removed.
+ * A single active LineEditor per surface prevents conflicting drawing gestures.
+ * Icons.Add/Move/Curve/Draw/Default accept CSS cursor values (including url(...) cursors).
  *
  * Behaviour:
  *  - Select: anchor selection, Shift additive selection, marquee rectangle, drag selection.
  *  - Pen: drawing tool. First click sets a start point, pointer movement previews one straight
- *         segment, second click commits that segment and finishes the Pen operation.
- *         Selecting an open endpoint before choosing Pen continues the existing path.
- *  - Curve: point-edit mode entered explicitly, or by clicking an already-selected anchor.
+ *         segment, second release commits it. Drag-and-release also creates one segment.
+ *         A fresh press on empty space starts another independent path.
+ *         The centre of an open endpoint starts one connected segment; its rim moves that point.
+ *  - The selected tool persists between gestures. Select restores marquee selection.
+ *  - Freehand: hold, draw sampled points, release to commit one independent path.
+ *  - Curve: drag a segment midpoint to bend it, or edit tangents explicitly.
  *           Constant / Linear / Bezier interpolation and draggable in/out tangents are preserved.
  *  - Delete: click a point to delete it, or drag a rectangle to delete every enclosed point.
  */
@@ -26,38 +34,61 @@ export namespace LineEditor
 {
     export namespace Types
     {
-        export type Mode = 'select' | 'pen' | 'curve' | 'delete';
+        export type Mode = 'select' | 'pen' | 'freehand' | 'curve' | 'delete';
         export type Interpolation = 'constant' | 'linear' | 'bezier';
         export type HandleMode = 'corner' | 'smooth' | 'symmetric';
+        export type CornerType = 'none' | 'fillet' | 'chamfer' | 'scallop';
     }
 
     export namespace Interfaces
     {
         export interface Vec2 { x: number; y: number; }
+        export interface Vec3 { x:number; y:number; z:number; }
+        export interface Plane3D { origin:Vec3; u:Vec3; v:Vec3; }
 
         /** Interpolation describes the segment LEAVING this anchor. */
         export interface Anchor
         {
             p: Vec2;
+            /** Starts an independent path; never connects to the preceding anchor. */
+            breakBefore?: boolean;
             in?: Vec2;
             out?: Vec2;
             interpolation?: Types.Interpolation;
             mode?: Types.HandleMode;
+            /** Optional non-destructive corner treatment for CAD / spline workflows. */
+            corner?: { type:Types.CornerType; amount:number };
         }
 
+        export interface CanvasTarget {
+            readonly drawingSurface:SVGSVGElement;
+            createDrawingLayer():SVGGElement;
+            removeDrawingLayer(layer:SVGGElement):void;
+        }
+        export interface StrokeOptions {
+            color:string; width:number; opacity:number;
+            lineCap:'butt'|'round'|'square'; lineJoin:'miter'|'round'|'bevel';
+            dashArray:number[]; dashOffset:number; miterLimit:number;
+        }
+        export interface CursorIcons { Default:string; Draw:string; Add:string; Move:string; Curve:string; }
         export interface LineEditorOptions
         {
+            canvas?:CanvasTarget;
+            stroke?:Partial<StrokeOptions>;
+            Icons?:Partial<CursorIcons>;
             anchors?: Anchor[];
             closed?: boolean;
             mode?: Types.Mode;
             interpolation?: Types.Interpolation;
             theme?: 'dark' | 'light';
+            plane?: Plane3D;
         }
     }
 
     interface DragState
     {
-        kind: 'anchor' | 'handle-in' | 'handle-out' | 'marquee';
+        kind: 'anchor' | 'handle-in' | 'handle-out' | 'marquee' | 'segment' | 'bend' | 'freehand';
+        segmentIndex?: number;
         pointerId: number;
         start: Interfaces.Vec2;
         current: Interfaces.Vec2;
@@ -77,8 +108,10 @@ export namespace LineEditor
         penStart: number | null;
         penDirection: 'append' | 'prepend';
         penSeedCreated: boolean;
+        penPointer?: {id:number; start:Interfaces.Vec2; commit:boolean};
         drag: DragState | null;
         marquee: { a: Interfaces.Vec2; b: Interfaces.Vec2 } | null;
+        plane: Interfaces.Plane3D;
     }
 
     const DEFAULT: Interfaces.Anchor[] = [];
@@ -92,15 +125,16 @@ export namespace LineEditor
             state = {
                 anchors: structuredClone(DEFAULT),
                 selected: new Set(),
-                mode: 'select',
-                interpolation: 'bezier',
+                mode: 'pen',
+                interpolation: 'linear',
                 preview: null,
                 hovered: null,
                 penStart: null,
                 penDirection: 'append',
                 penSeedCreated: false,
                 drag: null,
-                marquee: null
+                marquee: null,
+                plane: {origin:{x:0,y:0,z:0},u:{x:1,y:0,z:0},v:{x:0,y:1,z:0}}
             };
             Runtime.set(host, state);
         }
@@ -110,130 +144,134 @@ export namespace LineEditor
     const clamp = (value:number, min:number, max:number):number =>
         Math.max(min, Math.min(max, value));
 
-    export const Styles = new Css.Stylesheet([
-        new Css.Rule('arianna-line-editor,.LineEditor',{
-            Background:'#202428',Border:'1px solid #111417',BorderRadius:'7px',
-            BoxSizing:'border-box',Color:'#e4e8eb',Display:'block',
-            FontFamily:'var(--arianna-font,system-ui,sans-serif)',Height:'430px',
-            MaxWidth:'100%',MinWidth:'0',Overflow:'hidden',Width:'100%'
-        }),
-        new Css.Rule('.LineEditor-Shell',{
-            Display:'grid',GridTemplateColumns:'minmax(0,1fr) 190px',
-            GridTemplateRows:'40px 1fr',Height:'100%'
-        }),
-        new Css.Rule('.LineEditor-Toolbar',{
-            AlignItems:'center',Background:'linear-gradient(180deg,#373c41,#292d31)',
-            BorderBottom:'1px solid #111417',Display:'flex',Gap:'5px',
-            GridColumn:'1 / span 2',Padding:'6px 8px'
-        }),
-        new Css.Rule('.LineEditor-Button',{
-            Appearance:'none',Background:'linear-gradient(180deg,#41474c,#2d3237)',
-            Border:'1px solid #15181a',BorderRadius:'3px',Color:'#c7ced3',
-            Cursor:'pointer',Font:'700 9px/1 system-ui',Height:'26px',Padding:'0 8px'
-        }),
-        new Css.Rule('.LineEditor-Button[data-active="true"]',{
-            BorderColor:'#e40c88',Color:'#ff6dbb'
-        }),
-        new Css.Rule('.LineEditor-Button:disabled',{Opacity:'.45',Cursor:'default'}),
-        new Css.Rule('.LineEditor-Stage',{
-            BackgroundColor:'#1b1f22',
-            BackgroundImage:'linear-gradient(to right,rgba(151,160,169,.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(151,160,169,.12) 1px,transparent 1px)',
-            BackgroundSize:'24px 24px',Overflow:'hidden',Position:'relative',
-            TouchAction:'none'
-        }),
-        new Css.Rule('.LineEditor-Svg',{Height:'100%',Width:'100%',TouchAction:'none',UserSelect:'none'}),
-        new Css.Rule('.LineEditor-Path',{Fill:'none',Stroke:'#8a62ef',StrokeWidth:'2.2',PointerEvents:'none'}),
-        new Css.Rule('.LineEditor-Preview',{
-            Fill:'none',Stroke:'#8a62ef',StrokeDasharray:'5 4',
-            StrokeOpacity:'.82',StrokeWidth:'1.5',PointerEvents:'none'
-        }),
-        new Css.Rule('.LineEditor-HandleLine',{
-            Stroke:'#8e98a1',StrokeWidth:'1',StrokeDasharray:'2 2',Opacity:'.78',PointerEvents:'none'
-        }),
-        new Css.Rule('.LineEditor-Anchor',{
-            Cursor:'move',Fill:'#fff',Stroke:'#e40c88',StrokeWidth:'2'
-        }),
-        new Css.Rule('.LineEditor-Anchor[data-selected="true"]',{Fill:'#e40c88',Stroke:'#fff'}),
-        new Css.Rule('.LineEditor-Anchor[data-first="true"]',{StrokeWidth:'3'}),
-        new Css.Rule('.LineEditor-Handle',{
-            Cursor:'crosshair',Fill:'#1b1f22',Stroke:'#9b8cff',StrokeWidth:'1.5'
-        }),
-        new Css.Rule('.LineEditor-Marquee',{
-            Fill:'rgba(228,12,136,.10)',Stroke:'#e40c88',StrokeWidth:'1',
-            StrokeDasharray:'5 3',PointerEvents:'none'
-        }),
-        new Css.Rule('.LineEditor-Side',{
-            Background:'#24282c',BorderLeft:'1px solid #111417',
-            Display:'grid',Gap:'8px',Padding:'10px',AlignContent:'start'
-        }),
-        new Css.Rule('.LineEditor-SideTitle',{FontSize:'10px',FontWeight:'800'}),
-        new Css.Rule('.LineEditor-Field',{
-            Background:'#171b1e',Border:'1px solid #3b4146',BorderRadius:'3px',
-            Color:'#e4e8eb',Font:'9px ui-monospace,monospace',Padding:'6px'
-        }),
-        new Css.Rule('.LineEditor-Hint',{Color:'#8e979f',FontSize:'8px',LineHeight:'1.45'}),
-        new Css.Rule('arianna-line-editor[theme="light"],.LineEditor[theme="light"]',{
-            Background:'#eef0f2',BorderColor:'#b9bec3',Color:'#25292d'
-        }),
-        new Css.Rule('arianna-line-editor[theme="light"] .LineEditor-Toolbar',{
-            Background:'linear-gradient(180deg,#fff,#e1e4e7)',BorderBottomColor:'#b9bec3'
-        }),
-        new Css.Rule('arianna-line-editor[theme="light"] .LineEditor-Button',{
-            Background:'linear-gradient(180deg,#fff,#e2e5e8)',BorderColor:'#bec4c9',Color:'#4a5259'
-        }),
-        new Css.Rule('arianna-line-editor[theme="light"] .LineEditor-Stage',{
-            BackgroundColor:'#fafafa',
-            BackgroundImage:'linear-gradient(to right,#e1e3e5 1px,transparent 1px),linear-gradient(to bottom,#e1e3e5 1px,transparent 1px)'
-        }),
-        new Css.Rule('arianna-line-editor[theme="light"] .LineEditor-Side',{
-            Background:'#f4f5f6',BorderLeftColor:'#c1c6cb'
-        }),
-        new Css.Rule('arianna-line-editor[theme="light"] .LineEditor-Field',{
-            Background:'#fff',BorderColor:'#c4cacf',Color:'#30373d'
-        })
-    ]);
+    const CURVE_CURSOR=`url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><path d="M3 19Q12 0 21 19" fill="none" stroke="white" stroke-width="5"/><path d="M3 19Q12 0 21 19" fill="none" stroke="black" stroke-width="2"/></svg>')}") 12 12, crosshair`;
+    const DEFAULT_STROKE:Interfaces.StrokeOptions={color:'#8a62ef',width:2.2,opacity:1,lineCap:'round',lineJoin:'round',dashArray:[],dashOffset:0,miterLimit:4};
+    const DEFAULT_ICONS:Interfaces.CursorIcons={Default:'default',Draw:'crosshair',Add:'crosshair',Move:'move',Curve:CURVE_CURSOR};
+    interface Attachment {
+        canvas:Interfaces.CanvasTarget|null; layer:SVGGElement|null; cleanup:(()=>void)|null;
+        stroke:Interfaces.StrokeOptions; icons:Interfaces.CursorIcons; cursor:keyof Interfaces.CursorIcons;
+    }
+    const Attachments=new WeakMap<HTMLElement,Attachment>();
+    const ActiveSurfaces=new WeakMap<SVGSVGElement,LineEditor>();
+    function attachment(host:LineEditor):Attachment {
+        let a=Attachments.get(host);
+        if(!a) {
+            a={canvas:null,layer:null,cleanup:null,stroke:structuredClone(DEFAULT_STROKE),icons:{...DEFAULT_ICONS},cursor:'Default'};
+            Attachments.set(host,a);
+            a.icons=new Proxy(a.icons,{set(target,key,value){
+                if(!(key in DEFAULT_ICONS)||typeof value!=='string'||!value.trim())throw new TypeError('Invalid cursor icon');
+                Reflect.set(target,key,value);host.refreshCursor();return true;
+            }});
+        }
+        return a;
+    }
+    export const Styles = new Css.Stylesheet([new Css.Rule('arianna-line-editor',{Display:'none'})]);
 
     @Component('arianna-line-editor', Styles, {
         Shadow: false,
-        Attributes: ['theme','mode','closed','interpolation'],
-        Properties: ['anchors']
+        Attributes: ['mode','closed','interpolation','canvas','stroke'],
+        Properties: ['anchors','canvas','stroke','Icons']
     })
     export class LineEditor extends HTMLElement
     {
         public static readonly Styles = Styles;
-        public template = html``;
+        public get template() { return html``; }
 
         private _svg?: SVGSVGElement;
-        private _stage?: HTMLDivElement;
-        private _side?: HTMLElement;
-        private _toolbar?: HTMLElement;
-        private _bound = false;
-
-        public onCreated(): void
-        {
-            if(this.isConnected) this.onConnected();
+        constructor(options:Interfaces.LineEditorOptions={}) {
+            super();
+            if(options.anchors) this.anchors=options.anchors;
+            if(options.closed!==undefined) this.closed=options.closed;
+            if(options.mode) this.setMode(options.mode);
+            if(options.stroke) this.stroke=options.stroke;
+            if(options.Icons) this.Icons=options.Icons;
+            if(options.plane) stateOf(this).plane=structuredClone(options.plane);
+            if(options.canvas) this.attach(options.canvas);
         }
-
-        public onConnected(): void
-        {
-            const state = stateOf(this);
-
-            this.classList.add('LineEditor');
-            if(!this.hasAttribute('theme')) this.setAttribute('theme','dark');
-            if(!this.hasAttribute('tabindex')) this.tabIndex = 0;
-
-            const attrMode = this.getAttribute('mode');
-            if(attrMode === 'edit') state.mode = 'select'; // legacy compatibility
-            else if(attrMode === 'select' || attrMode === 'pen' || attrMode === 'curve' || attrMode === 'delete')
-                state.mode = attrMode;
-
-            const interpolation = this.getAttribute('interpolation') as Types.Interpolation | null;
-            if(interpolation === 'constant' || interpolation === 'linear' || interpolation === 'bezier')
-                state.interpolation = interpolation;
-
-            this.Build();
-            this.Draw();
-            this.RenderInspector();
+        public onCreated():void { if(this.isConnected)this.onConnected(); }
+        public onConnected():void {
+            this.style.display='none';
+            const selector=this.getAttribute('canvas');
+            if(selector) {
+                const canvas=document.querySelector(selector) as unknown as Interfaces.CanvasTarget|null;
+                if(!canvas)throw new Error('LineEditor canvas target not found: '+selector);
+                this.attach(canvas);
+            } else {
+                // Structural attachment: no dependency on the Canvas2D implementation.
+                let parent=this.parentElement;
+                while(parent) {
+                    if(typeof (parent as any).createDrawingLayer==='function') {this.attach(parent as unknown as Interfaces.CanvasTarget);break;}
+                    parent=parent.parentElement;
+                }
+            }
+            const stroke=this.getAttribute('stroke');if(stroke)this.stroke=JSON.parse(stroke);
+            const mode=this.getAttribute('mode');if(mode)this.setMode(mode as Types.Mode);
+        }
+        public onAttributeChanged(name:string):void {
+            if(name==='canvas'&&this.isConnected)this.onConnected();
+            else if(name==='stroke') { const value=this.getAttribute('stroke');if(value)this.stroke=JSON.parse(value); }
+            else if(name==='closed')this.Draw();
+            else if(name==='mode') {
+                const value=this.getAttribute('mode') as Types.Mode;
+                if(['select','pen','freehand','curve','delete'].includes(value)&&stateOf(this).mode!==value)this.setMode(value);
+            }
+        }
+        public onUnmount():void { this.detach(); }
+        public onDisconnected():void { this.detach(); }
+        public get canvas():Interfaces.CanvasTarget|null { return attachment(this).canvas; }
+        public set canvas(value:Interfaces.CanvasTarget|null) { value?this.attach(value):this.detach(); }
+        public get stroke():Interfaces.StrokeOptions { return structuredClone(attachment(this).stroke); }
+        public set stroke(value:Partial<Interfaces.StrokeOptions>) {
+            const next={...attachment(this).stroke,...value};
+            if(typeof next.color!=='string'||!Number.isFinite(next.width)||next.width<0||!Number.isFinite(next.opacity)||next.opacity<0||next.opacity>1||
+                !['butt','round','square'].includes(next.lineCap)||!['miter','round','bevel'].includes(next.lineJoin)||
+                !Array.isArray(next.dashArray)||next.dashArray.some(v=>!Number.isFinite(v)||v<0)||!Number.isFinite(next.dashOffset)||!Number.isFinite(next.miterLimit)||next.miterLimit<1)
+                throw new TypeError('Invalid stroke options');
+            attachment(this).stroke=structuredClone(next);this.Draw();
+            this.dispatchEvent(new CustomEvent('arianna:stroke-change',{detail:{stroke:this.stroke,source:this}}));
+        }
+        public get Icons():Interfaces.CursorIcons { return attachment(this).icons; }
+        public set Icons(value:Partial<Interfaces.CursorIcons>) { Object.assign(attachment(this).icons,value); }
+        public refreshCursor():void { const a=attachment(this);if(this._svg)this._svg.style.cursor=a.icons[a.cursor]; }
+        private Cursor(kind:keyof Interfaces.CursorIcons):void { attachment(this).cursor=kind;this.refreshCursor(); }
+        public attach(canvas:Interfaces.CanvasTarget):this {
+            if(!canvas||typeof canvas.createDrawingLayer!=='function'||typeof canvas.removeDrawingLayer!=='function')throw new TypeError('LineEditor requires a CanvasTarget');
+            const svg=canvas.drawingSurface;
+            if(ActiveSurfaces.has(svg)&&ActiveSurfaces.get(svg)!==this)throw new Error('This canvas already has an active LineEditor');
+            if(attachment(this).canvas===canvas&&this._svg===svg)return this;
+            this.detach();
+            const a=attachment(this),layer=canvas.createDrawingLayer();
+            a.canvas=canvas;a.layer=layer;this._svg=svg;layer.setAttribute('data-line-layer','');
+            ActiveSurfaces.set(svg,this);
+            const oldCursor=svg.style.cursor, oldTabindex=svg.getAttribute('tabindex');
+            svg.setAttribute('tabindex','0');
+            const listeners:Array<[string,EventListener]>=[];
+            const bind=(name:string,handler:EventListener)=>{svg.addEventListener(name,handler);listeners.push([name,handler]);};
+            bind('pointerdown',((e:PointerEvent)=>this.OnPointerDown(e)) as EventListener);
+            bind('pointermove',((e:PointerEvent)=>this.OnPointerMove(e)) as EventListener);
+            bind('pointerup',((e:PointerEvent)=>this.OnPointerUp(e)) as EventListener);
+            bind('pointercancel',((e:PointerEvent)=>this.OnPointerUp(e)) as EventListener);
+            bind('pointerleave',((e:PointerEvent)=>this.OnPointerLeave(e)) as EventListener);
+            bind('keydown',((e:KeyboardEvent)=>this.OnKeyDown(e)) as EventListener);
+            a.cleanup=()=>{for(const [name,fn] of listeners)svg.removeEventListener(name,fn);svg.style.cursor=oldCursor;if(oldTabindex===null)svg.removeAttribute('tabindex');else svg.setAttribute('tabindex',oldTabindex);ActiveSurfaces.delete(svg);};
+            this.Draw();this.Cursor('Default');return this;
+        }
+        /** Remove only this behaviour's layer/listeners. The canvas and foreign content survive. */
+        public detach():this {
+            const a=attachment(this),state=stateOf(this);
+            if(state.drag?.origin)state.anchors=state.drag.origin;
+            if(state.drag&&this._svg?.hasPointerCapture(state.drag.pointerId))this._svg.releasePointerCapture(state.drag.pointerId);
+            if(state.penPointer&&this._svg?.hasPointerCapture(state.penPointer.id))this._svg.releasePointerCapture(state.penPointer.id);
+            state.penPointer=undefined;
+            state.drag=null;state.preview=null;state.penStart=null;state.marquee=null;
+            a.cleanup?.();a.cleanup=null;
+            if(a.layer&&a.canvas)a.canvas.removeDrawingLayer(a.layer);
+            a.canvas=null;a.layer=null;this._svg=undefined;return this;
+        }
+        public dispose():void { this.detach(); }
+        private Bounds():{width:number;height:number} {
+            const box=this._svg?.viewBox.baseVal;
+            return {width:box?.width||520,height:box?.height||300};
         }
 
         public get anchors(): Interfaces.Anchor[]
@@ -247,7 +285,7 @@ export namespace LineEditor
             state.anchors = Array.isArray(value) ? structuredClone(value) : [];
             state.selected = new Set(state.anchors.length ? [0] : []);
             this.Draw();
-            this.RenderInspector();
+
         }
 
         public get closed(): boolean { return this.hasAttribute('closed'); }
@@ -262,6 +300,13 @@ export namespace LineEditor
         public setMode(value: Types.Mode | 'edit'): this
         {
             const state = stateOf(this);
+            if(!['select','pen','freehand','curve','delete','edit'].includes(value))throw new TypeError('Invalid LineEditor mode');
+            // Tool changes cancel only unfinished work and release any captured pointer.
+            if(state.drag?.origin)state.anchors=state.drag.origin;
+            if(state.penSeedCreated&&state.penStart!==null)state.anchors.splice(state.penStart,1);
+            const pointer=state.penPointer?.id??state.drag?.pointerId;
+            if(pointer!==undefined&&this._svg?.hasPointerCapture(pointer))this._svg.releasePointerCapture(pointer);
+            state.penPointer=undefined;
             state.mode = value === 'edit' ? 'select' : value;
             state.preview = null;
             state.hovered = null;
@@ -275,9 +320,11 @@ export namespace LineEditor
              * Merely selecting the tool must not start from a previously selected anchor.
              */
             this.setAttribute('mode', state.mode);
-            this.SyncToolbar();
+            this.Cursor(state.mode==='freehand'?'Draw':'Default');
             this.Draw();
-            this.RenderInspector();
+            this.dispatchEvent(new CustomEvent('arianna:line-mode-change',{detail:{mode:state.mode,source:this}}));
+            this.EmitChange();
+
             return this;
         }
 
@@ -289,24 +336,37 @@ export namespace LineEditor
             state.interpolation = value;
             this.setAttribute('interpolation', value);
 
+            /*
+             * Illustrator-compatible rule: changing interpolation MUST NOT change
+             * the visible path.  A Linear → Bezier conversion therefore seeds
+             * collinear one-third handles, which describe the exact same straight
+             * segment.  Curvature appears only after the user edits a tangent.
+             */
             const indices = this.SelectedIndices();
             for(const index of indices)
             {
                 const anchor = state.anchors[index];
                 if(!anchor) continue;
-
+                const previous = anchor.interpolation ?? 'linear';
                 anchor.interpolation = value;
 
-                if(value === 'bezier')
+                if(value === 'bezier' && previous !== 'bezier')
                 {
-                    anchor.mode ??= 'smooth';
-                    anchor.in ??= {x:-35,y:0};
-                    anchor.out ??= {x:35,y:0};
+                    anchor.mode ??= 'corner';
+                    const nextIndex = this.NextIndex(index);
+                    if(nextIndex !== null)
+                    {
+                        const next = state.anchors[nextIndex];
+                        const dx = next.p.x-anchor.p.x;
+                        const dy = next.p.y-anchor.p.y;
+                        anchor.out = {x:dx/3,y:dy/3};
+                        next.in = {x:-dx/3,y:-dy/3};
+                    }
                 }
             }
 
             this.Draw();
-            this.RenderInspector();
+
             this.EmitChange();
             return this;
         }
@@ -315,6 +375,60 @@ export namespace LineEditor
         {
             return stateOf(this).interpolation;
         }
+
+        /** Local 2D drawing plane used when the same spline is consumed in 3D. */
+        public setPlane(plane: Interfaces.Plane3D): this
+        {
+            const normalize=(v:Interfaces.Vec3):Interfaces.Vec3=>{const l=Math.hypot(v.x,v.y,v.z)||1;return{x:v.x/l,y:v.y/l,z:v.z/l};};
+            const u=normalize(plane.u),v=normalize(plane.v);
+            stateOf(this).plane={origin:{...plane.origin},u,v};
+            this.dispatchEvent(new CustomEvent('arianna:line-plane-change',{bubbles:true,detail:{plane:this.getPlane(),source:this}}));
+            return this;
+        }
+
+        public getPlane(): Interfaces.Plane3D
+        {
+            return structuredClone(stateOf(this).plane);
+        }
+
+        /** Map a local LineEditor coordinate onto its arbitrary 3D construction plane. */
+        public pointTo3D(point:Interfaces.Vec2): Interfaces.Vec3
+        {
+            const p=stateOf(this).plane;
+            return {
+                x:p.origin.x+p.u.x*point.x+p.v.x*point.y,
+                y:p.origin.y+p.u.y*point.x+p.v.y*point.y,
+                z:p.origin.z+p.u.z*point.x+p.v.z*point.y
+            };
+        }
+
+        public to3DAnchors(): Interfaces.Vec3[]
+        {
+            return stateOf(this).anchors.map(anchor=>this.pointTo3D(anchor.p));
+        }
+
+        /** Profile form consumed by CAD-style tools such as RevolveModifier. */
+        public getProfile2D(): Interfaces.Vec2[]
+        {
+            return stateOf(this).anchors.map(anchor=>({...anchor.p}));
+        }
+
+        /** Apply a non-destructive corner treatment to the selected anchors. */
+        public setCorner(type:Types.CornerType, amount=12): this
+        {
+            const state=stateOf(this);
+            const value=Math.max(0,Number(amount)||0);
+            for(const index of this.SelectedIndices())
+            {
+                const anchor=state.anchors[index];
+                if(!anchor)continue;
+                anchor.corner=type==='none'?undefined:{type,amount:value};
+            }
+            this.Draw();this.EmitChange();
+            return this;
+        }
+
+        public clearCorner(): this { return this.setCorner('none',0); }
 
         public closePath(): this
         {
@@ -326,7 +440,7 @@ export namespace LineEditor
                 stateOf(this).penSeedCreated = false;
                 this.Draw();
                 this.EmitChange();
-                this.SyncToolbar();
+
             }
             return this;
         }
@@ -336,7 +450,7 @@ export namespace LineEditor
             this.removeAttribute('closed');
             this.Draw();
             this.EmitChange();
-            this.SyncToolbar();
+
             return this;
         }
 
@@ -353,10 +467,20 @@ export namespace LineEditor
             state.marquee = null;
             this.removeAttribute('closed');
             this.Draw();
-            this.RenderInspector();
+
             this.EmitChange();
-            this.SyncToolbar();
+
             return this;
+        }
+
+        private FilterAnchors(remove:Set<number>):Interfaces.Anchor[] {
+            let start=true;const result:Interfaces.Anchor[]=[];
+            stateOf(this).anchors.forEach((anchor,index)=>{
+                start ||= !!anchor.breakBefore;
+                if(remove.has(index))return;
+                result.push({...anchor,breakBefore:result.length>0&&start});start=false;
+            });
+            return result;
         }
 
         public deleteSelection(): this
@@ -365,7 +489,7 @@ export namespace LineEditor
             const remove = state.selected;
             if(!remove.size) return this;
 
-            state.anchors = state.anchors.filter((_, index) => !remove.has(index));
+            state.anchors = this.FilterAnchors(remove);
             state.selected.clear();
 
             if(state.anchors.length)
@@ -375,8 +499,8 @@ export namespace LineEditor
                 this.removeAttribute('closed');
 
             this.Draw();
-            this.RenderInspector();
-            this.SyncToolbar();
+
+
             this.EmitChange();
             return this;
         }
@@ -392,8 +516,8 @@ export namespace LineEditor
             state.selected = new Set([state.anchors.length - 1]);
 
             this.Draw();
-            this.RenderInspector();
-            this.SyncToolbar();
+
+
             this.EmitChange();
             return this;
         }
@@ -401,7 +525,7 @@ export namespace LineEditor
         public removeAnchor(index: number): this
         {
             const state = stateOf(this);
-            state.anchors = state.anchors.filter((_, i) => i !== index);
+            state.anchors = this.FilterAnchors(new Set([index]));
 
             const next = new Set<number>();
             for(const selected of state.selected)
@@ -415,8 +539,8 @@ export namespace LineEditor
                 this.removeAttribute('closed');
 
             this.Draw();
-            this.RenderInspector();
-            this.SyncToolbar();
+
+
             this.EmitChange();
             return this;
         }
@@ -430,151 +554,104 @@ export namespace LineEditor
 
         public getAnchors(): Interfaces.Anchor[] { return this.anchors; }
 
+        private NextIndex(index:number):number|null
+        {
+            const anchors=stateOf(this).anchors,n=anchors.length;if(!n)return null;
+            if(index<n-1&&!anchors[index+1].breakBefore)return index+1;
+            if(!this.closed)return null;
+            let first=index;while(first>0&&!anchors[first].breakBefore)first--;
+            return first===index?null:first;
+        }
+
+        private PreviousIndex(index:number):number|null
+        {
+            const anchors=stateOf(this).anchors,n=anchors.length;if(!n)return null;
+            if(index>0&&!anchors[index].breakBefore)return index-1;
+            if(!this.closed)return null;
+            let last=index;while(last<n-1&&!anchors[last+1].breakBefore)last++;
+            return last===index?null:last;
+        }
+
+        private DefaultHandle(index:number,kind:'in'|'out'):Interfaces.Vec2
+        {
+            const state=stateOf(this),anchor=state.anchors[index];
+            if(!anchor)return{x:0,y:0};
+            if(kind==='out')
+            {
+                const ni=this.NextIndex(index);if(ni===null)return{x:0,y:0};
+                const next=state.anchors[ni];return{x:(next.p.x-anchor.p.x)/3,y:(next.p.y-anchor.p.y)/3};
+            }
+            const pi=this.PreviousIndex(index);if(pi===null)return{x:0,y:0};
+            const prev=state.anchors[pi];return{x:(prev.p.x-anchor.p.x)/3,y:(prev.p.y-anchor.p.y)/3};
+        }
+
+        private CornerGeometry(index:number):{entry:Interfaces.Vec2;exit:Interfaces.Vec2;type:Types.CornerType;c1?:Interfaces.Vec2;c2?:Interfaces.Vec2}|null
+        {
+            const state=stateOf(this),anchor=state.anchors[index],corner=anchor?.corner;
+            if(!anchor||!corner||corner.type==='none'||corner.amount<=0)return null;
+            const pi=this.PreviousIndex(index),ni=this.NextIndex(index);if(pi===null||ni===null)return null;
+            const prev=state.anchors[pi].p,next=state.anchors[ni].p,b=anchor.p;
+            const v1={x:prev.x-b.x,y:prev.y-b.y},v2={x:next.x-b.x,y:next.y-b.y};
+            const l1=Math.hypot(v1.x,v1.y),l2=Math.hypot(v2.x,v2.y);if(l1<1e-6||l2<1e-6)return null;
+            const u1={x:v1.x/l1,y:v1.y/l1},u2={x:v2.x/l2,y:v2.y/l2};
+            const d=Math.min(corner.amount,l1*.45,l2*.45);
+            const entry={x:b.x+u1.x*d,y:b.y+u1.y*d};
+            const exit={x:b.x+u2.x*d,y:b.y+u2.y*d};
+            if(corner.type==='chamfer')return{entry,exit,type:'chamfer'};
+            const h=d*.5522847498;
+            if(corner.type==='fillet')
+                return{entry,exit,type:'fillet',c1:{x:entry.x-u1.x*h,y:entry.y-u1.y*h},c2:{x:exit.x-u2.x*h,y:exit.y-u2.y*h}};
+            return{entry,exit,type:'scallop',c1:{x:entry.x+u1.x*h,y:entry.y+u1.y*h},c2:{x:exit.x+u2.x*h,y:exit.y+u2.y*h}};
+        }
+
         public toSVGPath(): string
         {
-            const anchors = stateOf(this).anchors;
-            if(!anchors.length) return '';
-
-            let d = `M ${anchors[0].p.x} ${anchors[0].p.y}`;
-
-            const segment = (from: Interfaces.Anchor, to: Interfaces.Anchor): string =>
+            const anchors=stateOf(this).anchors;if(!anchors.length)return '';
+            const corner=(i:number)=>this.CornerGeometry(i);
+            const absoluteControl=(anchor:Interfaces.Anchor,index:number,kind:'in'|'out')=>{const off=anchor[kind]??this.DefaultHandle(index,kind);return{x:anchor.p.x+off.x,y:anchor.p.y+off.y};};
+            const segment=(fromIndex:number,start:Interfaces.Vec2,end:Interfaces.Vec2,toIndex:number):string=>
             {
-                const interpolation = from.interpolation ?? 'bezier';
-
-                if(interpolation === 'constant')
-                    return ` H ${to.p.x} V ${to.p.y}`;
-
-                if(interpolation === 'linear')
-                    return ` L ${to.p.x} ${to.p.y}`;
-
-                const c1 = {
-                    x: from.p.x + (from.out?.x ?? 0),
-                    y: from.p.y + (from.out?.y ?? 0)
-                };
-                const c2 = {
-                    x: to.p.x + (to.in?.x ?? 0),
-                    y: to.p.y + (to.in?.y ?? 0)
-                };
-                return ` C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${to.p.x} ${to.p.y}`;
+                const from=anchors[fromIndex],to=anchors[toIndex];
+                const interpolation=from.interpolation??'linear';
+                if(interpolation==='constant')return ` H ${end.x} V ${end.y}`;
+                if(interpolation==='linear')return ` L ${end.x} ${end.y}`;
+                const c1=absoluteControl(from,fromIndex,'out'),c2=absoluteControl(to,toIndex,'in');
+                return ` C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${end.x} ${end.y}`;
             };
+            const drawCorner=(g:ReturnType<typeof corner>):string=>{if(!g)return '';if(g.type==='chamfer')return ` L ${g.exit.x} ${g.exit.y}`;return ` C ${g.c1!.x} ${g.c1!.y}, ${g.c2!.x} ${g.c2!.y}, ${g.exit.x} ${g.exit.y}`;};
 
-            for(let index = 1; index < anchors.length; index++)
-                d += segment(anchors[index - 1], anchors[index]);
-
-            if(this.closed && anchors.length > 1)
-                d += segment(anchors[anchors.length - 1], anchors[0]) + ' Z';
-
+            let d='';
+            for(let first=0;first<anchors.length;) {
+                let last=first;while(last+1<anchors.length&&!anchors[last+1].breakBefore)last++;
+                const start=corner(first)?.exit??anchors[first].p;
+                let current={...start};d+=`M ${current.x} ${current.y}`;
+                for(let i=first;i<last;i++) {
+                    const next=i+1,g=corner(next),end=g?.entry??anchors[next].p;
+                    d+=segment(i,current,end,next);current={...end};
+                    if(g){d+=drawCorner(g);current={...g.exit};}
+                }
+                if(this.closed&&last-first>=2) {
+                    const g=corner(first),end=g?.entry??anchors[first].p;
+                    d+=segment(last,current,end,first)+drawCorner(g)+' Z';
+                }
+                first=last+1;
+            }
             return d;
         }
 
-        private Build(): void
-        {
-            if(this._svg && this.contains(this._svg)) return;
-
-            const shell = document.createElement('section');
-            shell.className = 'LineEditor-Shell';
-
-            const toolbar = document.createElement('header');
-            toolbar.className = 'LineEditor-Toolbar';
-            this._toolbar = toolbar;
-
-            for(const [mode, label] of [
-                ['select','Select'],
-                ['pen','Pen'],
-                ['curve','Curve'],
-                ['delete','Delete']
-            ] as [Types.Mode,string][])
-            {
-                const button = document.createElement('button');
-                button.className = 'LineEditor-Button';
-                button.dataset.mode = mode;
-                button.textContent = label;
-                button.onclick = () => this.setMode(mode);
-                toolbar.appendChild(button);
-            }
-
-            const deleteSelected = document.createElement('button');
-            deleteSelected.className = 'LineEditor-Button';
-            deleteSelected.dataset.action = 'delete-selected';
-            deleteSelected.textContent = 'Delete selected';
-            deleteSelected.onclick = () => this.deleteSelection();
-            toolbar.appendChild(deleteSelected);
-
-            const close = document.createElement('button');
-            close.className = 'LineEditor-Button';
-            close.dataset.action = 'close';
-            close.onclick = () => this.closed ? this.openPath() : this.closePath();
-            toolbar.appendChild(close);
-
-            const clear = document.createElement('button');
-            clear.className = 'LineEditor-Button';
-            clear.textContent = 'Clear';
-            clear.onclick = () => this.clear();
-            toolbar.appendChild(clear);
-
-            const stage = document.createElement('div');
-            stage.className = 'LineEditor-Stage';
-            this._stage = stage;
-
-            const svg = document.createElementNS(SVG_NS,'svg');
-            svg.setAttribute('class','LineEditor-Svg');
-            svg.setAttribute('viewBox','0 0 620 340');
-            svg.setAttribute('preserveAspectRatio','none');
-            this._svg = svg;
-            stage.appendChild(svg);
-
-            const side = document.createElement('aside');
-            side.className = 'LineEditor-Side';
-            this._side = side;
-
-            shell.append(toolbar, stage, side);
-            this.replaceChildren(shell);
-
-            if(!this._bound)
-            {
-                this._bound = true;
-                svg.addEventListener('pointerdown', event => this.OnPointerDown(event));
-                svg.addEventListener('pointermove', event => this.OnPointerMove(event));
-                svg.addEventListener('pointerup', event => this.OnPointerUp(event));
-                svg.addEventListener('pointercancel', event => this.OnPointerUp(event));
-                svg.addEventListener('pointerleave', event => this.OnPointerLeave(event));
-                svg.addEventListener('dblclick', event => this.OnDoubleClick(event));
-                this.addEventListener('keydown', event => this.OnKeyDown(event));
-            }
-
-            this.SyncToolbar();
-        }
-
-        private SyncToolbar(): void
-        {
-            const state = stateOf(this);
-            if(!this._toolbar) return;
-
-            this._toolbar.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button =>
-            {
-                button.dataset.active = String(button.dataset.mode === state.mode);
-            });
-
-            const del = this._toolbar.querySelector<HTMLButtonElement>('[data-action="delete-selected"]');
-            if(del) del.disabled = state.selected.size === 0;
-
-            const close = this._toolbar.querySelector<HTMLButtonElement>('[data-action="close"]');
-            if(close)
-            {
-                close.disabled = state.anchors.length < 3;
-                close.textContent = this.closed ? 'Open' : 'Close';
-            }
-        }
 
         private Point(event: PointerEvent): Interfaces.Vec2
         {
             const svg = this._svg!;
-            const rect = svg.getBoundingClientRect();
-
-            return {
-                x: clamp((event.clientX - rect.left) / Math.max(1,rect.width) * 620, 0, 620),
-                y: clamp((event.clientY - rect.top) / Math.max(1,rect.height) * 340, 0, 340)
-            };
+            const matrix=svg.getScreenCTM();
+            if(matrix) {
+                const point=svg.createSVGPoint();point.x=event.clientX;point.y=event.clientY;
+                const local=point.matrixTransform(matrix.inverse()),box=svg.viewBox.baseVal;
+                return{x:clamp(local.x,box.x,box.x+box.width),y:clamp(local.y,box.y,box.y+box.height)};
+            }
+            const rect=svg.getBoundingClientRect(),bounds=this.Bounds();
+            return{x:clamp((event.clientX-rect.left)/Math.max(1,rect.width)*bounds.width,0,bounds.width),
+                y:clamp((event.clientY-rect.top)/Math.max(1,rect.height)*bounds.height,0,bounds.height)};
         }
 
         private SelectedIndices(): number[]
@@ -637,10 +714,50 @@ export namespace LineEditor
             return found;
         }
 
+        private HitRadius(pixels:number):number {
+            const matrix=this._svg?.getScreenCTM();
+            return matrix ? pixels / Math.max(.01,Math.hypot(matrix.a,matrix.b)) : pixels;
+        }
+        private Hit(point:Interfaces.Vec2):{kind:'connect'|'anchor'|'bend'|'segment';index:number}|null {
+            const state=stateOf(this), anchors=state.anchors, radius=this.HitRadius(10);
+            const index=this.NearestAnchor(point,radius);
+            if(index>=0) {
+                const p=anchors[index].p;
+                const centre=Math.hypot(point.x-p.x,point.y-p.y)<=this.HitRadius(4);
+                return {kind:centre&&!this.closed&&(this.PreviousIndex(index)===null||this.NextIndex(index)===null)?'connect':'anchor',index};
+            }
+            let best=radius, result:{kind:'bend'|'segment';index:number}|null=null;
+            const count=this.closed?anchors.length:anchors.length-1;
+            for(let i=0;i<count;i++) {
+                const j=this.NextIndex(i);if(j===null)continue;
+                const a=anchors[i],b=anchors[j];
+                const out=a.out??this.DefaultHandle(i,'out'), incoming=b.in??this.DefaultHandle(j,'in');
+                const at=(t:number):Interfaces.Vec2=>{
+                    if(a.interpolation==='constant') {
+                        const horizontal=Math.abs(b.p.x-a.p.x),vertical=Math.abs(b.p.y-a.p.y),distance=t*(horizontal+vertical);
+                        return distance<=horizontal?{x:a.p.x+Math.sign(b.p.x-a.p.x)*distance,y:a.p.y}:{x:b.p.x,y:a.p.y+Math.sign(b.p.y-a.p.y)*(distance-horizontal)};
+                    }
+                    if(a.interpolation!=='bezier')return{x:a.p.x+(b.p.x-a.p.x)*t,y:a.p.y+(b.p.y-a.p.y)*t};
+                    const u=1-t;
+                    return{x:u*u*u*a.p.x+3*u*u*t*(a.p.x+out.x)+3*u*t*t*(b.p.x+incoming.x)+t*t*t*b.p.x,
+                        y:u*u*u*a.p.y+3*u*u*t*(a.p.y+out.y)+3*u*t*t*(b.p.y+incoming.y)+t*t*t*b.p.y};
+                };
+                const middle=at(.5); let previous=at(0);
+                for(let step=1;step<=64;step++) {
+                    const current=at(step/64),vx=current.x-previous.x,vy=current.y-previous.y;
+                    const t=clamp(((point.x-previous.x)*vx+(point.y-previous.y)*vy)/(vx*vx+vy*vy||1),0,1);
+                    const distance=Math.hypot(point.x-previous.x-t*vx,point.y-previous.y-t*vy);
+                    if(distance<best){best=distance;result={kind:Math.hypot(point.x-middle.x,point.y-middle.y)<=radius?'bend':'segment',index:i};}
+                    previous=current;
+                }
+            }
+            return result;
+        }
+
         private OnPointerDown(event: PointerEvent): void
         {
             if(event.button !== 0 || !this._svg) return;
-            this.focus({preventScroll:true});
+            this._svg.focus({preventScroll:true});
 
             const state = stateOf(this);
             const point = this.Point(event);
@@ -650,26 +767,37 @@ export namespace LineEditor
             const handleNode = target.closest?.('.LineEditor-Handle') as SVGCircleElement | null;
             const nearest = anchorNode
                 ? Number(anchorNode.dataset.index)
-                : this.NearestAnchor(point, 9);
+                : this.NearestAnchor(point, this.HitRadius(10));
 
-            /*
-             * PEN = Illustrator-style point-to-point drawing.
-             *
-             * 1. MouseDown on empty space starts a fresh path and places point #1.
-             * 2. MouseUp does NOTHING: the rubber-band remains active.
-             * 3. PointerMove keeps previewing from the last committed point.
-             * 4. Every later MouseDown commits the next point/segment and immediately
-             *    arms that point as the origin of the following preview segment.
-             * 5. Double-click ends the current path and exits Pen.
-             *
-             * This component edits one path at a time. Therefore starting Pen on empty
-             * space while another path exists starts a fresh path. Clicking an open
-             * endpoint instead continues that existing path.
-             */
-            if(state.mode === 'pen')
+            const hit = this.Hit(point);
+            if(state.mode==='freehand') {
+                event.preventDefault();
+                const origin=structuredClone(state.anchors);
+                state.anchors.push({p:point,breakBefore:state.anchors.length>0,interpolation:'linear',mode:'corner'});
+                state.selected=new Set([state.anchors.length-1]);
+                state.drag={kind:'freehand',pointerId:event.pointerId,start:point,current:point,origin};
+                this.removeAttribute('closed');this._svg.setPointerCapture(event.pointerId);
+                this.Cursor('Draw');this.Draw();return;
+            }
+            if((state.mode==='pen'&&(state.penStart!==null||!hit)) || (hit?.kind==='connect'&&state.mode==='pen')) {
+                state.penPointer={id:event.pointerId,start:point,commit:state.penStart!==null};
+                this._svg.setPointerCapture(event.pointerId);
+            }
+            // The centre of an OPEN endpoint arms one additional segment. Its rim moves the point.
+            if(state.penStart === null && hit?.kind === 'connect' && state.mode === 'pen') {
+                event.preventDefault();
+                state.mode = 'pen'; this.setAttribute('mode','pen');
+                state.penStart = hit.index; state.penDirection = this.PreviousIndex(hit.index)===null && this.NextIndex(hit.index)!==null ? 'prepend' : 'append';
+                state.penSeedCreated = false; state.preview = {...state.anchors[hit.index].p};
+                state.selected = new Set([hit.index]);
+                this.Draw();
+                this.Cursor('Draw'); return;
+            }
+            // Guided drawing keeps its tool selected while existing geometry stays editable.
+            if(state.mode === 'pen' && (state.penStart!==null || !hit))
             {
                 event.preventDefault();
-                if(this.closed) return;
+                if(this.closed)this.removeAttribute('closed');
 
                 if(state.penStart === null)
                 {
@@ -677,106 +805,41 @@ export namespace LineEditor
                      * Continue only when the user explicitly presses an OPEN endpoint.
                      * Previous selection alone never arms Pen.
                      */
-                    if(nearest >= 0 && (nearest === 0 || nearest === state.anchors.length - 1))
+                    if(nearest >= 0 && (this.PreviousIndex(nearest)===null||this.NextIndex(nearest)===null))
                     {
                         state.selected = new Set([nearest]);
                         state.penStart = nearest;
                         state.penDirection =
-                            nearest === 0 && state.anchors.length > 1
+                            this.PreviousIndex(nearest)===null && this.NextIndex(nearest)!==null
                                 ? 'prepend'
                                 : 'append';
                         state.penSeedCreated = false;
                         state.preview = point;
 
                         this.Draw();
-                        this.RenderInspector();
-                        this.SyncToolbar();
+
+
                         return;
                     }
 
-                    /*
-                     * Empty-space MouseDown starts a NEW path.
-                     * LineEditor is intentionally a single-path editor, so the old path
-                     * is replaced rather than silently connected to the new point.
-                     */
-                    state.anchors = [{
-                        p: point,
-                        interpolation: 'linear',
-                        mode: 'corner'
-                    }];
-                    state.selected = new Set([0]);
-                    state.penStart = 0;
+                    // Preserve earlier paths; start a disconnected, editable path.
+                    const index=state.anchors.length;
+                    state.anchors.push({p:point,breakBefore:index>0,interpolation:'linear',mode:'corner'});
+                    state.selected = new Set([index]);
+                    state.penStart = index;
                     state.penDirection = 'append';
                     state.penSeedCreated = true;
                     state.preview = point;
                     this.removeAttribute('closed');
 
                     this.Draw();
-                    this.RenderInspector();
-                    this.SyncToolbar();
+
+
                     this.EmitChange();
                     return;
                 }
 
-                const startIndex = state.penStart;
-                const startAnchor = state.anchors[startIndex];
-                if(!startAnchor) return;
-
-                /*
-                 * The second press of a browser double-click lands on the point just
-                 * committed by the first press. Do not manufacture a zero-length point;
-                 * the following dblclick event will finish the path.
-                 */
-                if(nearest === startIndex)
-                    return;
-
-                if(state.penDirection === 'prepend')
-                {
-                    /*
-                     * Prepending: the NEW anchor owns the linear segment leaving it.
-                     */
-                    state.anchors.unshift({
-                        p: point,
-                        interpolation: 'linear',
-                        mode: 'corner'
-                    });
-                    state.selected = new Set([0]);
-                    state.penStart = 0;
-                }
-                else
-                {
-                    /*
-                     * Appending: interpolation belongs to the anchor the new segment
-                     * leaves. Pen always creates straight segments.
-                     */
-                    startAnchor.interpolation = 'linear';
-                    startAnchor.mode = 'corner';
-                    startAnchor.in = undefined;
-                    startAnchor.out = undefined;
-
-                    state.anchors.push({
-                        p: point,
-                        interpolation: 'linear',
-                        mode: 'corner'
-                    });
-
-                    const committed = state.anchors.length - 1;
-                    state.selected = new Set([committed]);
-                    state.penStart = committed;
-                }
-
-                /*
-                 * IMPORTANT: Pen REMAINS ACTIVE after committing a segment.
-                 * MouseUp cannot terminate this state. The next PointerMove will simply
-                 * move this preview away from the newly committed point.
-                 */
-                state.preview = point;
-                state.penSeedCreated = false;
-
-                this.Draw();
-                this.RenderInspector();
-                this.SyncToolbar();
-                this.EmitChange();
+                // The second press arms the commit; release finishes this cycle.
                 return;
             }
 
@@ -792,7 +855,8 @@ export namespace LineEditor
                     pointerId:event.pointerId,
                     start:point,
                     current:point,
-                    anchorIndex:index
+                    anchorIndex:index,
+                    origin:structuredClone(state.anchors)
                 };
 
                 this._svg.setPointerCapture(event.pointerId);
@@ -810,27 +874,12 @@ export namespace LineEditor
                     return;
                 }
 
-                const wasSelected = state.selected.has(index);
-
-                /* Clicking an already-selected anchor enters point/curve editing. */
-                if(state.mode === 'select' && wasSelected && !event.shiftKey)
-                {
-                    state.selected = new Set([index]);
-                    state.hovered = index;
-                    state.mode = 'curve';
-                    this.setAttribute('mode','curve');
-                    this.Draw();
-                    this.RenderInspector();
-                    this.SyncToolbar();
-                    return;
-                }
-
                 if(event.shiftKey)
                 {
                     if(state.selected.has(index)) state.selected.delete(index);
                     else state.selected.add(index);
                 }
-                else if(!state.selected.has(index))
+                else
                 {
                     state.selected = new Set([index]);
                 }
@@ -847,9 +896,25 @@ export namespace LineEditor
 
                 this._svg.setPointerCapture(event.pointerId);
                 this.Draw();
-                this.RenderInspector();
-                this.SyncToolbar();
+
+
                 return;
+            }
+
+            if(hit && (hit.kind === 'bend' || hit.kind === 'segment') && state.mode !== 'delete') {
+                event.preventDefault();
+                const index=hit.index, next=this.NextIndex(index)!;
+                state.selected=new Set([index,next]);
+                const origin=structuredClone(state.anchors);
+                if(hit.kind==='bend') {
+                    // Store the two original tangents once. At t=.5 each contributes 3/8.
+                    origin[index].out ??= this.DefaultHandle(index,'out');
+                    origin[next].in ??= this.DefaultHandle(next,'in');
+                }
+                state.drag={kind:hit.kind,pointerId:event.pointerId,start:point,current:point,origin,segmentIndex:index};
+                this._svg.setPointerCapture(event.pointerId);
+                this.Cursor(hit.kind==='bend'?'Curve':'Move');
+                this.Draw();return;
             }
 
             /* Blank-space drag = marquee selection. In Delete mode it is delete-rectangle. */
@@ -868,8 +933,73 @@ export namespace LineEditor
             };
             this._svg.setPointerCapture(event.pointerId);
             this.Draw();
-            this.RenderInspector();
-            this.SyncToolbar();
+
+
+        }
+
+        private CommitPen(point:Interfaces.Vec2):void
+        {
+                const state=stateOf(this);
+                const startIndex = state.penStart;
+                if(startIndex===null)return;
+                const startAnchor = state.anchors[startIndex];
+                if(!startAnchor) return;
+
+                /*
+                 * The second press of a browser double-click lands on the point just
+                 * committed by the first press. Do not manufacture a zero-length point;
+                 * leave the origin armed until a distinct endpoint is supplied.
+                 */
+                if(Math.hypot(point.x-startAnchor.p.x,point.y-startAnchor.p.y)<this.HitRadius(2))
+                    return;
+
+                if(state.penDirection === 'prepend')
+                {
+                    /*
+                     * Prepending: the NEW anchor owns the linear segment leaving it.
+                     */
+                    state.anchors.splice(startIndex,0,{
+                        breakBefore:startAnchor.breakBefore,
+                        p: point,
+                        interpolation: 'linear',
+                        mode: 'corner'
+                    });
+                    startAnchor.breakBefore=false;
+                    state.selected = new Set([startIndex]);
+                }
+                else
+                {
+                    /*
+                     * Appending: interpolation belongs to the anchor the new segment
+                     * leaves. Pen always creates straight segments.
+                     */
+                    startAnchor.interpolation = 'linear';
+                    startAnchor.mode = 'corner';
+                    startAnchor.out = undefined;
+
+                    state.anchors.splice(startIndex+1,0,{
+                        p: point,
+                        interpolation: 'linear',
+                        mode: 'corner'
+                    });
+
+                    const committed = startIndex+1;
+                    state.selected = new Set([committed]);
+                    state.penStart = committed;
+                }
+
+                // Release commits exactly ONE segment, then returns to neutral editing.
+                state.preview = null;
+                state.penStart = null;
+                state.penSeedCreated = false;
+                // Keep the selected drawing tool; the next press starts a fresh cycle.
+                this.Cursor('Default');
+
+                this.Draw();
+
+
+                this.EmitChange();
+                return;
         }
 
         private OnPointerMove(event: PointerEvent): void
@@ -883,7 +1013,9 @@ export namespace LineEditor
             /* Mouse-over preselection: visually select the closest anchor without changing selection state. */
             if(!drag)
             {
-                const hovered = this.NearestAnchor(point, 9);
+                const hovered = this.NearestAnchor(point, this.HitRadius(10));
+                const hit=this.Hit(point);
+                this.Cursor(state.penStart!==null?'Draw':hit?.kind==='connect'&&state.mode==='pen'?'Add':hit?.kind==='bend'?'Curve':hit?'Move':state.mode==='freehand'?'Draw':'Default');
                 const nextHovered = hovered >= 0 ? hovered : null;
                 if(nextHovered !== state.hovered)
                 {
@@ -903,6 +1035,12 @@ export namespace LineEditor
             if(drag.pointerId !== event.pointerId) return;
             drag.current = point;
 
+            if(drag.kind==='freehand') {
+                const samples=typeof event.getCoalescedEvents==='function'?event.getCoalescedEvents():[];
+                for(const sample of samples.length?samples:[event])this.SampleFreehand(this.Point(sample));
+                this.Draw();return;
+            }
+
             if(drag.kind === 'handle-in' || drag.kind === 'handle-out')
             {
                 const index = drag.anchorIndex!;
@@ -912,8 +1050,25 @@ export namespace LineEditor
                 const kind = drag.kind === 'handle-in' ? 'in' : 'out';
                 this.SetHandle(index, kind, point);
                 this.Draw();
-                this.RenderInspector();
+
                 return;
+            }
+
+            if(drag.kind === 'segment' || drag.kind === 'bend') {
+                const index=drag.segmentIndex!, next=this.NextIndex(index)!, origin=drag.origin!;
+                let dx=point.x-drag.start.x,dy=point.y-drag.start.y;
+                if(drag.kind==='bend') {
+                    const a=state.anchors[index],b=state.anchors[next];
+                    a.interpolation='bezier'; a.mode='corner'; b.mode='corner';
+                    a.out={x:origin[index].out!.x+dx*4/3,y:origin[index].out!.y+dy*4/3};
+                    b.in={x:origin[next].in!.x+dx*4/3,y:origin[next].in!.y+dy*4/3};
+                } else {
+                    // Clamp one common delta so dragging cannot change the segment's shape.
+                    dx=clamp(dx,-Math.min(origin[index].p.x,origin[next].p.x),this.Bounds().width-Math.max(origin[index].p.x,origin[next].p.x));
+                    dy=clamp(dy,-Math.min(origin[index].p.y,origin[next].p.y),this.Bounds().height-Math.max(origin[index].p.y,origin[next].p.y));
+                    for(const i of [index,next])state.anchors[i].p={x:origin[i].p.x+dx,y:origin[i].p.y+dy};
+                }
+                this.Draw();return;
             }
 
             if(drag.kind === 'anchor')
@@ -929,13 +1084,13 @@ export namespace LineEditor
                     if(!source || !anchor) continue;
 
                     anchor.p = {
-                        x: clamp(source.p.x + dx, 0, 620),
-                        y: clamp(source.p.y + dy, 0, 340)
+                        x: clamp(source.p.x + dx, 0, this.Bounds().width),
+                        y: clamp(source.p.y + dy, 0, this.Bounds().height)
                     };
                 }
 
                 this.Draw();
-                this.RenderInspector();
+
                 return;
             }
 
@@ -960,19 +1115,46 @@ export namespace LineEditor
                 }
 
                 this.Draw();
-                this.RenderInspector();
-                this.SyncToolbar();
+
+
             }
+        }
+
+        private SampleFreehand(point:Interfaces.Vec2,final=false):void {
+            const state=stateOf(this),last=state.anchors[state.anchors.length-1];
+            if(!last||Math.hypot(point.x-last.p.x,point.y-last.p.y)<this.HitRadius(final ? 0.25 : 2))return;
+            state.anchors.push({p:point,interpolation:'linear',mode:'corner'});
+            state.selected=new Set([state.anchors.length-1]);
         }
 
         private OnPointerUp(event: PointerEvent): void
         {
             if(!this._svg) return;
             const state = stateOf(this);
+            const pen=state.penPointer;
+            if(pen?.id===event.pointerId) {
+                state.penPointer=undefined;
+                if(this._svg.hasPointerCapture(event.pointerId))this._svg.releasePointerCapture(event.pointerId);
+                if(event.type==='pointercancel') {
+                    if(state.penSeedCreated&&state.penStart!==null)state.anchors.splice(state.penStart,1);
+                    state.penStart=null;state.penSeedCreated=false;state.preview=null;
+                    this.Cursor('Default');this.Draw();this.EmitChange();
+                } else {
+                    const point=this.Point(event);
+                    if(pen.commit||Math.hypot(point.x-pen.start.x,point.y-pen.start.y)>this.HitRadius(3))this.CommitPen(point);
+                }
+                return;
+            }
             const drag = state.drag;
             if(!drag || drag.pointerId !== event.pointerId) return;
 
-            if(drag.kind === 'marquee' && state.mode === 'delete' && state.marquee)
+            if(event.type === 'pointercancel' && drag.origin) state.anchors=drag.origin;
+            else if(drag.kind==='freehand') {
+                this.SampleFreehand(this.Point(event),true);
+                if(state.anchors.length-(drag.origin?.length??0)<2)state.anchors=drag.origin!;
+            }
+
+            if(event.type !== 'pointercancel' && drag.kind === 'marquee' && state.mode === 'delete' && state.marquee)
             {
                 const {a,b} = state.marquee;
                 const x1 = Math.min(a.x,b.x), x2 = Math.max(a.x,b.x);
@@ -987,7 +1169,7 @@ export namespace LineEditor
 
                 if(doomed.size)
                 {
-                    state.anchors = state.anchors.filter((_,index)=>!doomed.has(index));
+                    state.anchors = this.FilterAnchors(doomed);
                     state.selected.clear();
                     if(state.anchors.length < 3) this.removeAttribute('closed');
                 }
@@ -995,6 +1177,7 @@ export namespace LineEditor
 
             state.drag = null;
             state.marquee = null;
+            this.Cursor('Default');
 
             try
             {
@@ -1004,8 +1187,8 @@ export namespace LineEditor
             catch(_) {}
 
             this.Draw();
-            this.RenderInspector();
-            this.SyncToolbar();
+
+
             this.EmitChange();
         }
 
@@ -1025,29 +1208,6 @@ export namespace LineEditor
             this.Draw();
         }
 
-        private OnDoubleClick(event: MouseEvent): void
-        {
-            const state = stateOf(this);
-            if(state.mode !== 'pen' || state.penStart === null)
-                return;
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            /*
-             * Browser dispatches dblclick after the second click sequence.
-             * By then the first click of that pair has already committed the current
-             * segment. We only finish; we never add another anchor here.
-             */
-            state.preview = null;
-            state.penStart = null;
-            state.penSeedCreated = false;
-            state.hovered = null;
-
-            this.setMode('select');
-            this.EmitChange();
-        }
-
         private OnKeyDown(event: KeyboardEvent): void
         {
             const state = stateOf(this);
@@ -1062,20 +1222,24 @@ export namespace LineEditor
 
             if(event.key === 'Escape')
             {
+                if(state.penPointer&&this._svg?.hasPointerCapture(state.penPointer.id))this._svg.releasePointerCapture(state.penPointer.id);
+                state.penPointer=undefined;
+                if(state.drag?.origin) state.anchors=state.drag.origin;
+                if(state.drag && this._svg?.hasPointerCapture(state.drag.pointerId)) this._svg.releasePointerCapture(state.drag.pointerId);
                 state.drag = null;
                 state.marquee = null;
                 state.preview = null;
 
                 if(state.mode === 'pen')
                 {
-                    if(state.penSeedCreated && state.penStart !== null && state.anchors.length === 1)
+                    if(state.penSeedCreated && state.penStart !== null)
                     {
-                        state.anchors = [];
+                        state.anchors.splice(state.penStart,1);
                         state.selected.clear();
                     }
                     state.penStart = null;
                     state.penSeedCreated = false;
-                    this.setMode('select');
+                    this.setMode(state.mode);
                 }
                 else this.Draw();
                 return;
@@ -1087,7 +1251,7 @@ export namespace LineEditor
                 state.preview = null;
                 state.penStart = null;
                 state.penSeedCreated = false;
-                this.setMode('select');
+                this.setMode(state.mode);
                 return;
             }
 
@@ -1129,15 +1293,27 @@ export namespace LineEditor
 
         private Draw(): void
         {
-            const svg = this._svg;
+            const svg = attachment(this).layer;
             if(!svg) return;
-
             const state = stateOf(this);
             svg.replaceChildren();
+            const style=document.createElementNS(SVG_NS,'style');
+            style.textContent=`[data-line-layer] .LineEditor-Path{pointer-events:none}
+[data-line-layer] .LineEditor-Preview{fill:none;stroke:#8a62ef;stroke-width:1.5;stroke-dasharray:5 4;pointer-events:none}
+[data-line-layer] .LineEditor-HandleLine{stroke:#8e98a1;stroke-width:1;stroke-dasharray:2 2;pointer-events:none}
+[data-line-layer] .LineEditor-Handle{fill:white;stroke:#e40c88;stroke-width:1;cursor:inherit}
+[data-line-layer] .LineEditor-Anchor{fill:white;stroke:#e40c88;stroke-width:2;cursor:inherit}
+[data-line-layer] .LineEditor-Anchor[data-selected="true"]{fill:#e40c88;stroke:white}
+[data-line-layer] .LineEditor-Marquee{fill:#e40c881a;stroke:#e40c88;stroke-width:1;stroke-dasharray:5 3;pointer-events:none}`;
+            svg.appendChild(style);
 
             const path = document.createElementNS(SVG_NS,'path');
             path.setAttribute('class','LineEditor-Path');
             path.setAttribute('d',this.toSVGPath());
+            const stroke=this.stroke;
+            for(const [key,value] of Object.entries({fill:'none',stroke:stroke.color,'stroke-width':stroke.width,'stroke-opacity':stroke.opacity,
+                'stroke-linecap':stroke.lineCap,'stroke-linejoin':stroke.lineJoin,'stroke-dasharray':stroke.dashArray.join(' '),
+                'stroke-dashoffset':stroke.dashOffset,'stroke-miterlimit':stroke.miterLimit}))path.setAttribute(key,String(value));
             svg.appendChild(path);
 
             if(state.mode === 'pen' && state.preview && state.penStart !== null && !this.closed)
@@ -1147,6 +1323,7 @@ export namespace LineEditor
                 {
                     const preview = document.createElementNS(SVG_NS,'path');
                     preview.setAttribute('class','LineEditor-Preview');
+                    preview.style.stroke=this.stroke.color;preview.style.strokeWidth=String(this.stroke.width);preview.style.opacity=String(this.stroke.opacity);
                     preview.setAttribute('d',
                         `M ${start.p.x} ${start.p.y} L ${state.preview.x} ${state.preview.y}`);
                     svg.appendChild(preview);
@@ -1162,12 +1339,9 @@ export namespace LineEditor
                 // Same conceptual rule as CurveEditor: selected Bézier keys expose in/out tangents.
                 if(showHandles && selected && (anchor.interpolation ?? 'bezier') === 'bezier')
                 {
-                    anchor.in ??= {x:-35,y:0};
-                    anchor.out ??= {x:35,y:0};
-
                     for(const kind of ['in','out'] as const)
                     {
-                        const offset = anchor[kind]!;
+                        const offset = anchor[kind] ?? this.DefaultHandle(index,kind);
                         const hx = anchor.p.x + offset.x;
                         const hy = anchor.p.y + offset.y;
 
@@ -1190,11 +1364,16 @@ export namespace LineEditor
                     }
                 }
 
+                const rim = document.createElementNS(SVG_NS,'circle');
+                rim.setAttribute('class','LineEditor-AnchorRim');
+                rim.setAttribute('cx',String(anchor.p.x)); rim.setAttribute('cy',String(anchor.p.y));
+                rim.setAttribute('r','10'); rim.setAttribute('fill','transparent'); rim.style.cursor='inherit';
+                svg.appendChild(rim);
                 const circle = document.createElementNS(SVG_NS,'circle');
                 circle.setAttribute('class','LineEditor-Anchor');
                 circle.setAttribute('cx',String(anchor.p.x));
                 circle.setAttribute('cy',String(anchor.p.y));
-                circle.setAttribute('r', index===0 && state.mode==='pen' ? '2.8' : '2.5');
+                circle.setAttribute('r','5');
                 circle.dataset.index = String(index);
                 circle.dataset.selected = String(selected || state.hovered === index);
                 circle.dataset.first = String(index===0);
@@ -1219,131 +1398,14 @@ export namespace LineEditor
             }
         }
 
-        private RenderInspector(): void
-        {
-            const side = this._side;
-            if(!side) return;
-
-            const state = stateOf(this);
-            side.replaceChildren();
-
-            const title = document.createElement('div');
-            title.className = 'LineEditor-SideTitle';
-            title.textContent =
-                state.mode === 'curve'
-                    ? 'Curve'
-                    : `${state.selected.size} selected`;
-            side.appendChild(title);
-
-            const selected = this.SelectedIndices();
-            const index = selected.length === 1 ? selected[0] : -1;
-            const anchor = index >= 0 ? state.anchors[index] : undefined;
-
-            if(anchor)
-            {
-                for(const [label,value,setter] of [
-                    ['X',anchor.p.x,(v:number)=>anchor.p.x=v],
-                    ['Y',anchor.p.y,(v:number)=>anchor.p.y=v]
-                ] as [string,number,(value:number)=>void][])
-                {
-                    const input = document.createElement('input');
-                    input.className = 'LineEditor-Field';
-                    input.type = 'number';
-                    input.title = label;
-                    input.value = String(Math.round(value*10)/10);
-                    input.onchange = () =>
-                    {
-                        setter(Number(input.value));
-                        this.Draw();
-                        this.EmitChange();
-                    };
-                    side.appendChild(input);
-                }
-            }
-
-            if(anchor && state.anchors.length >= 3)
-            {
-                const close = document.createElement('button');
-                close.type = 'button';
-                close.className = 'LineEditor-Button';
-                close.dataset.action = 'inspector-close';
-                close.textContent = this.closed ? 'Open' : 'Close';
-                close.title = this.closed ? 'Open path' : 'Close path';
-                close.style.width = '100%';
-                close.onclick = () =>
-                {
-                    this.closed ? this.openPath() : this.closePath();
-                    this.RenderInspector();
-                };
-                side.appendChild(close);
-            }
-
-            /*
-             * CurveEditor parity: same Constant / Linear / Bezier segment model.
-             * When Curve mode is active, the selected key also exposes tangent mode.
-             */
-            if(state.mode === 'curve' && selected.length)
-            {
-                const interpolation = document.createElement('select');
-                interpolation.className = 'LineEditor-Field';
-                interpolation.title = 'Interpolation';
-                interpolation.innerHTML =
-                    '<option value="constant">Constant</option>' +
-                    '<option value="linear">Linear</option>' +
-                    '<option value="bezier">Bezier</option>';
-
-                const first = state.anchors[selected[0]];
-                interpolation.value = first?.interpolation ?? state.interpolation;
-                interpolation.onchange = () =>
-                    this.setInterpolation(interpolation.value as Types.Interpolation);
-                side.appendChild(interpolation);
-
-                if(selected.length === 1 && anchor &&
-                   (anchor.interpolation ?? 'bezier') === 'bezier')
-                {
-                    const handles = document.createElement('select');
-                    handles.className = 'LineEditor-Field';
-                    handles.title = 'Tangents';
-                    handles.innerHTML =
-                        '<option value="corner">Corner</option>' +
-                        '<option value="smooth">Smooth</option>' +
-                        '<option value="symmetric">Symmetric</option>';
-                    handles.value = anchor.mode ?? 'smooth';
-                    handles.onchange = () =>
-                    {
-                        anchor.mode = handles.value as Types.HandleMode;
-                        this.Draw();
-                        this.EmitChange();
-                    };
-                    side.appendChild(handles);
-                }
-            }
-
-            const hint = document.createElement('div');
-            hint.className = 'LineEditor-Hint';
-
-            if(state.mode === 'pen')
-                hint.textContent =
-                    'Pen: MouseDown places a point; MouseUp does not finish. Move to preview the next straight segment, MouseDown again to commit it and continue. Double-click finishes and exits Pen.';
-            else if(state.mode === 'curve')
-                hint.textContent =
-                    'Curve: select points, choose Constant / Linear / Bezier exactly like CurveEditor, then drag the visible in/out tangents.';
-            else if(state.mode === 'delete')
-                hint.textContent =
-                    'Delete: click one point, or drag a rectangle around many points to delete them together.';
-            else
-                hint.textContent =
-                    'Select: click/Shift-click points, drag a selection rectangle, drag selected points together. Delete/Backspace removes selection.';
-
-            side.appendChild(hint);
-        }
-
         private EmitChange(): void
         {
             const detail = {
                 anchors: this.getAnchors(),
                 selected: this.SelectedIndices(),
                 closed: this.closed,
+                stroke: this.stroke,
+                canvas: this.canvas,
                 path: this.toSVGPath(),
                 source: this
             };
@@ -1368,3 +1430,7 @@ export type LineEditorOptions = LineEditor.Interfaces.LineEditorOptions;
 
 export const LineEditorComponent = LineEditor.LineEditor;
 export default LineEditor.LineEditor;
+
+export type CanvasTarget = LineEditor.Interfaces.CanvasTarget;
+export type StrokeOptions = LineEditor.Interfaces.StrokeOptions;
+export type CursorIcons = LineEditor.Interfaces.CursorIcons;

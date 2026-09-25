@@ -4,15 +4,16 @@
  * @copyright Riccardo Angeli 2012-2026
  * @license   MIT / Commercial (dual license)
  *
- * Barrel — all 10 layout components (Batch 4 of the Component 2.0 migration).
- * Importing this module side-effect-registers all 11 custom elements (10
+ * Barrel — all 11 layout components (Batch 4 of the Component 2.0 migration).
+ * Importing this module side-effect-registers all 12 custom elements (11
  * layout + Tab co-located inside Tabs.ts) so the tags become available in
  * HTML markup, plus re-exports the classes and types for JS usage.
  *
  * Tags registered:
  *   arianna-card, arianna-drawer, arianna-modal, arianna-panel,
  *   arianna-splitter, arianna-tabs, arianna-tab,
- *   arianna-accordion, arianna-dock, arianna-window, arianna-table
+ *   arianna-accordion, arianna-dock, arianna-window, arianna-table,
+ *   arianna-golden
  *
  * Some layout components use modifiers internally:
  *   • Accordion (resizable mode) → <arianna-resizer>
@@ -30,6 +31,7 @@ export { Accordion } from './Accordion.ts';
 export { Dock } from './Dock.ts';
 export { WindowComponent } from './Window.ts';
 export { Table } from './Table.ts';
+export { Golden } from './Golden.ts';
 export type { CardOptions } from './Card.ts';
 export type { DrawerOptions } from './Drawer.ts';
 export type { ModalOptions } from './Modal.ts';
@@ -40,3 +42,4 @@ export type { AccordionItem, AccordionOptions } from './Accordion.ts';
 export type { DockItem, DockOptions, DockStyle } from './Dock.ts';
 export type { WindowOptions, WindowStyle, WindowMenuItem, } from './Window.ts';
 export type { Row, SortDir, SortState, SelectMode, TableColumn, TableOptions, } from './Table.ts';
+export type { GoldenDockPosition, GoldenToolBarSide, GoldenPanelDefinition, GoldenPanelSnapshot, GoldenOptions, } from './Golden.ts';
