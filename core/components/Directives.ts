@@ -603,7 +603,7 @@ export namespace Directives
         /**
          * One-way bind: element[prop] ← source().
          * Supports string and function sources. For State-based binding,
-         * use with state.on('State-Changed', update).
+         * use with state.OnChange(update).
          *
          * @param el   - Target element
          * @param prop - Property name (e.g. 'textContent', 'value', 'href')
@@ -611,8 +611,8 @@ export namespace Directives
          * @returns Directive.Update
          *
          * @example
-         *   const update = Directive.Bind(span, 'textContent', () => state.State.name);
-         *   state.on('State-Changed', update);
+         *   const update = Directive.Bind(span, 'textContent', () => state.Value.name);
+         *   state.OnChange(update);
          */
         static Bind
         (
@@ -641,7 +641,7 @@ export namespace Directives
          *
          * @example
          *   const update = Directive.Show(panel, () => isVisible);
-         *   state.on('State-Changed', update);
+         *   state.OnChange(update);
          */
         static Show
         (el: HTMLElement, condition: Condition): Update
@@ -658,36 +658,32 @@ export namespace Directives
 
         /**
          * Two-way binding between an input element and a State property.
-         * input.value → state.State[key] on 'input' event.
-         * state.State[key] → input.value on State-Changed.
+         * input.value → state.Value[key] on 'input' event.
+         * state.Value[key] → input.value on State-Changed.
          *
          * @param input - Input, textarea, or select element
          * @param state - AriannA State instance
-         * @param key   - Property key in state.State
+         * @param key   - Property key in state.Value
          *
          * @example
          *   const state = new State({ name: 'AriannA', version: 2 });
          *   Directive.Model(nameInput, state, 'name');
-         *   // nameInput.value ↔ state.State.name
+         *   // nameInput.value ↔ state.Value.name
          */
         static Model
         (
-            input : HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
-            state : { State: Record<string, unknown>; on(t: string, cb: (e: unknown) => void): void },
-            key   : string,
-        ): void
+            input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+            state: {Get():unknown;Set(value:unknown):unknown;addEventListener(type:string,handler:EventListener):void;removeEventListener(type:string,handler:EventListener):void},
+            key:string
+        ):()=>void
         {
-            // DOM → State
-            Events.Event.On(input, 'input', () => {
-                state.State[key] = input.value;
-            });
-            // State → DOM
-            state.on('State-Changed', () => {
-                const v = String(state.State[key] ?? '');
-                if (input.value !== v) input.value = v;
-            });
-            // Initial sync
-            input.value = String(state.State[key] ?? '');
+            const read=()=>state.Get() as Record<string,unknown>;
+            const sync=()=>{const value=String(read()?.[key]??'');if(input.value!==value)input.value=value;};
+            const update=()=>state.Set({...read(),[key]:input.value});
+            input.addEventListener('input',update);
+            state.addEventListener('State-Changed',sync);
+            sync();
+            return()=>{input.removeEventListener('input',update);state.removeEventListener('State-Changed',sync);};
         }
 
         // ── on ─────────────────────────────────────────────────────────────────────
@@ -1288,8 +1284,8 @@ export namespace Directives
             {
                 const path = element.getAttribute('a-model') ?? '';
                 const [stateKey, propKey] = path.split('.');
-                const state = ctx[stateKey] as { State: Record<string, unknown>; on(t: string, cb: (e: unknown) => void): void };
-                if(state && propKey) Directive.Model(element as HTMLInputElement, state, propKey);
+                const state=ctx[stateKey] as Parameters<typeof Directive.Model>[1];
+                if(state&&propKey)disposers.push(Directive.Model(element as HTMLInputElement,state,propKey));
             }
 
             /* a-on="click:handler" */
@@ -1534,13 +1530,11 @@ export namespace Directives
                         ? root
                         : document.body;
 
-                Directive.Bootstrap
+                return Directive.Bootstrap
                 (
                     target,
                     options?.Scope ?? {}
                 );
-
-                return () => undefined;
             }
         }
     );

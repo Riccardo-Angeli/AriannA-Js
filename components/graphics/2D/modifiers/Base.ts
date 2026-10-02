@@ -289,6 +289,22 @@ export namespace Modifier2D
         const bag = {} as T & Parameters.Bag;
         let theme: 'dark' | 'light' = 'dark';
 
+        /*
+         * Visual parameters are also declarative attributes.  Keeping the attribute
+         * in sync before the concrete setter runs is important: setters commonly
+         * call refreshAttachments(), whose applyTo()/syncAttributes() pass otherwise
+         * reads the stale attribute and restores the previous glyph colour.
+         */
+        const parameterAttribute = (key:string):string =>
+            key.replace(/([a-z0-9])([A-Z])/g,'$1-$2').toLowerCase();
+
+        const assign = (definition:Parameters.Definition,value:unknown):void =>
+        {
+            if(definition.kind === 'color')
+                owner.setAttribute(parameterAttribute(definition.key),String(value));
+            definition.set?.(value as never);
+        };
+
         const convert = (definition: Parameters.Definition, control: HTMLInputElement | HTMLSelectElement): unknown =>
         {
             if(definition.kind === 'checkbox' && control instanceof HTMLInputElement)
@@ -359,7 +375,7 @@ export namespace Modifier2D
 
             control.classList.add('ModifierParametersWindow-Control');
             const update = () => {
-                definition.set?.(convert(definition, control) as never);
+                assign(definition,convert(definition, control));
                 bag.Refresh();
             };
             control.addEventListener('input', update);
@@ -373,7 +389,7 @@ export namespace Modifier2D
                 configurable: false,
                 get: () => definition.get?.(),
                 set: (value: unknown) => {
-                    definition.set?.(value as never);
+                    assign(definition,value);
                     bag.Refresh();
                 },
             });

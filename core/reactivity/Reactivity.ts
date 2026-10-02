@@ -783,9 +783,9 @@ export namespace Reactivity
         const map = Graph.get(target);
         if(!map) return;
 
-        // Direct O(1) slot lookup. No graph scan, no sorting, no temporary Set.
-        // The tiny duplicate guard only matters when one Computation subscribes to
-        // more than one structural slot changed by the same atomic mutation.
+        // Resolve subscribed slots before executing effects: synchronous effects may
+        // unsubscribe and resubscribe while running. Snapshot and deduplicate
+        // multiple slots changed by the same atomic mutation.
         if(keys.length === 1)
         {
             map.get(keys[0])?.Notify();
@@ -802,9 +802,9 @@ export namespace Reactivity
             {
                 if(notified.has(subscriber)) return;
                 notified.add(subscriber);
-                subscriber.Notify();
             });
         }
+        for(const subscriber of notified)subscriber.Notify();
     }
 
     function ScheduleComputation(computation: Computation): void
@@ -1111,6 +1111,8 @@ export namespace Reactivity
                     Normalize: item => ToRaw(item),
                     Readonly: meta.Readonly,
                     BeforeMutate: target => RecordCollectionSnapshot(target),
+                    TrackRead: key => Track(ToRaw(value) as object, key),
+                    Changed: target => NotifyKeys(target, Array.from(Graph.get(target)?.keys() ?? [])),
                 }
             ) as T;
         }
@@ -1257,6 +1259,8 @@ export namespace Reactivity
                     Normalize: item => ToRaw(item),
                     Readonly: meta.Readonly,
                     BeforeMutate: target => RecordCollectionSnapshot(target),
+                    TrackRead: key => Track(raw, key),
+                    Changed: target => NotifyKeys(target, Array.from(Graph.get(target)?.keys() ?? [])),
                 }
             );
         }
@@ -1463,6 +1467,8 @@ export namespace Reactivity
                     Normalize: item => ToRaw(item),
                     Readonly: meta.Readonly,
                     BeforeMutate: target => RecordCollectionSnapshot(target),
+                    TrackRead: key => Track(ToRaw(source), key),
+                    Changed: target => NotifyKeys(target, Array.from(Graph.get(target)?.keys() ?? [])),
                 }
             ) as T;
         }
@@ -2101,9 +2107,9 @@ export namespace Reactivity
 
         Subscribe(handler: (value: T, previous: T) => void, options: EffectOptions = {}): Effect
         {
+            let previous = this.Peek();
             return new Effect(() =>
             {
-                let previous = this.Peek();
                 const value = this.Value;
                 if(!Object.is(value, previous))
                 {
@@ -2111,7 +2117,7 @@ export namespace Reactivity
                     previous = value;
                     Untrack(() => handler(value, old));
                 }
-            }, { ...options, Defer: true });
+            }, { ...options, Defer: false });
         }
 
         Map<U>(derive: (value: T) => U, options: SignalOptions<U> & EffectOptions = {}): Memo<U>

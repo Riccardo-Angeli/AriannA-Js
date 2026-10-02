@@ -1116,4 +1116,10 @@ export namespace Types
          *  @license     MIT / Commercial (dual license) */
         export type Hosts = object | readonly object[] | ArrayLike<object>;
     }
+    export namespace Application
+    {
+        export type Step=string|readonly string[];
+        export type Action=(input:unknown,application:unknown)=>unknown|Promise<unknown>;
+    }
+
 }

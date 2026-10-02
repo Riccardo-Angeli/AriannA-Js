@@ -10,5 +10,12 @@ export { default as AppleMaps } from './AppleMap.ts';
 export { default as MapLibreMaps } from './MapLibreMap.ts';
 
 export interface LatLng { lat:number; lng:number; }
-export interface MapOptions { center?:LatLng; zoom?:number; marker?:boolean; label?:string; address?:string; aspectRatio?:string; }
+export const MapTypes={
+    Standard:'standard',
+    Satellite:'satellite',
+    Hybrid:'hybrid',
+    Terrain:'terrain'
+} as const;
+export type MapType=typeof MapTypes[keyof typeof MapTypes];
+export interface MapOptions { center?:LatLng; zoom?:number; marker?:boolean; label?:string; address?:string; aspectRatio?:string; Type?:MapType; }
 export type MapProvider = 'google' | 'osm' | 'apple' | 'maplibre';

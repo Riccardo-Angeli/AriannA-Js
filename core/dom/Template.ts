@@ -3641,7 +3641,7 @@ export namespace Templates
 
                 if(binding.Kind === 'event' && node instanceof Element && binding.Name)
                 {
-                    const evaluated = Template.#Evaluate(binding.Expression, scope);
+                    const evaluated = Template.#Evaluate(binding.Expression, scope, false);
                     const candidate = typeof evaluated === 'function'
                         ? evaluated
                         : scope[binding.Expression];
@@ -3875,7 +3875,8 @@ export namespace Templates
         static #Evaluate
         (
             expression : string,
-            scope      : Scope
+            scope      : Scope,
+            invoke     : boolean = true
         ): unknown
         {
             const path = expression.trim().split('.');
@@ -3891,7 +3892,7 @@ export namespace Templates
                 value = (value as Record<string, unknown>)[key];
             }
 
-            return typeof value === 'function'
+            return invoke && typeof value === 'function'
                 ? (value as Function).call(scope)
                 : value;
         }

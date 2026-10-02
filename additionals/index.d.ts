@@ -43,6 +43,7 @@ export { default as Stylus } from './Stylus.ts';
 export { default as Three } from './Three.ts';
 export { default as Two } from './Two.ts';
 export { default as Video } from './Video.ts';
+export { TimecodeGenerator, Timecode } from './Video.ts';
 export { World, Body, Shape, Circle, Sphere, Box, Capsule, Polygon, Spring, DistanceConstraint, Pin, Rope, Drag, PointGravity, Wind, V as PhysicsVec, } from './Physics.ts';
 export { parseLess } from './Less.ts';
 export { parseSass } from './Sass.ts';

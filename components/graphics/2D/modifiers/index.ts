@@ -10,10 +10,9 @@ import * as RotatorModule from './Rotator.ts';
 import * as ReflectorModule from './Reflector.ts';
 import * as RounderModule from './Rounder.ts';
 import * as SkewerModule from './Skewer.ts';
+import * as DockableModule from './Dockable.ts';
 
 export const Modifier2D=BaseModule.Modifier2D.Modifier2D;
-export { default as Snappable2D } from './Snappable2D.ts';
-export type { Snappable2DOptions, SnapResult2D } from './Snappable2D.ts';
 export const ResolveTargets=BaseModule.Modifier2D.ResolveTargets;
 export type ModifierPhase=BaseModule.Modifier2D.Types.Phase;
 export type ModifierTarget=BaseModule.Modifier2D.Types.TargetLike;
@@ -48,6 +47,9 @@ export type SkewerAxis=SkewerModule.Skewer.Types.Axis;
 export type SkewerOptions=SkewerModule.Skewer.Interfaces.SkewerOptions;
 export type SkewerParameters=SkewerModule.Skewer.SkewerParameters;
 
-import Snappable2D from './Snappable2D.ts';
-export const Modifiers2D=Object.freeze({Resizer,Mover,Rotator,Reflector,Rounder,Skewer,Snappable2D});
+export const Dockable=DockableModule.Dockable.Dockable;
+export type { DockableOptions, DockPosition } from './Dockable.ts';
+
+/** Snap is a Mover sub-behaviour configured through snapX/snapY. */
+export const Modifiers2D=Object.freeze({Resizer,Mover,Rotator,Reflector,Rounder,Skewer,Dockable});
 export default Modifiers2D;

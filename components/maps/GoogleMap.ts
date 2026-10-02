@@ -3,9 +3,16 @@ import { Component, Css } from '../../core/index.ts';
 
 export interface LatLng { lat:number; lng:number; }
 export type MapProvider = 'google' | 'osm' | 'apple' | 'maplibre';
+export const MapTypes={Standard:'standard',Satellite:'satellite',Hybrid:'hybrid',Terrain:'terrain'} as const;
+export type MapType=typeof MapTypes[keyof typeof MapTypes];
 
-const ATTRIBUTES=['center-lat','center-lng','zoom','marker','label','address','aspect-ratio','api-key','mode','origin','destination'] as const;
+const ATTRIBUTES=['center-lat','center-lng','zoom','marker','label','address','aspect-ratio','api-key','mode','origin','destination','type'] as const;
 const OBSERVED=new Set<string>(ATTRIBUTES);
+
+function mapType(host:Element): MapType {
+    const value=(host.getAttribute('type')||MapTypes.Standard).trim().toLowerCase();
+    return value===MapTypes.Satellite || value===MapTypes.Hybrid || value===MapTypes.Terrain ? value : MapTypes.Standard;
+}
 
 function centerLat(host:Element): number {
     const value=Number.parseFloat(host.getAttribute('center-lat') ?? '');
@@ -105,6 +112,33 @@ function fallback(stage:HTMLElement,type:string,title:string,message:string,code
     return box;
 }
 
+type BrowserWindow=Window & typeof globalThis & { google?:any; __ariannaGoogleMapsLoaded?:()=>void; };
+const Browser=():BrowserWindow=>window as BrowserWindow;
+let loader:Promise<any>|null=null;
+
+function loadGoogleMaps(key:string): Promise<any> {
+    if(Browser().google?.maps) return Promise.resolve(Browser().google);
+    if(loader) return loader;
+    loader=new Promise((resolve,reject)=>{
+        const done=()=>Browser().google?.maps ? resolve(Browser().google) : reject(new Error('Google Maps loaded without google.maps'));
+        const existing=document.querySelector<HTMLScriptElement>('script[data-arianna-google-maps]');
+        if(existing){
+            if(Browser().google?.maps){ done(); return; }
+            existing.addEventListener('load',done,{once:true});
+            existing.addEventListener('error',()=>reject(new Error('Google Maps failed to load')),{once:true});
+            return;
+        }
+        Browser().__ariannaGoogleMapsLoaded=done;
+        const script=document.createElement('script');
+        script.dataset.ariannaGoogleMaps='true';
+        script.src=`https://maps.googleapis.com/maps/api/js?${new URLSearchParams({key,callback:'__ariannaGoogleMapsLoaded',loading:'async',v:'weekly'}).toString()}`;
+        script.async=true;
+        script.onerror=()=>reject(new Error('Google Maps failed to load'));
+        document.head.appendChild(script);
+    });
+    return loader;
+}
+
 
 export namespace GoogleMap {
 export const Styles = new Css.Stylesheet([
@@ -132,6 +166,9 @@ export const Styles = new Css.Stylesheet([
     }),
     new Css.Rule('.GoogleMap-Iframe', {
         Border:'0', Display:'block', Height:'100%', Inset:'0', Position:'absolute', Width:'100%'
+    }),
+    new Css.Rule('.GoogleMap-Map', {
+        Height:'100%', Inset:'0', Position:'absolute', Width:'100%'
     }),
     new Css.Rule('.GoogleMap-Chrome', {
         AlignItems:'center',
@@ -209,19 +246,22 @@ export const Styles = new Css.Stylesheet([
     @Component('arianna-google-map', Styles, { Attributes:[...ATTRIBUTES], Shadow:false })
     export class GoogleMap extends HTMLElement {
         public static readonly Styles=Styles;
-        declare private rendering:boolean;
+        declare private instance:any;
+        declare private renderVersion:number;
         declare private lastRenderKey:string | undefined;
 
-        onConnected(): void { this.rendering ??= false; this.lastRenderKey ??= undefined; this.render(); }
-        onDisconnected(): void { this.rendering=false; }
-        onAttributeChanged(name:string): void { if(this.isConnected && OBSERVED.has(name.toLowerCase())) this.render(); }
+        onConnected(): void { this.instance ??= null; this.renderVersion ??= 0; this.lastRenderKey ??= undefined; void this.render(); }
+        onDisconnected(): void { ++this.renderVersion; this.instance=null; this.lastRenderKey=undefined; }
+        onAttributeChanged(name:string): void { if(this.isConnected && OBSERVED.has(name.toLowerCase())) void this.render(); }
 
         getProvider(): MapProvider { return 'google'; }
         getCenter(): LatLng { return {lat:centerLat(this),lng:centerLng(this)}; }
         getZoom(): number { return zoom(this); }
+        get Type(): MapType { return mapType(this); }
+        set Type(value:MapType) { this.setAttribute('type',value); }
         setLocation(center:LatLng): this { this.setAttribute('center-lat',String(center.lat)); this.setAttribute('center-lng',String(center.lng)); return this; }
         setZoom(value:number): this { this.setAttribute('zoom',String(value)); return this; }
-        reload(): this { this.render(true); return this; }
+        reload(): this { void this.render(true); return this; }
 
         private openUrl(): string {
             const address=this.getAttribute('address')?.trim();
@@ -229,17 +269,36 @@ export const Styles = new Css.Stylesheet([
             return `https://www.google.com/maps/@${centerLat(this)},${centerLng(this)},${zoom(this)}z`;
         }
 
-        private render(force=false): void {
-            if(this.rendering) return;
+        private async render(force=false): Promise<void> {
             const key=renderKey(this);
             if(!force && key===this.lastRenderKey && this.firstElementChild) return;
-            this.rendering=true;
-            try {
-                ensureIdentity(this,'GoogleMap');
-                const stage=frame(this,'GoogleMap','GOOGLE',this.openUrl());
+            const version=++this.renderVersion;
+            ensureIdentity(this,'GoogleMap');
+            const stage=frame(this,'GoogleMap','GOOGLE',this.openUrl());
+            const apiKey=this.getAttribute('api-key')?.trim()||'';
+            const mode=(this.getAttribute('mode')??'place').toLowerCase();
+            const interactiveType=this.Type!==MapTypes.Standard && (mode==='place'||mode==='view');
+            if(!apiKey || !interactiveType){
+                this.instance=null;
                 iframe(stage,'GoogleMap',this.embedUrl());
                 this.lastRenderKey=key;
-            } finally { this.rendering=false; }
+                return;
+            }
+            const host=document.createElement('div');
+            host.className='GoogleMap-Map';
+            stage.replaceChildren(host);
+            try {
+                const google=await loadGoogleMaps(apiKey);
+                if(!this.isConnected || version!==this.renderVersion) return;
+                const center={lat:centerLat(this),lng:centerLng(this)};
+                this.instance=new google.maps.Map(host,{center,zoom:zoom(this),mapTypeId:this.Type==='standard'?'roadmap':this.Type});
+                if(marker(this) && google.maps.Marker) new google.maps.Marker({map:this.instance,position:center,title:this.getAttribute('label')||''});
+                this.lastRenderKey=key;
+            } catch(error) {
+                if(version!==this.renderVersion) return;
+                fallback(stage,'GoogleMap','Google Maps',error instanceof Error?error.message:String(error));
+                this.lastRenderKey=key;
+            }
         }
 
         private embedUrl(): string {
@@ -247,7 +306,8 @@ export const Styles = new Css.Stylesheet([
             if(key) return this.officialUrl(key);
             const address=this.getAttribute('address')?.trim();
             const query=address || `${centerLat(this)},${centerLng(this)}`;
-            return `https://www.google.com/maps?${new URLSearchParams({q:query,z:String(zoom(this)),output:'embed'}).toString()}`;
+            const codes:Record<MapType,string>={standard:'m',satellite:'k',hybrid:'h',terrain:'p'};
+            return `https://www.google.com/maps?${new URLSearchParams({q:query,z:String(zoom(this)),t:codes[this.Type],output:'embed'}).toString()}`;
         }
 
         private officialUrl(key:string): string {

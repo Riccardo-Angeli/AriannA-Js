@@ -34,6 +34,8 @@ export namespace Canvas2D
             width?:number|string;
             height?:number|string;
             zoom?:number;
+            tilt?:number;
+            navigation?:'none'|'pan'|'zoom'|'tilt';
             pan?:Vec2;
             grid?:Partial<GridOptions>|boolean;
             snap?:Partial<SnapOptions>|boolean;
@@ -45,6 +47,7 @@ export namespace Canvas2D
             panX:number;
             panY:number;
             zoom:number;
+            tilt:number;
         }
     }
 
@@ -81,7 +84,7 @@ export namespace Canvas2D
             AlignItems:'center',
             Background:'linear-gradient(180deg,var(--arianna-surface-3,#363b40),var(--arianna-surface-2,#25292d))',
             BorderBottom:'1px solid var(--arianna-border,#111417)',
-            Display:'flex',Gap:'4px',Padding:'5px 7px'
+            Display:'flex',Gap:'4px',Padding:'5px 7px',OverflowX:'auto'
         }),
         new Css.Rule('.Canvas2D-Button',{
             Appearance:'none',
@@ -93,7 +96,8 @@ export namespace Canvas2D
         }),
         new Css.Rule('.Canvas2D-Button[data-active="true"]',{
             BorderColor:'var(--arianna-accent,#e40c88)',
-            Color:'var(--arianna-accent-light,#ff6dbb)'
+            Background:'linear-gradient(180deg,#ff4dad 0%,#e40c88 55%,#b90769 100%)',
+            Color:'#ffffff',BoxShadow:'inset 0 1px 0 #ffffff35,0 1px 3px #0004'
         }),
         new Css.Rule('.Canvas2D-Zoom',{Color:'var(--arianna-text-muted,#9ea6ad)',FontSize:'9px',MarginLeft:'auto'}),
         new Css.Rule('.Canvas2D-Stage',{
@@ -107,7 +111,7 @@ export namespace Canvas2D
             Background:'var(--arianna-artboard,#f9f9f9)',
             Border:'1px solid #0e1012',BoxShadow:'0 6px 25px rgba(0,0,0,.38)',
             Height:'300px',Left:'50%',Position:'absolute',Top:'50%',
-            Transform:'translate(-50%,-50%) translate(var(--pan-x,0px),var(--pan-y,0px)) scale(var(--zoom,1))',
+            Transform:'translate(-50%,-50%) translate(var(--pan-x,0px),var(--pan-y,0px)) scale(var(--zoom,1)) rotate(var(--tilt,0deg))',
             TransformOrigin:'50% 50%',Width:'520px'
         }),
         new Css.Rule('.Canvas2D-World',{
@@ -132,11 +136,11 @@ export namespace Canvas2D
     @Component('arianna-canvas-2d',Styles,{
         Shadow:false,
         Attributes:[
-            'theme','zoom',
+            'theme','zoom','tilt','navigation',
             'show-grid','grid-size','grid-subdivisions','grid-major-every',
             'snap','snap-grid','snap-threshold'
         ],
-        Properties:['grid','snap']
+        Properties:['grid','snap','tilt','navigation']
     })
     export class Canvas2D extends HTMLElement
     {
@@ -150,9 +154,12 @@ export namespace Canvas2D
 
         private _pan!:Interfaces.Vec2;
         private _zoom!:number;
+        private _tilt!:number;
+        private _navigation!:'none'|'pan'|'zoom'|'tilt';
+        private _gridProvider!:{options?:{enabled?:boolean};configure(options:{enabled:boolean}):unknown}|null;
         private _grid!:Interfaces.GridOptions;
         private _snap!:Interfaces.SnapOptions;
-        private _drag!:{x:number;y:number;px:number;py:number}|null;
+        private _drag!:{x:number;y:number;px:number;py:number;pointerId:number;kind:'pan'|'zoom'|'tilt';zoom:number;tilt:number}|null;
         private _world!:HTMLElement|null;
         private _artboard!:HTMLElement|null;
         private _stage!:HTMLElement|null;
@@ -185,6 +192,9 @@ export namespace Canvas2D
             else
                 self._snap={...DEFAULT_SNAP,...self._snap};
 
+            if(!Number.isFinite(self._tilt))self._tilt=0;
+            if(!['none','pan','zoom','tilt'].includes(self._navigation))self._navigation='none';
+            if(!('_gridProvider' in self))self._gridProvider=null;
             if(!('_drag' in self)) self._drag=null;
             if(!('_world' in self)) self._world=null;
             if(!('_artboard' in self)) self._artboard=null;
@@ -200,6 +210,8 @@ export namespace Canvas2D
             this.EnsureState();
             if(options.theme) this.setAttribute('theme',options.theme);
             if(options.zoom!=null) this._zoom=options.zoom;
+            if(options.tilt!=null)this._tilt=options.tilt;
+            if(options.navigation)this._navigation=options.navigation;
             if(options.pan) this._pan={...options.pan};
 
             if(typeof options.grid==='boolean') this._grid.enabled=options.grid;
@@ -257,9 +269,6 @@ export namespace Canvas2D
             return svg;
         }
 
-        /** Shared pointer surface used by mode-aware selection behaviours. */
-        public get selectionSurface():SVGSVGElement{return this.drawingSurface;}
-
         public createDrawingLayer():SVGGElement
         {
             const layer=document.createElementNS('http://www.w3.org/2000/svg','g');
@@ -271,6 +280,28 @@ export namespace Canvas2D
         {
             if(layer.parentNode===this.drawingSurface) layer.remove();
         }
+
+        /** Shared stage observed by independent 2D selection behaviours. */
+        public get selectionSurface():HTMLElement{this.EnsureState();if(!this._stage)this.Build();return this._stage!;}
+        public get tilt():number{this.EnsureState();return this._tilt;}
+        public set tilt(value:number){this.setTilt(value);}
+        public setTilt(value:number):this {
+            if(!Number.isFinite(value))throw new TypeError('Invalid canvas tilt');this.EnsureState();this._tilt=((value+180)%360+360)%360-180;
+            this.ApplyViewport();this.UpdateStatus();this.EmitViewport();return this;
+        }
+        public get navigation():'none'|'pan'|'zoom'|'tilt'{this.EnsureState();return this._navigation;}
+        public set navigation(value:'none'|'pan'|'zoom'|'tilt'){this.setNavigation(value);}
+        public setNavigation(value:'none'|'pan'|'zoom'|'tilt'):this {
+            if(!['none','pan','zoom','tilt'].includes(value))throw new TypeError('Invalid canvas navigation');
+            this.EnsureState();if(this._drag){try{this._stage?.releasePointerCapture(this._drag.pointerId);}catch{}this._drag=null;}
+            this._navigation=value;this.SyncToolbar();if(this._stage)this._stage.style.cursor=value==='pan'?'grab':value==='zoom'?'zoom-in':value==='tilt'?'crosshair':'';
+            this.dispatchEvent(new CustomEvent('arianna:navigation-change',{bubbles:true,composed:true,detail:{navigation:value,source:this}}));return this;
+        }
+        /** Bind an independent grid without taking ownership of its lifecycle. */
+        public useGrid(provider:{options?:{enabled?:boolean};configure(options:{enabled:boolean}):unknown}|null):this {
+            this.EnsureState();this._gridProvider=provider;this.ApplyGrid();return this;
+        }
+        public onUnmount():void{if(this._drag){try{this._stage?.releasePointerCapture(this._drag.pointerId);}catch{}}this._drag=null;}
 
         /** Add content to the world, attaching canvas behaviours through their public contract. */
         public add(...items:Parameters<Real['add']>):this {
@@ -286,7 +317,7 @@ export namespace Canvas2D
         public get viewport():Interfaces.ViewportState
         {
             this.EnsureState();
-            return {panX:this._pan.x,panY:this._pan.y,zoom:this._zoom};
+            return {panX:this._pan.x,panY:this._pan.y,zoom:this._zoom,tilt:this._tilt};
         }
 
         /** Grid is enabled by default and is programmatically configurable as one object. */
@@ -315,6 +346,7 @@ export namespace Canvas2D
             this.ApplyGrid();
             this.SyncToolbar();
             this.UpdateStatus();
+            this.dispatchEvent(new CustomEvent('arianna:grid-change',{bubbles:true,composed:true,detail:{...this._grid,source:this}}));
             return this;
         }
 
@@ -380,20 +412,26 @@ export namespace Canvas2D
         public screenToWorld(point:Interfaces.Vec2):Interfaces.Vec2
         {
             this.EnsureState();
-            return{x:(point.x-this._pan.x)/this._zoom,y:(point.y-this._pan.y)/this._zoom};
+            const x=(point.x-this._pan.x)/this._zoom,y=(point.y-this._pan.y)/this._zoom;
+            return this.RotatePoint({x,y},-this._tilt);
         }
 
         public worldToScreen(point:Interfaces.Vec2):Interfaces.Vec2
         {
             this.EnsureState();
-            return{x:point.x*this._zoom+this._pan.x,y:point.y*this._zoom+this._pan.y};
+            const p=this.RotatePoint(point,this._tilt);return{x:p.x*this._zoom+this._pan.x,y:p.y*this._zoom+this._pan.y};
         }
 
+        private RotatePoint(point:Interfaces.Vec2,degrees:number):Interfaces.Vec2 {
+            if(degrees===0)return{...point};const cx=(this._artboard?.clientWidth||520)/2,cy=(this._artboard?.clientHeight||300)/2;
+            const angle=degrees*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle),x=point.x-cx,y=point.y-cy;
+            return{x:cx+x*c-y*s,y:cy+x*s+y*c};
+        }
         public fitContent():this
         {
             this.EnsureState();
             this._pan={x:0,y:0};
-            this._zoom=1;
+            this._zoom=1;this._tilt=0;
             this.ApplyViewport();
             this.UpdateStatus();
             this.EmitViewport();
@@ -406,6 +444,8 @@ export namespace Canvas2D
         {
             this.EnsureState();
 
+            if(this.hasAttribute('tilt')){const value=Number(this.getAttribute('tilt'));if(Number.isFinite(value))this._tilt=value;}
+            const navigation=this.getAttribute('navigation');if(navigation&&['none','pan','zoom','tilt'].includes(navigation))this._navigation=navigation as typeof this._navigation;
             if(this.hasAttribute('zoom'))
                 this._zoom=Math.max(.2,Math.min(5,Number(this.getAttribute('zoom'))||1));
 
@@ -464,7 +504,13 @@ export namespace Canvas2D
             const zoom=document.createElement('div');
             zoom.className='Canvas2D-Zoom';this._zoomLabel=zoom;
 
-            toolbar.append(home,minus,plus,gridButton,snapButton,zoom);
+            const navigationButtons=['pan','zoom','tilt'].map(mode=>{
+                const button=document.createElement('button');button.type='button';button.className='Canvas2D-Button';button.dataset.role=mode;
+                button.textContent=mode[0].toUpperCase()+mode.slice(1);button.title=mode==='pan'?'Pan · drag view':mode==='zoom'?'Zoom · drag vertically or use wheel':'Tilt · drag horizontally to rotate view';
+                button.onclick=()=>this.setNavigation(this._navigation===mode?'none':mode as 'pan'|'zoom'|'tilt');return button;
+            });
+            for(const button of [home,minus,plus,gridButton,snapButton])button.type='button';
+            toolbar.append(home,...navigationButtons,snapButton,gridButton,minus,plus,zoom);
 
             const stage=document.createElement('div');
             stage.className='Canvas2D-Stage';this._stage=stage;
@@ -492,25 +538,31 @@ export namespace Canvas2D
             for(const child of preserved)
                 if(child!==shell) world.appendChild(child);
 
-            stage.addEventListener('pointerdown',event=>{
-                if(event.target!==stage && event.target!==grid)return;
-                this._drag={x:event.clientX,y:event.clientY,px:this._pan.x,py:this._pan.y};
+            const down=(event:PointerEvent)=>{
+                if(event.button!==0||this._drag)return;
+                if(this._navigation==='none'&&event.target!==stage&&event.target!==grid)return;
+                this._drag={x:event.clientX,y:event.clientY,px:this._pan.x,py:this._pan.y,pointerId:event.pointerId,kind:this._navigation==='none'?'pan':this._navigation,zoom:this._zoom,tilt:this._tilt};
                 stage.setPointerCapture(event.pointerId);
-            });
+                if(this._navigation!=='none'){event.preventDefault();event.stopImmediatePropagation();}
+            };
+            stage.addEventListener('pointerdown',event=>{if(this._navigation!=='none')down(event);},true);
+            stage.addEventListener('pointerdown',event=>{if(this._navigation==='none'&&!event.defaultPrevented)down(event);});
             stage.addEventListener('pointermove',event=>{
-                if(!this._drag)return;
-                this._pan={
-                    x:this._drag.px+(event.clientX-this._drag.x)/this._zoom,
-                    y:this._drag.py+(event.clientY-this._drag.y)/this._zoom
-                };
-                this.ApplyViewport();this.UpdateStatus();
-            });
-            stage.addEventListener('pointerup',event=>{
-                this._drag=null;
-                try{stage.releasePointerCapture(event.pointerId);}catch{}
-                this.EmitViewport();
-            });
-            stage.addEventListener('pointercancel',()=>{this._drag=null;});
+                const drag=this._drag;if(!drag||drag.pointerId!==event.pointerId)return;
+                if(drag.kind==='pan'){
+                    this._pan={x:drag.px+(event.clientX-drag.x)/drag.zoom,y:drag.py+(event.clientY-drag.y)/drag.zoom};
+                    this.ApplyViewport();this.UpdateStatus();
+                }else if(drag.kind==='zoom')this.setZoom(drag.zoom*Math.exp((drag.y-event.clientY)*.01));
+                else this.setTilt(drag.tilt+(event.clientX-drag.x)*.5);
+                if(this._navigation!=='none'){event.preventDefault();event.stopImmediatePropagation();}
+            },true);
+            const release=(event:PointerEvent)=>{
+                const drag=this._drag;if(!drag||drag.pointerId!==event.pointerId)return;
+                if(event.type==='pointercancel'){this._pan={x:drag.px,y:drag.py};this._zoom=drag.zoom;this._tilt=drag.tilt;this.ApplyViewport();this.UpdateStatus();}
+                this._drag=null;try{stage.releasePointerCapture(event.pointerId);}catch{}this.EmitViewport();
+                if(this._navigation!=='none'){event.preventDefault();event.stopImmediatePropagation();}
+            };
+            stage.addEventListener('pointerup',release,true);stage.addEventListener('pointercancel',release,true);
             stage.addEventListener('wheel',event=>{
                 event.preventDefault();
                 this.setZoom(this._zoom*(event.deltaY>0?.92:1.08));
@@ -523,6 +575,7 @@ export namespace Canvas2D
         {
             this.EnsureState();
             this.style.setProperty('--zoom',String(this._zoom));
+            this.style.setProperty('--tilt',`${this._tilt}deg`);
             this.style.setProperty('--pan-x',`${this._pan.x}px`);
             this.style.setProperty('--pan-y',`${this._pan.y}px`);
             this.ApplyGrid();
@@ -536,7 +589,8 @@ export namespace Canvas2D
 
             const minor=this._grid.size/Math.max(1,this._grid.subdivisions);
             const major=this._grid.size*Math.max(1,this._grid.majorEvery);
-            this._gridLayer.style.display=this._grid.enabled?'block':'none';
+            if(this._gridProvider&&this._gridProvider.options?.enabled!==this._grid.enabled)this._gridProvider.configure({enabled:this._grid.enabled});
+            this._gridLayer.style.display=this._grid.enabled&&!this._gridProvider?'block':'none';
             this._gridLayer.style.backgroundImage=[
                 `linear-gradient(to right,rgba(151,160,169,${this._grid.minorOpacity}) 1px,transparent 1px)`,
                 `linear-gradient(to bottom,rgba(151,160,169,${this._grid.minorOpacity}) 1px,transparent 1px)`,
@@ -556,8 +610,12 @@ export namespace Canvas2D
         private SyncToolbar():void
         {
             this.EnsureState();
-            this.querySelector<HTMLButtonElement>('[data-role="grid"]')?.setAttribute('data-active',String(this._grid.enabled));
-            this.querySelector<HTMLButtonElement>('[data-role="snap"]')?.setAttribute('data-active',String(this._snap.enabled));
+            if(this._stage)this._stage.style.cursor=this._navigation==='pan'?'grab':this._navigation==='zoom'?'zoom-in':this._navigation==='tilt'?'crosshair':'';
+            for(const role of ['pan','zoom','tilt','snap','grid']) {
+                const active=role==='grid'?this._grid.enabled:role==='snap'?this._snap.enabled:this._navigation===role;
+                const button=this.querySelector<HTMLButtonElement>('[data-role="'+role+'"]');
+                button?.setAttribute('data-active',String(active));button?.setAttribute('aria-pressed',String(active));
+            }
         }
 
         private UpdateStatus():void
@@ -569,7 +627,7 @@ export namespace Canvas2D
             statusText.textContent=
                 `X ${Math.round(this._pan.x)}  Y ${Math.round(this._pan.y)} · `+
                 `Grid ${this._grid.enabled?`${this._grid.size}px / ${this._grid.subdivisions}`:'off'} · `+
-                `Snap ${this._snap.enabled?'on':'off'}`;
+                `Snap ${this._snap.enabled?'on':'off'} · Tilt ${Math.round(this._tilt)}°`;
         }
 
         private EmitViewport():void

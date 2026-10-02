@@ -43,6 +43,25 @@ export namespace PianoRoll
             theme?      : 'dark' | 'light';
             src?        : string;
         }
+
+        export interface MidiImportOptions
+        {
+            /** Keep a single melodic note at every onset. Defaults to true. */
+            monophonic?    : boolean;
+            /** Zero-based MIDI track index. By default the most likely melodic track is selected. */
+            track?         : number;
+            /** Move the first imported note to beat zero. Defaults to true. */
+            normalizeStart?: boolean;
+        }
+
+        export interface MidiImportResult
+        {
+            notes     : PianoNote[];
+            bpm       : number;
+            bars      : number;
+            track     : number;
+            trackName?: string;
+        }
     }
 
     export namespace Types
@@ -59,6 +78,121 @@ export namespace PianoRoll
 
     const pitchLabel = (pitch: number): string =>
         NOTE_NAMES[((pitch % 12) + 12) % 12] + (Math.floor(pitch / 12) - 1);
+
+    type ParsedMidiNote = Interfaces.PianoNote & { startTick:number; endTick:number; track:number };
+    type ParsedMidiTrack = { index:number; name?:string; notes:ParsedMidiNote[] };
+
+    const ParseMidi = (source:ArrayBuffer|Uint8Array,options:Interfaces.MidiImportOptions={}):Interfaces.MidiImportResult =>
+    {
+        const bytes=source instanceof Uint8Array?source:new Uint8Array(source);
+        const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+        let offset=0;
+        const ascii=(length:number):string=>{let value='';for(let i=0;i<length;i++)value+=String.fromCharCode(bytes[offset++]);return value;};
+        const u16=():number=>{const value=view.getUint16(offset);offset+=2;return value;};
+        const u32=():number=>{const value=view.getUint32(offset);offset+=4;return value;};
+        const vlq=(end:number):number=>
+        {
+            let value=0,byte=0,count=0;
+            do
+            {
+                if(offset>=end||count++>4)throw new Error('Invalid MIDI variable-length quantity');
+                byte=bytes[offset++];value=(value<<7)|(byte&0x7f);
+            }
+            while(byte&0x80);
+            return value;
+        };
+        if(ascii(4)!=='MThd')throw new Error('Invalid MIDI header');
+        const headerLength=u32();
+        if(headerLength<6||offset+headerLength>bytes.length)throw new Error('Invalid MIDI header length');
+        const format=u16(),trackCount=u16(),division=u16();
+        if(format>2)throw new Error('Unsupported MIDI format');
+        if(division&0x8000)throw new Error('SMPTE MIDI timing is not supported');
+        const ticksPerBeat=Math.max(1,division);
+        offset=8+headerLength;
+        const tracks:ParsedMidiTrack[]=[];
+        const tempos:{tick:number;microseconds:number}[]=[];
+
+        for(let trackIndex=0;trackIndex<trackCount&&offset+8<=bytes.length;trackIndex++)
+        {
+            if(ascii(4)!=='MTrk')throw new Error(`Invalid MIDI track ${trackIndex}`);
+            const length=u32(),end=Math.min(bytes.length,offset+length);
+            let tick=0,runningStatus=0,name='';
+            const notes:ParsedMidiNote[]=[];
+            const active=new Map<string,ParsedMidiNote[]>();
+            while(offset<end)
+            {
+                tick+=vlq(end);
+                let status=bytes[offset++];
+                if(status<0x80)
+                {
+                    if(!runningStatus)throw new Error('Invalid MIDI running status');
+                    offset--;status=runningStatus;
+                }
+                else if(status<0xf0)runningStatus=status;
+
+                if(status===0xff)
+                {
+                    const type=bytes[offset++],size=vlq(end),dataStart=offset;
+                    if(type===0x03)name=new TextDecoder().decode(bytes.subarray(dataStart,dataStart+size));
+                    else if(type===0x51&&size===3)
+                        tempos.push({tick,microseconds:(bytes[dataStart]<<16)|(bytes[dataStart+1]<<8)|bytes[dataStart+2]});
+                    offset=Math.min(end,dataStart+size);continue;
+                }
+                if(status===0xf0||status===0xf7){const size=vlq(end);offset=Math.min(end,offset+size);continue;}
+                const operation=status&0xf0,channel=status&0x0f;
+                const pitch=bytes[offset++];
+                const value=operation===0xc0||operation===0xd0?0:bytes[offset++];
+                const key=`${channel}:${pitch}`;
+                if(operation===0x90&&value>0)
+                {
+                    const note:ParsedMidiNote={pitch,start:0,length:0,velocity:value/127,channel,id:undefined,startTick:tick,endTick:tick,track:trackIndex};
+                    const queue=active.get(key)??[];queue.push(note);active.set(key,queue);
+                }
+                else if(operation===0x80||(operation===0x90&&value===0))
+                {
+                    const queue=active.get(key),note=queue?.shift();
+                    if(note){note.endTick=Math.max(note.startTick+1,tick);notes.push(note);}
+                    if(queue&&!queue.length)active.delete(key);
+                }
+            }
+            offset=end;tracks.push({index:trackIndex,name:name||undefined,notes});
+        }
+
+        const candidates=tracks.filter(track=>track.notes.some(note=>note.channel!==9));
+        if(!candidates.length)throw new Error('The MIDI file contains no melodic notes');
+        let selected=Number.isInteger(options.track)?candidates.find(track=>track.index===options.track):undefined;
+        selected??=candidates.sort((a,b)=>
+        {
+            const score=(track:ParsedMidiTrack):number=>
+            {
+                const melodic=track.notes.filter(note=>note.channel!==9);
+                const onsets=new Set(melodic.map(note=>note.startTick)).size;
+                const first=Math.min(...melodic.map(note=>note.startTick));
+                const mean=melodic.reduce((sum,note)=>sum+note.pitch,0)/Math.max(1,melodic.length);
+                return onsets*4+melodic.length+mean-first/ticksPerBeat;
+            };
+            return score(b)-score(a);
+        })[0];
+        const selectedTrack=selected??candidates[0];
+        let chosen=selectedTrack.notes.filter(note=>note.channel!==9).sort((a,b)=>a.startTick-b.startTick||b.pitch-a.pitch);
+        if(options.monophonic!==false)
+        {
+            const byOnset=new Map<number,ParsedMidiNote[]>();
+            for(const note of chosen){const group=byOnset.get(note.startTick)??[];group.push(note);byOnset.set(note.startTick,group);}
+            chosen=[...byOnset.values()].map(group=>group.sort((a,b)=>b.pitch-a.pitch||b.endTick-a.endTick)[0]).sort((a,b)=>a.startTick-b.startTick);
+            chosen=chosen.map((note,index)=>({...note,endTick:Math.min(note.endTick,chosen[index+1]?.startTick??note.endTick)})).filter(note=>note.endTick>note.startTick);
+        }
+        const origin=options.normalizeStart===false?0:(chosen[0]?.startTick??0);
+        const round=(value:number):number=>Math.round(value*1e6)/1e6;
+        const notes=chosen.map(note=>({
+            pitch:note.pitch,start:round((note.startTick-origin)/ticksPerBeat),
+            length:round(Math.max(1,note.endTick-note.startTick)/ticksPerBeat),velocity:round(note.velocity),channel:note.channel
+        }));
+        const tempo=tempos.sort((a,b)=>a.tick-b.tick)[0]?.microseconds??500000;
+        const bpm=Math.max(20,Math.min(300,Math.round(60000000/tempo*1000)/1000));
+        const endBeat=notes.reduce((maximum,note)=>Math.max(maximum,note.start+note.length),0);
+        return{notes,bpm,bars:Math.max(1,Math.ceil(endBeat/BPB)),track:selectedTrack.index,trackName:selectedTrack.name};
+    };
 
 
     const Styles = new Stylesheet([
@@ -89,6 +223,7 @@ export namespace PianoRoll
                 new Rule('.PianoRoll-Button.play', { Background: '#16a34a', borderColor: '#16a34a', Color: '#fff' }),
                 new Rule('.PianoRoll-Button.pause', { Background: '#eab308', borderColor: '#eab308', Color: '#1f1f1f' }),
                 new Rule('.PianoRoll-Button.stop', { Background: '#dc2626', borderColor: '#dc2626', Color: '#fff' }),
+                new Rule('.PianoRoll-MidiInput', { Display: 'none' }),
                 new Rule('.PianoRoll-Input', {
                     Background: 'transparent', Border: '1px solid #444', BorderRadius: '3px', Color: '#d4d4d4',
                     Font: '12px ui-monospace, monospace', Padding: '3px 8px', Width: '60px'
@@ -177,6 +312,7 @@ export namespace PianoRoll
         _velToggle?: HTMLButtonElement;
         _playButton?: HTMLButtonElement;
         _pauseButton?: HTMLButtonElement;
+        _midiInput?: HTMLInputElement;
 
         _beats = 32;
         _pitchMin = 36;
@@ -262,12 +398,15 @@ export namespace PianoRoll
                 <button type="button" class="PianoRoll-Button pause">‖ Pause</button>
                 <button type="button" class="PianoRoll-Button stop">■ Stop</button>
                 <span class="PianoRoll-Spacer"></span>
+                <button type="button" class="PianoRoll-Button import" title="Import .mid or .midi">IMPORT</button>
+                <input class="PianoRoll-MidiInput" type="file" accept=".mid,.midi,audio/midi,audio/x-midi">
                 <button type="button" class="PianoRoll-Button clear">Clear</button>
                 <button type="button" class="PianoRoll-Button export">Export JSON</button>`;
 
             this._status = toolbar.querySelector('.PianoRoll-Status') as HTMLSpanElement;
             this._playButton = toolbar.querySelector('.play') as HTMLButtonElement;
             this._pauseButton = toolbar.querySelector('.pause') as HTMLButtonElement;
+            this._midiInput = toolbar.querySelector('.PianoRoll-MidiInput') as HTMLInputElement;
             const snap = toolbar.querySelector('.PianoRoll-Snap') as HTMLSelectElement;
             const bpm = toolbar.querySelector('.PianoRoll__bpm') as HTMLInputElement;
             const barsInput = toolbar.querySelector('.PianoRoll__bars') as HTMLInputElement;
@@ -414,6 +553,19 @@ export namespace PianoRoll
             this._playButton?.addEventListener('click', () => this.play());
             this._pauseButton?.addEventListener('click', () => this.pause());
             toolbar.querySelector('.stop')?.addEventListener('click', () => this.stop());
+            toolbar.querySelector('.import')?.addEventListener('click',()=>this._midiInput?.click());
+            this._midiInput?.addEventListener('change',async()=>
+            {
+                const file=this._midiInput?.files?.[0];
+                if(!file)return;
+                try{await this.importMidi(file);}
+                catch(error)
+                {
+                    if(this._status)this._status.textContent='⚠ '+(error instanceof Error?error.message:'MIDI import failed');
+                    this.dispatchEvent(new CustomEvent('arianna:pianoroll-midi-import-error',{bubbles:true,detail:{error,source:this}}));
+                }
+                finally{if(this._midiInput)this._midiInput.value='';}
+            });
             toolbar.querySelector('.clear')?.addEventListener('click', () =>
             {
                 this._selected.clear();
@@ -880,6 +1032,40 @@ export namespace PianoRoll
             setTimeout(() => URL.revokeObjectURL(url), 0);
         }
 
+        /** Import a Standard MIDI File. Monophonic melody extraction is the default. */
+        async importMidi(source:Blob|ArrayBuffer|Uint8Array,options:Interfaces.MidiImportOptions={}):Promise<Interfaces.MidiImportResult>
+        {
+            const bytes=source instanceof Blob?await source.arrayBuffer():source;
+            const result=ParseMidi(bytes,{monophonic:true,normalizeStart:true,...options});
+            this.stop();
+            this._bpm=result.bpm;
+            this._beats=result.bars*BPB;
+            const pitches=result.notes.map(note=>note.pitch);
+            if(pitches.length)
+            {
+                this._pitchMin=Math.max(0,Math.floor((Math.min(...pitches)-2)/12)*12);
+                this._pitchMax=Math.min(127,Math.ceil((Math.max(...pitches)+3)/12)*12-1);
+            }
+            this.setAttribute('bpm',String(this._bpm));
+            this.setAttribute('bars',String(result.bars));
+            this.setAttribute('beats',String(this._beats));
+            this.setAttribute('pitch-min',String(this._pitchMin));
+            this.setAttribute('pitch-max',String(this._pitchMax));
+            const bpmInput=this.querySelector<HTMLInputElement>('.PianoRoll__bpm');
+            const barsInput=this.querySelector<HTMLInputElement>('.PianoRoll__bars');
+            if(bpmInput)bpmInput.value=String(this._bpm);
+            if(barsInput)barsInput.value=String(result.bars);
+            this._buildKeys();
+            this._buildRulerAndGrid();
+            this.setNotes(result.notes);
+            this.setPlayhead(0);
+            if(this._status)this._status.textContent=`✓ ${result.notes.length} notes · ${this._bpm} BPM${result.trackName?' · '+result.trackName:''}`;
+            this.dispatchEvent(new CustomEvent('arianna:pianoroll-midi-import',{
+                bubbles:true,detail:{...result,monophonic:options.monophonic!==false,source:this}
+            }));
+            return result;
+        }
+
         addNote(note: Interfaces.PianoNote): this
         {
             this.notes$.Set([...this.notes$.Peek(), { ...note, id: note.id ?? 'n' + this._nextId++ }]);
@@ -979,4 +1165,6 @@ export namespace PianoRoll
 
 export type PianoRollOptions = PianoRoll.Interfaces.PianoRollOptions;
 export type PianoNote = PianoRoll.Interfaces.PianoNote;
+export type MidiImportOptions = PianoRoll.Interfaces.MidiImportOptions;
+export type MidiImportResult = PianoRoll.Interfaces.MidiImportResult;
 export default PianoRoll;

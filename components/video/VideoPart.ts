@@ -3,7 +3,7 @@
  * @version 2.0.0
  * @description DaVinci-style video clip for AriannA 2.0. Prototype-promotion safe.
  */
-import { Component, Css, Templates } from '../../core/index.ts';
+import { Component, Css, Templates, Real } from '../../core/index.ts';
 
 export type VideoTheme = 'dark' | 'light';
 
@@ -22,9 +22,13 @@ export interface VideoPartOptions {
     theme?: VideoTheme;
     speed?: number;
     opacity?: number;
+    fadeIn?: number;
+    fadeOut?: number;
     volume?: number;
     muted?: boolean;
     locked?: boolean;
+    poster?: string;
+    frames?: string[];
 }
 
 export interface VideoPartSnapshot {
@@ -42,22 +46,55 @@ export interface VideoPartSnapshot {
     theme: VideoTheme;
     speed: number;
     opacity: number;
+    fadeIn: number;
+    fadeOut: number;
     volume: number;
     muted: boolean;
     locked: boolean;
+    poster: string;
+    frames: string[];
 }
 
 const html = Templates.Template.Html;
-const Runtime = new WeakMap<HTMLElement, { bound: boolean; filmstripToken: number; filmstripKey?: string }>();
-const FilmstripCache = new Map<string, Promise<string[]>>();
-const VisualAttributes = new Set([
-    'start', 'length', 'duration', 'source-start', 'source-in', 'src', 'source',
-    'label', 'name', 'color', 'theme', 'speed', 'opacity', 'volume', 'muted',
-    'locked', 'pixels-per-second', 'snap', 'framerate'
+const Runtime = new WeakMap<HTMLElement, { bound: boolean; frames: string[] }>();
+const VideoPartReactiveAttributes = new Set([
+    'start','length','duration','source-start','source-in','src','source',
+    'label','name','color','theme','speed','opacity','fade-in','fade-out','volume','muted',
+    'locked','poster','frames','pixels-per-second','snap','framerate'
 ]);
 
+function runtimeFor(element: HTMLElement): { bound: boolean; frames: string[] } {
+    let state = Runtime.get(element);
+    if(!state) {
+        state = { bound: false, frames: [] };
+        Runtime.set(element, state);
+    }
+    return state;
+}
+
+function attributeFrames(element: HTMLElement): string[] {
+    const value = element.getAttribute('frames')?.trim();
+    if(!value) return [];
+    try {
+        const parsed = JSON.parse(value);
+        if(Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch {}
+    return value.split('|').map(item => item.trim()).filter(Boolean);
+}
+
+function syncFilmstrip(element: HTMLElement): void {
+    const state = runtimeFor(element);
+    const frames = state.frames.length ? state.frames : attributeFrames(element);
+    const poster = element.getAttribute('poster') || '';
+    const sources = frames.length ? frames : poster ? [poster] : [];
+    const nodes = Array.from(element.querySelectorAll<HTMLElement>(':scope > .VideoPart-Filmstrip > .VideoPart-Frame'));
+    nodes.forEach((node, index) => {
+        const source = sources.length ? sources[index % sources.length]! : '';
+        node.style.backgroundImage = source ? `url(${JSON.stringify(source)})` : '';
+    });
+}
+
 function numberValue(value: unknown, fallback = 0): number {
-    if(value == null || (typeof value === 'string' && value.trim() === '')) return fallback;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
 }
@@ -89,75 +126,16 @@ export function applyVideoPartOptions(element: HTMLElement, options: VideoPartOp
     if(options.theme != null) element.setAttribute('theme', options.theme === 'light' ? 'light' : 'dark');
     if(options.speed != null) element.setAttribute('speed', String(options.speed));
     if(options.opacity != null) element.setAttribute('opacity', String(options.opacity));
+    if(options.fadeIn != null) element.setAttribute('fade-in', String(options.fadeIn));
+    if(options.fadeOut != null) element.setAttribute('fade-out', String(options.fadeOut));
     if(options.volume != null) element.setAttribute('volume', String(options.volume));
     if(options.muted != null) boolAttribute(element, 'muted', options.muted);
     if(options.locked != null) boolAttribute(element, 'locked', options.locked);
-}
-
-function waitFor(video: HTMLVideoElement, eventName: keyof HTMLMediaElementEventMap, timeoutMs: number): Promise<void> {
-    return new Promise(resolve => {
-        let done = false;
-        const finish = (): void => {
-            if(done) return;
-            done = true;
-            clearTimeout(timer);
-            video.removeEventListener(eventName, finish as EventListener);
-            resolve();
-        };
-        const timer = window.setTimeout(finish, timeoutMs);
-        video.addEventListener(eventName, finish as EventListener, { once: true });
-    });
-}
-
-async function makeFilmstrip(source: string, frameCount: number, sourceStart = 0, sourceLength = 0): Promise<string[]> {
-    if(!source) return [];
-    const absolute = new URL(source, document.baseURI).href;
-    const count = clamp(Math.floor(frameCount), 2, 10);
-    const key = `${absolute}|${count}|${sourceStart.toFixed(4)}|${sourceLength.toFixed(4)}`;
-    const cached = FilmstripCache.get(key);
-    if(cached) return cached;
-
-    const task = (async (): Promise<string[]> => {
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        video.muted = true;
-        video.playsInline = true;
-        try {
-            const parsed = new URL(absolute);
-            if(parsed.origin !== location.origin && parsed.protocol !== 'blob:' && parsed.protocol !== 'data:') video.crossOrigin = 'anonymous';
-        } catch {}
-        video.src = absolute;
-        await Promise.race([waitFor(video, 'loadedmetadata', 2200), waitFor(video, 'error', 2200)]);
-        if(!Number.isFinite(video.duration) || video.duration <= 0) return [];
-
-        const canvas = document.createElement('canvas');
-        canvas.width = 160;
-        canvas.height = 90;
-        const context = canvas.getContext('2d');
-        if(!context) return [];
-
-        const frames: string[] = [];
-        const clipStart = clamp(sourceStart, 0, Math.max(0, video.duration - .01));
-        const available = Math.max(.01, video.duration - clipStart);
-        const clipLength = sourceLength > 0 ? Math.min(sourceLength, available) : available;
-        for(let index = 0; index < count; index++) {
-            try {
-                video.currentTime = clamp(
-                    clipStart + clipLength * ((index + .5) / count),
-                    .01,
-                    Math.max(.01, video.duration - .01)
-                );
-                await waitFor(video, 'seeked', 650);
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                frames.push(canvas.toDataURL('image/jpeg', .68));
-            } catch {}
-        }
-        try { video.removeAttribute('src'); video.load(); } catch {}
-        return frames;
-    })();
-
-    FilmstripCache.set(key, task);
-    return task;
+    if(options.poster != null) element.setAttribute('poster', String(options.poster));
+    if(options.frames != null) {
+        runtimeFor(element).frames = options.frames.map(String).filter(Boolean);
+        syncFilmstrip(element);
+    }
 }
 
 export const VideoPartStyles = new Css.Stylesheet([
@@ -172,8 +150,12 @@ export const VideoPartStyles = new Css.Stylesheet([
         Background: 'linear-gradient(180deg,rgba(7,9,12,.94),rgba(7,9,12,.55))', Color: '#fff', Font: '700 9px/1 var(--arianna-font,system-ui,sans-serif)',
         Height: '18px', Left: '0', Overflow: 'hidden', Padding: '4px 7px', Position: 'absolute', Right: '0', TextOverflow: 'ellipsis', Top: '0', WhiteSpace: 'nowrap', ZIndex: '4'
     }),
-    new Css.Rule('.VideoPart-Filmstrip', { Bottom: '0', Display: 'flex', Gap: '1px', Left: '0', Overflow: 'hidden', Position: 'absolute', Right: '0', Top: '18px' }),
+    new Css.Rule('.VideoPart-Filmstrip', { Bottom: '7px', Display: 'flex', Gap: '1px', Left: '0', Overflow: 'hidden', Position: 'absolute', Right: '0', Top: '18px' }),
     new Css.Rule('.VideoPart-Frame', { Background: 'linear-gradient(135deg,#36434e,#171d23)', BackgroundPosition: 'center', BackgroundRepeat: 'no-repeat', BackgroundSize: 'cover', BorderRight: '1px solid rgba(0,0,0,.35)', Flex: '1 0 48px', MinWidth: '36px' }),
+    new Css.Rule('.VideoPart-Fade', { Bottom: '7px', PointerEvents: 'none', Position: 'absolute', Top: '18px', ZIndex: '3' }),
+    new Css.Rule('.VideoPart-Fade[data-side="in"]', { Background: 'linear-gradient(90deg,rgba(0,0,0,.96),rgba(0,0,0,0))', Left: '0' }),
+    new Css.Rule('.VideoPart-Fade[data-side="out"]', { Background: 'linear-gradient(270deg,rgba(0,0,0,.96),rgba(0,0,0,0))', Right: '0' }),
+    new Css.Rule('.VideoPart-AudioBand', { Background: 'repeating-linear-gradient(to right,rgba(255,255,255,.08) 0 2px,rgba(255,255,255,.42) 2px 3px,rgba(255,255,255,.08) 3px 7px)', Bottom: '2px', Height: '4px', Left: '3px', Opacity: '.72', PointerEvents: 'none', Position: 'absolute', Right: '3px', ZIndex: '3' }),
     new Css.Rule('.VideoPart-Handle', { Bottom: '0', Cursor: 'ew-resize', Position: 'absolute', Top: '0', Width: '8px', ZIndex: '7' }),
     new Css.Rule('.VideoPart-Handle[data-side="left"]', { Left: '0' }),
     new Css.Rule('.VideoPart-Handle[data-side="right"]', { Right: '0' }),
@@ -201,8 +183,11 @@ export const VideoPartStyles = new Css.Stylesheet([
 function ApplyCriticalVideoPartLayout(element: HTMLElement): void {
     const label = element.querySelector<HTMLElement>(':scope > .VideoPart-Label');
     const strip = element.querySelector<HTMLElement>(':scope > .VideoPart-Filmstrip');
+    const audio = element.querySelector<HTMLElement>(':scope > .VideoPart-AudioBand');
     const left = element.querySelector<HTMLElement>(':scope > .VideoPart-Handle[data-side="left"]');
     const right = element.querySelector<HTMLElement>(':scope > .VideoPart-Handle[data-side="right"]');
+    const fadeIn = element.querySelector<HTMLElement>(':scope > .VideoPart-Fade[data-side="in"]');
+    const fadeOut = element.querySelector<HTMLElement>(':scope > .VideoPart-Fade[data-side="out"]');
 
     /*
      * These are geometry/interaction invariants, not theme skin.
@@ -241,7 +226,7 @@ function ApplyCriticalVideoPartLayout(element: HTMLElement): void {
         strip.style.left = '0';
         strip.style.right = '0';
         strip.style.top = '18px';
-        strip.style.bottom = '0';
+        strip.style.bottom = '7px';
         strip.style.display = 'flex';
         strip.style.gap = '1px';
         strip.style.overflow = 'hidden';
@@ -249,15 +234,40 @@ function ApplyCriticalVideoPartLayout(element: HTMLElement): void {
         strip.querySelectorAll<HTMLElement>(':scope > .VideoPart-Frame').forEach(frame => {
             frame.style.flex = '1 0 48px';
             frame.style.minWidth = '36px';
-            frame.style.backgroundColor = '#26313a';
-            if(!frame.style.backgroundImage)
-                frame.style.backgroundImage = 'linear-gradient(135deg,#36434e,#171d23)';
+            frame.style.background = 'linear-gradient(135deg,#36434e,#171d23)';
             frame.style.backgroundPosition = 'center';
             frame.style.backgroundRepeat = 'no-repeat';
             frame.style.backgroundSize = 'cover';
             frame.style.borderRight = '1px solid rgba(0,0,0,.35)';
         });
     }
+
+    if(audio) {
+        audio.style.position = 'absolute';
+        audio.style.left = '3px';
+        audio.style.right = '3px';
+        audio.style.bottom = '2px';
+        audio.style.height = '4px';
+        audio.style.opacity = '.72';
+        audio.style.pointerEvents = 'none';
+        audio.style.zIndex = '3';
+        audio.style.background = 'repeating-linear-gradient(to right,rgba(255,255,255,.08) 0 2px,rgba(255,255,255,.42) 2px 3px,rgba(255,255,255,.08) 3px 7px)';
+    }
+
+    const styleFade = (fade: HTMLElement | null, side: 'in' | 'out'): void => {
+        if(!fade) return;
+        fade.style.position = 'absolute';
+        fade.style.top = '18px';
+        fade.style.bottom = '7px';
+        fade.style.pointerEvents = 'none';
+        fade.style.zIndex = '3';
+        fade.style[side === 'in' ? 'left' : 'right'] = '0';
+        fade.style.background = side === 'in'
+            ? 'linear-gradient(90deg,rgba(0,0,0,.96),rgba(0,0,0,0))'
+            : 'linear-gradient(270deg,rgba(0,0,0,.96),rgba(0,0,0,0))';
+    };
+    styleFade(fadeIn, 'in');
+    styleFade(fadeOut, 'out');
 
     const styleHandle = (handle: HTMLElement | null, side: 'left' | 'right'): void => {
         if(!handle) return;
@@ -282,8 +292,7 @@ function ApplyCriticalVideoPartLayout(element: HTMLElement): void {
 }
 
 export function EnsureVideoPartVisual(element: HTMLElement): void {
-    const state = Runtime.get(element) ?? { bound: false, filmstripToken: 0 };
-    Runtime.set(element, state);
+    const state = runtimeFor(element);
 
     element.classList.add('VideoPart');
     if(!element.hasAttribute('theme')) {
@@ -293,41 +302,32 @@ export function EnsureVideoPartVisual(element: HTMLElement): void {
     if(!element.hasAttribute('tabindex')) element.tabIndex = 0;
 
     let label = element.querySelector<HTMLElement>(':scope > .VideoPart-Label');
-    if(!label) {
+    let strip = element.querySelector<HTMLElement>(':scope > .VideoPart-Filmstrip');
+    if(!label || !strip) {
         label = document.createElement('div');
         label.className = 'VideoPart-Label';
-        element.prepend(label);
-    }
-
-    let strip = element.querySelector<HTMLElement>(':scope > .VideoPart-Filmstrip');
-    if(!strip) {
         strip = document.createElement('div');
         strip.className = 'VideoPart-Filmstrip';
-        label.after(strip);
-    }
-
-    const frames = Array.from(strip.querySelectorAll<HTMLElement>(':scope > .VideoPart-Frame'));
-    for(let index = frames.length; index < 8; index++) {
-        const frame = document.createElement('span');
-        frame.className = 'VideoPart-Frame';
-        strip.appendChild(frame);
-    }
-
-    // Video clips show frames, never the waveform-like band used by AudioPart.
-    element.querySelector(':scope > .VideoPart-AudioBand')?.remove();
-
-    if(!element.querySelector(':scope > .VideoPart-Handle[data-side="left"]')) {
+        for(let index = 0; index < 8; index++) {
+            const frame = document.createElement('span');
+            frame.className = 'VideoPart-Frame';
+            strip.appendChild(frame);
+        }
+        const audio = document.createElement('span');
+        audio.className = 'VideoPart-AudioBand';
+        const fadeIn = document.createElement('span');
+        fadeIn.className = 'VideoPart-Fade';
+        fadeIn.dataset.side = 'in';
+        const fadeOut = document.createElement('span');
+        fadeOut.className = 'VideoPart-Fade';
+        fadeOut.dataset.side = 'out';
         const left = document.createElement('span');
         left.className = 'VideoPart-Handle';
         left.dataset.side = 'left';
-        element.appendChild(left);
-    }
-
-    if(!element.querySelector(':scope > .VideoPart-Handle[data-side="right"]')) {
         const right = document.createElement('span');
         right.className = 'VideoPart-Handle';
         right.dataset.side = 'right';
-        element.appendChild(right);
+        element.replaceChildren(label, strip, audio, fadeIn, fadeOut, left, right);
     }
 
     const ownerEditor = element.closest('arianna-video-track-editor');
@@ -341,7 +341,6 @@ export function EnsureVideoPartVisual(element: HTMLElement): void {
     const color = element.getAttribute('color') || '#4d9de0';
 
     element.style.setProperty('--VideoPart-Color', color);
-    element.style.backgroundColor = color;
     element.style.position = 'absolute';
     element.style.display = 'block';
     element.style.top = '4px';
@@ -353,8 +352,15 @@ export function EnsureVideoPartVisual(element: HTMLElement): void {
     element.style.touchAction = 'none';
     element.style.userSelect = 'none';
     element.style.opacity = String(clamp(numberAttribute(element, 'opacity', 1), 0, 1));
+    const fadeIn = clamp(numberAttribute(element, 'fade-in', 0), 0, length);
+    const fadeOut = clamp(numberAttribute(element, 'fade-out', 0), 0, length);
+    const fadeInNode = element.querySelector<HTMLElement>(':scope > .VideoPart-Fade[data-side="in"]');
+    const fadeOutNode = element.querySelector<HTMLElement>(':scope > .VideoPart-Fade[data-side="out"]');
+    if(fadeInNode) { fadeInNode.style.width = `${fadeIn * pps}px`; fadeInNode.hidden = fadeIn <= 0; }
+    if(fadeOutNode) { fadeOutNode.style.width = `${fadeOut * pps}px`; fadeOutNode.hidden = fadeOut <= 0; }
     label.textContent = element.getAttribute('label') || element.getAttribute('name') || 'Video';
     ApplyCriticalVideoPartLayout(element);
+    syncFilmstrip(element);
 
     const emit = (type: string, detail: Record<string, unknown> = {}): void => {
         element.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true, detail: { ...detail, part: element, source: element } }));
@@ -439,85 +445,36 @@ export function EnsureVideoPartVisual(element: HTMLElement): void {
             window.addEventListener('pointerup', finish, true);
             window.addEventListener('pointercancel', finish, true);
         });
-
-        element.addEventListener('keydown', (event: KeyboardEvent) => {
-            if(event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                event.preventDefault();
-                const owner = element.closest('arianna-video-track-editor,arianna-video-track') ?? element;
-                const fps = Math.max(1, numberAttribute(owner, 'framerate', 25));
-                const direction = event.key === 'ArrowLeft' ? -1 : 1;
-                const increment = event.shiftKey ? 1 : 1 / fps;
-                element.setAttribute('start', String(Math.max(0, numberAttribute(element, 'start', 0) + direction * increment)));
-                EnsureVideoPartVisual(element);
-                emit('arianna:video-part-change', { mode: 'nudge' });
-            }
-            if(event.key === 'Delete' || event.key === 'Backspace') {
-                event.preventDefault();
-                emit('arianna:video-part-delete');
-            }
-        });
     }
 
-    const source = element.getAttribute('src') || element.getAttribute('source') || '';
-    const sourceStart = numberAttribute(element, 'source-start', numberAttribute(element, 'source-in', 0));
-    const filmstripKey = `${source}|${length.toFixed(4)}|${sourceStart.toFixed(4)}`;
-    if(!source && state.filmstripKey !== filmstripKey) {
-        state.filmstripKey = filmstripKey;
-        ++state.filmstripToken;
-        strip.querySelectorAll<HTMLElement>(':scope > .VideoPart-Frame').forEach(node => {
-            node.style.backgroundImage = 'linear-gradient(135deg,#36434e,#171d23)';
-        });
-    }
-    if(source && state.filmstripKey !== filmstripKey) {
-        state.filmstripKey = filmstripKey;
-        const token = ++state.filmstripToken;
-        const count = Math.max(3, Math.min(10, Math.ceil(length / 1.1)));
-        void makeFilmstrip(source, count, sourceStart, length).then(frames => {
-            const current = Runtime.get(element);
-            if(!element.isConnected || current?.filmstripToken !== token) return;
-            const host = element.querySelector<HTMLElement>(':scope > .VideoPart-Filmstrip');
-            if(!host) return;
-            const nodes = Array.from(host.querySelectorAll<HTMLElement>('.VideoPart-Frame'));
-            nodes.forEach((node, index) => {
-                const frame = frames[index % Math.max(1, frames.length)];
-                node.style.backgroundImage = frame
-                    ? `url("${frame}")`
-                    : 'linear-gradient(135deg,#36434e,#171d23)';
-            });
-        });
-    }
 }
 
 @Component('arianna-video-part', VideoPartStyles, {
     Shadow: false,
-    Attributes: ['start','length','duration','source-start','source-in','src','source','label','name','color','theme','speed','opacity','volume','muted','locked','pixels-per-second','snap','framerate']
+    Attributes: ['start','length','duration','source-start','source-in','src','source','label','name','color','theme','speed','opacity','fade-in','fade-out','volume','muted','locked','poster','frames','pixels-per-second','snap','framerate']
 })
-export class VideoPart extends HTMLElement {
+export class VideoPartElement extends HTMLElement {
     public static readonly Styles = VideoPartStyles;
     public template = html``;
 
-    constructor(options: VideoPartOptions = {}) {
-        super();
-        applyVideoPartOptions(this, options);
-    }
-
-    public onCreated(): void { EnsureVideoPartVisual(this); }
+    public onCreated(): void { if(this.isConnected) this.onConnected(); }
 
     public onConnected(): void {
-        EnsureVideoPartVisual(this);
+        this.classList.add('VideoPart');
+        if(!this.hasAttribute('theme')) {
+            const parentTheme = this.closest('arianna-video-track,arianna-video-track-editor')?.getAttribute('theme');
+            this.setAttribute('theme', parentTheme === 'light' ? 'light' : 'dark');
+        }
+        if(!this.hasAttribute('tabindex')) this.tabIndex = 0;
+        this.renderClip();
+        this.syncVisuals();
+        this.bindClip();
     }
 
     public onAttributeChanged(name: string): void {
         if(!this.isConnected) return;
-        name = name.toLowerCase();
-
-        // AriannA's document observer reports every attribute, including the
-        // internal style/class/data writes performed by syncVisuals and drag.
-        // Reacting to those writes feeds the component back into its own render
-        // path and can starve the browser's main thread.
-        if(!VisualAttributes.has(name)) return;
-
-        EnsureVideoPartVisual(this);
+        if(!VideoPartReactiveAttributes.has(name)) return;
+        this.syncVisuals();
     }
 
     public get start(): number { return Math.max(0, numberAttribute(this, 'start', 0)); }
@@ -546,12 +503,20 @@ export class VideoPart extends HTMLElement {
     public set speed(value: number) { this.setAttribute('speed', String(Math.max(.05, numberValue(value, 1)))); }
     public get opacity(): number { return clamp(numberAttribute(this, 'opacity', 1), 0, 1); }
     public set opacity(value: number) { this.setAttribute('opacity', String(clamp(numberValue(value, 1), 0, 1))); }
+    public get fadeIn(): number { return clamp(numberAttribute(this, 'fade-in', 0), 0, this.length); }
+    public set fadeIn(value: number) { this.setAttribute('fade-in', String(clamp(numberValue(value, 0), 0, this.length))); }
+    public get fadeOut(): number { return clamp(numberAttribute(this, 'fade-out', 0), 0, this.length); }
+    public set fadeOut(value: number) { this.setAttribute('fade-out', String(clamp(numberValue(value, 0), 0, this.length))); }
     public get volume(): number { return clamp(numberAttribute(this, 'volume', 1), 0, 1); }
     public set volume(value: number) { this.setAttribute('volume', String(clamp(numberValue(value, 1), 0, 1))); }
     public get muted(): boolean { return this.hasAttribute('muted'); }
     public set muted(value: boolean) { boolAttribute(this, 'muted', value); }
     public get locked(): boolean { return this.hasAttribute('locked'); }
     public set locked(value: boolean) { boolAttribute(this, 'locked', value); }
+    public get poster(): string { return this.getAttribute('poster') || ''; }
+    public set poster(value: string) { value ? this.setAttribute('poster', value) : this.removeAttribute('poster'); }
+    public get frames(): string[] { return [...(runtimeFor(this).frames.length ? runtimeFor(this).frames : attributeFrames(this))]; }
+    public set frames(value: string[]) { runtimeFor(this).frames = (Array.isArray(value) ? value : []).map(String).filter(Boolean); syncFilmstrip(this); }
 
     public setOptions(options: VideoPartOptions): this { applyVideoPartOptions(this, options); return this; }
 
@@ -560,7 +525,9 @@ export class VideoPart extends HTMLElement {
             id: this.id || '', start: this.start, length: this.length, duration: this.length,
             sourceStart: this.sourceStart, sourceIn: this.sourceStart, src: this.src, source: this.src,
             label: this.label, name: this.label, color: this.color, theme: this.theme,
-            speed: this.speed, opacity: this.opacity, volume: this.volume, muted: this.muted, locked: this.locked
+            speed: this.speed, opacity: this.opacity, fadeIn: this.fadeIn, fadeOut: this.fadeOut,
+            volume: this.volume, muted: this.muted, locked: this.locked,
+            poster: this.poster, frames: this.frames
         };
     }
 
@@ -572,18 +539,152 @@ export class VideoPart extends HTMLElement {
         const leftLength = cut - this.start;
         const rightLength = this.start + this.length - cut;
         this.length = leftLength;
+        this.fadeOut = 0;
         const right = document.createElement('arianna-video-part') as VideoPart;
         applyVideoPartOptions(right, {
             ...original,
             id: '',
             start: cut,
             length: rightLength,
-            sourceStart: original.sourceStart + leftLength * original.speed
+            sourceStart: original.sourceStart + leftLength * original.speed,
+            fadeIn: 0,
+            fadeOut: original.fadeOut
         });
         this.parentElement?.insertBefore(right, this.nextSibling);
-        EnsureVideoPartVisual(right);
         this.emit('arianna:video-part-split', { left: this, right, at: cut });
         return right;
+    }
+
+    private renderClip(): void {
+        if(this.querySelector(':scope > .VideoPart-Label')) return;
+        const label = document.createElement('div');
+        label.className = 'VideoPart-Label';
+        const strip = document.createElement('div');
+        strip.className = 'VideoPart-Filmstrip';
+        for(let index = 0; index < 8; index++) {
+            const frame = document.createElement('span');
+            frame.className = 'VideoPart-Frame';
+            strip.appendChild(frame);
+        }
+        const audio = document.createElement('span');
+        audio.className = 'VideoPart-AudioBand';
+        const fadeIn = document.createElement('span');
+        fadeIn.className = 'VideoPart-Fade';
+        fadeIn.dataset.side = 'in';
+        const fadeOut = document.createElement('span');
+        fadeOut.className = 'VideoPart-Fade';
+        fadeOut.dataset.side = 'out';
+        const left = document.createElement('span');
+        left.className = 'VideoPart-Handle';
+        left.dataset.side = 'left';
+        const right = document.createElement('span');
+        right.className = 'VideoPart-Handle';
+        right.dataset.side = 'right';
+        this.replaceChildren(label, strip, audio, fadeIn, fadeOut, left, right);
+    }
+
+    private syncVisuals(): void {
+        this.style.setProperty('--VideoPart-Color', this.color);
+        this.style.left = `${this.start * this.pixelsPerSecond()}px`;
+        this.style.width = `${Math.max(14, this.length * this.pixelsPerSecond())}px`;
+        this.style.opacity = String(this.opacity);
+        const fadeIn = this.querySelector<HTMLElement>(':scope > .VideoPart-Fade[data-side="in"]');
+        const fadeOut = this.querySelector<HTMLElement>(':scope > .VideoPart-Fade[data-side="out"]');
+        if(fadeIn) { fadeIn.style.width = `${this.fadeIn * this.pixelsPerSecond()}px`; fadeIn.hidden = this.fadeIn <= 0; }
+        if(fadeOut) { fadeOut.style.width = `${this.fadeOut * this.pixelsPerSecond()}px`; fadeOut.hidden = this.fadeOut <= 0; }
+        const label = this.querySelector<HTMLElement>('.VideoPart-Label');
+        if(label) label.textContent = this.label;
+        ApplyCriticalVideoPartLayout(this);
+        syncFilmstrip(this);
+    }
+
+    private bindClip(): void {
+        const state = runtimeFor(this);
+        if(state.bound) return;
+        state.bound = true;
+        Runtime.set(this, state);
+
+        this.addEventListener('click', event => {
+            event.stopPropagation();
+            this.selectClip();
+        });
+
+        this.addEventListener('pointerdown', (event: PointerEvent) => {
+            if(event.button !== 0 || this.locked || this.closest('arianna-video-track[locked]')) return;
+            const target = event.target as HTMLElement;
+            const handle = target.closest('.VideoPart-Handle') as HTMLElement | null;
+            const mode = handle?.dataset.side === 'left' ? 'left' : handle?.dataset.side === 'right' ? 'right' : 'move';
+            const initial = { x: event.clientX, start: this.start, length: this.length, sourceStart: this.sourceStart };
+            this.selectClip();
+            event.preventDefault();
+            event.stopPropagation();
+            this.dataset.dragging = 'true';
+            try { this.setPointerCapture(event.pointerId); } catch {}
+
+            const move = (moveEvent: PointerEvent): void => {
+                if(moveEvent.pointerId !== event.pointerId) return;
+                const delta = (moveEvent.clientX - initial.x) / this.pixelsPerSecond();
+                if(mode === 'move') {
+                    this.start = this.snapTime(Math.max(0, initial.start + delta));
+                    const lane = document.elementsFromPoint(moveEvent.clientX, moveEvent.clientY)
+                        .map(element => element.closest?.('.VideoTrack-Lane'))
+                        .find(Boolean) as HTMLElement | undefined;
+                    if(lane && lane !== this.parentElement) lane.appendChild(this);
+                } else if(mode === 'right') {
+                    this.length = Math.max(this.minimumLength(), this.snapTime(initial.length + delta));
+                } else {
+                    const nextStart = this.snapTime(Math.max(0, initial.start + delta));
+                    const maximumStart = initial.start + initial.length - this.minimumLength();
+                    const start = Math.min(nextStart, maximumStart);
+                    const shift = start - initial.start;
+                    this.start = start;
+                    this.length = initial.length - shift;
+                    this.sourceStart = Math.max(0, initial.sourceStart + shift * this.speed);
+                }
+                this.emit('arianna:video-part-change', { mode });
+            };
+
+            const finish = (finishEvent: PointerEvent): void => {
+                if(finishEvent.pointerId !== event.pointerId) return;
+                window.removeEventListener('pointermove', move, true);
+                window.removeEventListener('pointerup', finish, true);
+                window.removeEventListener('pointercancel', finish, true);
+                delete this.dataset.dragging;
+                try { this.releasePointerCapture(event.pointerId); } catch {}
+                this.emit('arianna:video-part-commit', { mode });
+            };
+
+            window.addEventListener('pointermove', move, true);
+            window.addEventListener('pointerup', finish, true);
+            window.addEventListener('pointercancel', finish, true);
+        });
+
+        this.addEventListener('keydown', (event: KeyboardEvent) => {
+            if(event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                event.preventDefault();
+                const direction = event.key === 'ArrowLeft' ? -1 : 1;
+                this.start = Math.max(0, this.start + direction * (event.shiftKey ? 1 : this.frameDuration()));
+                this.emit('arianna:video-part-change', { mode: 'nudge' });
+            }
+            if(event.key === 'Delete' || event.key === 'Backspace') {
+                event.preventDefault();
+                this.emit('arianna:video-part-delete');
+            }
+        });
+    }
+
+    private selectClip(): void {
+        const editor = this.closest('arianna-video-track-editor');
+        editor?.querySelectorAll('arianna-video-part[selected]').forEach(node => { if(node !== this) node.removeAttribute('selected'); });
+        this.setAttribute('selected', '');
+        this.focus();
+        this.emit('arianna:video-part-select');
+    }
+
+    private pixelsPerSecond(): number {
+        const editor = this.closest('arianna-video-track-editor');
+        const track = this.closest('arianna-video-track');
+        return Math.max(1, numberAttribute(editor ?? track ?? this, 'pixels-per-second', 36));
     }
 
     private frameDuration(): number {
@@ -593,10 +694,44 @@ export class VideoPart extends HTMLElement {
 
     private minimumLength(): number { return Math.max(.04, this.frameDuration()); }
 
+    private snapTime(value: number): number {
+        const editor = this.closest('arianna-video-track-editor');
+        if(editor?.getAttribute('magnetic-snap') === 'false') return Math.max(0, value);
+        const explicit = numberAttribute(editor ?? this, 'snap', 0);
+        const milliseconds = numberAttribute(editor ?? this, 'snap-ms', 0);
+        const step = explicit > 0 ? explicit : milliseconds > 0 ? milliseconds / 1000 : this.frameDuration();
+        return Math.max(0, Math.round(value / step) * step);
+    }
+
     private emit(type: string, detail: Record<string, unknown> = {}): void {
         this.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true, detail: { ...detail, part: this, source: this } }));
     }
 }
+
+/** Public instance type of the AriannA-upgraded video part element. */
+export type VideoPart = VideoPartElement;
+
+type VideoPartConstructor = {
+    new(options?: VideoPartOptions): VideoPartElement;
+    readonly prototype: VideoPartElement;
+    readonly Styles: Css.Stylesheet;
+};
+
+/*
+ * Direct construction must use AriannA's synchronous creation path. Calling
+ * the native HTMLElement subclass constructor directly is illegal in browsers
+ * because AriannA intentionally does not register W3C customElements.
+ */
+export const VideoPart = new Proxy(
+    VideoPartElement as unknown as VideoPartConstructor,
+    {
+        construct(_target, args): VideoPartElement {
+            const element = new Real('arianna-video-part').render() as VideoPartElement;
+            applyVideoPartOptions(element, (args[0] ?? {}) as VideoPartOptions);
+            return element;
+        }
+    }
+) as VideoPartConstructor;
 
 export const VideoPartComponent = VideoPart;
 export default VideoPart;

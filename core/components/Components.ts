@@ -1309,22 +1309,16 @@ export namespace Components
                     }
                 }
 
-                (
-                    node as
-                        {
-                            onConnected?: () => void;
-                        }
-                ).onConnected?.();
+                const lifecycle=node as {onConnected?:()=>void;onMount?:()=>void;};
+                if(typeof lifecycle.onConnected==='function')lifecycle.onConnected();
+                else lifecycle.onMount?.();
             },
 
             Disconnected(node: Element): void
             {
-                (
-                    node as
-                    {
-                        onDisconnected?: () => void;
-                    }
-                ).onDisconnected?.();
+                const lifecycle=node as {onDisconnected?:()=>void;onUnmount?:()=>void;};
+                if(typeof lifecycle.onDisconnected==='function')lifecycle.onDisconnected();
+                else lifecycle.onUnmount?.();
             },
 
             Adopted(node: Element): void

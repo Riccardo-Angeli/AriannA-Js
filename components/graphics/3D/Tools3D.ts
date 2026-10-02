@@ -8,6 +8,7 @@ export namespace Tools3D
     export interface Options{selection?:SelectionTarget;mode?:Selection3DMode;theme?:'dark'|'light';}
     const Modes:[Selection3DMode,string,string][]=[['vertex','Vertex','•'],['edge','Edge','╱'],['polygon','Polygon','△'],['face','Face','▱'],['object','Object','⬡']];
     const Targets=new WeakMap<HTMLElement,SelectionTarget|null>();
+    const Listeners=new WeakMap<HTMLElement,EventListener>();
     export const Styles=new Css.Stylesheet([
         new Css.Rule('arianna-tools-3d,.Tools3D',{AlignItems:'center',Background:'#292d31',Border:'1px solid #111417',BorderRadius:'6px',BoxSizing:'border-box',Display:'flex',Gap:'3px',Padding:'5px',Width:'max-content'}),
         new Css.Rule('.Tools3D-Button',{Appearance:'none',Background:'#202428',Border:'1px solid transparent',BorderRadius:'4px',Color:'#bbc2c8',Cursor:'pointer',Font:'700 10px/1 system-ui',Height:'30px',MinWidth:'48px',Padding:'0 7px'}),
@@ -21,12 +22,15 @@ export namespace Tools3D
         public template=html``;
         constructor(options:Options={}){super();if(options.theme)this.setAttribute('theme',options.theme);if(options.mode)this.setAttribute('mode',options.mode);if(options.selection)this.selection=options.selection;}
         public onCreated():void{if(this.isConnected)this.onConnected();}
-        public onConnected():void{this.classList.add('Tools3D');if(!this.hasAttribute('theme'))this.setAttribute('theme','dark');if(!this.hasAttribute('mode'))this.setAttribute('mode','object');this.render();}
-        public onAttributeChanged(name:string):void{if(name==='mode'&&this.isConnected)this.render();}
+        public onConnected():void{this.classList.add('Tools3D');if(!this.hasAttribute('theme'))this.setAttribute('theme','dark');if(!this.hasAttribute('mode'))this.setAttribute('mode','object');this.renderTools();this.listen();}
+        public onUnmount():void{this.unlisten();}
+        public onAttributeChanged(name:string):void{if(name==='mode'&&this.isConnected)this.renderTools();}
         public get selection():SelectionTarget|null{return Targets.get(this)??null;}
-        public set selection(value:SelectionTarget|null){Targets.set(this,value);if(value){this.setAttribute('mode',value.mode);value.addEventListener('arianna:selection-3d-mode',((event:CustomEvent<{mode:Selection3DMode}>)=>this.setAttribute('mode',event.detail.mode)) as EventListener);}}
+        public set selection(value:SelectionTarget|null){this.unlisten();Targets.set(this,value);if(value){this.setAttribute('mode',value.mode);if(this.isConnected)this.listen();}}
+        private unlisten():void{const listener=Listeners.get(this);if(listener)this.selection?.removeEventListener('arianna:selection-3d-mode',listener);Listeners.delete(this);}
+        private listen():void{this.unlisten();if(!this.selection)return;const listener:EventListener=event=>{const mode=(event as CustomEvent<{mode:Selection3DMode}>).detail?.mode;if(mode&&this.getAttribute('mode')!==mode)this.setAttribute('mode',mode);};Listeners.set(this,listener);this.selection.addEventListener('arianna:selection-3d-mode',listener);}
         public setMode(mode:Selection3DMode):this{this.setAttribute('mode',mode);this.selection?.setMode(mode);this.dispatchEvent(new CustomEvent('arianna:tool-3d',{bubbles:true,composed:true,detail:{mode,source:this}}));return this;}
-        private render():void{const mode=this.getAttribute('mode') as Selection3DMode;this.replaceChildren(...Modes.map(([id,label,icon])=>{const button=document.createElement('button');button.type='button';button.className='Tools3D-Button';button.dataset.selected=String(id===mode);button.title=label;button.textContent=`${icon} ${label}`;button.onclick=()=>this.setMode(id);return button;}));}
+        private renderTools():void{const mode=this.getAttribute('mode') as Selection3DMode;this.replaceChildren(...Modes.map(([id,label,icon])=>{const button=document.createElement('button');button.type='button';button.className='Tools3D-Button';button.dataset.selected=String(id===mode);button.title=label;button.textContent=`${icon} ${label}`;button.onclick=()=>this.setMode(id);return button;}));}
     }
 }
 export default Tools3D.Tools3D;

@@ -55,10 +55,10 @@ export namespace Selection3D
             const up=(e:PointerEvent)=>{if(!s.enabled||!s.down)return;const d=Math.hypot(e.clientX-s.down.x,e.clientY-s.down.y);s.down=null;if(d<=4)this.selectAt(e.clientX,e.clientY,e.altKey?'subtract':e.ctrlKey||e.metaKey?'toggle':e.shiftKey?'add':'replace');};
             const rectangle=(e:Event)=>{const detail=(e as CustomEvent<SelectionRectangleDetail>).detail;if(detail?.mode==='3d')this.selectRectangle(detail);};
             surface.addEventListener('pointerdown',down);surface.addEventListener('pointerup',up);canvas.addEventListener('arianna:selection-rectangle',rectangle);
-            s.cleanup=()=>{surface.removeEventListener('pointerdown',down);surface.removeEventListener('pointerup',up);canvas.removeEventListener('arianna:selection-rectangle',rectangle);};
+            s.cleanup=()=>{delete surface.dataset.selection3dActive;surface.removeEventListener('pointerdown',down);surface.removeEventListener('pointerup',up);canvas.removeEventListener('arianna:selection-rectangle',rectangle);};
             s.unsub=canvas.onFrame?.(()=>this.draw())??null;this.draw();return this;
         }
-        public detach():this{const s=state(this);if(s.canvas?.selectionSurface)delete s.canvas.selectionSurface.dataset.selection3dActive;s.cleanup?.();s.unsub?.();s.overlay?.remove();s.cleanup=null;s.unsub=null;s.overlay=null;s.canvas=null;s.down=null;return this;}
+        public detach():this{const s=state(this);s.cleanup?.();s.unsub?.();s.overlay?.remove();s.cleanup=null;s.unsub=null;s.overlay=null;s.canvas=null;s.down=null;return this;}
         public clear():this{state(this).selected.clear();this.changed();return this;}
         public selectAt(clientX:number,clientY:number,operation:Operation='replace'):Result
         {

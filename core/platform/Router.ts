@@ -454,7 +454,7 @@ export namespace Routers
                     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
                     .replace
                     (
-                        /\\:([A-Za-z0-9_]+)/g,
+                        /:([A-Za-z0-9_]+)/g,
                         (_, name: string) =>
                         {
                             names.push(name);

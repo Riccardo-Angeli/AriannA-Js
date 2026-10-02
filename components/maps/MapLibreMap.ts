@@ -3,9 +3,16 @@ import { Component, Css } from '../../core/index.ts';
 
 export interface LatLng { lat:number; lng:number; }
 export type MapProvider = 'google' | 'osm' | 'apple' | 'maplibre';
+export const MapTypes={Standard:'standard',Satellite:'satellite',Hybrid:'hybrid',Terrain:'terrain'} as const;
+export type MapType=typeof MapTypes[keyof typeof MapTypes];
 
-const ATTRIBUTES=['center-lat','center-lng','zoom','marker','label','address','aspect-ratio','style-url','bearing','pitch'] as const;
+const ATTRIBUTES=['center-lat','center-lng','zoom','marker','label','address','aspect-ratio','style-url','bearing','pitch','type','imagery-url','imagery-attribution','labels-url','labels-attribution','terrain-style-url'] as const;
 const OBSERVED=new Set<string>(ATTRIBUTES);
+
+function mapType(host:Element): MapType {
+    const value=(host.getAttribute('type')||MapTypes.Standard).trim().toLowerCase();
+    return value===MapTypes.Satellite || value===MapTypes.Hybrid || value===MapTypes.Terrain ? value : MapTypes.Standard;
+}
 
 function centerLat(host:Element): number {
     const value=Number.parseFloat(host.getAttribute('center-lat') ?? '');
@@ -112,6 +119,27 @@ let loader:Promise<any>|null=null;
 
 function defaultStyle(): Record<string,unknown> {
     return {version:8,sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}},layers:[{id:'osm',type:'raster',source:'osm'}]};
+}
+
+function imageryStyle(host:Element): Record<string,unknown> | string {
+    const styleUrl=host.getAttribute('style-url')?.trim();
+    if(styleUrl) return styleUrl;
+    if(mapType(host)===MapTypes.Terrain){
+        const terrain=host.getAttribute('terrain-style-url')?.trim();
+        if(terrain) return terrain;
+    }
+    const imagery=host.getAttribute('imagery-url')?.trim();
+    if((mapType(host)===MapTypes.Satellite || mapType(host)===MapTypes.Hybrid) && imagery){
+        const labels=host.getAttribute('labels-url')?.trim();
+        const sources:Record<string,unknown>={imagery:{type:'raster',tiles:[imagery],tileSize:256,attribution:host.getAttribute('imagery-attribution')?.trim()||''}};
+        const layers:Array<Record<string,unknown>>=[{id:'imagery',type:'raster',source:'imagery'}];
+        if(mapType(host)===MapTypes.Hybrid && labels){
+            sources.labels={type:'raster',tiles:[labels],tileSize:256,attribution:host.getAttribute('labels-attribution')?.trim()||''};
+            layers.push({id:'labels',type:'raster',source:'labels'});
+        }
+        return {version:8,sources,layers};
+    }
+    return defaultStyle();
 }
 
 function loadMapLibre(): Promise<any> {
@@ -255,6 +283,8 @@ export const Styles = new Css.Stylesheet([
         getProvider(): MapProvider { return 'maplibre'; }
         getCenter(): LatLng { return {lat:centerLat(this),lng:centerLng(this)}; }
         getZoom(): number { return zoom(this); }
+        get Type(): MapType { return mapType(this); }
+        set Type(value:MapType) { this.setAttribute('type',value); }
         setLocation(center:LatLng): this { this.setAttribute('center-lat',String(center.lat)); this.setAttribute('center-lng',String(center.lng)); return this; }
         setZoom(value:number): this { this.setAttribute('zoom',String(value)); return this; }
         reload(): this { void this.render(true); return this; }
@@ -266,12 +296,29 @@ export const Styles = new Css.Stylesheet([
             const version=++this.renderVersion;
             ensureIdentity(this,'MapLibreMap');
             const stage=frame(this,'MapLibreMap','MAPLIBRE',this.openUrl());
+            const suppliedStyle=this.getAttribute('style-url')?.trim();
+            const suppliedImagery=this.getAttribute('imagery-url')?.trim();
+            const suppliedTerrain=this.getAttribute('terrain-style-url')?.trim();
+            if((this.Type===MapTypes.Satellite || this.Type===MapTypes.Hybrid) && !suppliedStyle && !suppliedImagery){
+                try { this.instance?.remove?.(); } catch {}
+                this.instance=null;
+                fallback(stage,'MapLibreMap','Photographic source required','Set imagery-url or style-url to a licensed imagery source.','map.Type = "satellite"');
+                this.lastRenderKey=key;
+                return;
+            }
+            if(this.Type===MapTypes.Terrain && !suppliedStyle && !suppliedTerrain){
+                try { this.instance?.remove?.(); } catch {}
+                this.instance=null;
+                fallback(stage,'MapLibreMap','Terrain style required','Set terrain-style-url or style-url.','map.Type = "terrain"');
+                this.lastRenderKey=key;
+                return;
+            }
             const host=document.createElement('div'); host.className='MapLibreMap-Map'; stage.replaceChildren(host);
             try {
                 const gl=await loadMapLibre();
                 if(!this.isConnected || version!==this.renderVersion) return;
                 try { this.instance?.remove?.(); } catch {}
-                this.instance=new gl.Map({container:host,style:this.getAttribute('style-url')?.trim()||defaultStyle(),center:[centerLng(this),centerLat(this)],zoom:zoom(this),bearing:Number(this.getAttribute('bearing')||0),pitch:Number(this.getAttribute('pitch')||0)});
+                this.instance=new gl.Map({container:host,style:imageryStyle(this),center:[centerLng(this),centerLat(this)],zoom:zoom(this),bearing:Number(this.getAttribute('bearing')||0),pitch:Number(this.getAttribute('pitch')||0)});
                 this.instance.addControl?.(new gl.NavigationControl(),'top-right');
                 if(marker(this) && gl.Marker) new gl.Marker({color:'#e40c88'}).setLngLat([centerLng(this),centerLat(this)]).addTo(this.instance);
                 this.lastRenderKey=key;

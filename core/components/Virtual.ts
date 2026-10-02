@@ -378,8 +378,11 @@ export namespace Virtuals
         /** Active effect-disposer functions, called on destroy(). */
         #effects     : Array<() => void> = [];
 
+        /** Active whole-content binding installed by text(). */
+        #textEffect  : (() => void) | null = null;
+
         /** Reactive sinks queued pre-render, flushed by #applySinks(). */
-        #sinks       : { type: 'text' | 'textMono' | 'attr' | 'cls' | 'prop' | 'style' | 'bind' | 'shadow'; getter: (() => unknown); setter?: (v: string) => void; name?: string; mono?: SignalMono<string>; node?: Text; shadowMode?: 'open' | 'closed'; shadowOpts?: Record<string, unknown> }[] = [];
+        #sinks       : { type: 'text' | 'content' | 'textMono' | 'attr' | 'cls' | 'prop' | 'style' | 'bind' | 'shadow'; getter: (() => unknown); setter?: (v: string) => void; name?: string; mono?: SignalMono<string>; node?: Text; shadowMode?: 'open' | 'closed'; shadowOpts?: Record<string, unknown> }[] = [];
 
         /** Wired event-listener records (Events facet of the descriptor). */
         #events      : Array<{ type: string; cb: EventListener; opts?: AddEventListenerOptions | boolean }> = [];
@@ -923,6 +926,22 @@ export namespace Virtuals
             {
                 switch (sink.type)
                 {
+                    case 'content':
+                    {
+                        this.#textEffect?.();
+                        const instance = new Reactivity.Effect
+                        (
+                            () => Reals.Real.Content
+                            (
+                                this.#dom!,
+                                String((sink.getter as (() => string))() ?? '')
+                            )
+                        );
+                        const dispose = (): void => instance.Dispose();
+                        this.#textEffect = dispose;
+                        this.#effects.push(dispose);
+                        break;
+                    }
                     case 'text':
                     {
                         const node = Reals.Real.CreateText(
@@ -1458,21 +1477,29 @@ export namespace Virtuals
         }
 
         /**
-         * Append a reactive Text node whose value is `getter()`. Updates
-         * automatically whenever the getter's dependencies change.
+         * Replace the element's complete text content with `getter()`.
+         * Constructor/template defaults and existing children are removed.
          */
         text(getter: (() => string) | string): this
         {
             const g: (() => string) = Virtual.#AsGetter(getter);
             if (this.#dom)
             {
-                const n = Reals.Real.CreateText(g());
-                Reals.Real.Append(this.#dom, n);
-                this.#effects.push(Virtual.effect(() => { Reals.Real.Text(n, g()); }));
+                this.#textEffect?.();
+                const instance = new Reactivity.Effect
+                (
+                    () => Reals.Real.Content(this.#dom!, String(g() ?? ''))
+                );
+                const dispose = (): void => instance.Dispose();
+                this.#textEffect = dispose;
+                this.#effects.push(dispose);
             }
             else
             {
-                this.#sinks.push({ type: 'text', getter: g });
+                this.#text = '';
+                this.#children = [];
+                this.#sinks = this.#sinks.filter(sink => sink.type !== 'content');
+                this.#sinks.push({ type: 'content', getter: g });
             }
             return this;
         }
@@ -1720,6 +1747,7 @@ export namespace Virtuals
             }
 
             this.#effects = [];
+            this.#textEffect = null;
             this.#sinks = [];
             this.#events = [];
             this.#domQueue = [];

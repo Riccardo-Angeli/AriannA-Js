@@ -170,6 +170,8 @@ export namespace Reals
          *  @license     MIT / Commercial (dual license)
          */
         #effects: Array<() => void> = [];
+        /** Active whole-content text binding installed by text(). */
+        #textEffect: (() => void) | null = null;
         /** @name        #sheet
          *  @private
          *  @type        {Stylesheet | null}
@@ -1231,7 +1233,9 @@ export namespace Reals
 
         /** @name        text
          *  @public
-         *  @description Append a reactive text node bound to `getter` (or a static string). Re-runs on signal change.
+         *  @description Replace the element's complete text content with `getter` (or a static string).
+         *               The constructor/template default and every existing child are removed. Re-runs on
+         *               signal change; a later text() call replaces the previous whole-content binding.
          *  @param       {(() => string) | string} getter The text source.
          *  @returns     {this}
          *  @author      Riccardo Angeli
@@ -1241,15 +1245,15 @@ export namespace Reals
         text(getter: (() => string) | string): this
         {
             const g = Real.#AsGetter(getter);
-            const node = Real.CreateText(g());
-            Real.Append(this.#el, node);
-            this.#Effect
+            this.#textEffect?.();
+
+            const instance = new Reactivity.Effect
             (
-                () =>
-                {
-                    Real.Text(node, g());
-                }
+                () => Real.Content(this.#el, String(g() ?? ''))
             );
+            const dispose = (): void => instance.Dispose();
+            this.#textEffect = dispose;
+            this.#effects.push(dispose);
             return this;
         }
 
@@ -1425,6 +1429,7 @@ export namespace Reals
         {
             this.#effects.forEach(s => s());
             this.#effects = [];
+            this.#textEffect = null;
             this.Sheet = null;
             return this;
         }

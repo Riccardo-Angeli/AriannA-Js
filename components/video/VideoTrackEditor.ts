@@ -40,7 +40,7 @@ import { Component, Css, Templates, Real } from '../../core/index.ts';
 import './VideoPart.ts';
 import './VideoTrack.ts';
 import type { VideoPart, VideoPartSnapshot } from './VideoPart.ts';
-import type { VideoTrack } from './VideoTrack.ts';
+import type { VideoTrack, VideoTrackEditMode } from './VideoTrack.ts';
 
 export interface VideoClip {
     id: string;
@@ -52,10 +52,14 @@ export interface VideoClip {
     sourceIn?: number;
     color?: string;
     opacity?: number;
+    fadeIn?: number;
+    fadeOut?: number;
     speed?: number;
     volume?: number;
     muted?: boolean;
     locked?: boolean;
+    poster?: string;
+    frames?: string[];
 }
 
 export interface VideoTrackEditorOptions {
@@ -69,6 +73,7 @@ export interface VideoTrackEditorOptions {
     framerate?: number;
     title?: string;
     source?: string;
+    editMode?: VideoTrackEditMode;
 }
 
 export interface VideoProjectSnapshot {
@@ -101,9 +106,16 @@ type RuntimeState = {
     range?: HTMLInputElement;
     playButton?: HTMLButtonElement;
     draggingPlayhead: boolean;
+    partsTool?: HTMLButtonElement;
+    automationTool?: HTMLButtonElement;
+    automationDrawTool?: HTMLButtonElement;
 };
 
 const Runtime = new WeakMap<HTMLElement, RuntimeState>();
+const VideoTrackEditorReactiveAttributes = new Set([
+    'theme','duration','time','tracks','pixels-per-second','snap','snap-ms',
+    'framerate','title','source','magnetic-snap','track-height','edit-mode'
+]);
 
 function stateFor(element: HTMLElement): RuntimeState {
     let state = Runtime.get(element);
@@ -132,6 +144,7 @@ function applyOptions(element: HTMLElement, options: VideoTrackEditorOptions = {
     if(options.framerate != null) element.setAttribute('framerate', String(options.framerate));
     if(options.title) element.setAttribute('title', options.title);
     if(options.source) element.setAttribute('source', options.source);
+    if(options.editMode) element.setAttribute('edit-mode', options.editMode);
 }
 
 export const VideoTrackEditorStyles = new Css.Stylesheet([
@@ -180,7 +193,7 @@ export const VideoTrackEditorStyles = new Css.Stylesheet([
 
 @Component('arianna-video-track-editor', VideoTrackEditorStyles, {
     Shadow: false,
-    Attributes: ['theme','duration','time','tracks','pixels-per-second','snap','snap-ms','framerate','title','source','magnetic-snap','track-height']
+    Attributes: ['theme','duration','time','tracks','pixels-per-second','snap','snap-ms','framerate','title','source','magnetic-snap','track-height','edit-mode']
 })
 class VideoTrackEditorElement extends HTMLElement {
     public static readonly Styles = VideoTrackEditorStyles;
@@ -201,6 +214,7 @@ class VideoTrackEditorElement extends HTMLElement {
         if(!this.hasAttribute('pixels-per-second')) this.setAttribute('pixels-per-second', '54');
         if(!this.hasAttribute('framerate')) this.setAttribute('framerate', '25');
         if(!this.hasAttribute('snap')) this.setAttribute('snap', String(1 / this.framerate));
+        if(!this.hasAttribute('edit-mode')) this.setAttribute('edit-mode','parts');
         this.render();
         this.bind();
         this.renderTimeline();
@@ -209,8 +223,10 @@ class VideoTrackEditorElement extends HTMLElement {
 
     public onAttributeChanged(name: string): void {
         if(!this.isConnected) return;
+        if(!VideoTrackEditorReactiveAttributes.has(name)) return;
         if(['duration','tracks','framerate','theme'].includes(name)) this.renderTimeline();
         if(name === 'pixels-per-second' || name === 'track-height') this.syncScale();
+        if(name === 'edit-mode') this.syncEditMode();
         if(name === 'time') this.playhead = numberValue(this.getAttribute('time'), this.playhead);
         this.syncPlayhead(false);
     }
@@ -232,6 +248,9 @@ class VideoTrackEditorElement extends HTMLElement {
     public get playhead(): number { return stateFor(this).playhead; }
     public set playhead(value: number) { this.seek(value); }
     public get playing(): boolean { return stateFor(this).playing; }
+    public get editMode():VideoTrackEditMode { const value=this.getAttribute('edit-mode');return value==='automation-select'||value==='automation-draw'?value:'parts'; }
+    public set editMode(value:VideoTrackEditMode) { this.setAttribute('edit-mode',value==='automation-select'||value==='automation-draw'?value:'parts'); }
+    public setEditMode(value:VideoTrackEditMode):this { this.editMode=value;this.syncEditMode();return this; }
     public get tracks(): VideoTrack[] { return Array.from(this.querySelectorAll<VideoTrack>('.VideoTrackEditor-Tracks > arianna-video-track')); }
     public set tracks(value: number | VideoTrack[]) { this.trackCount = Array.isArray(value) ? Math.max(1, value.length) : value; }
     public get clips(): VideoPart[] { return Array.from(this.querySelectorAll<VideoPart>('.VideoTrackEditor-Tracks arianna-video-part')); }
@@ -247,7 +266,7 @@ class VideoTrackEditorElement extends HTMLElement {
         return this;
     }
 
-    public getClips(): VideoClip[] { return stateFor(this).clips.map(clip => ({ ...clip })); }
+    public getClips(): VideoClip[] { return stateFor(this).clips.map(clip => ({ ...clip, frames: clip.frames ? [...clip.frames] : undefined })); }
 
     public addClip(clip: Partial<VideoClip>, track = clip.track ?? 0): VideoClip {
         const state = stateFor(this);
@@ -341,7 +360,7 @@ class VideoTrackEditorElement extends HTMLElement {
 
         const viewerBar = document.createElement('div'); viewerBar.className = 'VideoTrackEditor-ViewerBar';
         const viewer = document.createElement('div'); viewer.className = 'VideoTrackEditor-Viewer';
-        const video = document.createElement('video'); video.preload = 'auto'; video.playsInline = true; video.muted = true;
+        const video = document.createElement('video'); video.preload = 'metadata'; video.playsInline = true; video.muted = true;
         const badge = document.createElement('span'); badge.className = 'VideoTrackEditor-ViewerBadge'; badge.textContent = 'PROGRAM';
         viewer.append(video, badge); state.viewer = video;
         const inspector = document.createElement('div'); inspector.className = 'VideoTrackEditor-Inspector';
@@ -355,10 +374,17 @@ class VideoTrackEditorElement extends HTMLElement {
             this.tool('‹', 'prev-frame', 'Previous frame')
         );
         const play = this.tool('▶', 'play', 'Play / Pause'); state.playButton = play; transport.appendChild(play);
+        const partsTool=this.tool('↖','parts-mode','Edit video clips');state.partsTool=partsTool;
+        const automationTool=this.tool('⌁','automation-select','Select automation points');state.automationTool=automationTool;
+        const automationDrawTool=this.tool('✎','automation-draw','Draw automation points');state.automationDrawTool=automationDrawTool;
         transport.append(
             this.tool('■', 'stop', 'Stop'),
             this.tool('›', 'next-frame', 'Next frame'),
             this.tool('»', 'next-edit', 'Next edit'),
+            this.separator(),
+            partsTool,
+            automationTool,
+            automationDrawTool,
             this.separator(),
             this.tool('✂', 'split', 'Split selected clip at playhead'),
             this.tool('⌫', 'delete', 'Delete selected clip'),
@@ -373,6 +399,7 @@ class VideoTrackEditorElement extends HTMLElement {
         timeline.appendChild(content);
         shell.append(viewerBar, transport, timeline);
         this.replaceChildren(shell);
+        this.syncEditMode();
     }
 
     private renderTimeline(): void {
@@ -402,6 +429,7 @@ class VideoTrackEditorElement extends HTMLElement {
             track.setAttribute('pixels-per-second', String(this.pixelsPerSecond));
             track.setAttribute('snap', String(this.snap));
             track.setAttribute('framerate', String(this.framerate));
+            track.setAttribute('edit-mode',this.editMode);
             track.style.width = `${width}px`;
             const clips = state.clips.filter(clip => clip.track === index);
             clips.forEach(clip => {
@@ -418,10 +446,14 @@ class VideoTrackEditorElement extends HTMLElement {
                 part.setAttribute('framerate', String(this.framerate));
                 part.setAttribute('snap', String(this.snap));
                 if(clip.opacity != null) part.setAttribute('opacity', String(clip.opacity));
+                if(clip.fadeIn != null) part.setAttribute('fade-in', String(clip.fadeIn));
+                if(clip.fadeOut != null) part.setAttribute('fade-out', String(clip.fadeOut));
                 if(clip.speed != null) part.setAttribute('speed', String(clip.speed));
                 if(clip.volume != null) part.setAttribute('volume', String(clip.volume));
                 if(clip.muted) part.setAttribute('muted', '');
                 if(clip.locked) part.setAttribute('locked', '');
+                if(clip.poster) part.setAttribute('poster', clip.poster);
+                if(clip.frames?.length) part.frames = clip.frames;
                 if(state.selectedId === clip.id) part.setAttribute('selected', '');
                 track.appendChild(part);
             });
@@ -451,6 +483,9 @@ class VideoTrackEditorElement extends HTMLElement {
             if(type === 'next-frame') this.nextFrame();
             if(type === 'prev-edit') this.previousEdit();
             if(type === 'next-edit') this.nextEdit();
+            if(type === 'parts-mode') this.setEditMode('parts');
+            if(type === 'automation-select') this.setEditMode('automation-select');
+            if(type === 'automation-draw') this.setEditMode('automation-draw');
             if(type === 'split') this.splitSelected();
             if(type === 'delete' && state.selectedId) this.removeClip(state.selectedId);
         });
@@ -489,6 +524,7 @@ class VideoTrackEditorElement extends HTMLElement {
 
         this.addEventListener('keydown', event => {
             if(event.code === 'Space') { event.preventDefault(); this.toggle(); }
+            if(event.key === 'Escape' && this.editMode!=='parts') { event.preventDefault(); this.setEditMode('parts'); }
             if(event.key === 'ArrowLeft') { event.preventDefault(); event.shiftKey ? this.previousEdit() : this.previousFrame(); }
             if(event.key === 'ArrowRight') { event.preventDefault(); event.shiftKey ? this.nextEdit() : this.nextFrame(); }
         });
@@ -497,6 +533,13 @@ class VideoTrackEditorElement extends HTMLElement {
 
     public get trackHeight(): number { return clamp(numberValue(this.getAttribute('track-height'),82) || 82,48,240); }
     public set trackHeight(value: number) { this.setAttribute('track-height',String(value)); }
+    private syncEditMode():void {
+        const state=stateFor(this),mode=this.editMode;
+        if(state.partsTool)state.partsTool.dataset.active=String(mode==='parts');
+        if(state.automationTool)state.automationTool.dataset.active=String(mode==='automation-select');
+        if(state.automationDrawTool)state.automationDrawTool.dataset.active=String(mode==='automation-draw');
+        for(const track of this.tracks)if(track.editMode!==mode)track.editMode=mode;
+    }
     private syncScale(): void {
         const state=stateFor(this); if(!state.content || !state.timeline) return;
         syncTimelineScales(this,'pixels-per-second',this.pixelsPerSecond,'track-height',this.trackHeight);
@@ -512,6 +555,7 @@ class VideoTrackEditorElement extends HTMLElement {
         for(const track of this.tracks) {
             if(track.getAttribute('height')!==String(this.trackHeight)) track.setAttribute('height',String(this.trackHeight));
             if(track.getAttribute('pixels-per-second')!==String(this.pixelsPerSecond)) track.setAttribute('pixels-per-second',String(this.pixelsPerSecond));
+            if(track.getAttribute('edit-mode')!==this.editMode)track.setAttribute('edit-mode',this.editMode);
         }
         this.syncPlayhead(false);
     }
@@ -533,10 +577,14 @@ class VideoTrackEditorElement extends HTMLElement {
                     sourceIn: snapshot.sourceStart,
                     color: snapshot.color,
                     opacity: snapshot.opacity,
+                    fadeIn: snapshot.fadeIn,
+                    fadeOut: snapshot.fadeOut,
                     speed: snapshot.speed,
                     volume: snapshot.volume,
                     muted: snapshot.muted,
-                    locked: snapshot.locked
+                    locked: snapshot.locked,
+                    poster: snapshot.poster,
+                    frames: [...snapshot.frames]
                 });
             });
         });
@@ -550,6 +598,7 @@ class VideoTrackEditorElement extends HTMLElement {
         if(state.playheadNode) state.playheadNode.style.left = `${HeaderWidth + state.playhead * this.pixelsPerSecond}px`;
         if(state.timeNode) state.timeNode.textContent = this.formatTimecode(state.playhead);
         if(state.range) { state.range.max = String(this.duration); state.range.step = String(1 / this.framerate); state.range.value = String(state.playhead); }
+        for(const track of this.tracks)track.applyAutomation?.(state.playhead);
         if(updatePreview) this.syncPreview(false);
     }
 
@@ -576,15 +625,22 @@ class VideoTrackEditorElement extends HTMLElement {
             if(state.viewerClipId !== undefined || video.hasAttribute('src')) {
                 state.viewerClipId = undefined;
                 video.removeAttribute('src');
-                video.load();
             }
+            video.removeAttribute('poster');
             return;
         }
         const localTime = Math.max(0, (active.sourceIn ?? 0) + (state.playhead - active.start) * (active.speed ?? 1));
-        if(state.viewerClipId !== active.id || video.getAttribute('src') !== active.source) {
+        const poster = active.poster || active.frames?.[0] || '';
+        if(poster) video.poster = poster; else video.removeAttribute('poster');
+
+        /* Merely opening/scrubbing the editor must not start Safari's media
+           decoder.  The viewer acquires a source only on an explicit Play. */
+        if(!playing && (state.viewerClipId !== active.id || video.getAttribute('src') !== active.source)) {
+            if(!video.paused) video.pause();
+            state.viewerClipId = undefined;
+        } else if(state.viewerClipId !== active.id || video.getAttribute('src') !== active.source) {
             state.viewerClipId = active.id;
             video.src = active.source;
-            video.load();
             const setTime = (): void => { try { video.currentTime = localTime; } catch {} if(playing) void video.play().catch(() => {}); };
             if(video.readyState >= 1) setTime(); else video.addEventListener('loadedmetadata', setTime, { once: true });
         } else {
@@ -595,6 +651,27 @@ class VideoTrackEditorElement extends HTMLElement {
         video.muted = active.muted ?? true;
         video.volume = clamp(active.volume ?? 1, 0, 1);
         video.playbackRate = clamp(active.speed ?? 1, .25, 4);
+        const automationTrack=this.tracks[active.track];
+        const automated=(id:string,fallback:number):number=>{
+            if(!automationTrack?.automationRead)return fallback;
+            const value=automationTrack.automationValue?.(id,state.playhead);
+            return Number.isFinite(value)?value:fallback;
+        };
+        const clipElapsed=Math.max(0,state.playhead-active.start);
+        const clipRemaining=Math.max(0,active.start+active.duration-state.playhead);
+        const fadeIn=clamp(numberValue(active.fadeIn,0),0,active.duration);
+        const fadeOut=clamp(numberValue(active.fadeOut,0),0,active.duration);
+        const fadeInOpacity=fadeIn>0?clamp(clipElapsed/fadeIn,0,1):1;
+        const fadeOutOpacity=fadeOut>0?clamp(clipRemaining/fadeOut,0,1):1;
+        const opacity=automated('opacity',active.opacity??1)*Math.min(fadeInOpacity,fadeOutOpacity);
+        const zoom=automated('zoom',1);
+        const x=automated('position.x',0);
+        const y=automated('position.y',0);
+        const rotation=automated('rotation',0);
+        const blur=automated('blur',0);
+        video.style.opacity=String(clamp(opacity,0,1));
+        video.style.transform=`translate(${x*50}%,${y*50}%) scale(${Math.max(.01,zoom)}) rotate(${rotation}deg)`;
+        video.style.filter=blur>0?`blur(${blur}px)`:'none';
     }
 
     private syncInspector(): void {
@@ -625,10 +702,14 @@ class VideoTrackEditorElement extends HTMLElement {
             sourceIn: Math.max(0, numberValue(clip.sourceIn, 0)),
             color: clip.color || this.clipColor(track),
             opacity: clamp(numberValue(clip.opacity, 1), 0, 1),
+            fadeIn: clamp(numberValue(clip.fadeIn, 0), 0, duration),
+            fadeOut: clamp(numberValue(clip.fadeOut, 0), 0, duration),
             speed: Math.max(.05, numberValue(clip.speed, 1)),
             volume: clamp(numberValue(clip.volume, 1), 0, 1),
             muted: !!clip.muted,
-            locked: !!clip.locked
+            locked: !!clip.locked,
+            poster: clip.poster || '',
+            frames: Array.isArray(clip.frames) ? clip.frames.map(String).filter(Boolean) : []
         };
     }
 
@@ -638,7 +719,9 @@ class VideoTrackEditorElement extends HTMLElement {
         const sourceStart = Math.max(0, numberValue(part.getAttribute('source-start'), 0));
         const src = part.getAttribute('src') || '';
         const label = part.getAttribute('label') || 'Video';
-        return { id: part.id, start, length, duration: length, sourceStart, sourceIn: sourceStart, src, source: src, label, name: label, color: part.getAttribute('color') || '#4d9de0', theme: this.getAttribute('theme') === 'light' ? 'light' : 'dark', speed: numberValue(part.getAttribute('speed'), 1), opacity: clamp(numberValue(part.getAttribute('opacity'), 1), 0, 1), volume: clamp(numberValue(part.getAttribute('volume'), 1), 0, 1), muted: part.hasAttribute('muted'), locked: part.hasAttribute('locked') };
+        let frames: string[] = [];
+        try { const parsed = JSON.parse(part.getAttribute('frames') || '[]'); if(Array.isArray(parsed)) frames = parsed.map(String).filter(Boolean); } catch {}
+        return { id: part.id, start, length, duration: length, sourceStart, sourceIn: sourceStart, src, source: src, label, name: label, color: part.getAttribute('color') || '#4d9de0', theme: this.getAttribute('theme') === 'light' ? 'light' : 'dark', speed: numberValue(part.getAttribute('speed'), 1), opacity: clamp(numberValue(part.getAttribute('opacity'), 1), 0, 1), fadeIn: clamp(numberValue(part.getAttribute('fade-in'), 0), 0, length), fadeOut: clamp(numberValue(part.getAttribute('fade-out'), 0), 0, length), volume: clamp(numberValue(part.getAttribute('volume'), 1), 0, 1), muted: part.hasAttribute('muted'), locked: part.hasAttribute('locked'), poster: part.getAttribute('poster') || '', frames };
     }
 
     private tool(text: string, action: string, title: string): HTMLButtonElement {

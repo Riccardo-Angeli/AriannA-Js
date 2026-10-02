@@ -7,8 +7,12 @@ export { default as Tools3D } from './Tools3D.ts';
 export type { Tools3DOptions } from './Tools3D.ts';
 export { Csg, CsgComponent } from './Csg.ts';
 export type { CsgOperation, CsgMode, CsgOperand } from './Csg.ts';
-export * from './MaterialsPalette.ts';
-export { MaterialsPalette as Materials } from './MaterialsPalette.ts';
-export * from './Modifiers3DPalette.ts';
-export { Modifiers3DPalette as Modifiers3D } from './Modifiers3DPalette.ts';
+
+
+// Source compatibility only. New code and Playground use the canonical names
+// above; keeping these aliases avoids breaking consumers during the rename.
+export { default as MaterialsPalette } from './MaterialsPalette.ts';
+export type { MaterialsPaletteOptions } from './MaterialsPalette.ts';
+export { default as Modifiers3DPalette } from './Modifiers3DPalette.ts';
+export type { Modifiers3DPaletteOptions } from './Modifiers3DPalette.ts';
 export * from './modifiers/index.ts';

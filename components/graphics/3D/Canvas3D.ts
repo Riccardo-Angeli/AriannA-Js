@@ -17,6 +17,7 @@ export namespace Canvas3D
 {
     export interface Vec3 { x:number; y:number; z:number; }
     export interface Geometry3 { vertices:Vec3[]; normals:Vec3[]; indices:number[];faceIds?:number[]; clone():Geometry3; }
+    export interface Material3 { kind?:string;color?:string;roughness?:number;metalness?:number;opacity?:number;emissive?:string;wireframe?:boolean; }
     export interface Mesh3 { geometry:Geometry3; position:Vec3; rotation:Vec3; scale:Vec3; visible:boolean; userData:Record<string,unknown>; updateMatrix?():void; }
     export interface Scene3 { children:Mesh3[]; add(obj:Mesh3):void; remove(obj:Mesh3):void; }
     export interface Camera3 { position:Vec3; }
@@ -174,7 +175,10 @@ export namespace Canvas3D
         public localToWorld(point:Vec3,mesh:Mesh3):Vec3{return this.transform(point,mesh);}
         public projectWorld(point:Vec3):{x:number;y:number;z:number;visible:boolean}
         {
-            const s=State(this),rect=this.getBoundingClientRect();this.updateCamera();const basis=this.cameraBasis(),rel=sub(point,s.camera.position),z=dot(rel,basis.forward),focal=rect.height*.82;
+            /* Selection rectangles are expressed in selectionSurface-local
+             * coordinates, not in coordinates of the whole Canvas3D host
+             * (which also contains toolbars/status UI). */
+            const s=State(this),rect=this.selectionSurface.getBoundingClientRect();this.updateCamera();const basis=this.cameraBasis(),rel=sub(point,s.camera.position),z=dot(rel,basis.forward),focal=rect.height*.82;
             return{x:rect.width/2+focal*dot(rel,basis.right)/Math.max(.0001,z),y:rect.height/2-focal*dot(rel,basis.up)/Math.max(.0001,z),z,visible:z>.0001};
         }
         public rayFromClient(clientX:number,clientY:number):Ray3
@@ -255,14 +259,26 @@ export namespace Canvas3D
         {
             const h=hex.replace('#','');const n=parseInt(h.length===3?h.split('').map(x=>x+x).join(''):h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;const k=Math.max(.18,Math.min(1.35,shade));return`rgba(${Math.round(r*k)},${Math.round(g*k)},${Math.round(b*k)},${Math.max(0,Math.min(1,alpha))})`;
         }
+        private normalColor(normal:Vec3):string
+        {
+            const channel=(value:number)=>Math.max(0,Math.min(255,Math.round((value*.5+.5)*255))).toString(16).padStart(2,'0');
+            return`#${channel(normal.x)}${channel(normal.y)}${channel(normal.z)}`;
+        }
+        private materialShade(material:Material3,diffuse:number):number
+        {
+            const kind=material.kind??'standard',roughness=Math.max(0,Math.min(1,Number(material.roughness??.45))),metalness=Math.max(0,Math.min(1,Number(material.metalness??.15)));
+            if(kind==='basic'||kind==='normal'||kind==='wireframe')return 1;
+            const lit=.34+.66*Math.max(0,diffuse),soft=.55+(.45*lit),shade=lit*(1-roughness*.38)+soft*(roughness*.38)+metalness*.12;
+            return kind==='toon'?Math.round(shade*4)/4:shade;
+        }
         private render():void
         {
             const s=State(this),canvas=s.canvas,ctx=s.ctx;if(!canvas||!ctx)return;const w=canvas.width,h=canvas.height,dpr=Math.min(2,window.devicePixelRatio||1);
             const light=this.getAttribute('theme')==='light';const grad=ctx.createLinearGradient(0,0,0,h);grad.addColorStop(0,light?'#f5f7f9':'#20252b');grad.addColorStop(1,light?'#dfe4e8':'#111418');ctx.fillStyle=grad;ctx.fillRect(0,0,w,h);
             this.updateCamera();const {forward,right,up}=this.cameraBasis(),focal=(h/dpr)*.82*dpr;
-            type Tri={p:[{x:number;y:number;z:number},{x:number;y:number;z:number},{x:number;y:number;z:number}];depth:number;shade:number;color:string;alpha:number};const tris:Tri[]=[];
-            for(const mesh of s.scene.children){if(!mesh.visible)continue;const g=mesh.geometry,opacity=Number(mesh.userData['_arianna_opacity']??1),base=String(mesh.userData.color??this.getAttribute('color')??'#8f9aa6');const projected=g.vertices.map(v=>{const world=this.transform(v,mesh),rel=sub(world,s.camera.position),z=dot(rel,forward);return{x:w/2+focal*dot(rel,right)/Math.max(.08,z),y:h/2-focal*dot(rel,up)/Math.max(.08,z),z,world};});for(let i=0;i<g.indices.length;i+=3){const ia=g.indices[i],ib=g.indices[i+1],ic=g.indices[i+2],a=projected[ia],b=projected[ib],c=projected[ic];if(!a||!b||!c||a.z<=.08||b.z<=.08||c.z<=.08)continue;const wa=a.world,wb=b.world,wc=c.world,n=norm(cross(sub(wb,wa),sub(wc,wa))),ld=norm({x:-.45,y:.75,z:.6}),shade=.42+.58*Math.max(0,dot(n,ld));tris.push({p:[a,b,c],depth:(a.z+b.z+c.z)/3,shade,color:base,alpha:opacity});}}
-            tris.sort((a,b)=>b.depth-a.depth);ctx.lineJoin='round';for(const tri of tris){ctx.beginPath();ctx.moveTo(tri.p[0].x,tri.p[0].y);ctx.lineTo(tri.p[1].x,tri.p[1].y);ctx.lineTo(tri.p[2].x,tri.p[2].y);ctx.closePath();ctx.fillStyle=this.color(tri.color,tri.shade,tri.alpha);ctx.fill();ctx.strokeStyle=light?'rgba(35,40,45,.10)':'rgba(255,255,255,.055)';ctx.lineWidth=.7*dpr;ctx.stroke();}
+            type Tri={p:[{x:number;y:number;z:number},{x:number;y:number;z:number},{x:number;y:number;z:number}];depth:number;shade:number;color:string;alpha:number;wireframe:boolean};const tris:Tri[]=[];
+            for(const mesh of s.scene.children){if(!mesh.visible)continue;const g=mesh.geometry,material=(mesh.userData.material??{}) as Material3,opacity=Number(mesh.userData['_arianna_opacity']??1)*Number(material.opacity??1),fallback=String(mesh.userData.color??this.getAttribute('color')??'#8f9aa6'),base=String(material.color??fallback),wireframe=Boolean(material.wireframe||material.kind==='wireframe');const projected=g.vertices.map(v=>{const world=this.transform(v,mesh),rel=sub(world,s.camera.position),z=dot(rel,forward);return{x:w/2+focal*dot(rel,right)/Math.max(.08,z),y:h/2-focal*dot(rel,up)/Math.max(.08,z),z,world};});for(let i=0;i<g.indices.length;i+=3){const ia=g.indices[i],ib=g.indices[i+1],ic=g.indices[i+2],a=projected[ia],b=projected[ib],c=projected[ic];if(!a||!b||!c||a.z<=.08||b.z<=.08||c.z<=.08)continue;const wa=a.world,wb=b.world,wc=c.world,n=norm(cross(sub(wb,wa),sub(wc,wa))),ld=norm({x:-.45,y:.75,z:.6}),diffuse=Math.max(0,dot(n,ld)),shade=this.materialShade(material,diffuse),color=material.kind==='normal'?this.normalColor(n):base;tris.push({p:[a,b,c],depth:(a.z+b.z+c.z)/3,shade,color,alpha:opacity,wireframe});}}
+            tris.sort((a,b)=>b.depth-a.depth);ctx.lineJoin='round';for(const tri of tris){ctx.beginPath();ctx.moveTo(tri.p[0].x,tri.p[0].y);ctx.lineTo(tri.p[1].x,tri.p[1].y);ctx.lineTo(tri.p[2].x,tri.p[2].y);ctx.closePath();if(!tri.wireframe){ctx.fillStyle=this.color(tri.color,tri.shade,tri.alpha);ctx.fill();}ctx.strokeStyle=tri.wireframe?this.color(tri.color,1,tri.alpha):(light?'rgba(35,40,45,.10)':'rgba(255,255,255,.055)');ctx.lineWidth=(tri.wireframe?1.15:.7)*dpr;ctx.stroke();}
         }
     }
 }

@@ -3,9 +3,16 @@ import { Component, Css } from '../../core/index.ts';
 
 export interface LatLng { lat:number; lng:number; }
 export type MapProvider = 'google' | 'osm' | 'apple' | 'maplibre';
+export const MapTypes={Standard:'standard',Satellite:'satellite',Hybrid:'hybrid',Terrain:'terrain'} as const;
+export type MapType=typeof MapTypes[keyof typeof MapTypes];
 
-const ATTRIBUTES=['center-lat','center-lng','zoom','marker','label','address','aspect-ratio','mapkit-token'] as const;
+const ATTRIBUTES=['center-lat','center-lng','zoom','marker','label','address','aspect-ratio','mapkit-token','type'] as const;
 const OBSERVED=new Set<string>(ATTRIBUTES);
+
+function mapType(host:Element): MapType {
+    const value=(host.getAttribute('type')||MapTypes.Standard).trim().toLowerCase();
+    return value===MapTypes.Satellite || value===MapTypes.Hybrid || value===MapTypes.Terrain ? value : MapTypes.Standard;
+}
 
 function centerLat(host:Element): number {
     const value=Number.parseFloat(host.getAttribute('center-lat') ?? '');
@@ -249,6 +256,8 @@ export const Styles = new Css.Stylesheet([
         getProvider(): MapProvider { return 'apple'; }
         getCenter(): LatLng { return {lat:centerLat(this),lng:centerLng(this)}; }
         getZoom(): number { return zoom(this); }
+        get Type(): MapType { return mapType(this); }
+        set Type(value:MapType) { this.setAttribute('type',value); }
         setLocation(center:LatLng): this { this.setAttribute('center-lat',String(center.lat)); this.setAttribute('center-lng',String(center.lng)); return this; }
         setZoom(value:number): this { this.setAttribute('zoom',String(value)); return this; }
         reload(): this { void this.render(true); return this; }
@@ -281,7 +290,10 @@ export const Styles = new Css.Stylesheet([
                 const span=Math.max(.002,1/Math.pow(2,zoom(this)-7));
                 const region=new mapkit.CoordinateRegion(center,new mapkit.CoordinateSpan(span,span));
                 try { this.instance?.destroy?.(); } catch {}
-                this.instance=new mapkit.Map(host,{region,showsCompass:mapkit.FeatureVisibility?.Adaptive,showsZoomControl:true});
+                const requested=this.Type;
+                const resolved=requested===MapTypes.Terrain ? MapTypes.Standard : requested;
+                const nativeType=mapkit.Map?.MapTypes?.[resolved==='standard'?'Standard':resolved==='satellite'?'Satellite':'Hybrid'] || resolved;
+                this.instance=new mapkit.Map(host,{region,mapType:nativeType,showsCompass:mapkit.FeatureVisibility?.Adaptive,showsZoomControl:true});
                 if(marker(this) && mapkit.MarkerAnnotation){
                     const annotation=new mapkit.MarkerAnnotation(center,{title:this.getAttribute('label')||''});
                     this.instance.addAnnotation?.(annotation);

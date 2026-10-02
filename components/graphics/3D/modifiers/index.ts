@@ -26,6 +26,12 @@ import { DragModifier as DragModifierNamespace } from './DragModifier.ts';
 import { ArrayModifier as ArrayModifierNamespace } from './ArrayModifier.ts';
 import { RevolveModifier as RevolveModifierNamespace } from './RevolveModifier.ts';
 import { CrossSection as CrossSectionNamespace } from './CrossSection.ts';
+import { Mover3D as Mover3DNamespace } from './Mover3D.ts';
+import { Resizer3D as Resizer3DNamespace } from './Resizer3D.ts';
+import { Rotator3D as Rotator3DNamespace } from './Rotator3D.ts';
+import { Reflector3D as Reflector3DNamespace } from './Reflector3D.ts';
+import { Rounder3D as Rounder3DNamespace } from './Rounder3D.ts';
+import { Skewer3D as Skewer3DNamespace } from './Skewer3D.ts';
 
 export const Modifier3D = BaseNamespace.Modifier3D;
 export const Modifier3DElement = BaseNamespace.Modifier3DElement;
@@ -107,6 +113,26 @@ export const CrossSection = CrossSectionNamespace.CrossSection;
 export type CrossSectionPlane = CrossSectionNamespace.Plane;
 export type CrossSectionSegment = CrossSectionNamespace.Segment;
 
+export const Mover3D=Mover3DNamespace.Mover3D;
+export const Mover3DElement=Mover3DNamespace.Mover3DElement;
+export type Mover3DAxis=Mover3DNamespace.Axis;
+export type Mover3DOptions=Mover3DNamespace.Options;
+export const Resizer3D=Resizer3DNamespace.Resizer3D;
+export const Resizer3DElement=Resizer3DNamespace.Resizer3DElement;
+export type Resizer3DOptions=Resizer3DNamespace.Options;
+export const Rotator3D=Rotator3DNamespace.Rotator3D;
+export const Rotator3DElement=Rotator3DNamespace.Rotator3DElement;
+export type Rotator3DOptions=Rotator3DNamespace.Options;
+export const Reflector3D=Reflector3DNamespace.Reflector3D;
+export const Reflector3DElement=Reflector3DNamespace.Reflector3DElement;
+export type Reflector3DOptions=Reflector3DNamespace.Options;
+export const Rounder3D=Rounder3DNamespace.Rounder3D;
+export const Rounder3DElement=Rounder3DNamespace.Rounder3DElement;
+export type Rounder3DOptions=Rounder3DNamespace.Options;
+export const Skewer3D=Skewer3DNamespace.Skewer3D;
+export const Skewer3DElement=Skewer3DNamespace.Skewer3DElement;
+export type Skewer3DOptions=Skewer3DNamespace.Options;
+
 
 export const Modifiers3DRegistry =
 {
@@ -128,6 +154,13 @@ export const Modifiers3DRegistry =
     ArrayModifier,
     RevolveModifier,
     CrossSection,
+
+    Mover3D,
+    Resizer3D,
+    Rotator3D,
+    Reflector3D,
+    Rounder3D,
+    Skewer3D,
 };
 
 export default Modifiers3DRegistry;

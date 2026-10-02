@@ -83,6 +83,7 @@ export namespace Modifier3D
          *  @license     MIT / Commercial (dual license) */
         export interface Geometry3Like
         {
+            faceIds?:number[];
             /** @name        vertices
              *  @public
              *  @type        {Modifier3D.Interfaces.Vec3Like[]}
@@ -363,6 +364,7 @@ export namespace Modifier3D
             vertices: g.vertices.map(v => ({ ...v })),
             normals: g.normals.map(v => ({ ...v })),
             indices: [...g.indices],
+            faceIds:g.faceIds?[...g.faceIds]:undefined,
             uvs: g.uvs ? g.uvs.map(uv => [...uv] as [
                 number,
                 number
@@ -542,6 +544,68 @@ export namespace Modifier3D
                 {attr:'animate',label:'Animate',type:'toggle',value:true},
             ]
         },
+        'arianna-mover-3d': {
+            title:'Mover3D', subtitle:'Move mesh · snap is internal', controls:[
+                {attr:'x',label:'X',type:'range',min:-10,max:10,step:.05,value:0},
+                {attr:'y',label:'Y',type:'range',min:-10,max:10,step:.05,value:0},
+                {attr:'z',label:'Z',type:'range',min:-10,max:10,step:.05,value:0},
+                {attr:'axis',label:'Axis',type:'select',value:'all',options:['all','x','y','z','xy','xz','yz']},
+                {attr:'snap-x',label:'Snap X',type:'range',min:0,max:5,step:.05,value:0},
+                {attr:'snap-y',label:'Snap Y',type:'range',min:0,max:5,step:.05,value:0},
+                {attr:'snap-z',label:'Snap Z',type:'range',min:0,max:5,step:.05,value:0},
+                {attr:'snap-enabled',label:'Target snap',type:'toggle',value:true},
+                {attr:'snap-distance',label:'Tolerance',type:'range',min:0,max:2,step:.01,value:.25},
+                {attr:'snap-unit',label:'Tolerance unit',type:'select',value:'world',options:['world','screen-px']},
+                {attr:'angle-step',label:'Angle step',type:'range',min:1,max:90,step:1,value:15,suffix:'°'},
+            ]
+        },
+        'arianna-resizer-3d': {
+            title:'Resizer3D', subtitle:'Scale mesh on three axes', controls:[
+                {attr:'x',label:'Scale X',type:'range',min:.01,max:5,step:.01,value:1},
+                {attr:'y',label:'Scale Y',type:'range',min:.01,max:5,step:.01,value:1},
+                {attr:'z',label:'Scale Z',type:'range',min:.01,max:5,step:.01,value:1},
+                {attr:'axis',label:'Axis',type:'select',value:'all',options:['all','x','y','z','xy','xz','yz']},
+            ]
+        },
+        'arianna-rotator-3d': {
+            title:'Rotator3D', subtitle:'Rotate mesh in degrees', controls:[
+                {attr:'x',label:'X',type:'range',min:-180,max:180,step:1,value:0},
+                {attr:'y',label:'Y',type:'range',min:-180,max:180,step:1,value:0},
+                {attr:'z',label:'Z',type:'range',min:-180,max:180,step:1,value:0},
+                {attr:'axis',label:'Axis',type:'select',value:'all',options:['all','x','y','z']},
+                {attr:'snap',label:'Snap',type:'range',min:0,max:90,step:1,value:0,suffix:'°'},
+            ]
+        },
+        'arianna-reflector-3d': {
+            title:'Reflector3D', subtitle:'Reflect object transform', controls:[
+                {attr:'axis',label:'Axis',type:'select',value:'x',options:['x','y','z','xy','xz','yz','xyz']},
+            ]
+        },
+        'arianna-rounder-3d': {
+            title:'Rounder3D', subtitle:'Solid fillet · spherical corners', controls:[
+                {attr:'radius',label:'Radius',type:'range',min:0,max:1,step:.01,value:.05},
+                {attr:'segments',label:'Segments',type:'range',min:1,max:12,step:1,value:3},
+            ]
+        },
+        'arianna-revolve': {
+            title:'RevolveModifier',subtitle:'Profile revolution',controls:[
+                {attr:'axis',label:'Axis',type:'select',value:'y',options:['x','y','z']},
+                {attr:'angle-deg',label:'Angle',type:'range',min:1,max:360,step:1,value:360,suffix:'°'},
+                {attr:'start-angle-deg',label:'Start',type:'range',min:-180,max:180,step:1,value:0,suffix:'°'},
+                {attr:'segments',label:'Segments',type:'range',min:3,max:96,step:1,value:32},
+                {attr:'centered',label:'Centered',type:'toggle',value:true},
+                {attr:'cap',label:'Cap ends',type:'toggle',value:true},
+                {attr:'flip',label:'Flip normals',type:'toggle',value:false}
+            ]
+        },
+        'arianna-skewer-3d': {
+            title:'Skewer3D', subtitle:'Shear mesh geometry', controls:[
+                {attr:'x',label:'Skew X',type:'range',min:-45,max:45,step:1,value:0,suffix:'°'},
+                {attr:'y',label:'Skew Y',type:'range',min:-45,max:45,step:1,value:0,suffix:'°'},
+                {attr:'z',label:'Skew Z',type:'range',min:-45,max:45,step:1,value:0,suffix:'°'},
+                {attr:'max-angle',label:'Maximum',type:'range',min:0,max:89,step:1,value:45,suffix:'°'},
+            ]
+        },
     });
 
     function EnsurePanelStyles(): void
@@ -550,7 +614,7 @@ export namespace Modifier3D
         const style=document.createElement('style');
         style.id='arianna-modifier-3d-panel-styles';
         style.textContent=`
-arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,arianna-decimate,arianna-drag,arianna-fade,arianna-inflate,arianna-lod,arianna-mirror,arianna-smooth,arianna-snap,arianna-subdivision,arianna-twist,arianna-wave{box-sizing:border-box;position:absolute;top:14px;right:14px;z-index:25;width:272px;max-height:calc(100% - 28px);overflow:auto;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(24,27,31,.94);box-shadow:0 18px 50px rgba(0,0,0,.32);backdrop-filter:blur(14px);color:#edf0f3;font:12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto}
+arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,arianna-decimate,arianna-drag,arianna-fade,arianna-inflate,arianna-lod,arianna-mirror,arianna-smooth,arianna-snap,arianna-subdivision,arianna-twist,arianna-wave,arianna-mover-3d,arianna-resizer-3d,arianna-rotator-3d,arianna-reflector-3d,arianna-rounder-3d,arianna-skewer-3d,arianna-revolve{box-sizing:border-box;position:absolute;top:14px;right:14px;z-index:25;width:272px;max-height:calc(100% - 28px);overflow:auto;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(24,27,31,.94);box-shadow:0 18px 50px rgba(0,0,0,.32);backdrop-filter:blur(14px);color:#edf0f3;font:12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto}
 .ar-mod3d__head{display:flex;align-items:center;gap:9px;padding:10px 11px;border-bottom:1px solid rgba(255,255,255,.1);cursor:move;user-select:none;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012))}
 .ar-mod3d__titles{min-width:0;flex:1}.ar-mod3d__title{display:block;font-size:12px;font-weight:750;color:#fff}.ar-mod3d__sub{display:block;margin-top:1px;font-size:9px;color:#8f98a2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ar-mod3d__enabled{display:flex;align-items:center;gap:5px;color:#9da6ae;font-size:9px}.ar-mod3d__enabled input{accent-color:#e40c88}
 .ar-mod3d__body{display:grid;gap:9px;padding:11px}.ar-mod3d__row{display:grid;grid-template-columns:86px minmax(0,1fr) 48px;align-items:center;gap:7px}.ar-mod3d__row--select{grid-template-columns:86px minmax(0,1fr)}.ar-mod3d__row--toggle{grid-template-columns:1fr auto}.ar-mod3d__label{color:#aeb6bd;font-size:10px}.ar-mod3d__value{box-sizing:border-box;width:100%;min-width:0;text-align:right;color:#f0f2f4;font:10px ui-monospace,SFMono-Regular,Menlo,monospace;background:#171b1e;border:1px solid #464c53;border-radius:5px;padding:4px 5px}.ar-mod3d__range{width:100%;accent-color:#e40c88}.ar-mod3d__resize{position:absolute;z-index:50;background:transparent;border:0;pointer-events:auto;touch-action:none;user-select:none}.ar-mod3d__resize[data-edge="n"]{left:12px;right:12px;top:0;height:8px;cursor:n-resize}.ar-mod3d__resize[data-edge="s"]{left:12px;right:12px;bottom:0;height:8px;cursor:s-resize}.ar-mod3d__resize[data-edge="e"]{right:0;top:12px;bottom:12px;width:8px;cursor:e-resize}.ar-mod3d__resize[data-edge="w"]{left:0;top:12px;bottom:12px;width:8px;cursor:w-resize}.ar-mod3d__resize[data-edge="ne"]{right:0;top:0;width:14px;height:14px;cursor:ne-resize}.ar-mod3d__resize[data-edge="nw"]{left:0;top:0;width:14px;height:14px;cursor:nw-resize}.ar-mod3d__resize[data-edge="se"]{right:0;bottom:0;width:14px;height:14px;cursor:se-resize}.ar-mod3d__resize[data-edge="sw"]{left:0;bottom:0;width:14px;height:14px;cursor:sw-resize}.ar-mod3d__select{width:100%;min-height:28px;border:1px solid #464c53;border-radius:6px;background:#22262b;color:#e8ebee;padding:4px 7px;font:10px system-ui}.ar-mod3d__toggle{accent-color:#e40c88}.ar-mod3d__foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 11px;border-top:1px solid rgba(255,255,255,.09)}.ar-mod3d__badge{color:#8f98a2;font:9px ui-monospace,SFMono-Regular,Menlo,monospace}.ar-mod3d__reset{appearance:none;border:1px solid #4b5158;border-radius:6px;background:#2b3035;color:#d9dde1;padding:5px 8px;font:700 9px system-ui;cursor:pointer}.ar-mod3d__reset:hover{border-color:#e40c88;color:#fff}
@@ -596,7 +660,7 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
         public set selection(value:Modifier3D.Interfaces.SelectionLike|null)
         {
             const s=ElementState(this),mesh=value?.items[0]?.mesh??value?.objects[0]??null;s.selection=value;
-            if(!mesh||mesh===s.target)return;
+            if(!mesh||mesh===s.target){if(s.bound)this.scheduleRefresh();return;}
             s.frameUnsub?.();s.modifier?.destroy();this.restoreTarget();s.target=mesh;
             s.baseGeometry=_cloneGeom(mesh.geometry);s.baseTransform={position:{...mesh.position},rotation:{...mesh.rotation},scale:{...mesh.scale},visible:mesh.visible};s.bound=!!s.viewport;this.refreshModifier();
         }
@@ -645,7 +709,11 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
         protected onFrame(dt:number): void
         {
             const m=this.modifier as Modifier3D&{update?:(cam:Modifier3D.Interfaces.CameraLike,dt?:number)=>void};
-            if(m&&typeof m.update==='function'&&this.viewport){m.update(this.viewport.camera,dt);this.viewport.invalidate?.();}
+            if(m&&typeof m.update==='function'&&this.viewport){m.update(this.viewport.camera,dt);this.applySelectionScope();this.viewport.invalidate?.();}
+        }
+        protected captureTarget():void
+        {
+            const s=ElementState(this);if(!s.target)return;s.baseGeometry=_cloneGeom(s.target.geometry);s.baseTransform={position:{...s.target.position},rotation:{...s.target.rotation},scale:{...s.target.scale},visible:s.target.visible};
         }
         protected restoreTarget(): void
         {
@@ -658,13 +726,30 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
             const s=ElementState(this);if(!s.bound||!s.target||!s.viewport)return;
             s.frameUnsub?.();s.frameUnsub=null;s.modifier?.destroy();this.restoreTarget();
             s.modifier=this.createModifier(s.target);if(!s.modifier){s.viewport.invalidate?.();return;}
-            if(!this.enabled)s.modifier.disable();s.modifier.apply();
+            if(!this.enabled)s.modifier.disable();s.modifier.selection=s.selection;s.modifier.apply();this.applySelectionScope();
             if(this.enabled&&this.needsFrameUpdate()&&s.viewport.onFrame)s.frameUnsub=s.viewport.onFrame(dt=>this.onFrame(dt));
             s.viewport.invalidate?.();this.dispatchEvent(new CustomEvent('arianna:modifier-3d-change',{bubbles:true,detail:{modifier:this.localName,attributes:Object.fromEntries(Array.from(this.attributes).map(a=>[a.name,a.value]))}}));
         }
         private scheduleRefresh(): void
         {
             const s=ElementState(this);if(s.refreshQueued)return;s.refreshQueued=true;queueMicrotask(()=>{s.refreshQueued=false;this.refreshModifier();});
+        }
+        /** Keep unselected vertices fixed for modifiers which preserve topology.
+         * Topology generators/Boolean operations retain their whole-solid scope. */
+        protected applySelectionScope():void
+        {
+            const s=ElementState(this),selection=s.selection,target=s.target,base=s.baseGeometry,initial=s.baseTransform;
+            if(!selection||selection.mode==='object'||!target||!base||!initial)return;
+            const current=target.geometry;
+            if(current.vertices.length!==base.vertices.length||current.indices.length!==base.indices.length||current.indices.some((id,i)=>id!==base.indices[i]))return;
+            const chosen=new Set(selection.items.filter(item=>item.mesh===target).flatMap(item=>item.vertexIndices));
+            const transform=(p:Interfaces.Vec3Like,t:{position:Interfaces.Vec3Like;rotation:Interfaces.Vec3Like;scale:Interfaces.Vec3Like},inverse=false):Interfaces.Vec3Like=>{
+                let {x,y,z}=p;const rotate=(axis:'x'|'y'|'z',angle:number)=>{const c=Math.cos(angle),sn=Math.sin(angle);if(axis==='x')[y,z]=[y*c-z*sn,y*sn+z*c];if(axis==='y')[x,z]=[x*c+z*sn,-x*sn+z*c];if(axis==='z')[x,y]=[x*c-y*sn,x*sn+y*c];};
+                if(inverse){x-=t.position.x;y-=t.position.y;z-=t.position.z;rotate('z',-t.rotation.z);rotate('y',-t.rotation.y);rotate('x',-t.rotation.x);x/=t.scale.x;y/=t.scale.y;z/=t.scale.z;}
+                else{x*=t.scale.x;y*=t.scale.y;z*=t.scale.z;rotate('x',t.rotation.x);rotate('y',t.rotation.y);rotate('z',t.rotation.z);x+=t.position.x;y+=t.position.y;z+=t.position.z;}return{x,y,z};
+            };
+            current.vertices=current.vertices.map((point,index)=>chosen.has(index)?transform(transform(point,target),initial,true):{...base.vertices[index]});
+            target.position={...initial.position};target.rotation={...initial.rotation};target.scale={...initial.scale};_recomputeNormals(current);
         }
         private bindSoon(): void
         {
@@ -683,7 +768,10 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
             const head=document.createElement('header');head.className='ar-mod3d__head';const titles=document.createElement('div');titles.className='ar-mod3d__titles';const title=document.createElement('strong');title.className='ar-mod3d__title';title.textContent=schema.title;const sub=document.createElement('span');sub.className='ar-mod3d__sub';sub.textContent=schema.subtitle;titles.append(title,sub);
             const enabledLabel=document.createElement('label');enabledLabel.className='ar-mod3d__enabled';const enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=this.enabled;enabled.dataset.role='enabled';enabled.addEventListener('change',()=>{this.enabled=enabled.checked;this.scheduleRefresh();});enabledLabel.append(enabled,document.createTextNode('Enabled'));head.append(titles,enabledLabel);
             const body=document.createElement('div');body.className='ar-mod3d__body';for(const control of schema.controls)body.appendChild(this.makeControl(control));
-            const foot=document.createElement('footer');foot.className='ar-mod3d__foot';const badge=document.createElement('span');badge.className='ar-mod3d__badge';badge.textContent='AriannA · 3D';const reset=document.createElement('button');reset.type='button';reset.className='ar-mod3d__reset';reset.textContent='Reset';reset.addEventListener('click',()=>{for(const c of schema.controls)this.removeAttribute(c.attr);this.ensureDefaults(schema);this.syncPanel();this.scheduleRefresh();});foot.append(badge,reset);this.append(head,body,foot);this.wirePanelDrag(head);this.installPanelResize();state.panelReady=true;this.syncPanel();
+            const foot=document.createElement('footer');foot.className='ar-mod3d__foot';const badge=document.createElement('span');badge.className='ar-mod3d__badge';badge.textContent='AriannA · 3D';const reset=document.createElement('button');reset.type='button';reset.className='ar-mod3d__reset';reset.textContent='Reset';reset.addEventListener('click',()=>{for(const c of schema.controls)this.removeAttribute(c.attr);this.ensureDefaults(schema);this.syncPanel();this.scheduleRefresh();});foot.append(badge,reset);this.append(head,body,foot);
+            if(this.hasAttribute('data-arianna-stack-item')){this.classList.add('Modifier3DPanel--stacked');head.style.cursor='default';}
+            else{this.wirePanelDrag(head);this.installPanelResize();}
+            state.panelReady=true;this.syncPanel();
         }
         private makeControl(control:PanelControl): HTMLElement
         {
@@ -695,7 +783,7 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
                 input.addEventListener('input',()=>apply(input.value));value.addEventListener('input',()=>apply(value.value));value.addEventListener('change',()=>apply(value.value));row.append(label,input,value);return row;
             }
             if(control.type==='select'){row.classList.add('ar-mod3d__row--select');const select=document.createElement('select');select.className='ar-mod3d__select';select.dataset.attr=control.attr;for(const option of control.options??[]){const o=document.createElement('option');o.value=option;o.textContent=option;select.appendChild(o);}select.addEventListener('change',()=>{this.setAttribute(control.attr,select.value);this.scheduleRefresh();});row.append(label,select);return row;}
-            row.classList.add('ar-mod3d__row--toggle');const toggle=document.createElement('input');toggle.type='checkbox';toggle.className='ar-mod3d__toggle';toggle.dataset.attr=control.attr;toggle.addEventListener('change',()=>{if(toggle.checked)this.setAttribute(control.attr,'');else this.removeAttribute(control.attr);this.scheduleRefresh();});row.append(label,toggle);return row;
+            row.classList.add('ar-mod3d__row--toggle');const toggle=document.createElement('input');toggle.type='checkbox';toggle.className='ar-mod3d__toggle';toggle.dataset.attr=control.attr;toggle.addEventListener('change',()=>{if(toggle.checked)this.setAttribute(control.attr,'');else this.setAttribute(control.attr,'false');this.scheduleRefresh();});row.append(label,toggle);return row;
         }
         private syncPanel(): void
         {
@@ -736,6 +824,16 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
         get enabled(): boolean{const explicit=this.getAttribute('enabled');if(explicit==='false')return false;return !this.hasAttribute('disabled');}
         set enabled(v:boolean){if(v){this.removeAttribute('disabled');if(this.getAttribute('enabled')==='false')this.setAttribute('enabled','true');}else this.setAttribute('disabled','');}
         getModifier(): Modifier3D | null { return ElementState(this).modifier; }
+        /** Re-capture the current upstream result and apply this modifier again.
+         *  Modifier stacks use this after an earlier entry changes. */
+        public rebase(): this
+        {
+            const s=ElementState(this);if(!s.bound||!s.target||!s.viewport)return this;
+            s.frameUnsub?.();s.frameUnsub=null;s.modifier?.destroy();s.modifier=null;
+            s.baseGeometry=_cloneGeom(s.target.geometry);
+            s.baseTransform={position:{...s.target.position},rotation:{...s.target.rotation},scale:{...s.target.scale},visible:s.target.visible};
+            this.refreshModifier();return this;
+        }
     }
     // ── Programmatic core (plain class — Modifier3D) ─────────────────────────────
     /**

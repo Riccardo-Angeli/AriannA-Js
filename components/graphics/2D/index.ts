@@ -14,7 +14,7 @@ export const LayersPanel=LayersModule.LayersPanel;
 export type { LayerModel } from './Layers.ts';
 
 export { default as Strokes } from './Strokes.ts';
-export type { LineTool, StrokesOptions } from './Strokes.ts';
+export type { LineTool, StrokeStyle, StrokesOptions } from './Strokes.ts';
 
 export { default as Tools2D } from './Tools2D.ts';
 export type { PaletteTool, Tools2DOptions } from './Tools2D.ts';

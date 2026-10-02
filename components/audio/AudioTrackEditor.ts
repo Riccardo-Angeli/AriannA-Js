@@ -36,6 +36,8 @@ function syncTimelineScales(host: HTMLElement, xAttribute: string, x: number, yA
     }
 }
 import { Component, Css, Templates } from '../../core/index.ts';
+import { AutomationLaneCollection, AutomationOverlay } from '../timeline/Automation.ts';
+import type { AutomationLane } from '../timeline/Automation.ts';
 
 const html = Templates.Template.Html;
 
@@ -138,6 +140,7 @@ export namespace AudioTrackEditor
     export namespace Types
     {
         export type Theme = 'dark' | 'light';
+        export type EditMode = 'parts' | 'automation-select' | 'automation-draw';
     }
 
     export namespace Interfaces
@@ -162,6 +165,11 @@ export namespace AudioTrackEditor
             beatPx?: number;
             trackHeight?: number;
             snap?: number;
+            automations?: AutomationLane[];
+            editMode?: Types.EditMode;
+            activeAutomation?: string;
+            automationRead?: boolean;
+            automationWrite?: boolean;
         }
 
         export interface AudioTrackEditorOptions
@@ -173,6 +181,7 @@ export namespace AudioTrackEditor
             trackHeight?: number;
             bpm?: number;
             theme?: Types.Theme;
+            editMode?: Types.EditMode;
         }
     }
 
@@ -207,9 +216,14 @@ export namespace AudioTrackEditor
         new Css.Rule('.AudioPart-Resize[data-side="right"]', { Right: '0' }),
         new Css.Rule('.AudioPart-Resize:hover', { Background: 'rgba(255,255,255,.22)' }),
         new Css.Rule('arianna-audio-part[theme="light"], .AudioPart[theme="light"], arianna-audio-track[theme="light"] .AudioPart, .AudioTrack[theme="light"] .AudioPart, arianna-audio-track-editor[theme="light"] .AudioPart, .AudioTrackEditor[theme="light"] .AudioPart', {
-            Background: 'color-mix(in srgb, var(--AudioPart-Color) 62%, #ffffff)',
-            BorderColor: 'color-mix(in srgb, var(--AudioPart-Color) 54%, #aeb4ba)',
+            Background: 'var(--AudioPart-Color)',
+            BorderColor: 'color-mix(in srgb, var(--AudioPart-Color) 82%, #5f666c)',
             BoxShadow: 'inset 0 1px 0 rgba(255,255,255,.46),0 1px 2px rgba(0,0,0,.13)', Color: '#202428'
+        }),
+        new Css.Rule('arianna-audio-track[data-edit-mode^="automation"] .AudioPart, .AudioTrack[data-edit-mode^="automation"] .AudioPart', {
+            Background: 'color-mix(in srgb, var(--AudioPart-Color) 80%, #ffffff)',
+            BorderColor: 'color-mix(in srgb, var(--AudioPart-Color) 70%, #8f969d)',
+            Filter: 'saturate(.88)', Opacity: '1'
         })
     ]);
 
@@ -574,6 +588,8 @@ export namespace AudioTrackEditor
             this.addEventListener('pointerdown', event =>
             {
                 if(event.button !== 0) return;
+                const track=this.closest('arianna-audio-track, .AudioTrack');
+                if((track?.getAttribute('edit-mode')??'parts')!=='parts')return;
 
                 const target = event.target as HTMLElement;
                 const handle = target.closest('.AudioPart-Resize') as HTMLElement | null;
@@ -688,7 +704,7 @@ export namespace AudioTrackEditor
         new Css.Rule('.AudioTrack-Header', {
             AlignItems: 'center', Background: 'linear-gradient(180deg,#30353a,#262a2e)', BorderRight: '1px solid #111315', Display: 'grid', Gap: '4px', GridTemplateColumns: '5px 1fr auto', Padding: '5px 6px 5px 0'
         }),
-        new Css.Rule('.AudioTrack-Color', { AlignSelf: 'stretch', Background: 'var(--AudioTrack-Color)', BorderRadius: '0 1px 1px 0', GridRow: '1 / span 2' }),
+        new Css.Rule('.AudioTrack-Color', { AlignSelf: 'stretch', Background: 'var(--AudioTrack-Color)', BorderRadius: '0 1px 1px 0', GridRow: '1 / span 3' }),
         new Css.Rule('.AudioTrack-Name', { FontSize: '10px', FontWeight: '700', MinWidth: '0', Overflow: 'hidden', PaddingLeft: '4px', TextOverflow: 'ellipsis', WhiteSpace: 'nowrap' }),
         new Css.Rule('.AudioTrack-Buttons', { Display: 'flex', Gap: '2px' }),
         new Css.Rule('.AudioTrack-Button', {
@@ -697,24 +713,33 @@ export namespace AudioTrackEditor
         new Css.Rule('.AudioTrack-Button[data-active="true"][data-action="mute"]', { Background: '#e2aa2f', BorderColor: '#a87612', Color: '#201a08' }),
         new Css.Rule('.AudioTrack-Button[data-active="true"][data-action="solo"]', { Background: '#6fc358', BorderColor: '#3c882a', Color: '#0d2208' }),
         new Css.Rule('.AudioTrack-Button[data-active="true"][data-action="record"]', { Background: '#d9564d', BorderColor: '#96332d', Color: '#fff' }),
+        new Css.Rule('.AudioTrack-Button[data-active="true"][data-action="automation"], .AudioTrack-Button[data-active="true"][data-action="automation-read"]', { Background: '#4d9de0', BorderColor: '#266b9e', Color: '#fff' }),
+        new Css.Rule('.AudioTrack-Button[data-active="true"][data-action="automation-write"]', { Background: '#d9564d', BorderColor: '#96332d', Color: '#fff' }),
+        new Css.Rule('.AudioTrack-AutomationControls', { AlignItems: 'center', Display: 'grid', Gap: '2px', GridColumn: '2 / span 2', GridTemplateColumns: '19px minmax(42px,1fr) 19px 19px', MarginLeft: '4px', MinWidth: '0' }),
+        new Css.Rule('.AudioTrack-AutomationSelect', { Appearance: 'none', Background: '#202428', Border: '1px solid #151719', BorderRadius: '2px', Color: '#cbd1d5', Font: '600 8px/1 var(--arianna-font,system-ui,sans-serif)', Height: '18px', MinWidth: '0', Padding: '0 15px 0 5px' }),
         new Css.Rule('.AudioTrack-Meter', { Background: '#0d1012', Border: '1px solid #0a0b0c', BorderRadius: '1px', GridColumn: '2 / span 1', Height: '5px', MarginLeft: '4px', Overflow: 'hidden', Position: 'relative' }),
         new Css.Rule('.AudioTrack-MeterFill', { Background: 'linear-gradient(to right,#42bd50,#b5cd3c,#d59b31)', Bottom: '0', Left: '0', Position: 'absolute', Top: '0', Width: '0%' }),
         new Css.Rule('.AudioTrack-Lane', {
             BackgroundColor: '#1e2226', BackgroundImage: 'linear-gradient(to right,rgba(151,160,169,.16) 1px,transparent 1px)', BackgroundSize: 'var(--AudioTrackEditor-BeatPx,28px) 100%', MinHeight: '64px', Overflow: 'hidden', Position: 'relative'
         }),
+        new Css.Rule('.AudioTrack[data-edit-mode="parts"] .AudioTrack-Automation', { Display: 'none', Opacity: '0', PointerEvents: 'none' }),
+        new Css.Rule('.AudioTrack[data-edit-mode^="automation"] .AudioTrack-Automation', { Opacity: '1', PointerEvents: 'auto' }),
         new Css.Rule('.AudioTrack[data-silenced="true"] .AudioTrack-Lane', { Opacity: '.42' }),
         new Css.Rule('arianna-audio-track[theme="light"], .AudioTrack[theme="light"], arianna-audio-track-editor[theme="light"] .AudioTrack, .AudioTrackEditor[theme="light"] .AudioTrack', { Background: '#e5e8ea', BorderBottomColor: '#bdc2c6', Color: '#2d3237' }),
         new Css.Rule('arianna-audio-track[theme="light"] .AudioTrack-Header, .AudioTrack[theme="light"] .AudioTrack-Header, arianna-audio-track-editor[theme="light"] .AudioTrack-Header, .AudioTrackEditor[theme="light"] .AudioTrack-Header', { Background: 'linear-gradient(180deg,#f7f8f9,#d9dde0)', BorderRightColor: '#bcc1c5' }),
         new Css.Rule('arianna-audio-track[theme="light"] .AudioTrack-Button, .AudioTrack[theme="light"] .AudioTrack-Button, arianna-audio-track-editor[theme="light"] .AudioTrack-Button, .AudioTrackEditor[theme="light"] .AudioTrack-Button', { Background: 'linear-gradient(180deg,#fff,#dfe2e5)', BorderColor: '#b8bdc2', Color: '#555c62' }),
+        new Css.Rule('arianna-audio-track[theme="light"] .AudioTrack-AutomationSelect, .AudioTrack[theme="light"] .AudioTrack-AutomationSelect, arianna-audio-track-editor[theme="light"] .AudioTrack-AutomationSelect, .AudioTrackEditor[theme="light"] .AudioTrack-AutomationSelect', { Background: '#fff', BorderColor: '#b8bdc2', Color: '#343a40' }),
         new Css.Rule('arianna-audio-track[theme="light"] .AudioTrack-Button[data-active="true"][data-action="mute"], .AudioTrack[theme="light"] .AudioTrack-Button[data-active="true"][data-action="mute"], arianna-audio-track-editor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="mute"], .AudioTrackEditor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="mute"]', { Background: '#e2aa2f', BorderColor: '#a87612', Color: '#201a08' }),
         new Css.Rule('arianna-audio-track[theme="light"] .AudioTrack-Button[data-active="true"][data-action="solo"], .AudioTrack[theme="light"] .AudioTrack-Button[data-active="true"][data-action="solo"], arianna-audio-track-editor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="solo"], .AudioTrackEditor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="solo"]', { Background: '#6fc358', BorderColor: '#3c882a', Color: '#0d2208' }),
         new Css.Rule('arianna-audio-track[theme="light"] .AudioTrack-Button[data-active="true"][data-action="record"], .AudioTrack[theme="light"] .AudioTrack-Button[data-active="true"][data-action="record"], arianna-audio-track-editor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="record"], .AudioTrackEditor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="record"]', { Background: '#d9564d', BorderColor: '#96332d', Color: '#fff' }),
+        new Css.Rule('arianna-audio-track[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation"], .AudioTrack[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation"], arianna-audio-track-editor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation"], .AudioTrackEditor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation"], arianna-audio-track[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation-read"], .AudioTrack[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation-read"], arianna-audio-track-editor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation-read"], .AudioTrackEditor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation-read"]', { Background: '#4d9de0', BorderColor: '#266b9e', Color: '#fff' }),
+        new Css.Rule('arianna-audio-track[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation-write"], .AudioTrack[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation-write"], arianna-audio-track-editor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation-write"], .AudioTrackEditor[theme="light"] .AudioTrack-Button[data-active="true"][data-action="automation-write"]', { Background: '#d9564d', BorderColor: '#96332d', Color: '#fff' }),
         new Css.Rule('arianna-audio-track[theme="light"] .AudioTrack-Lane, .AudioTrack[theme="light"] .AudioTrack-Lane, arianna-audio-track-editor[theme="light"] .AudioTrack-Lane, .AudioTrackEditor[theme="light"] .AudioTrack-Lane', { BackgroundColor: '#fafafa', BackgroundImage: 'linear-gradient(to right,#e2e4e6 1px,transparent 1px)' })
     ]);
 
     @Component('arianna-audio-track', AudioTrackStyles, {
         Shadow: false,
-        Attributes: ['name', 'muted', 'soloed', 'color', 'theme', 'beat-px', 'snap', 'track-height']
+        Attributes: ['name', 'muted', 'soloed', 'color', 'theme', 'beat-px', 'snap', 'track-height', 'edit-mode', 'active-automation', 'automation-read', 'automation-write']
     })
     export class AudioTrack extends HTMLElement
     {
@@ -724,12 +749,31 @@ export namespace AudioTrackEditor
         private Lane?: HTMLElement;
         private MeterFill?: HTMLElement;
         private GainNode?: GainNode;
+        private PanNode?:StereoPannerNode;
         private Analyser?: AnalyserNode;
+        private AudioContextRef?:AudioContext;
+        private AudioEnabled=true;
+        private LastAutomationTime=0;
         private ControlsBound?: boolean;
+        private AutomationCollection=new AutomationLaneCollection();
+        private AutomationView?:AutomationOverlay;
+        private AutomationSelect?:HTMLSelectElement;
+
+        /** Markup upgrades replace the prototype of an existing element and do
+         * not execute TypeScript class-field initializers. Keep automation state
+         * valid for both `new AudioTrack()` and declarative custom elements. */
+        private EnsureAutomationState():void
+        {
+            if(!(this.AutomationCollection instanceof AutomationLaneCollection))
+                this.AutomationCollection=new AutomationLaneCollection();
+            if(typeof this.AudioEnabled!=='boolean')this.AudioEnabled=true;
+            if(!Number.isFinite(this.LastAutomationTime))this.LastAutomationTime=0;
+        }
 
         constructor(options: Interfaces.AudioTrackOptions = {})
         {
             super();
+            this.EnsureAutomationState();
             if(options.name) this.setAttribute('name', options.name);
             if(options.muted) this.setAttribute('muted', '');
             if(options.soloed) this.setAttribute('soloed', '');
@@ -738,22 +782,33 @@ export namespace AudioTrackEditor
             if(options.beatPx != null) this.setAttribute('beat-px', String(options.beatPx));
             if(options.trackHeight != null) this.setAttribute('track-height', String(options.trackHeight));
             if(options.snap != null) this.setAttribute('snap', String(options.snap));
+            if(options.automations) this.automations=options.automations;
+            if(options.editMode) this.editMode=options.editMode;
+            if(options.activeAutomation) this.activeAutomation=options.activeAutomation;
+            if(options.automationRead != null) this.automationRead=options.automationRead;
+            if(options.automationWrite != null) this.automationWrite=options.automationWrite;
         }
 
         public onCreated(): void
         {
+            this.EnsureAutomationState();
             if(this.isConnected) this.onConnected();
         }
 
         public onConnected(): void
         {
+            this.EnsureAutomationState();
             this.classList.add('AudioTrack');
+            if(!this.hasAttribute('edit-mode')) this.setAttribute('edit-mode','parts');
+            if(!this.hasAttribute('automation-read')) this.setAttribute('automation-read','false');
+            if(!this.hasAttribute('automation-write')) this.setAttribute('automation-write','false');
             this.style.setProperty('--AudioTrack-Color', this.getAttribute('color') || '#df756d');
             this.ApplyGrid();
             this.Render();
             this.BindControls();
             this.Sync();
             this.SyncScale();
+            this.SyncAutomation();
         }
 
         public onAttributeChanged(name: string): void
@@ -776,10 +831,15 @@ export namespace AudioTrackEditor
                 this.ApplyGrid();
                 this.querySelectorAll<HTMLElement>(':scope > .AudioTrack-Lane > arianna-audio-part, :scope > .AudioTrack-Lane > .AudioPart')
                     .forEach(part => (part as AudioPart).onConnected?.());
+                this.SyncAutomation();
             }
             else if(name === 'muted' || name === 'soloed')
             {
                 this.Sync();
+            }
+            else if(name === 'edit-mode' || name === 'active-automation' || name === 'automation-read' || name === 'automation-write')
+            {
+                this.SyncAutomation();
             }
         }
 
@@ -803,31 +863,110 @@ export namespace AudioTrackEditor
             this.setAttribute('snap', String(Math.max(.001, value)));
         }
 
+        public get editMode():Types.EditMode
+        {
+            const value=this.getAttribute('edit-mode');
+            return value==='automation-select'||value==='automation-draw'?value:'parts';
+        }
+        public set editMode(value:Types.EditMode)
+        {
+            this.setAttribute('edit-mode',value==='automation-select'||value==='automation-draw'?value:'parts');
+        }
+        public get activeAutomation():string
+        {
+            this.EnsureAutomationState();
+            const requested=this.getAttribute('active-automation')?.trim();
+            return requested&&this.AutomationCollection.has(requested)?requested:(this.AutomationCollection.keys().next().value??'');
+        }
+        public set activeAutomation(value:string)
+        {
+            const id=String(value??'').trim();
+            if(id)this.setAttribute('active-automation',id);else this.removeAttribute('active-automation');
+        }
+        public get automationRead():boolean{return this.getAttribute('automation-read')==='true';}
+        public set automationRead(value:boolean){this.setAttribute('automation-read',String(!!value));}
+        public get automationWrite():boolean{return this.getAttribute('automation-write')==='true';}
+        public set automationWrite(value:boolean){this.setAttribute('automation-write',String(!!value));}
+        public setEditMode(value:Types.EditMode):this{this.editMode=value;return this;}
+        public selectAutomation(id:string,edit=true):this
+        {
+            this.activeAutomation=id;
+            if(edit&&this.editMode==='parts')this.editMode='automation-select';
+            this.SyncAutomation();
+            return this;
+        }
+
         public addPart(part: AudioPart): this
         {
             this.Render();
             this.Lane?.append(part);
             part.onConnected?.();
+            this.SyncAutomation();
             return this;
+        }
+
+        /** Ordered, keyed automation data shared with video tracks and external processors. */
+        public get automation():AutomationLaneCollection{this.EnsureAutomationState();return this.AutomationCollection;}
+        public set automation(value:AutomationLaneCollection){this.AutomationCollection=value instanceof AutomationLaneCollection?value:new AutomationLaneCollection();this.SyncAutomation();}
+        public get automations():AutomationLane[]{this.EnsureAutomationState();return this.AutomationCollection.snapshot();}
+        public set automations(value:AutomationLane[]){this.EnsureAutomationState();this.AutomationCollection.replace(value??[]);this.SyncAutomation();}
+        public setAutomationLanes(value:AutomationLane[]):this{this.automations=value;return this;}
+        public addAutomationLane(value:AutomationLane):this{this.EnsureAutomationState();this.AutomationCollection.upsert(value);this.SyncAutomation();return this;}
+        public removeAutomationLane(id:string):this{this.EnsureAutomationState();this.AutomationCollection.delete(id);this.SyncAutomation();return this;}
+        public applyAutomation(time:number):this
+        {
+            this.EnsureAutomationState();
+            this.LastAutomationTime=Math.max(0,Number(time)||0);
+            if(this.automationRead)this.AutomationCollection.apply(this.LastAutomationTime);
+            this.syncAudioGain();
+            this.syncAudioPan();
+            return this;
+        }
+        public automationValue(id:string,time?:number):number{return this.AutomationCollection.valueAt(id,time??this.LastAutomationTime);}
+        public snapshot():Interfaces.AudioTrackOptions
+        {
+            return{name:this.getAttribute('name')??undefined,muted:this.hasAttribute('muted'),soloed:this.hasAttribute('soloed'),color:this.getAttribute('color')??undefined,theme:(this.getAttribute('theme') as Types.Theme|null)??undefined,beatPx:this.beatPx,trackHeight:this.trackHeight,snap:this.snap,automations:this.automations,editMode:this.editMode,activeAutomation:this.activeAutomation||undefined,automationRead:this.automationRead,automationWrite:this.automationWrite};
+        }
+        public addAudioAutomationPresets(duration=16):this
+        {
+            this.EnsureAutomationState();
+            const presets:AutomationLane[]=[
+                {id:'volume',label:'Volume',parameter:'volume',color:'#f5d547',min:0,max:1,defaultValue:1,points:[{time:0,value:1},{time:duration,value:1}]},
+                {id:'gain',label:'Gain',parameter:'gain',color:'#7bc96f',min:0,max:2,defaultValue:1,points:[{time:0,value:1},{time:duration,value:1}]},
+                {id:'pan',label:'Pan',parameter:'pan',color:'#4d9de0',min:-1,max:1,defaultValue:0,points:[{time:0,value:0},{time:duration,value:0}]},
+                {id:'pitch',label:'Pitch',parameter:'pitch',color:'#d987e8',min:-24,max:24,defaultValue:0,points:[{time:0,value:0},{time:duration,value:0}]},
+            ];
+            for(const lane of presets)if(!this.AutomationCollection.has(lane.id))this.AutomationCollection.upsert(lane);
+            this.SyncAutomation();return this;
         }
 
         public ensureAudio(context: AudioContext, destination: AudioNode): AudioNode
         {
+            this.EnsureAutomationState();
+            this.AudioContextRef=context;
             if(!this.GainNode)
             {
                 this.GainNode = context.createGain();
                 this.Analyser = context.createAnalyser();
                 this.Analyser.fftSize = 256;
-                this.GainNode.connect(this.Analyser);
+                if(typeof context.createStereoPanner==='function')
+                {
+                    this.PanNode=context.createStereoPanner();
+                    this.GainNode.connect(this.PanNode);
+                    this.PanNode.connect(this.Analyser);
+                }
+                else this.GainNode.connect(this.Analyser);
                 this.Analyser.connect(destination);
             }
             this.syncAudioGain();
+            this.syncAudioPan();
             return this.GainNode;
         }
 
         public setAudioEnabled(enabled: boolean): void
         {
-            if(this.GainNode) this.GainNode.gain.value = enabled ? 1 : 0;
+            this.AudioEnabled=enabled;
+            this.syncAudioGain();
         }
 
         public meterLevel(): number
@@ -870,7 +1009,23 @@ export namespace AudioTrackEditor
 
         private syncAudioGain(): void
         {
-            if(this.GainNode) this.GainNode.gain.value = this.hasAttribute('muted') ? 0 : 1;
+            if(!this.GainNode)return;
+            const read=this.automationRead;
+            const volume=read?this.AutomationCollection.valueAt('volume',this.LastAutomationTime):1;
+            const gain=read?this.AutomationCollection.valueAt('gain',this.LastAutomationTime):1;
+            const level=(Number.isFinite(volume)?volume:1)*(Number.isFinite(gain)?gain:1);
+            const value=this.AudioEnabled&&!this.hasAttribute('muted')?Math.max(0,level):0;
+            if(this.AudioContextRef)this.GainNode.gain.setTargetAtTime(value,this.AudioContextRef.currentTime,.005);
+            else this.GainNode.gain.value=value;
+        }
+
+        private syncAudioPan():void
+        {
+            if(!this.PanNode)return;
+            const value=this.automationRead?this.AutomationCollection.valueAt('pan',this.LastAutomationTime):0;
+            const pan=Number.isFinite(value)?Math.max(-1,Math.min(1,value)):0;
+            if(this.AudioContextRef)this.PanNode.pan.setTargetAtTime(pan,this.AudioContextRef.currentTime,.005);
+            else this.PanNode.pan.value=pan;
         }
 
         private Render(): void
@@ -884,13 +1039,104 @@ export namespace AudioTrackEditor
             const buttons = document.createElement('span'); buttons.className = 'AudioTrack-Buttons';
             const mute = this.Button('M', 'mute'); const solo = this.Button('S', 'solo'); const record = this.Button('R', 'record'); buttons.append(mute, solo, record);
             const meter = document.createElement('span'); meter.className = 'AudioTrack-Meter'; this.MeterFill = document.createElement('span'); this.MeterFill.className = 'AudioTrack-MeterFill'; this.MeterFill.style.width = '0%'; meter.append(this.MeterFill);
-            header.append(color, name, buttons, meter);
+            const automationControls=document.createElement('span');automationControls.className='AudioTrack-AutomationControls';
+            const automation=this.Button('⌁','automation');automation.title='Toggle parts / automation editing';
+            this.AutomationSelect=document.createElement('select');this.AutomationSelect.className='AudioTrack-AutomationSelect';this.AutomationSelect.title='Automation parameter';this.AutomationSelect.setAttribute('aria-label','Automation parameter');
+            const read=this.Button('R','automation-read');read.title='Read automation';
+            const write=this.Button('W','automation-write');write.title='Write automation';
+            automationControls.append(automation,this.AutomationSelect,read,write);
+            header.append(color, name, buttons, meter,automationControls);
 
             this.Lane = document.createElement('div'); this.Lane.className = 'AudioTrack-Lane';
             parts.forEach(part => this.Lane?.append(part));
             this.append(header, this.Lane);
             parts.forEach(part => (part as AudioPart).onConnected?.());
+            this.SyncAutomation();
+        }
 
+        private SyncAutomation():void
+        {
+            this.EnsureAutomationState();
+            this.dataset.editMode=this.editMode;
+            if(!this.Lane)return;
+            if(!this.AutomationCollection.size)
+            {
+                this.AutomationView?.remove();this.AutomationView=undefined;
+                this.SyncAutomationControls();
+                return;
+            }
+            let active=this.activeAutomation;
+            if(!active||!this.AutomationCollection.has(active))
+            {
+                active=this.AutomationCollection.keys().next().value??'';
+                if(active&&this.getAttribute('active-automation')!==active)this.setAttribute('active-automation',active);
+            }
+            for(const lane of this.AutomationCollection.values())
+            {
+                lane.visible=lane.id===active;
+            }
+            const automationVisible=this.editMode!=='parts';
+            if(!automationVisible)
+            {
+                // Waveform mode owns the lane completely. Detaching the overlay,
+                // rather than merely making it transparent, guarantees that it can
+                // never intercept the first drag after mounting or a theme change.
+                if(this.AutomationView)
+                {
+                    this.AutomationView.style.display='none';
+                    this.AutomationView.style.pointerEvents='none';
+                    this.AutomationView.style.opacity='0';
+                    this.AutomationView.setAttribute('aria-hidden','true');
+                    this.AutomationView.remove();
+                }
+                this.SyncAutomationControls();
+                return;
+            }
+            if(!this.AutomationView)
+            {
+                this.AutomationView=new AutomationOverlay();
+                this.AutomationView.classList.add('AudioTrack-Automation');
+                this.AutomationView.addEventListener('dblclick',event=>
+                {
+                    if(this.editMode!=='automation-draw')
+                    {
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                    }
+                },true);
+            }
+            if(this.AutomationView.parentElement!==this.Lane)this.Lane.append(this.AutomationView);
+            const duration=Math.max(1,this.Lane.scrollWidth/this.beatPx);
+            this.AutomationView.collection=this.AutomationCollection;
+            this.AutomationView.configure({scale:this.beatPx,duration,snap:this.snap,active});
+            this.AutomationView.style.display='block';
+            this.AutomationView.style.pointerEvents='auto';
+            this.AutomationView.style.opacity='1';
+            this.AutomationView.setAttribute('aria-hidden','false');
+            this.SyncAutomationControls();
+        }
+
+        private SyncAutomationControls():void
+        {
+            const select=this.AutomationSelect??this.querySelector<HTMLSelectElement>('.AudioTrack-AutomationSelect');
+            if(select)
+            {
+                const active=this.activeAutomation;
+                const signature=[...this.AutomationCollection.values()].map(lane=>`${lane.id}:${lane.label??lane.parameter??lane.id}`).join('|');
+                if(select.dataset.signature!==signature)
+                {
+                    select.replaceChildren(...[...this.AutomationCollection.values()].map(lane=>
+                    {
+                        const option=document.createElement('option');option.value=lane.id;option.textContent=lane.label??lane.parameter??lane.id;return option;
+                    }));
+                    select.dataset.signature=signature;
+                }
+                select.disabled=!this.AutomationCollection.size;
+                if(active)select.value=active;
+            }
+            this.querySelector<HTMLButtonElement>('[data-action="automation"]')?.setAttribute('data-active',String(this.editMode!=='parts'));
+            this.querySelector<HTMLButtonElement>('[data-action="automation-read"]')?.setAttribute('data-active',String(this.automationRead));
+            this.querySelector<HTMLButtonElement>('[data-action="automation-write"]')?.setAttribute('data-active',String(this.automationWrite));
         }
 
         private BindControls(): void
@@ -929,6 +1175,29 @@ export namespace AudioTrackEditor
                     button.dataset.active = String(active);
                     this.Emit('arianna:track-record', { recording: active });
                 }
+                else if(action === 'automation')
+                {
+                    this.editMode=this.editMode==='parts'?'automation-select':'parts';
+                    this.Emit('arianna:track-edit-mode',{editMode:this.editMode});
+                }
+                else if(action === 'automation-read')
+                {
+                    this.automationRead=!this.automationRead;
+                    this.Emit('arianna:automation-read',{read:this.automationRead});
+                }
+                else if(action === 'automation-write')
+                {
+                    this.automationWrite=!this.automationWrite;
+                    this.Emit('arianna:automation-write',{write:this.automationWrite});
+                }
+            });
+            this.addEventListener('change',event=>
+            {
+                const select=(event.target as Element|null)?.closest?.('.AudioTrack-AutomationSelect') as HTMLSelectElement|null;
+                if(!select||!this.contains(select))return;
+                event.stopPropagation();
+                this.selectAutomation(select.value,true);
+                this.Emit('arianna:automation-select',{laneId:select.value,editMode:this.editMode});
             });
         }
 
@@ -941,6 +1210,7 @@ export namespace AudioTrackEditor
         {
             this.querySelector<HTMLButtonElement>('[data-action="mute"]')?.setAttribute('data-active', String(this.hasAttribute('muted')));
             this.querySelector<HTMLButtonElement>('[data-action="solo"]')?.setAttribute('data-active', String(this.hasAttribute('soloed')));
+            this.SyncAutomationControls();
             this.syncAudioGain();
         }
 
@@ -979,7 +1249,7 @@ export namespace AudioTrackEditor
 
     @Component('arianna-audio-track-editor', AudioTrackEditorStyles, {
         Shadow: false,
-        Attributes: ['tracks', 'bars', 'beats-per-bar', 'beat-px', 'bpm', 'snap', 'theme', 'track-height']
+        Attributes: ['tracks', 'bars', 'beats-per-bar', 'beat-px', 'bpm', 'snap', 'theme', 'track-height', 'edit-mode']
     })
     export class AudioTrackEditor extends HTMLElement
     {
@@ -999,13 +1269,16 @@ export namespace AudioTrackEditor
         private Bpm = 120;
         private Context?: AudioContext;
         private Master?: GainNode;
-        private ActiveSources: AudioBufferSourceNode[] = [];
+        private ActiveSources:{source:AudioBufferSourceNode;track:AudioTrack}[] = [];
         private Playing = false;
         private PlaybackStartedAt = 0;
         private PlaybackStartBeat = 0;
         private PlaybackRaf = 0;
         private SeekingFromRuler = false;
         private PlayButton?: HTMLButtonElement;
+        private PartsToolButton?:HTMLButtonElement;
+        private AutomationToolButton?:HTMLButtonElement;
+        private AutomationDrawButton?:HTMLButtonElement;
 
         constructor(options: Interfaces.AudioTrackEditorOptions = {})
         {
@@ -1018,6 +1291,7 @@ export namespace AudioTrackEditor
             if(options.trackHeight != null) this.setAttribute('track-height', String(options.trackHeight));
             if(options.bpm != null) this.setAttribute('bpm', String(options.bpm));
             if(options.theme) this.setAttribute('theme', options.theme);
+            if(options.editMode) this.editMode=options.editMode;
         }
 
         public onCreated(): void
@@ -1035,6 +1309,7 @@ export namespace AudioTrackEditor
             this.style.overflow = 'hidden';
             if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
             if(!this.hasAttribute('snap')) this.setAttribute('snap', '.25');
+            if(!this.hasAttribute('edit-mode')) this.setAttribute('edit-mode','parts');
             if(!this.hasAttribute('tabindex')) this.tabIndex = 0;
             this.BeatPx = Number(this.getAttribute('beat-px') ?? 28) || 28;
             this.Bars = Number(this.getAttribute('bars') ?? 16) || 16;
@@ -1073,6 +1348,29 @@ export namespace AudioTrackEditor
                 const snap = this.getAttribute('snap') || '.25';
                 for(const track of this.tracks) track.setAttribute('snap', snap);
             }
+            else if(name === 'edit-mode') this.SyncEditMode();
+        }
+
+        public get editMode():Types.EditMode
+        {
+            const value=this.getAttribute('edit-mode');
+            return value==='automation-select'||value==='automation-draw'?value:'parts';
+        }
+        public set editMode(value:Types.EditMode)
+        {
+            this.setAttribute('edit-mode',value==='automation-select'||value==='automation-draw'?value:'parts');
+        }
+        public setEditMode(value:Types.EditMode):this{this.editMode=value;this.SyncEditMode();return this;}
+
+        private SyncEditMode():void
+        {
+            const mode=this.editMode;
+            for(const track of this.tracks)if(track.getAttribute('edit-mode')!==mode)track.setAttribute('edit-mode',mode);
+            if(this.PartsToolButton)this.PartsToolButton.dataset.active=String(mode==='parts');
+            if(this.AutomationToolButton)this.AutomationToolButton.dataset.active=String(mode==='automation-select');
+            if(this.AutomationDrawButton)this.AutomationDrawButton.dataset.active=String(mode==='automation-draw');
+            this.dataset.editMode=mode;
+            this.dispatchEvent(new CustomEvent('arianna:editor-edit-mode',{bubbles:true,composed:true,detail:{editMode:mode,source:this}}));
         }
 
         public get trackHeight(): number { return Math.max(48,Math.min(240,Number(this.getAttribute('track-height')) || 64)); }
@@ -1103,6 +1401,7 @@ export namespace AudioTrackEditor
             this.PlayheadValue = Math.max(0, Math.min(total, beats));
             if(this.Playhead) this.Playhead.style.left = `${150 + this.PlayheadValue * (this.BeatPx ?? 28)}px`;
             if(this.Time) this.Time.textContent = `${Math.floor(this.PlayheadValue / (this.BeatsPerBar ?? 4)) + 1}.${Math.floor(this.PlayheadValue % (this.BeatsPerBar ?? 4)) + 1}`;
+            for(const track of this.tracks)if(typeof track.applyAutomation==='function')track.applyAutomation(this.PlayheadValue);
             this.dispatchEvent(new CustomEvent('arianna:editor-playhead', { bubbles: true, composed: true, detail: { beat: this.PlayheadValue, source: this } }));
             return this;
         }
@@ -1296,6 +1595,13 @@ export namespace AudioTrackEditor
             this.Time.className = 'AudioTrackEditor-Time';
             this.Time.textContent = '1.1';
 
+            this.PartsToolButton=this.Button('↖','Edit audio parts');
+            this.PartsToolButton.setAttribute('aria-label','Edit audio parts');
+            this.AutomationToolButton=this.Button('⌁','Select automation points');
+            this.AutomationToolButton.setAttribute('aria-label','Select automation points');
+            this.AutomationDrawButton=this.Button('✎','Draw automation points');
+            this.AutomationDrawButton.setAttribute('aria-label','Draw automation points');
+
             const cut = this.Button('✂', 'Cut part');
             const copy = this.Button('⧉', 'Copy part');
             const paste = this.Button('⎘', 'Paste part');
@@ -1304,7 +1610,7 @@ export namespace AudioTrackEditor
             fill.className = 'AudioTrackEditor-Fill';
             const zoomOut = this.Button('−', 'Zoom out');
             const zoomIn = this.Button('+', 'Zoom in');
-            toolbar.append(start, back, play, stop, forward, this.Time, cut, copy, paste, fill, zoomOut, zoomIn);
+            toolbar.append(start, back, play, stop, forward, this.Time,this.PartsToolButton,this.AutomationToolButton,this.AutomationDrawButton, cut, copy, paste, fill, zoomOut, zoomIn);
 
             const ruler = document.createElement('div');
             ruler.className = 'AudioTrackEditor-Ruler';
@@ -1352,6 +1658,9 @@ export namespace AudioTrackEditor
             cut.addEventListener('click', () => this.cutSelectedPart());
             copy.addEventListener('click', () => this.copySelectedPart());
             paste.addEventListener('click', () => this.pastePart());
+            this.PartsToolButton.addEventListener('click',()=>this.setEditMode('parts'));
+            this.AutomationToolButton.addEventListener('click',()=>this.setEditMode('automation-select'));
+            this.AutomationDrawButton.addEventListener('click',()=>this.setEditMode('automation-draw'));
             zoomIn.addEventListener('click', () => this.Zoom(4));
             zoomOut.addEventListener('click', () => this.Zoom(-4));
 
@@ -1410,9 +1719,11 @@ export namespace AudioTrackEditor
             this.Body.addEventListener('pointerdown', event =>
             {
                 const target = event.target as Element;
-                if(target.closest('arianna-audio-part, .AudioPart') || target.closest('.AudioTrack-Header')) return;
+                if(target.closest('arianna-audio-part, .AudioPart') || target.closest('.AudioTrack-Header') || target.closest('.AudioTrack-Automation')) return;
                 const laneTarget = target.closest('.AudioTrack-Lane') as HTMLElement | null;
                 if(!laneTarget) return;
+                const track=laneTarget.closest('arianna-audio-track, .AudioTrack') as AudioTrack|null;
+                if((track?.getAttribute('edit-mode')??this.editMode)!=='parts')return;
                 const rect = laneTarget.getBoundingClientRect();
                 const beat = Math.max(0, (event.clientX - rect.left) / (this.BeatPx ?? 28));
                 this.SeekToBeat(beat);
@@ -1438,18 +1749,23 @@ export namespace AudioTrackEditor
                     const target = event.target as HTMLElement | null;
                     if(target && target !== this && target.matches('input,textarea,select')) return;
                     const primary = event.metaKey || event.ctrlKey;
-                    if(primary && event.key.toLowerCase() === 'c') { event.preventDefault(); this.copySelectedPart(); }
+                    if(event.key==='Escape'&&this.editMode!=='parts'){event.preventDefault();this.setEditMode('parts');}
+                    else if(primary && event.key.toLowerCase() === 'c') { event.preventDefault(); this.copySelectedPart(); }
                     else if(primary && event.key.toLowerCase() === 'x') { event.preventDefault(); this.cutSelectedPart(); }
                     else if(primary && event.key.toLowerCase() === 'v') { event.preventDefault(); this.pastePart(); }
                     else if(event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); this.deleteSelectedPart(); }
                 });
             }
 
+            // Establish waveform/parts mode before the first paint. This keeps the
+            // parts draggable and prevents automation controls from flashing active.
+            this.SyncEditMode();
             requestAnimationFrame(() =>
             {
                 this.ApplyTheme();
                 this.querySelectorAll<AudioPart>('arianna-audio-part, .AudioPart').forEach(part => part.onConnected?.());
                 this.SyncMix();
+                this.SyncEditMode();
                 this.setPlayhead(this.PlayheadValue ?? 0);
             });
         }
@@ -1588,12 +1904,15 @@ export namespace AudioTrackEditor
                         if(duration <= 0) return;
                         const source = context.createBufferSource();
                         source.buffer = buffer;
+                        const pitch=audioTrack.automationRead?audioTrack.automationValue('pitch',startBeatValue):Number.NaN;
+                        source.playbackRate.value=Number.isFinite(pitch)?Math.pow(2,pitch/12):1;
                         source.connect(input);
                         source.start(when, offset, duration);
-                        this.ActiveSources.push(source);
+                        const active={source,track:audioTrack};
+                        this.ActiveSources.push(active);
                         source.onended = () =>
                         {
-                            const index = this.ActiveSources.indexOf(source);
+                            const index = this.ActiveSources.indexOf(active);
                             if(index >= 0) this.ActiveSources.splice(index, 1);
                         };
                     })());
@@ -1605,7 +1924,7 @@ export namespace AudioTrackEditor
 
         private StopSources(): void
         {
-            for(const source of this.ActiveSources.splice(0))
+            for(const {source} of this.ActiveSources.splice(0))
             {
                 source.onended = null;
                 try { source.stop(); } catch {}
@@ -1633,6 +1952,12 @@ export namespace AudioTrackEditor
                     return;
                 }
                 this.UpdatePlaybackPosition();
+                for(const active of this.ActiveSources)
+                {
+                    const pitch=active.track.automationRead?active.track.automationValue('pitch',this.PlayheadValue??0):Number.NaN;
+                    const rate=Number.isFinite(pitch)?Math.pow(2,pitch/12):1;
+                    active.source.playbackRate.setTargetAtTime(rate,this.Context.currentTime,.01);
+                }
                 for(const track of this.tracks)
                 {
                     const meterTrack = track as AudioTrack & {

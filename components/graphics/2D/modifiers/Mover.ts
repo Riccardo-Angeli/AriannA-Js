@@ -14,6 +14,11 @@ export namespace Mover
         export type Bounds = 'none' | 'parent' | 'viewport';
     }
 
+    export type GroupItems=Iterable<unknown>|ReadonlyMap<unknown,unknown>;
+    export type GroupSource=GroupItems|(()=>GroupItems)|null;
+    interface Member {element:HTMLElement;x:number;y:number;width:number;height:number;}
+    const DragOwners=new WeakMap<HTMLElement,Mover>();
+
     export namespace Interfaces
     {
         export interface MoverOptions
@@ -27,6 +32,8 @@ export namespace Mover
             damping?: number;
             stiffness?: number;
             disabled?: boolean;
+            group?:GroupSource;
+            Group?:GroupSource;
         }
     }
 
@@ -46,6 +53,7 @@ export namespace Mover
             'handle-selector', 'axis', 'bounds', 'snap-x', 'snap-y',
             'mass', 'damping', 'stiffness', 'disabled',
         ],
+        Properties:['Group'],
     })
     export class Mover extends Base.Modifier2D.Modifier2D
     {
@@ -67,10 +75,13 @@ export namespace Mover
         private moveCallbacks = new Set<MoveCallback>();
         private snapCallbacks = new Set<MoveCallback>();
         private endCallbacks = new Set<MoveCallback>();
+        private groupSource!:GroupSource;
+        private activeCleanup!:(()=>void)|null;
 
         /** Restore class-field defaults after an in-place AriannA markup upgrade. */
         private ensureRuntime(): void
         {
+            this.groupSource??=null;this.activeCleanup??=null;
             this.handleSelector ??= '';
             this.axis ??= 'both';
             this.bounds ??= 'none';
@@ -122,6 +133,7 @@ export namespace Mover
             if(options.mass !== undefined) this.mass = options.mass;
             if(options.damping !== undefined) this.damping = options.damping;
             if(options.stiffness !== undefined) this.stiffness = options.stiffness;
+            if(options.group!==undefined||options.Group!==undefined)this.setGroup(options.Group??options.group??null);
             if(options.disabled) this.disable();
         }
 
@@ -151,179 +163,97 @@ export namespace Mover
             this.stiffness = number('stiffness', this.stiffness);
         }
 
-        protected applyTo(target: HTMLElement): void
-        {
-            this.syncAttributes();
-
-            if(getComputedStyle(target).position === 'static')
-                target.style.position = 'absolute';
-
-            let pointerId = -1;
-            let startPointerX = 0;
-            let startPointerY = 0;
-            let startLeft = 0;
-            let startTop = 0;
-
-            const isOnHandle = (element: EventTarget | null): boolean =>
-            {
-                if(!this.handleSelector)
-                    return true;
-
-                if(!(element instanceof HTMLElement))
-                    return false;
-
-                let current: HTMLElement | null = element;
-                while(current && current !== target)
-                {
-                    if(current.matches(this.handleSelector))
-                        return true;
-                    current = current.parentElement;
+        /** Independent movement membership. No selection component is imported or owned. */
+        public get Group():GroupSource{this.ensureRuntime();return this.groupSource;}
+        public set Group(value:GroupSource){this.setGroup(value);}
+        public setGroup(value:GroupSource):this {
+            if(value!==null&&typeof value!=='function'&&typeof value?.[Symbol.iterator]!=='function')throw new TypeError('Mover.Group requires an iterable, Map or provider');
+            this.ensureRuntime();this.groupSource=value;return this;
+        }
+        private members(target:HTMLElement):Member[] {
+            let source=typeof this.groupSource==='function'?this.groupSource():this.groupSource;
+            if(source instanceof Map)source=source.values();
+            const values:HTMLElement[]=source instanceof Map?[...source.values()]:source?[...(source as Iterable<HTMLElement>)]:[];
+            if(values.some(element=>!(element instanceof HTMLElement)))throw new TypeError('Mover.Group members must be HTMLElements');
+            let elements=values.includes(target)?[...new Set(values)]:[target];
+            // Moving an ancestor already moves its descendants; never apply the same translation twice.
+            elements=elements.filter(element=>!elements.some(other=>other!==element&&other.contains(element)));
+            const containers=new Set(elements.map(element=>this.coordinateContainer(element)));
+            if(containers.size>1)throw new TypeError('Mover.Group members must share one coordinate container');
+            return elements.map(element=>({element,x:element.offsetLeft,y:element.offsetTop,width:element.offsetWidth,height:element.offsetHeight}));
+        }
+        private coordinateContainer(element:HTMLElement):HTMLElement|null{return element.offsetParent as HTMLElement|null??this.containerFor(element);}
+        private delta(target:HTMLElement,members:Member[],dx:number,dy:number):{dx:number;dy:number;snapped:boolean} {
+            if(this.axis==='x')dy=0;if(this.axis==='y')dx=0;
+            const leader=members.find(member=>member.element===target)??members[0];
+            const canvas=target.closest('arianna-canvas-2d') as HTMLElement&{getSnap?:()=>{enabled?:boolean;grid?:boolean}}|null;
+            const master=canvas?.getSnap?.(),enabled=master?.enabled!==false&&master?.grid!==false;
+            const stepX=enabled?this.snapX:0,stepY=enabled?this.snapY:0;let snapped=false;
+            if(this.axis!=='y'&&stepX>0){const next=Math.round((leader.x+dx)/stepX)*stepX-leader.x;snapped||=next!==dx;dx=next;}
+            if(this.axis!=='x'&&stepY>0){const next=Math.round((leader.y+dy)/stepY)*stepY-leader.y;snapped||=next!==dy;dy=next;}
+            dx=Math.round(dx);dy=Math.round(dy);
+            if(this.bounds!=='none') {
+                const container=this.coordinateContainer(target),width=this.bounds==='viewport'?window.innerWidth:container?.clientWidth,
+                    height=this.bounds==='viewport'?window.innerHeight:container?.clientHeight;
+                if(width!==undefined&&height!==undefined){
+                    const minX=-Math.min(...members.map(member=>member.x)),maxX=width-Math.max(...members.map(member=>member.x+member.width));
+                    const minY=-Math.min(...members.map(member=>member.y)),maxY=height-Math.max(...members.map(member=>member.y+member.height));
+                    if(this.axis!=='y')dx=minX<=maxX?Math.max(minX,Math.min(maxX,dx)):0;
+                    if(this.axis!=='x')dy=minY<=maxY?Math.max(minY,Math.min(maxY,dy)):0;
                 }
-
-                return current === target && target.matches(this.handleSelector);
+            }
+            return{dx,dy,snapped};
+        }
+        private write(members:Member[],dx:number,dy:number):void {
+            for(const member of members){const x=member.x+dx,y=member.y+dy;member.element.style.left=x+'px';member.element.style.top=y+'px';member.element.setAttribute('x',String(x));member.element.setAttribute('y',String(y));}
+        }
+        protected applyTo(target: HTMLElement): void {
+            this.syncAttributes();if(getComputedStyle(target).position==='static')target.style.position='absolute';
+            let pointerId=-1,startX=0,startY=0,members:Member[]=[];
+            const isOnHandle=(node:EventTarget|null)=>{
+                if(!(node instanceof Element))return false;
+                if(node.closest('.Resizer-Handle,[data-resize-handle]'))return false;
+                if(!this.handleSelector)return !node.closest('input,textarea,select,button,[contenteditable="true"]');
+                const handle=node.closest(this.handleSelector);return !!handle&&(handle===target||target.contains(handle));
             };
-
-            const clamp = (x: number, y: number): [number, number] =>
-            {
-                if(this.bounds === 'parent')
-                {
-                    const parent = this.containerFor(target);
-                    if(parent)
-                    {
-                        x = Math.max(0, Math.min(Math.max(0, parent.clientWidth - target.offsetWidth), x));
-                        y = Math.max(0, Math.min(Math.max(0, parent.clientHeight - target.offsetHeight), y));
-                    }
-                }
-                else if(this.bounds === 'viewport')
-                {
-                    x = Math.max(0, Math.min(Math.max(0, window.innerWidth - target.offsetWidth), x));
-                    y = Math.max(0, Math.min(Math.max(0, window.innerHeight - target.offsetHeight), y));
-                }
-
-                return [x, y];
+            const finish=(cancelled:boolean,notify=true)=>{
+                if(pointerId<0)return;const id=pointerId;
+                if(cancelled)this.write(members,0,0);
+                try{if(target.hasPointerCapture(id))target.releasePointerCapture(id);}catch{}
+                target.removeEventListener('pointermove',onMove);target.removeEventListener('pointerup',onUp);target.removeEventListener('pointercancel',onUp);
+                for(const member of members)if(DragOwners.get(member.element)===this)DragOwners.delete(member.element);
+                pointerId=-1;this.activeCleanup=null;target.style.cursor=this.handleSelector?'':'grab';
+                if(notify)for(const member of members){const x=member.element.offsetLeft,y=member.element.offsetTop;this.End({x,y,pointerId:id,cancelled,group:members.map(item=>item.element)},member.element);for(const callback of this.endCallbacks)callback(member.element,x,y);}
+                members=[];
             };
-
-            const onMove = (event: PointerEvent): void =>
-            {
-                if(event.pointerId !== pointerId || !this.isEnabled)
-                    return;
-
-                let x = startLeft + event.clientX - startPointerX;
-                let y = startTop + event.clientY - startPointerY;
-
-                if(this.axis === 'x') y = startTop;
-                if(this.axis === 'y') x = startLeft;
-
-                [x, y] = clamp(x, y);
-
-                /* Canvas2D Snap is the spatial master switch. Turning it off makes
-                 * the effective modifier snap 0 while preserving the configured SnapX/SnapY
-                 * values so turning Snap back on restores the previous behaviour. */
-                const canvas = target.closest('arianna-canvas-2d') as (HTMLElement & { getSnap?:()=>{enabled?:boolean;grid?:boolean} }) | null;
-                const canvasSnapState = typeof canvas?.getSnap === 'function' ? canvas.getSnap() : null;
-                const canvasSnapEnabled = canvasSnapState
-                    ? canvasSnapState.enabled !== false && canvasSnapState.grid !== false
-                    : true;
-                const effectiveSnapX = canvasSnapEnabled ? this.snapX : 0;
-                const effectiveSnapY = canvasSnapEnabled ? this.snapY : 0;
-
-                let snapped = false;
-                if(effectiveSnapX > 0)
-                {
-                    const next = Math.round(x / effectiveSnapX) * effectiveSnapX;
-                    snapped ||= next !== x;
-                    x = next;
-                }
-                if(effectiveSnapY > 0)
-                {
-                    const next = Math.round(y / effectiveSnapY) * effectiveSnapY;
-                    snapped ||= next !== y;
-                    y = next;
-                }
-
-                [x, y] = clamp(x, y);
-                x = Math.round(x);
-                y = Math.round(y);
-
-                target.style.left = `${x}px`;
-                target.style.top = `${y}px`;
-                target.setAttribute('x', String(x));
-                target.setAttribute('y', String(y));
-
-                this.Change({ x, y, pointerId, snapped }, target);
-                for(const callback of this.moveCallbacks) callback(target, x, y);
-                if(snapped)
-                {
-                    for(const callback of this.snapCallbacks) callback(target, x, y);
-                    target.dispatchEvent(new CustomEvent('arianna:move-snap', {
-                        bubbles: true,
-                        composed: true,
-                        detail: { target, modifier: this, x, y },
-                    }));
-                }
-            };
-
-            const onUp = (event: PointerEvent): void =>
-            {
-                if(event.pointerId !== pointerId)
-                    return;
-
-                try { target.releasePointerCapture(pointerId); } catch {}
-                target.removeEventListener('pointermove', onMove);
-                target.removeEventListener('pointerup', onUp);
-                target.removeEventListener('pointercancel', onUp);
-
-                const x = target.offsetLeft;
-                const y = target.offsetTop;
-                this.End({ x, y, pointerId }, target);
-                for(const callback of this.endCallbacks) callback(target, x, y);
-                pointerId = -1;
-                target.style.cursor = this.handleSelector ? '' : 'grab';
-            };
-
-            const onDown = (event: PointerEvent): void =>
-            {
-                if(!this.isEnabled || event.button !== 0 || !isOnHandle(event.target))
-                    return;
-
-                const eventTarget = event.target;
-                if(eventTarget instanceof HTMLElement)
-                {
-                    const interactive = eventTarget.closest('input,textarea,select,button,[contenteditable="true"]');
-                    if(interactive && interactive !== target && !this.handleSelector)
-                        return;
-                }
-
+            const onMove=(event:PointerEvent)=>{
+                if(pointerId<0||event.pointerId!==pointerId)return;if(!this.isEnabled){finish(true);return;}
+                let dx=event.clientX-startX,dy=event.clientY-startY;
+                const canvas=target.closest('arianna-canvas-2d') as HTMLElement&{getViewport?:()=>{zoom:number;tilt?:number}}|null;
+                const viewport=canvas?.getViewport?.();
+                if(viewport){const angle=(viewport.tilt??0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle),z=viewport.zoom||1;const x=dx;dx=(x*c+dy*s)/z;dy=(dy*c-x*s)/z;}
+                const motion=this.delta(target,members,dx,dy);this.write(members,motion.dx,motion.dy);
                 event.preventDefault();
-                pointerId = event.pointerId;
-                startPointerX = event.clientX;
-                startPointerY = event.clientY;
-                startLeft = target.offsetLeft;
-                startTop = target.offsetTop;
-
-                try { target.setPointerCapture(pointerId); } catch {}
-                target.addEventListener('pointermove', onMove);
-                target.addEventListener('pointerup', onUp);
-                target.addEventListener('pointercancel', onUp);
-                target.style.cursor = 'grabbing';
-
-                this.Start({ x: startLeft, y: startTop, pointerId }, target);
-                for(const callback of this.startCallbacks) callback(target, startLeft, startTop);
+                const group=members.map(member=>member.element);
+                for(const member of members){const x=member.x+motion.dx,y=member.y+motion.dy;
+                    this.Change({x,y,pointerId,snapped:motion.snapped,dx:motion.dx,dy:motion.dy,group},member.element);
+                    for(const callback of this.moveCallbacks)callback(member.element,x,y);
+                    if(motion.snapped){for(const callback of this.snapCallbacks)callback(member.element,x,y);member.element.dispatchEvent(new CustomEvent('arianna:move-snap',{bubbles:true,composed:true,detail:{target:member.element,modifier:this,x,y,group}}));}
+                }
             };
-
-            target.addEventListener('pointerdown', onDown);
-            target.style.cursor = this.handleSelector ? '' : 'grab';
-            target.style.touchAction ||= 'none';
-            target.style.userSelect ||= 'none';
-
-            this.cleanups.push(() =>
-            {
-                target.removeEventListener('pointerdown', onDown);
-                target.removeEventListener('pointermove', onMove);
-                target.removeEventListener('pointerup', onUp);
-                target.removeEventListener('pointercancel', onUp);
-                target.style.cursor = '';
-            });
+            const onUp=(event:PointerEvent)=>{if(event.pointerId===pointerId)finish(event.type==='pointercancel');};
+            const onDown=(event:PointerEvent)=>{
+                if(!this.isEnabled||event.button!==0||pointerId>=0||this.activeCleanup||!isOnHandle(event.target))return;
+                const next=this.members(target);if(next.some(member=>DragOwners.has(member.element)))return;
+                members=next;for(const member of members)DragOwners.set(member.element,this);
+                pointerId=event.pointerId;startX=event.clientX;startY=event.clientY;
+                event.preventDefault();event.stopPropagation();try{target.setPointerCapture(pointerId);}catch{}
+                target.addEventListener('pointermove',onMove);target.addEventListener('pointerup',onUp);target.addEventListener('pointercancel',onUp);
+                target.style.cursor='grabbing';this.activeCleanup=()=>finish(true,false);
+                for(const member of members){this.Start({x:member.x,y:member.y,pointerId,group:members.map(item=>item.element)},member.element);for(const callback of this.startCallbacks)callback(member.element,member.x,member.y);}
+            };
+            target.addEventListener('pointerdown',onDown);target.style.cursor=this.handleSelector?'':'grab';target.style.touchAction||='none';target.style.userSelect||='none';
+            this.cleanups.push(()=>{finish(true,false);target.removeEventListener('pointerdown',onDown);target.style.cursor='';});
         }
 
         public onStart(callback: MoveCallback): this { this.ensureRuntime(); this.startCallbacks.add(callback); return this; }
@@ -334,6 +264,11 @@ export namespace Mover
         public setPosition(x: number, y: number): this
         {
             this.ensureRuntime();
+            if(this.groupSource&&this.targets.length){
+                const target=this.targets[0],members=this.members(target),leader=members.find(member=>member.element===target)??members[0];
+                const motion=this.delta(target,members,x-leader.x,y-leader.y);this.write(members,motion.dx,motion.dy);
+                for(const member of members){const px=member.x+motion.dx,py=member.y+motion.dy;this.Change({x:px,y:py,programmatic:true,group:members.map(item=>item.element)},member.element);for(const callback of this.moveCallbacks)callback(member.element,px,py);}return this;
+            }
             for(const target of this.targets)
             {
                 target.style.left = `${Math.round(x)}px`;
@@ -343,6 +278,8 @@ export namespace Mover
             }
             return this;
         }
+
+        public destroy():this{this.ensureRuntime();super.destroy();this.groupSource=null;this.activeCleanup=null;this.startCallbacks.clear();this.moveCallbacks.clear();this.snapCallbacks.clear();this.endCallbacks.clear();return this;}
 
         /** Placeholder hook consumed by the upcoming physics bridge. */
         public _physicsTick(_deltaTime = 0): this
@@ -355,5 +292,6 @@ export namespace Mover
 export type MoverAxis = Mover.Types.Axis;
 export type MoverBounds = Mover.Types.Bounds;
 export type MoverOptions = Mover.Interfaces.MoverOptions;
+export type MoverGroupSource=Mover.GroupSource;
 
 export default Mover.Mover;

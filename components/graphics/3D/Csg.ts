@@ -22,6 +22,9 @@ export namespace Csg
         scene:Canvas3DNamespace.Scene3;
         camera:Canvas3DNamespace.Camera3;
         canvas?:HTMLCanvasElement;
+        addMesh?(id:string,mesh:Canvas3DNamespace.Mesh3):Canvas3DNamespace.Mesh3;
+        removeMesh?(source:string|Canvas3DNamespace.Mesh3):unknown;
+        invalidate?():void;
     }
 
     interface RuntimeState
@@ -33,9 +36,11 @@ export namespace Csg
         a:Operand|null;
         b:Operand|null;
         pickSlot:OperandSlot;
+        picking:boolean;
         built:boolean;
         drag:{id:number;x:number;y:number;left:number;top:number}|null;
         selectionCleanup:(()=>void)|null;
+        history:{result:Operand;operands:[Operand,Operand];consumed:boolean;visible:[boolean,boolean]}[];
     }
 
     const Runtime=new WeakMap<HTMLElement,RuntimeState>();
@@ -44,7 +49,7 @@ export namespace Csg
         let s=Runtime.get(host);
         if(!s)
         {
-            s={canvas:null,meshes:[],mode:'gallery',operation:'union',a:null,b:null,pickSlot:'a',built:false,drag:null,selectionCleanup:null};
+            s={canvas:null,meshes:[],mode:'single',operation:'union',a:null,b:null,pickSlot:'a',picking:false,built:false,drag:null,selectionCleanup:null,history:[]};
             Runtime.set(host,s);
         }
         return s;
@@ -90,7 +95,7 @@ export namespace Csg
     const resultMesh=(g:Three.BufferGeometry,color:string,label:string):Canvas3DNamespace.Mesh3=>({
         geometry:canvasGeometry(g),
         position:{x:0,y:0,z:0},rotation:{x:0,y:0,z:0},scale:{x:1,y:1,z:1},visible:true,
-        userData:{color,name:label,csgGenerated:true,csgSelectable:false},
+        userData:{color,name:label,csgGenerated:true,csgSelectable:true},
     });
 
     const opLabel=(op:Operation)=>op==='union'?'Union (A ∪ B)':op==='intersection'?'Intersection (A ∩ B)':op==='subtract-reverse'?'Subtraction (B − A)':'Subtraction (A − B)';
@@ -125,7 +130,7 @@ export namespace Csg
         new Css.Rule('arianna-csg[theme="light"] .Csg-Button,.Csg[theme="light"] .Csg-Button',{Background:'#f5f6f7',BorderColor:'#c9cfd4',Color:'#30363c'}),
     ]);
 
-    @Component('arianna-csg',Styles,{Shadow:false,Attributes:['for','mode','operation','theme']})
+    @Component('arianna-csg',Styles,{Shadow:false,Attributes:['for','mode','operation','theme','preserve-operands']})
     export class Csg extends HTMLElement
     {
         public static readonly Styles=Styles;
@@ -140,8 +145,8 @@ export namespace Csg
             if(!st.built){this.renderPanel();this.installResize();st.built=true;}
             queueMicrotask(()=>this.bind());
         }
-        public onUnmount():void{this.clearResults();const st=S(this);st.selectionCleanup?.();st.selectionCleanup=null;st.canvas=null;}
-        public onAttributeChanged():void{if(!this.isConnected)return;this.syncAttributes();this.renderPanel();queueMicrotask(()=>{this.bind();this.rebuild();});}
+        public onUnmount():void{this.clearResults();const st=S(this);st.selectionCleanup?.();st.selectionCleanup=null;st.history.length=0;st.a=null;st.b=null;st.canvas=null;}
+        public onAttributeChanged():void{if(!this.isConnected)return;this.syncAttributes();this.renderPanel();queueMicrotask(()=>{if(this.isConnected)this.bind();});}
 
         public bind(canvas?:HTMLElement|null):this
         {
@@ -159,11 +164,46 @@ export namespace Csg
             return this;
         }
         public setMode(mode:Mode):this{this.setAttribute('mode',mode);return this;}
-        public setOperation(operation:Operation):this{this.setAttribute('operation',operation);return this;}
-        public beginPick(slot:OperandSlot):this{S(this).pickSlot=slot;this.renderPanel();return this;}
-        public setOperands(a:Operand|null,b:Operand|null):this{const st=S(this);st.a=a;st.b=b;st.pickSlot=a&&!b?'b':'a';this.renderPanel();this.rebuild();return this;}
+        public setOperation(operation:Operation):this{S(this).operation=operation;this.setAttribute('operation',operation);return this;}
+        public beginPick(slot:OperandSlot):this{S(this).pickSlot=slot;S(this).picking=true;this.renderPanel();return this;}
+        public setOperands(a:Operand|null,b:Operand|null):this{const st=S(this);st.a=a;st.b=b;st.pickSlot=a&&!b?'b':'a';this.clearResults();this.renderPanel();return this;}
         public getOperands():Readonly<{a:Operand|null;b:Operand|null}>{const st=S(this);return{a:st.a,b:st.b};}
         public clearSelection():this{const st=S(this);st.a=null;st.b=null;st.pickSlot='a';this.clearResults();this.renderPanel();this.emitSelection();return this;}
+
+        /** Commit the selected Boolean. By default the result replaces both operands. */
+        public commit(consumeOperands?:boolean):Canvas3DNamespace.Mesh3|null
+        {
+            const st=S(this),canvas=st.canvas;if(!canvas||!st.a||!st.b||st.a===st.b)return null;
+            consumeOperands??=!this.hasAttribute('preserve-operands');
+            const a=st.a,b=st.b,operation=st.operation;
+            const visibility:[boolean,boolean]=[a.visible,b.visible];
+            const evaluated=this.evaluate(a,b,operation);
+            const result=resultMesh(evaluated.geometry,colorFor(operation),opLabel(operation));
+            result.userData.id=`csg-${operation}-${Date.now().toString(36)}-${st.history.length}`;
+            this.clearResults();
+            if(consumeOperands)
+            {
+                a.visible=false;b.visible=false;
+            }
+            if(canvas.addMesh)canvas.addMesh(String(result.userData.id),result);
+            else canvas.scene.add(result);
+            canvas.invalidate?.();
+            st.history.push({result,operands:[a,b],consumed:consumeOperands,visible:visibility});
+            st.a=null;st.b=null;st.pickSlot='a';this.renderPanel();this.emitSelection();
+            this.dispatchEvent(new CustomEvent('arianna:csg-commit',{bubbles:true,composed:true,detail:{result,operation,operands:[a,b],consumed:consumeOperands,source:this}}));
+            return result;
+        }
+
+        /** Restore the exact operand objects and transforms retained at commit. */
+        public undo():this
+        {
+            const st=S(this),entry=st.history.pop();if(!entry||!st.canvas)return this;
+            this.clearResults();if(st.canvas.removeMesh)st.canvas.removeMesh(entry.result);else st.canvas.scene.remove(entry.result);
+            if(entry.consumed){entry.operands[0].visible=entry.visible[0];entry.operands[1].visible=entry.visible[1];}
+            [st.a,st.b]=entry.operands;st.pickSlot='a';this.renderPanel();st.canvas.invalidate?.();this.emitSelection();
+            this.dispatchEvent(new CustomEvent('arianna:csg-undo',{bubbles:true,composed:true,detail:{operands:entry.operands,result:entry.result,source:this}}));return this;
+        }
+        public reset():this{while(S(this).history.length)this.undo();this.clearResults();this.renderPanel();return this;}
 
         /** Evaluate one Boolean using two existing Canvas3D meshes. */
         public evaluate(a:Operand,b:Operand,operation:Operation):Three.Mesh
@@ -187,7 +227,7 @@ export namespace Csg
         private syncAttributes():void
         {
             const st=S(this),mode=this.getAttribute('mode'),op=this.getAttribute('operation');
-            st.mode=mode==='single'?'single':'gallery';
+            st.mode=mode==='gallery'?'gallery':'single';
             if(op==='union'||op==='intersection'||op==='subtract'||op==='subtract-reverse')st.operation=op;
         }
         private scene():Canvas3DNamespace.Scene3|null{return S(this).canvas?.scene??null;}
@@ -228,28 +268,30 @@ export namespace Csg
         private renderPanel():void
         {
             const st=S(this),resize=[...this.querySelectorAll('.Csg-Resize')];
-            const head=document.createElement('header');head.className='Csg-Header';head.innerHTML='<span>CSG</span><span style="font:9px ui-monospace,monospace;color:#7f8993">Three.CSG · BSP</span>';this.wireDrag(head);
+            const head=document.createElement('header');head.className='Csg-Header';head.textContent='Csg';this.wireDrag(head);
             const body=document.createElement('div');body.className='Csg-Body';
             const row=(name:string,control:HTMLElement)=>{const r=document.createElement('label');r.className='Csg-Row';const l=document.createElement('span');l.className='Csg-Label';l.textContent=name;r.append(l,control);body.appendChild(r);};
             const select=(items:[string,string][],value:string,fn:(v:string)=>void)=>{const s=document.createElement('select');s.className='Csg-Input';for(const [v,t] of items){const o=document.createElement('option');o.value=v;o.textContent=t;o.selected=v===value;s.appendChild(o);}s.onchange=()=>fn(s.value);return s;};
             const operand=(slot:OperandSlot,mesh:Operand|null)=>
             {
                 const wrap=document.createElement('div');wrap.className='Csg-Operand';
-                const pick=document.createElement('button');pick.type='button';pick.className='Csg-Button Csg-Pick';pick.dataset.active=String(st.pickSlot===slot);pick.textContent=`Pick ${slot.toUpperCase()}`;pick.onclick=()=>this.beginPick(slot);
-                const name=document.createElement('div');name.className='Csg-OperandName';name.title=this.meshName(mesh);name.textContent=this.meshName(mesh);
+                const pick=document.createElement('button');pick.type='button';pick.className='Csg-Button Csg-Pick';pick.dataset.active=String(st.picking&&st.pickSlot===slot);pick.textContent=`Pick ${slot.toUpperCase()}`;pick.onclick=()=>this.beginPick(slot);
+                const name=document.createElement('select');name.className='Csg-Input';const empty=document.createElement('option');empty.value='';empty.textContent='Choose solid';name.appendChild(empty);
+                const candidates=st.canvas?.scene.children.filter(item=>item.visible&&item.userData.csgSelectable!==false&&!st.meshes.includes(item))??[];
+                candidates.forEach((item,index)=>{const option=document.createElement('option');option.value=String(index);option.textContent=this.meshName(item);option.selected=item===mesh;name.appendChild(option);});
+                name.onchange=()=>{st[slot]=name.value===''?null:candidates[Number(name.value)];this.clearResults();this.emitSelection();};
                 wrap.append(pick,name);return wrap;
             };
             row('Operand A',operand('a',st.a));
             row('Operand B',operand('b',st.b));
-            row('Display',select([['gallery','All operations'],['single','Single result']],st.mode,v=>this.setMode(v as Mode)));
             row('Operation',select([['union','Union'],['intersection','Intersection'],['subtract','Subtraction (A − B)'],['subtract-reverse','Subtraction (B − A)']],st.operation,v=>this.setOperation(v as Operation)));
-            const hint=document.createElement('div');hint.className='Csg-Hint';hint.textContent=st.pickSlot==='a'?'Click a mesh in the viewport to set Operand A.':'Click a different mesh in the viewport to set Operand B.';body.appendChild(hint);
+            const hint=document.createElement('div');hint.className='Csg-Hint';hint.textContent=!st.picking?'Choose A/B, move the axes, then Apply. Undo/Reset restores the operands.':st.pickSlot==='a'?'Click a mesh in the viewport to set Operand A.':'Click a different mesh in the viewport to set Operand B.';body.appendChild(hint);
             const actions=document.createElement('div');actions.className='Csg-Actions';
-            const all=document.createElement('button');all.className='Csg-Button';all.dataset.primary=String(st.mode==='gallery');all.textContent='All Booleans';all.onclick=()=>this.setMode('gallery');
-            const apply=document.createElement('button');apply.className='Csg-Button';apply.textContent='Apply';apply.onclick=()=>this.rebuild();
-            const clear=document.createElement('button');clear.className='Csg-Button';clear.textContent='Clear';clear.onclick=()=>this.clearSelection();
+            const all=document.createElement('button');all.type='button';all.className='Csg-Button';all.textContent='Undo';all.disabled=!st.history.length;all.onclick=()=>this.undo();
+            const apply=document.createElement('button');apply.className='Csg-Button';apply.type='button';apply.disabled=!st.a||!st.b||st.a===st.b;apply.textContent='Apply';apply.title='Create result and replace operands';apply.onclick=()=>this.commit();
+            const clear=document.createElement('button');clear.type='button';clear.className='Csg-Button';clear.textContent='Reset';clear.onclick=()=>this.reset();
             actions.append(all,apply,clear);body.appendChild(actions);
-            const legend=document.createElement('div');legend.className='Csg-Legend';for(const op of ['union','intersection','subtract','subtract-reverse'] as Operation[]){const item=document.createElement('div');item.className='Csg-LegendItem';const sw=document.createElement('i');sw.className='Csg-Swatch';sw.style.background=colorFor(op);const tx=document.createElement('span');tx.textContent=opLabel(op);item.append(sw,tx);legend.appendChild(item);}body.appendChild(legend);
+
             const footer=document.createElement('div');footer.className='Csg-Footer';footer.textContent='Operands come from the Canvas3D scene · click to select';body.appendChild(footer);
             this.replaceChildren(head,body,...resize);
         }
@@ -260,7 +302,7 @@ export namespace Csg
         }
         private choose(mesh:Operand):void
         {
-            const st=S(this);if(mesh.userData.csgGenerated===true||mesh.userData.csgSelectable===false)return;
+            const st=S(this);if(mesh.userData.csgSelectable===false)return;
             if(st.pickSlot==='a')
             {
                 st.a=mesh;
@@ -272,7 +314,7 @@ export namespace Csg
                 if(st.a===mesh)return;
                 st.b=mesh;st.pickSlot='a';
             }
-            this.renderPanel();this.emitSelection();if(st.a&&st.b)this.rebuild();
+            this.clearResults();this.renderPanel();this.emitSelection();
         }
 
         private wireSelection():void
@@ -284,7 +326,7 @@ export namespace Csg
             {
                 if(!down||down.id!==e.pointerId)return;
                 const moved=Math.hypot(e.clientX-down.x,e.clientY-down.y);down=null;if(moved>5)return;
-                const mesh=this.pick(e.clientX,e.clientY);if(mesh)this.choose(mesh);
+                if(!st.picking)return;const mesh=this.pick(e.clientX,e.clientY);if(mesh){this.choose(mesh);st.picking=false;this.renderPanel();}
             };
             const onCancel=()=>{down=null;};
             surface.addEventListener('pointerdown',onDown);

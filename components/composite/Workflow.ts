@@ -87,14 +87,14 @@ export namespace NodeEditor
             Background: '#202428', Border: '1px solid #121517', BorderRadius: '8px',
             BoxSizing: 'border-box', Color: '#e5e8ea', Display: 'block',
             FontFamily: 'var(--arianna-font,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif)',
-            Height: '560px', MaxWidth: '100%', MinWidth: '0', Overflow: 'hidden', Width: '100%'
+            Height: '640px', MaxWidth: '100%', MinWidth: '0', Overflow: 'hidden', Width: '100%'
         }),
         new Css.Rule('.NodeEditor-Shell', {
-            Display: 'grid', GridTemplateRows: '48px 1fr', Height: '100%', MinHeight: '0'
+            Display: 'grid', GridTemplateRows: '38px minmax(0,1fr)', Height: '100%', MinHeight: '0'
         }),
         new Css.Rule('.NodeEditor-Toolbar', {
             AlignItems: 'center', Background: 'linear-gradient(180deg,#363b40,#25292d)',
-            BorderBottom: '1px solid #111417', Display: 'flex', Gap: '5px', Padding: '6px 8px'
+            BorderBottom: '1px solid #111417', Display: 'flex', Gap: '4px', Padding: '5px 7px', OverflowX:'auto'
         }),
         new Css.Rule('.NodeEditor-Title', { FontSize: '11px', FontWeight: '760', MarginRight: '5px' }),
         new Css.Rule('.NodeEditor-State', {
@@ -102,23 +102,24 @@ export namespace NodeEditor
         }),
         new Css.Rule('.NodeEditor-Button', {
             Appearance: 'none', Background: 'linear-gradient(180deg,#444a50,#30353a)',
-            Border: '1px solid #15181a', BorderRadius: '4px', Color: '#dce0e3',
+            Border: '1px solid #15181a', BorderRadius: '3px', Color: '#dce0e3',
             Cursor: 'pointer', Font: '700 9px/1 var(--arianna-font,system-ui,sans-serif)',
-            Height: '27px', Padding: '0 9px'
+            Height: '25px', Padding: '0 7px', FlexShrink:'0'
         }),
+        new Css.Rule('.NodeEditor-Button:disabled', { Opacity: '.45', Cursor: 'default' }),
+        new Css.Rule('.NodeEditor-Button[data-active="true"]:disabled', {Opacity:'1'}),
         new Css.Rule('.NodeEditor-Button:hover', { Background: 'linear-gradient(180deg,#51585e,#383d42)' }),
-        new Css.Rule('.NodeEditor-Button[data-kind="run"]', {
-            Background: 'linear-gradient(180deg,#38c477,#1f9e5b)', BorderColor: '#187b46', Color: '#fff'
+        new Css.Rule('.NodeEditor-Button[data-active="true"]', {
+            Background:'linear-gradient(180deg,#ff4dad 0%,#e40c88 55%,#b90769 100%)',
+            BorderColor:'#e40c88',Color:'#fff',BoxShadow:'inset 0 1px 0 #ffffff35,0 1px 3px #0004'
         }),
-        new Css.Rule('.NodeEditor-Button[data-kind="stop"]', {
-            Background: 'linear-gradient(180deg,#ef5360,#c93845)', BorderColor: '#9d2631', Color: '#fff'
-        }),
+        new Css.Rule('.NodeEditor-Button:focus-visible,.NodeEditor-Input:focus-visible,.NodeEditor-PaletteSearch:focus-visible', {Outline:'2px solid #e40c88',OutlineOffset:'2px'}),
 
         /*
          * Playground-like LEFT PANE | WORKSPACE | INSPECTOR
          */
         new Css.Rule('.NodeEditor-Body', {
-            Display: 'grid', GridTemplateColumns: '236px minmax(0,1fr) 220px', MinHeight: '0'
+            Display: 'grid', GridTemplateColumns: '190px minmax(0,1fr) 190px', OverflowX:'auto', MinHeight: '0'
         }),
         new Css.Rule('.NodeEditor-Palette', {
             Background: '#1b1e22', BorderRight: '1px solid #111417', Display: 'grid',
@@ -194,7 +195,7 @@ export namespace NodeEditor
         new Css.Rule('.NodeEditor-Workspace', {
             BackgroundColor: '#1b1f22',
             BackgroundImage: 'radial-gradient(circle,#3a4045 1px,transparent 1px)',
-            BackgroundSize: '20px 20px', MinWidth: '0', Overflow: 'hidden', Position: 'relative'
+            BackgroundSize: '20px 20px', MinWidth: '260px', Overflow: 'auto', Position: 'relative'
         }),
         new Css.Rule('.NodeEditor-Workspace[data-drag-over="true"]', {
             BoxShadow: 'inset 0 0 0 2px #e40c88'
@@ -207,12 +208,12 @@ export namespace NodeEditor
             Height: '100%', Inset: '0', Overflow: 'visible', PointerEvents: 'none',
             Position: 'absolute', Width: '100%', ZIndex: '1'
         }),
-        new Css.Rule('.NodeEditor-Wire', { Fill: 'none', Stroke: '#4eb0a5', StrokeWidth: '2' }),
+        new Css.Rule('.NodeEditor-Wire', { Fill: 'none', Stroke: '#4eb0a5', StrokeWidth: '2',StrokeLinejoin:'round',StrokeLinecap:'round' }),
         new Css.Rule('.NodeEditor-Wire[data-status="connected-warn"]', { Stroke: '#d7aa39' }),
         new Css.Rule('.NodeEditor-Wire[data-status="connected-error"]', { Stroke: '#e45656' }),
         new Css.Rule('.NodeEditor-Node', {
             Background: '#2a2f33', Border: '1px solid #43494e', BorderRadius: '10px',
-            BoxShadow: '0 7px 18px rgba(0,0,0,.28)', MinWidth: '174px',
+            BoxShadow: '0 7px 18px rgba(0,0,0,.28)', Width:'174px', MinWidth: '174px', BoxSizing:'border-box',
             Position: 'absolute', UserSelect: 'none', ZIndex: '2'
         }),
         new Css.Rule('.NodeEditor-Node[data-selected="true"]', {
@@ -286,10 +287,10 @@ export namespace NodeEditor
             Background: '#eef0f2', BorderColor: '#b9bec3', Color: '#25292d'
         }),
         new Css.Rule('.NodeEditor[theme="light"] .NodeEditor-Toolbar,.NodeEditor[theme="light"] .NodeEditor-InspectorHeader', {
-            Background: 'linear-gradient(180deg,#f9fafb,#dfe3e6)', BorderColor: '#b9bec3'
+            Background: 'linear-gradient(180deg,#fff,#e1e4e7)', BorderColor: '#b9bec3'
         }),
         new Css.Rule('.NodeEditor[theme="light"] .NodeEditor-Button', {
-            Background: 'linear-gradient(180deg,#fff,#e1e4e7)', BorderColor: '#b9bec3', Color: '#383e43'
+            Background: 'linear-gradient(180deg,#f9fbfc,#e0e4e7)', BorderColor: '#b8bdc2', Color: '#25292d'
         }),
         new Css.Rule('.NodeEditor[theme="light"] .NodeEditor-Palette', {
             Background: '#f4f5f6', BorderColor: '#bcc1c5'
@@ -329,7 +330,14 @@ export namespace NodeEditor
         }),
         new Css.Rule('.NodeEditor[theme="light"] .NodeEditor-Info,.NodeEditor[theme="light"] .NodeEditor-Input', {
             Background: '#fff', BorderColor: '#c5cacf', Color: '#30363b'
-        })
+        }),
+        new Css.Rule('.NodeEditor[theme="light"] .NodeEditor-Button[data-active="true"]', {Background:'linear-gradient(180deg,#ff4dad 0%,#e40c88 55%,#b90769 100%)',BorderColor:'#e40c88',Color:'#fff'}),
+        new Css.Rule('.NodeEditor[theme="light"] .NodeEditor-State,.NodeEditor[theme="light"] .NodeEditor-SectionTitle,.NodeEditor[theme="light"] .NodeEditor-Param label', {Color:'#626a71'}),
+        new Css.Rule('.NodeEditor[theme="light"] .NodeEditor-PortDot', {Background:'#fff',BoxShadow:'0 0 0 2px #eef0f2'}),
+        new Css.Rule('.NodeEditor[theme="light"] .NodeEditor-Add', {Background:'linear-gradient(180deg,#f9fbfc,#e0e4e7)',BorderColor:'#b8bdc2',Color:'#25292d'}),
+        new Css.Rule('.NodeEditor[state="running"] .NodeEditor-Wire,.NodeEditor[state="paused"] .NodeEditor-Wire', {StrokeDasharray:'6 4'}),
+        new Css.Rule('.NodeEditor[state="running"] .NodeEditor-Workspace', {BoxShadow:'inset 0 0 0 1px #e40c8855'})
+
     ]);
 
     @Component('arianna-node-editor', Styles, {
@@ -349,6 +357,9 @@ export namespace NodeEditor
         private _selected: string | null = null;
         private _typeCheck: Types.TypeCheckFn = (a, b) => a === b ? 'connected-ok' : 'connected-warn';
         private _drag: { id: string; dx: number; dy: number } | null = null;
+        private _runController: AbortController | null = null;
+        private _createdFrame: number | null = null;
+        private _resizeObserver:ResizeObserver|null=null;
 
         private EnsureState(): void
         {
@@ -374,9 +385,11 @@ export namespace NodeEditor
 
         public onCreated(): void
         {
-            requestAnimationFrame(() =>
+            if(this._createdFrame != null) cancelAnimationFrame(this._createdFrame);
+            this._createdFrame = requestAnimationFrame(() =>
             {
-                if(this.isConnected) this.onConnected();
+                this._createdFrame = null;
+                if(this.isConnected && !this.querySelector('.NodeEditor-Shell')) this.onConnected();
             });
         }
 
@@ -385,6 +398,8 @@ export namespace NodeEditor
             this.EnsureState();
             this.classList.add('NodeEditor');
             if(!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+            const state=this.getAttribute('state');
+            if(state==='running'||state==='paused') this.setRunState(state as Types.RunState);
             this.Render();
         }
 
@@ -443,10 +458,67 @@ export namespace NodeEditor
         public setRunState(state: Types.RunState): this
         {
             this.EnsureState();
-            this._state = state;
-            this.setAttribute('state', state);
-            if(this.isConnected) this.Render();
+            if(state !== 'idle' && state !== 'running' && state !== 'paused')
+                throw new TypeError(`Invalid Workflow run state: ${state}`);
+            const previous=this._state;
+            if(state==='running' && (!this._runController || this._runController.signal.aborted))
+                this._runController=new AbortController();
+            if(state==='idle')
+            {
+                this._runController?.abort(new DOMException('Workflow stopped.', 'AbortError'));
+                this._runController=null;
+                this._drag=null;
+            }
+            this._state=state;
+            if(this.getAttribute('state')!==state) this.setAttribute('state',state);
+            this.UpdateRunControls();
+            if(previous!==state) this.dispatchEvent(new CustomEvent('arianna:workflow-state', {
+                bubbles:true, composed:true,
+                detail:{state,previous,signal:this._runController?.signal ?? null,source:this}
+            }));
             return this;
+        }
+
+        public get runState(): Types.RunState { this.EnsureState(); return this._state; }
+        public get RunSignal(): AbortSignal | null { return this._runController?.signal ?? null; }
+        public Run(): this { return this.setRunState('running'); }
+        public Pause(): this { return this.setRunState('paused'); }
+        public Stop(): this { return this.setRunState('idle'); }
+
+        public onDisconnected(): void
+        {
+            if(this._createdFrame != null) cancelAnimationFrame(this._createdFrame);
+            this._createdFrame=null;
+            this._resizeObserver?.disconnect();this._resizeObserver=null;
+            this.Stop();
+        }
+
+        public onUnmount():void {this.onDisconnected();}
+
+        public onAttributeChanged(name: string, _old: string | null, value: string | null): void
+        {
+            if(name==='state')
+            {
+                const current=this.getAttribute('state');
+                const next=current==='running'||current==='paused'?current:'idle';
+                if(next!==this._state) this.setRunState(next);
+            }
+            else if(name==='theme' && this.isConnected) this.Render();
+        }
+
+        private UpdateRunControls(): void
+        {
+            const status=this.querySelector('.NodeEditor-State');
+            if(status) status.textContent=`— ${this._state}`;
+            for(const kind of ['run','pause','stop'])
+            {
+                const button=this.querySelector<HTMLButtonElement>(`.NodeEditor-Button[data-kind="${kind}"]`);
+                if(!button) continue;
+                button.disabled=kind==='run'?this._state==='running':kind==='pause'?this._state!=='running':this._state==='idle';
+                const active=kind==='run'?this._state==='running':kind==='pause'&&this._state==='paused';
+                button.dataset.active=String(active);
+                if(kind==='stop')button.removeAttribute('aria-pressed');else button.setAttribute('aria-pressed',String(active));
+            }
         }
 
         public addNode(
@@ -801,6 +873,41 @@ export namespace NodeEditor
             });
         }
 
+        /** Manhattan routing: straight horizontal/vertical segments with small corner radii. */
+        private WirePath(points:Array<{x:number;y:number}>,radius=8):string {
+            const clean=points.filter((p,i)=>!i||p.x!==points[i-1].x||p.y!==points[i-1].y);
+            if(!clean.length)return '';
+            let path=`M ${clean[0].x} ${clean[0].y}`;
+            for(let i=1;i<clean.length-1;i++) {
+                const a=clean[i-1],b=clean[i],c=clean[i+1],before=Math.hypot(b.x-a.x,b.y-a.y),after=Math.hypot(c.x-b.x,c.y-b.y);
+                const r=Math.min(radius,before/2,after/2);
+                if(!r||(b.x-a.x)*(c.y-b.y)===(b.y-a.y)*(c.x-b.x)){path+=` L ${b.x} ${b.y}`;continue;}
+                const start={x:b.x+(a.x-b.x)*r/before,y:b.y+(a.y-b.y)*r/before};
+                const end={x:b.x+(c.x-b.x)*r/after,y:b.y+(c.y-b.y)*r/after};
+                path+=` L ${start.x} ${start.y} Q ${b.x} ${b.y} ${end.x} ${end.y}`;
+            }
+            const last=clean[clean.length-1];return path+` L ${last.x} ${last.y}`;
+        }
+        private RenderWires():void {
+            const workspace=this.querySelector<HTMLElement>('.NodeEditor-Workspace');
+            const svg=workspace?.querySelector<SVGSVGElement>('.NodeEditor-Wires');if(!workspace||!svg)return;
+            svg.replaceChildren();
+            const elements=new Map(Array.from(workspace.querySelectorAll<HTMLElement>('[data-node-id]')).map(el=>[el.dataset.nodeId,el]));
+            const width=Math.max(workspace.clientWidth,...this._nodes.map(node=>node.x+(elements.get(node.id)?.offsetWidth||174)+48));
+            const height=Math.max(workspace.clientHeight,...this._nodes.map(node=>node.y+(elements.get(node.id)?.offsetHeight||108)+48));
+            svg.style.width=width+'px';svg.style.height=height+'px';
+            for(const wire of this._wires){
+                const src=this._nodes.find(node=>node.id===wire.srcNodeId),dst=this._nodes.find(node=>node.id===wire.dstNodeId);if(!src||!dst)continue;
+                const sourceEl=elements.get(src.id),destinationEl=elements.get(dst.id);
+                const sw=sourceEl?.offsetWidth||174,sh=sourceEl?.offsetHeight||108,dh=destinationEl?.offsetHeight||108;
+                const x1=src.x+sw+2,y1=src.y+sh/2,x2=dst.x-2,y2=dst.y+dh/2;
+                let points:Array<{x:number;y:number}>;
+                if(x2-x1>=32){const middle=(x1+x2)/2;points=[{x:x1,y:y1},{x:middle,y:y1},{x:middle,y:y2},{x:x2,y:y2}];}
+                else {const bottom=Math.max(src.y+sh,dst.y+dh)+28;points=[{x:x1,y:y1},{x:x1+20,y:y1},{x:x1+20,y:bottom},{x:x2-20,y:bottom},{x:x2-20,y:y2},{x:x2,y:y2}];}
+                const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',this.WirePath(points));path.setAttribute('class','NodeEditor-Wire');path.setAttribute('data-status',wire.status);path.setAttribute('data-wire-id',wire.id);svg.appendChild(path);
+            }
+        }
+
         private Render(): void
         {
             this.EnsureState();
@@ -817,25 +924,31 @@ export namespace NodeEditor
             const run = document.createElement('button');
             run.className = 'NodeEditor-Button';
             run.dataset.kind = 'run';
-            run.textContent = '▶ Run';
-            run.onclick = () => this.setRunState('running');
+            run.textContent = '▶ Play';
+            run.type='button';
+            run.onclick = () => this.Run();
 
             const pause = document.createElement('button');
             pause.className = 'NodeEditor-Button';
+            pause.type='button';
+            pause.dataset.kind='pause';
             pause.textContent = 'Ⅱ Pause';
-            pause.onclick = () => this.setRunState('paused');
+            pause.onclick = () => this.Pause();
 
             const stop = document.createElement('button');
             stop.className = 'NodeEditor-Button';
             stop.dataset.kind = 'stop';
             stop.textContent = '■ Stop';
-            stop.onclick = () => this.setRunState('idle');
+            stop.type='button';
+            stop.onclick = () => this.Stop();
 
             const clear = document.createElement('button');
+            clear.type='button';clear.dataset.kind='clear';
             clear.className = 'NodeEditor-Button';
             clear.textContent = 'Clear';
             clear.onclick = () =>
             {
+                this.Stop();
                 this._nodes = [];
                 this._wires = [];
                 this._selected = null;
@@ -843,6 +956,7 @@ export namespace NodeEditor
             };
 
             const exportButton = document.createElement('button');
+            exportButton.type='button';exportButton.dataset.kind='export';
             exportButton.className = 'NodeEditor-Button';
             exportButton.textContent = 'Export JSON';
             exportButton.onclick = () =>
@@ -865,33 +979,6 @@ export namespace NodeEditor
 
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svg.setAttribute('class', 'NodeEditor-Wires');
-
-            const centers = new Map(
-                this._nodes.map(node => [node.id, { x: node.x + 174, y: node.y + 54 }])
-            );
-
-            for(const wire of this._wires)
-            {
-                const source = centers.get(wire.srcNodeId);
-                const destination = centers.get(wire.dstNodeId);
-                if(!source || !destination) continue;
-
-                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                const sourceX = source.x;
-                const sourceY = source.y;
-                const destinationX = destination.x - 174;
-                const destinationY = destination.y;
-                const bend = Math.max(60, Math.abs(destinationX - sourceX) * .42);
-
-                path.setAttribute(
-                    'd',
-                    `M ${sourceX} ${sourceY} C ${sourceX + bend} ${sourceY}, ` +
-                    `${destinationX - bend} ${destinationY}, ${destinationX} ${destinationY}`
-                );
-                path.setAttribute('class', 'NodeEditor-Wire');
-                path.setAttribute('data-status', wire.status);
-                svg.appendChild(path);
-            }
 
             workspace.appendChild(svg);
 
@@ -955,6 +1042,7 @@ export namespace NodeEditor
                     node.y = Math.max(5, event.clientY - rect.top - this._drag.dy);
                     element.style.left = `${node.x}px`;
                     element.style.top = `${node.y}px`;
+                    this.RenderWires();
                 });
 
                 element.addEventListener('pointerup', () =>
@@ -968,6 +1056,7 @@ export namespace NodeEditor
             }
 
             const add = document.createElement('button');
+            add.type='button';
             add.className = 'NodeEditor-Add';
             add.textContent = '＋';
             add.title = 'Add first module';
@@ -1032,6 +1121,11 @@ export namespace NodeEditor
             body.append(palette, workspace, inspector);
             shell.append(toolbar, body);
             this.replaceChildren(shell);
+            this.UpdateRunControls();
+            this.RenderWires();
+            this._resizeObserver?.disconnect();
+            this._resizeObserver=typeof ResizeObserver==='function'?new ResizeObserver(()=>this.RenderWires()):null;
+            this._resizeObserver?.observe(workspace);
         }
     }
 }

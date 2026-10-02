@@ -44,6 +44,7 @@ export { default as Stylus     } from './Stylus.ts';
 export { default as Three      } from './Three.ts';
 export { default as Two        } from './Two.ts';
 export { default as Video      } from './Video.ts';
+export { TimecodeGenerator, Timecode } from './Video.ts';
 
 
 // ── Re-exports of selected named members ─────────────────────────────────

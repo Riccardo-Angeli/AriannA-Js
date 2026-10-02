@@ -1891,10 +1891,12 @@ void main() {
     const BSP_EPS = 1e-5;
 
     function _bspPlaneFromVerts(verts: BSPVertex[]): BSPPlane {
-        const n = Vec3.cross(
-            Vec3.sub(verts[1].pos, verts[0].pos),
-            Vec3.sub(verts[2].pos, verts[0].pos),
-        ).normalize();
+        let n=new Vec3();
+        for(let i=1;i<verts.length-1;i++){
+            n=Vec3.cross(Vec3.sub(verts[i].pos,verts[0].pos),Vec3.sub(verts[i+1].pos,verts[0].pos));
+            if(n.length()>1e-10)break;
+        }
+        n.normalize();
         return { normal: n, w: n.dot(verts[0].pos) };
     }
 
@@ -1914,7 +1916,7 @@ void main() {
             const tj   = _bspClassifyPoint(plane, vj.pos);
 
             if (ti !== BSP_BACK)  front.push(vi);
-            if (ti !== BSP_FRONT) back.push(vi);
+            if (ti !== BSP_FRONT) back.push({pos:vi.pos.clone(),normal:vi.normal.clone(),uv:vi.uv.clone()});
 
             if ((ti | tj) === BSP_SPANNING) {
                 const t  = (plane.w - plane.normal.dot(vi.pos)) / plane.normal.dot(Vec3.sub(vj.pos, vi.pos));
@@ -1922,7 +1924,7 @@ void main() {
                 const in_ = vi.normal.clone().lerp(vj.normal, t).normalize();
                 const iuv = vi.uv.clone().add(vj.uv.clone().sub(vi.uv).scale(t));
                 const iv: BSPVertex = { pos: ip, normal: in_, uv: iuv };
-                front.push(iv); back.push(iv);
+                front.push(iv); back.push({pos:ip.clone(),normal:in_.clone(),uv:iuv.clone()});
             }
         }
 
@@ -1940,7 +1942,7 @@ void main() {
 
         build(polys: BSPPolygon[]): void {
             if (!polys.length) return;
-            if (!this.plane) this.plane = polys[0].plane;
+            if (!this.plane) this.plane = {normal:polys[0].plane.normal.clone(),w:polys[0].plane.w};
             const f: BSPPolygon[] = [], b: BSPPolygon[] = [];
             for (const p of polys) {
                 const types = p.vertices.map(v => _bspClassifyPoint(this.plane!, v.pos));
@@ -1953,8 +1955,8 @@ void main() {
                     f.push(...front); b.push(...back);
                 }
             }
-            if (f.length) { this.front = new BSPNode(); this.front.build(f); }
-            if (b.length) { this.back  = new BSPNode(); this.back.build(b);  }
+            if (f.length) { this.front ??= new BSPNode(); this.front.build(f); }
+            if (b.length) { this.back ??= new BSPNode(); this.back.build(b);  }
         }
 
         allPolygons(): BSPPolygon[] {
@@ -1989,8 +1991,11 @@ void main() {
             if (!this.plane) return [...polys];
             let f: BSPPolygon[] = [], b: BSPPolygon[] = [];
             for (const p of polys) {
-                const { front, back } = _bspSplitPolygon(this.plane, p);
-                f.push(...front); b.push(...back);
+                const type=p.vertices.reduce((value,v)=>value|_bspClassifyPoint(this.plane!,v.pos),0);
+                if(type===BSP_COPLANAR){(this.plane.normal.dot(p.plane.normal)>0?f:b).push(p);}
+                else if(type===BSP_FRONT)f.push(p);
+                else if(type===BSP_BACK)b.push(p);
+                else{const split=_bspSplitPolygon(this.plane,p);f.push(...split.front);b.push(...split.back);}
             }
             if (this.front) f = this.front.clipPolygons(f);
             b = this.back  ? this.back.clipPolygons(b) : [];
@@ -2020,12 +2025,14 @@ void main() {
         if (idx.length > 0) {
             for (let i = 0; i < idx.length; i += 3) {
                 const verts = [makeVert(idx[i]), makeVert(idx[i+1]), makeVert(idx[i+2])];
-                out.push({ vertices: verts, plane: _bspPlaneFromVerts(verts) });
+                const plane = _bspPlaneFromVerts(verts);
+                if (plane.normal.length() > 1e-8) out.push({ vertices: verts, plane });
             }
         } else {
             for (let i = 0; i < pos.length/3; i += 3) {
                 const verts = [makeVert(i), makeVert(i+1), makeVert(i+2)];
-                out.push({ vertices: verts, plane: _bspPlaneFromVerts(verts) });
+                const plane = _bspPlaneFromVerts(verts);
+                if (plane.normal.length() > 1e-8) out.push({ vertices: verts, plane });
             }
         }
         return out;

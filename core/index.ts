@@ -8,7 +8,7 @@
  * @license     MIT / Commercial (dual license)
  */
 
-import { Core }       from './kernel/Core.ts';
+import { Core } from './kernel/Core.ts';
 import { Services }   from './kernel/Services.ts';
 
 import { Reactive }   from './reactivity/Reactive.ts';
@@ -21,7 +21,8 @@ import { Css }        from './dom/Css.ts';
 import { Namespaces } from './dom/Namespaces.ts';
 import { Observers }  from './dom/Observer.ts';
 import Real, { Reals }          from './dom/Real.ts';
-import Template, { Templates }  from './dom/Template.ts';
+import { Templates } from './dom/Template.ts';
+const Template = Templates.Template;
 import Shadow, { Shadows }      from './dom/Shadow.ts';
 import { Natives }    from './dom/Natives.ts';
 
@@ -31,8 +32,10 @@ import Directive, { Directives } from './components/Directives.ts';
 import JSX, { Jsx }              from './components/Jsx.ts';
 import Property, { Properties }  from './components/Properties.ts';
 
+import Application, { Applications } from './platform/Application.ts';
 import Router, { Routers }       from './platform/Router.ts';
-import Renderer, { SSR }         from './platform/SSR.ts';
+import { SSR } from './platform/SSR.ts';
+const Renderer = SSR.Renderer;
 import Worker, { Workers }       from './platform/Workers.ts';
 import { Wasm }                  from './platform/Wasm.ts';
 import { WebSockets }            from './platform/WebSocket.ts';
@@ -49,8 +52,8 @@ export {
     Reactive, Reactivity, Events, States, Contexts,
     Css, Namespaces, Observers, Reals, Templates, Shadows, Natives,
     Virtuals, Components, Directives, Jsx, Properties,
-    Routers, SSR, Workers, Wasm, WebSockets, GraphQL, Plugins,
-    State, Context, Router, Template, Shadow, Renderer, Worker,
+    Applications, Routers, SSR, Workers, Wasm, WebSockets, GraphQL, Plugins,
+    Application, State, Context, Router, Template, Shadow, Renderer, Worker,
     Real, Virtual, Component, Directive, JSX, Plugin, Property
 };
 
@@ -87,8 +90,8 @@ export function Bootstrap(): Promise<void>
         Reactive, Reactivity, Events, States, Contexts,
         Css, Namespaces, Observers, Reals, Templates, Shadows, Natives,
         Virtuals, Components, Directives, Jsx, Properties,
-        Routers, SSR, Workers, Wasm, WebSockets, GraphQL, Plugins,
-        State, Context, Router, Template, Shadow, Renderer, Worker,
+        Applications, Routers, SSR, Workers, Wasm, WebSockets, GraphQL, Plugins,
+        Application, State, Context, Router, Template, Shadow, Renderer, Worker,
         Real, Virtual, Component, Directive, JSX, Plugin, Property,
         AriannA, Html, Svg, MathML, X3D,
         Bootstrap

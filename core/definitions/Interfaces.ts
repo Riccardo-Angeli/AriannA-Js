@@ -3359,4 +3359,16 @@ export namespace Interfaces
             functions?: Types.Properties.Functions;
         }
     }
+    /** Application composition contracts. Each instance owns its service/action scope. */
+    export namespace Application
+    {
+        export interface Options
+        {
+            Name?:string;
+            State?:unknown;
+            Context?:unknown;
+            Router?:Router.Options;
+        }
+    }
+
 }

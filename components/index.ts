@@ -55,6 +55,7 @@ export * from './graphics/2D/modifiers/index.ts';
 export * from './graphics/3D/modifiers/index.ts';
 export * from './navigation/index.ts';
 export * from './project/index.ts';
+export * from './timeline/index.ts';
 export * from './video/index.ts';
 // data — Table is already exported by layout/ (canonical source); we only
 // re-export what's unique to data here.
@@ -67,9 +68,9 @@ export { Button, Switch, Checkbox, Radio, TextField, SearchBar, Dropdown, Rating
 // ── graphics — alias ColorPicker, re-export everything else ────────────────
 export { 
 // 2D
-Canvas2D, Grid2D, Snappable2D, SelectionRectangle, LineEditor, Align, Layer, Layers, Strokes, Tools2D,
+Canvas2D, Grid2D, SelectionRectangle, LineEditor, Align, Layer, Layers, Strokes, Tools2D,
 // 3D
-Canvas3D, Grid3D, Snappable3D, Selection3D, Tools3D, Csg, Materials, Modifiers3D,
+Canvas3D, Grid3D, Snappable3D, Selection3D, Tools3D, Csg, MaterialsPalette, Modifiers3DPalette,
 // colors (canonical inputs/ColorPicker — aliasing this one)
 ColorPickerSquare, ColorPickerTile, ColorPickerWheel, LinearGradientEditor, RadialGradientEditor, ShapeGradientEditor, GraphicsColorPicker, RGBColorPicker, HSLColorPicker, HSVColorPicker, OKHSLColorPicker, OKHSVColorPicker, CMYKColorPicker, XYZColorPicker, CIELABColorPicker, CIELUVColorPicker, CIEUVWColorPicker, } from './graphics/index.ts';
 // Re-export the colour utility functions (not classes)

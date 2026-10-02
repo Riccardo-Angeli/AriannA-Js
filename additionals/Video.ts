@@ -27,6 +27,247 @@
  *   .download() — trigger Blob download
  */
 
+// ── Timecode ─────────────────────────────────────────────────────────────────
+// Kept in this file deliberately: Video is the single Additional public unit.
+export type TimecodeFormat = 'text' | 'txt' | 'csv' | 'srt' | 'vtt' | 'json' | 'wav';
+
+export interface TimecodeOptions {
+    FrameRate?: number;
+    DropFrame?: boolean;
+    Start?: number | string;
+    Frame?: number;
+    Duration?: number;
+    DurationFrames?: number;
+    Step?: number;
+    FileName?: string;
+    SampleRate?: number;
+}
+
+export interface TimecodeEntry {
+    Frame: number;
+    RelativeFrame: number;
+    Seconds: number;
+    Timecode: string;
+}
+
+const pad = (value: number, width = 2): string => String(Math.max(0, Math.floor(value))).padStart(width, '0');
+const finite = (value: unknown, fallback: number): number => Number.isFinite(Number(value)) ? Number(value) : fallback;
+
+/** SMPTE timecode including 29.97/59.94 drop-frame numbering. */
+export class TimecodeGenerator {
+    private Rate = 25;
+    private IsDropFrame = false;
+    private StartAt = 0;
+    private Position = 0;
+    private Length = 0;
+    private Interval = 1;
+    private Name = 'timecode';
+    private AudioSampleRate = 48000;
+
+    public constructor(options: TimecodeOptions = {}) {
+        this.FrameRate = options.FrameRate ?? 25;
+        this.DropFrame = options.DropFrame ?? false;
+        this.Start = options.Start ?? 0;
+        this.Frame = options.Frame ?? 0;
+        this.DurationFrames = options.DurationFrames ?? Math.round(Math.max(0, finite(options.Duration, 60)) * this.FrameRate);
+        this.Step = options.Step ?? 1;
+        this.FileName = options.FileName ?? 'timecode';
+        this.SampleRate = options.SampleRate ?? 48000;
+    }
+
+    public get FrameRate(): number { return this.Rate; }
+    public set FrameRate(value: number) {
+        const rate = finite(value, 25);
+        this.Rate = rate > 0 ? rate : 25;
+        if(!this.dropFrameRate) this.IsDropFrame = false;
+    }
+
+    public get DropFrame(): boolean { return this.IsDropFrame && this.dropFrameRate; }
+    public set DropFrame(value: boolean) { this.IsDropFrame = !!value && this.dropFrameRate; }
+    public get NominalFrameRate(): number { return Math.max(1, Math.round(this.FrameRate)); }
+    public get FrameDuration(): number { return 1 / this.FrameRate; }
+
+    public get Start(): number { return this.StartAt; }
+    public set Start(value: number | string) {
+        this.StartAt = typeof value === 'string' ? this.Parse(value) : Math.max(0, Math.round(finite(value, 0)));
+    }
+
+    public get Frame(): number { return this.Position; }
+    public set Frame(value: number) { this.Position = Math.max(0, Math.round(finite(value, 0))); }
+    public get AbsoluteFrame(): number { return this.StartAt + this.Position; }
+
+    public get Seconds(): number { return this.Position / this.FrameRate; }
+    public set Seconds(value: number) { this.Frame = Math.round(Math.max(0, finite(value, 0)) * this.FrameRate); }
+
+    public get DurationFrames(): number { return this.Length; }
+    public set DurationFrames(value: number) { this.Length = Math.max(0, Math.round(finite(value, 0))); }
+    public get Duration(): number { return this.Length / this.FrameRate; }
+    public set Duration(value: number) { this.DurationFrames = Math.round(Math.max(0, finite(value, 0)) * this.FrameRate); }
+
+    public get Step(): number { return this.Interval; }
+    public set Step(value: number) { this.Interval = Math.max(1, Math.round(finite(value, 1))); }
+    public get FileName(): string { return this.Name; }
+    public set FileName(value: string) { this.Name = String(value || 'timecode').replace(/[^a-z0-9._-]+/gi, '-'); }
+    public get SampleRate(): number { return this.AudioSampleRate; }
+    public set SampleRate(value: number) { this.AudioSampleRate = Math.max(8000, Math.round(finite(value, 48000))); }
+
+    /** Current SMPTE label. Semicolon denotes drop-frame. */
+    public get Text(): string { return this.Format(this.AbsoluteFrame); }
+    /** One timecode per line for the configured duration. */
+    public get Txt(): string { return this.Entries.map(entry => entry.Timecode).join('\n'); }
+    public get Csv(): string {
+        return ['Frame,RelativeFrame,Seconds,Timecode', ...this.Entries.map(entry =>
+            `${entry.Frame},${entry.RelativeFrame},${entry.Seconds.toFixed(6)},${entry.Timecode}`
+        )].join('\n');
+    }
+    public get Srt(): string {
+        return this.Entries.map((entry, index) => {
+            const next = Math.min(this.DurationFrames, entry.RelativeFrame + this.Step);
+            return `${index + 1}\n${this.subtitleTime(entry.RelativeFrame)} --> ${this.subtitleTime(next)}\n${entry.Timecode}\n`;
+        }).join('\n');
+    }
+    public get Vtt(): string { return `WEBVTT\n\n${this.Srt.replace(/^\d+\n/gm, '')}`; }
+    public get Json(): string { return JSON.stringify({ FrameRate: this.FrameRate, DropFrame: this.DropFrame, Start: this.Format(this.Start), DurationFrames: this.DurationFrames, Entries: this.Entries }, null, 2); }
+    /** 16-bit mono SMPTE-LTC WAV bytes for the configured interval. */
+    public get Wav(): Uint8Array { return this.encodeLtcWav(); }
+    public get Ltc(): Uint8Array { return this.Wav; }
+
+    public get Entries(): TimecodeEntry[] {
+        const result: TimecodeEntry[] = [];
+        for(let relative = 0; relative < this.DurationFrames; relative += this.Step) {
+            const frame = this.StartAt + relative;
+            result.push({ Frame: frame, RelativeFrame: relative, Seconds: relative / this.FrameRate, Timecode: this.Format(frame) });
+        }
+        return result;
+    }
+
+    public Format(frame = this.AbsoluteFrame): string {
+        let count = Math.max(0, Math.round(frame));
+        const nominal = this.NominalFrameRate;
+        if(this.DropFrame) {
+            const drop = nominal === 60 ? 4 : 2;
+            const framesPerMinute = nominal * 60 - drop;
+            const framesPerTenMinutes = nominal * 600 - drop * 9;
+            const blocks = Math.floor(count / framesPerTenMinutes);
+            const remainder = count % framesPerTenMinutes;
+            count += drop * 9 * blocks;
+            if(remainder > drop) count += drop * Math.floor((remainder - drop) / framesPerMinute);
+        }
+        const frames = count % nominal;
+        const secondsTotal = Math.floor(count / nominal);
+        const seconds = secondsTotal % 60;
+        const minutes = Math.floor(secondsTotal / 60) % 60;
+        const hours = Math.floor(secondsTotal / 3600) % 24;
+        return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}${this.DropFrame ? ';' : ':'}${pad(frames)}`;
+    }
+
+    public Parse(value: string): number {
+        const match = String(value).trim().match(/^(\d{1,2}):(\d{2}):(\d{2})[:;](\d{2})$/);
+        if(!match) throw new TypeError(`Invalid SMPTE timecode: ${value}`);
+        const [, hh, mm, ss, ff] = match;
+        const hours = Number(hh), minutes = Number(mm), seconds = Number(ss), frames = Number(ff);
+        const nominal = this.NominalFrameRate;
+        if(minutes > 59 || seconds > 59 || frames >= nominal) throw new RangeError(`Timecode outside ${nominal} fps range: ${value}`);
+        let result = ((hours * 3600 + minutes * 60 + seconds) * nominal) + frames;
+        if(value.includes(';') || this.DropFrame) {
+            const drop = nominal === 60 ? 4 : 2;
+            const totalMinutes = hours * 60 + minutes;
+            result -= drop * (totalMinutes - Math.floor(totalMinutes / 10));
+        }
+        return Math.max(0, result);
+    }
+
+    public Generate(format: TimecodeFormat = 'txt'): string | Uint8Array {
+        if(format === 'text') return this.Text;
+        if(format === 'txt') return this.Txt;
+        if(format === 'csv') return this.Csv;
+        if(format === 'srt') return this.Srt;
+        if(format === 'vtt') return this.Vtt;
+        if(format === 'json') return this.Json;
+        return this.Wav;
+    }
+
+    public Blob(format: TimecodeFormat = 'txt'): Blob {
+        const value = this.Generate(format);
+        const mime = format === 'wav' ? 'audio/wav' : format === 'json' ? 'application/json' : format === 'csv' ? 'text/csv' : 'text/plain';
+        const body: BlobPart = value instanceof Uint8Array ? new Uint8Array(value).buffer : value;
+        return new Blob([body], { type: `${mime};charset=utf-8` });
+    }
+
+    public Download(format: TimecodeFormat = 'txt'): this {
+        if(typeof document === 'undefined') return this;
+        const url = URL.createObjectURL(this.Blob(format));
+        const anchor = document.createElement('a');
+        anchor.href = url; anchor.download = `${this.FileName}.${format === 'text' ? 'txt' : format}`; anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        return this;
+    }
+
+    private get dropFrameRate(): boolean {
+        return Math.abs(this.Rate - 29.97) < .02 || Math.abs(this.Rate - 59.94) < .02;
+    }
+
+    private subtitleTime(relativeFrame: number): string {
+        const milliseconds = Math.round(relativeFrame / this.FrameRate * 1000);
+        const hours = Math.floor(milliseconds / 3600000);
+        const minutes = Math.floor(milliseconds / 60000) % 60;
+        const seconds = Math.floor(milliseconds / 1000) % 60;
+        return `${pad(hours)}:${pad(minutes)}:${pad(seconds)},${pad(milliseconds % 1000, 3)}`;
+    }
+
+    private ltcBits(frame: number): Uint8Array {
+        const text = this.Format(frame);
+        const parts = text.split(/[:;]/).map(Number);
+        const [hours, minutes, seconds, frames] = parts;
+        const bits = new Uint8Array(80);
+        const put = (offset: number, value: number, length: number): void => {
+            for(let bit = 0; bit < length; bit++) bits[offset + bit] = (value >> bit) & 1;
+        };
+        put(0, frames % 10, 4); put(8, Math.floor(frames / 10), 2);
+        bits[10] = this.DropFrame ? 1 : 0;
+        put(16, seconds % 10, 4); put(24, Math.floor(seconds / 10), 3);
+        put(32, minutes % 10, 4); put(40, Math.floor(minutes / 10), 3);
+        put(48, hours % 10, 4); put(56, Math.floor(hours / 10), 2);
+        const sync = 0x3ffd;
+        put(64, sync, 16);
+        return bits;
+    }
+
+    private encodeLtcWav(): Uint8Array {
+        const samplesPerFrame = this.SampleRate / this.FrameRate;
+        const sampleCount = Math.ceil(this.DurationFrames * samplesPerFrame);
+        const pcm = new Int16Array(sampleCount);
+        let level = 12000;
+        for(let frame = 0; frame < this.DurationFrames; frame++) {
+            const bits = this.ltcBits(this.StartAt + frame);
+            const frameStart = Math.round(frame * samplesPerFrame);
+            const frameEnd = Math.min(sampleCount, Math.round((frame + 1) * samplesPerFrame));
+            const samplesPerBit = (frameEnd - frameStart) / 80;
+            for(let bit = 0; bit < 80; bit++) {
+                const start = frameStart + Math.round(bit * samplesPerBit);
+                const middle = frameStart + Math.round((bit + .5) * samplesPerBit);
+                const end = frameStart + Math.round((bit + 1) * samplesPerBit);
+                level = -level;
+                for(let sample = start; sample < Math.min(middle, pcm.length); sample++) pcm[sample] = level;
+                if(bits[bit]) level = -level;
+                for(let sample = middle; sample < Math.min(end, pcm.length); sample++) pcm[sample] = level;
+            }
+        }
+        const bytes = new Uint8Array(44 + pcm.byteLength);
+        const view = new DataView(bytes.buffer);
+        const ascii = (offset: number, value: string): void => [...value].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0)));
+        ascii(0, 'RIFF'); view.setUint32(4, 36 + pcm.byteLength, true); ascii(8, 'WAVE'); ascii(12, 'fmt ');
+        view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+        view.setUint32(24, this.SampleRate, true); view.setUint32(28, this.SampleRate * 2, true);
+        view.setUint16(32, 2, true); view.setUint16(34, 16, true); ascii(36, 'data'); view.setUint32(40, pcm.byteLength, true);
+        new Int16Array(bytes.buffer, 44).set(pcm);
+        return bytes;
+    }
+}
+
+export const Timecode = TimecodeGenerator;
+
+
 export interface VideoOptions {
     width?    : number;
     height?   : number;
@@ -123,7 +364,7 @@ export class CameraCapture {
 
 // ── VideoPlayer ───────────────────────────────────────────────────────────────
 
-export class VideoPlayer {
+export class AddonVideoPlayer {
     #el: HTMLVideoElement;
 
     constructor(container: string | HTMLElement, opts: { width?: number; height?: number; controls?: boolean; autoplay?: boolean; loop?: boolean; muted?: boolean } = {}) {
@@ -362,7 +603,23 @@ export const VideoUtils = {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export const Video = { ScreenCapture, CameraCapture, VideoPlayer, VideoCompositor, GIFEncoder, utils: VideoUtils };
+/* The addon keeps its lightweight player implementation distinct internally.
+   additionals/index.ts exports only the `Video` facade, so the Playground cannot
+   confuse it with Components' custom-element VideoPlayer. */
+export const Video = {
+    ScreenCapture,
+    CameraCapture,
+    VideoPlayer: AddonVideoPlayer,
+    Player: AddonVideoPlayer,
+    VideoCompositor,
+    GIFEncoder,
+    Timecode: TimecodeGenerator,
+    utils: VideoUtils
+};
+
+/* Preserve direct-import compatibility without re-exporting this name from the
+   Additionals package barrel. */
+export { AddonVideoPlayer as VideoPlayer, AddonVideoPlayer as VideoRuntimePlayer };
 
 if (typeof window !== 'undefined') {
     // Use try/catch + delete + assign so re-loading the bundle (e.g. HMR, multiple

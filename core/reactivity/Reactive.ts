@@ -51,6 +51,9 @@ export namespace Reactive
         Readonly?: boolean;
         /** Called immediately before a structural mutation. FULL Reactivity uses this for transactional snapshots. */
         BeforeMutate?: (target: unknown[]) => void;
+        /** Bridge reads and structural changes into the FULL dependency graph. */
+        TrackRead?: (key: PropertyKey) => void;
+        Changed?: (target: unknown[]) => void;
     }
 
     export interface EffectHandle
@@ -120,7 +123,7 @@ export namespace Reactive
             }
             const many = this.Many;
             if(!many) return;
-            for(const subscriber of many) subscriber(key);
+            for(const subscriber of [...many]) subscriber(key);
         }
     }
 
@@ -181,6 +184,8 @@ export namespace Reactive
         removed     : readonly unknown[] = Empty
     ): void
     {
+        const proxy=RawToProxy.get(target);
+        if(proxy)ProxyOptions.get(proxy)?.Changed?.(target as unknown[]);
         const slot = ArraySinks.get(target);
         if(!slot) return;
         if(slot instanceof Set)
@@ -585,6 +590,8 @@ export namespace Reactive
             if(options.Normalize) current.Normalize = options.Normalize;
             if(options.Readonly) current.Readonly = true;
             if(options.BeforeMutate) current.BeforeMutate = options.BeforeMutate;
+            if(options.TrackRead) current.TrackRead=options.TrackRead;
+            if(options.Changed) current.Changed=options.Changed;
             ProxyOptions.set(cached, current);
             return cached as T;
         }
@@ -593,12 +600,14 @@ export namespace Reactive
         {
             get(target, key, receiver)
             {
+                ProxyOptions.get(receiver)?.TrackRead?.(key);
                 if(typeof key === 'string' && key in ArrayMethods)
                     return Reflect.get(ArrayMethods, key).bind(receiver);
 
                 const value = Reflect.get(target, key, receiver);
                 if(IsArrayIndex(key))
                 {
+                    TrackSource(SourceOf(target));
                     const read = ProxyOptions.get(receiver as object)?.Read;
                     return read ? read(value, key) : value;
                 }
@@ -614,7 +623,7 @@ export namespace Reactive
                 BeforeMutate(receiver as object, target);
                 const previous = Reflect.get(target, key, target);
                 const value = Normalize(receiver, next);
-                if(Object.is(previous, value)) return true;
+                if(Object.is(previous, value) && Reflect.has(target,key)) return true;
                 const oldLength = target.length;
                 const result = Reflect.set(target, key, value, target);
                 if(!result) return false;
@@ -626,12 +635,14 @@ export namespace Reactive
                 {
                     const length = Number(value);
                     if(length < oldLength) EmitArray(target, length === 0 ? 'clear' : 'truncate', length, oldLength - length);
+                    else ProxyOptions.get(receiver)?.Changed?.(target);
                 }
                 else if(IsArrayIndex(key))
                 {
                     const index = Number(key);
                     EmitArray(target, previous === undefined ? 'add' : 'set', index, previous === undefined ? 0 : 1, [value], previous === undefined ? Empty : [previous]);
                 }
+                else ProxyOptions.get(receiver)?.Changed?.(target);
                 return true;
             },
 
@@ -646,6 +657,7 @@ export namespace Reactive
                 Touch(Durability.Normal);
                 SourceOf(target).Emit(key);
                 if(IsArrayIndex(key)) EmitArray(target, 'delete', Number(key), 1, Empty, [previous]);
+                else if(proxy)ProxyOptions.get(proxy)?.Changed?.(target);
                 return true;
             }
         });
