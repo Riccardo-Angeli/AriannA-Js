@@ -43,3 +43,6 @@ export type { DockItem, DockOptions, DockStyle } from './Dock.ts';
 export type { WindowOptions, WindowStyle, WindowMenuItem, } from './Window.ts';
 export type { Row, SortDir, SortState, SelectMode, TableColumn, TableOptions, } from './Table.ts';
 export type { GoldenDockPosition, GoldenToolBarSide, GoldenPanelDefinition, GoldenPanelSnapshot, GoldenOptions, } from './Golden.ts';
+
+export { ToolBar } from './ToolBar.ts';
+export type { ToolBarPosition, ToolBarOptions, ToolBarItem } from './ToolBar.ts';

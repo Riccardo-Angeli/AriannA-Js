@@ -23,6 +23,11 @@ export namespace Canvas3D
     export interface Camera3 { position:Vec3; }
     export interface Ray3 { origin:Vec3;direction:Vec3; }
     export type ViewPreset='perspective'|'front'|'right'|'top';
+    export interface GridOptions{enabled:boolean;stepX:number;stepY:number;stepZ:number;kind:'lines'|'dotted';}
+    export interface SnapOptions{enabled:boolean;x:boolean;y:boolean;z:boolean;stepX:number;stepY:number;stepZ:number;}
+    type GridProvider={options?:Partial<GridOptions>&{snapX?:boolean;snapY?:boolean;snapZ?:boolean;snapStepX?:number;snapStepY?:number;snapStepZ?:number};configure(options:Partial<GridOptions>&{snapX?:boolean;snapY?:boolean;snapZ?:boolean;snapStepX?:number;snapStepY?:number;snapStepZ?:number}):unknown;project?(point:Vec3):Vec3;drawOn?(ctx:CanvasRenderingContext2D,width:number,height:number,dpr:number):void};
+    const Settings=new WeakMap<HTMLElement,{grid:GridOptions;snap:SnapOptions;provider:GridProvider|null;attributesInitialized:boolean}>();
+    const settings=(host:HTMLElement)=>{let value=Settings.get(host);if(!value){value={grid:{enabled:true,stepX:1,stepY:1,stepZ:1,kind:'lines'},snap:{enabled:true,x:true,y:true,z:true,stepX:0,stepY:0,stepZ:0},provider:null,attributesInitialized:false};Settings.set(host,value);}return value;};
 
     interface RuntimeState
     {
@@ -69,16 +74,20 @@ export namespace Canvas3D
         new Css.Rule('arianna-canvas-3d,.Canvas3D',{Background:'#13161a',Border:'1px solid #30363d',BorderRadius:'10px',BoxSizing:'border-box',Display:'block',Height:'520px',MaxWidth:'100%',MinHeight:'260px',MinWidth:'0',Overflow:'hidden',Position:'relative',Width:'100%'}),
         new Css.Rule('.Canvas3D-Canvas',{Cursor:'grab',Display:'block',Height:'100%',TouchAction:'none',Width:'100%'}),
         new Css.Rule('.Canvas3D-Canvas:active',{Cursor:'grabbing'}),
-        new Css.Rule('.Canvas3D-Toolbar',{AlignItems:'center',BackdropFilter:'blur(12px)',Background:'rgba(26,30,35,.82)',Border:'1px solid rgba(255,255,255,.10)',BorderRadius:'7px',Display:'flex',Gap:'4px',Left:'12px',Padding:'5px',Position:'absolute',Top:'12px',ZIndex:'12'}),
+        new Css.Rule('.Canvas3D-Toolbar',{Color:'#e5e8ea',AlignItems:'center',BackdropFilter:'blur(12px)',Background:'rgba(26,30,35,.82)',Border:'1px solid rgba(255,255,255,.10)',BorderRadius:'7px',Display:'flex',Gap:'4px',Left:'12px',Padding:'5px',Position:'absolute',Top:'12px',ZIndex:'12',MaxWidth:'calc(100% - 24px)',OverflowX:'auto'}),
         new Css.Rule('.Canvas3D-Button',{Appearance:'none',Background:'#292e34',Border:'1px solid #454c54',BorderRadius:'5px',Color:'#c9d0d6',Cursor:'pointer',Font:'700 9px/1 system-ui',Height:'25px',Padding:'0 8px'}),
-        new Css.Rule('.Canvas3D-Button[data-active="true"]',{BorderColor:'#e40c88',Color:'#ff69bb'}),
+        new Css.Rule('.Canvas3D-Button[data-active="true"]',{BorderColor:'#e40c88',Color:'#fff',Background:'linear-gradient(180deg,#f344a4,#ce0879)',BoxShadow:'inset 0 1px 0 #ffffff35,0 1px 3px #0004'}),
+        new Css.Rule('.Canvas3D-Input',{Height:'25px',BoxSizing:'border-box',Background:'#25292d',Color:'#e5e8ea',ColorScheme:'dark',Border:'1px solid #15181a',BorderRadius:'3px'}),
+        new Css.Rule('.Canvas3D[theme="light"] .Canvas3D-Toolbar',{Color:'#25292d'}),
+        new Css.Rule('.Canvas3D[theme="light"] .Canvas3D-Input',{Background:'#fff',Color:'#25292d',ColorScheme:'light',BorderColor:'#b8bdc2'}),
+        new Css.Rule('.Canvas3D[theme] .Canvas3D-Button[data-active="true"]',{Color:'#fff',Background:'linear-gradient(180deg,#ff4dad,#e40c88,#b90769)'}),
         new Css.Rule('.Canvas3D-Axes',{Bottom:'12px',Color:'#8d969e',Font:'9px ui-monospace,monospace',Position:'absolute',Right:'12px',ZIndex:'10'}),
         new Css.Rule('arianna-canvas-3d[theme="light"],.Canvas3D[theme="light"]',{Background:'#eef1f4',BorderColor:'#c4cbd1'}),
         new Css.Rule('arianna-canvas-3d[theme="light"] .Canvas3D-Toolbar',{Background:'rgba(255,255,255,.86)',BorderColor:'rgba(0,0,0,.12)'}),
         new Css.Rule('arianna-canvas-3d[theme="light"] .Canvas3D-Button',{Background:'#f4f5f6',BorderColor:'#c5cbd0',Color:'#3b4248'}),
     ]);
 
-    @Component('arianna-canvas-3d',Styles,{Shadow:false,Attributes:['theme','color','orbit','zoom','yaw','pitch','view','show-toolbar']})
+    @Component('arianna-canvas-3d',Styles,{Shadow:false,Attributes:['theme','color','orbit','zoom','yaw','pitch','view','show-toolbar','grid-step-x','grid-step-y','grid-step-z','grid-kind','show-grid','snap','snap-x','snap-y','snap-z','snap-step-x','snap-step-y','snap-step-z'],Properties:['grid','snap']})
     export class Canvas3D extends HTMLElement
     {
         public static readonly Styles=Styles;
@@ -86,6 +95,7 @@ export namespace Canvas3D
 
         public get scene():Scene3{return State(this).scene;}
         public get camera():Camera3{return State(this).camera;}
+        public get rendersGrid():boolean{return true;}
         public get canvas():HTMLCanvasElement|undefined{return State(this).canvas;}
 
         public onCreated():void{if(this.isConnected)this.onConnected();}
@@ -96,7 +106,7 @@ export namespace Canvas3D
             this.classList.add('Canvas3D');
             if(!this.hasAttribute('theme'))this.setAttribute('theme','dark');
             if(!this.hasAttribute('view'))this.setAttribute('view','perspective');
-            if(s.started){this.syncToolbar();return;}
+            if(!settings(this).attributesInitialized){this.readGridAttributes();settings(this).attributesInitialized=true;}if(s.started){this.syncToolbar();return;}
 
             s.yaw=this.numberAttr('yaw',.72);s.pitch=this.numberAttr('pitch',.42);s.distance=this.numberAttr('zoom',4.6);
             this.applyView(this.getView(),false);
@@ -119,7 +129,7 @@ export namespace Canvas3D
         }
         public onAttributeChanged(name?:string):void
         {
-            const s=State(this);if(!s.started)return;
+            this.readGridAttributes(name);const s=State(this);if(!s.started)return;
             if(name==='view')this.applyView(this.getView(),false);
             if(name==='yaw')s.yaw=this.numberAttr('yaw',s.yaw);
             if(name==='pitch')s.pitch=this.numberAttr('pitch',s.pitch);
@@ -160,6 +170,13 @@ export namespace Canvas3D
             delete mesh.userData['_arianna_opacity'];return this;
         }
         public onFrame(cb:(dt:number)=>void):()=>void{const s=State(this);s.frameCallbacks.add(cb);return()=>s.frameCallbacks.delete(cb);}
+        public get grid():GridOptions{return {...settings(this).grid};}public set grid(value:Partial<GridOptions>){this.setGrid(value);}
+        public get snap():SnapOptions{return {...settings(this).snap};}public set snap(value:Partial<SnapOptions>){this.setSnap(value);}
+        public getGrid():GridOptions{return this.grid;}public getSnap():SnapOptions{return this.snap;}
+        public setGrid(value:Partial<GridOptions>|boolean):this{const s=settings(this);if(typeof value==='boolean')s.grid.enabled=value;else Object.assign(s.grid,value);for(const key of ['stepX','stepY','stepZ'] as const)s.grid[key]=Math.max(.0001,Number(s.grid[key])||1);s.provider?.configure(s.grid);this.syncToolbar();this.dispatchEvent(new CustomEvent('arianna:grid-change',{bubbles:true,composed:true,detail:{...s.grid,source:this}}));return this;}
+        public setSnap(value:Partial<SnapOptions>|boolean):this{const s=settings(this);if(typeof value==='boolean')s.snap.enabled=value;else Object.assign(s.snap,value);for(const key of ['stepX','stepY','stepZ'] as const)s.snap[key]=Math.max(0,Number(s.snap[key])||0);s.provider?.configure({snapX:s.snap.x,snapY:s.snap.y,snapZ:s.snap.z,snapStepX:s.snap.stepX,snapStepY:s.snap.stepY,snapStepZ:s.snap.stepZ});this.syncToolbar();this.dispatchEvent(new CustomEvent('arianna:snap-change',{bubbles:true,composed:true,detail:{...s.snap,source:this}}));return this;}
+        public useGrid(provider:GridProvider|null):this{const s=settings(this);s.provider=provider;if(provider?.options)for(const key of ['enabled','stepX','stepY','stepZ','kind'] as const)if(provider.options[key]!==undefined)(s.grid as any)[key]=provider.options[key];if(provider?.options){s.snap.x=provider.options.snapX??s.snap.x;s.snap.y=provider.options.snapY??s.snap.y;s.snap.z=provider.options.snapZ??s.snap.z;s.snap.stepX=provider.options.snapStepX??s.snap.stepX;s.snap.stepY=provider.options.snapStepY??s.snap.stepY;s.snap.stepZ=provider.options.snapStepZ??s.snap.stepZ;}this.syncToolbar();return this;}
+        public snapPoint(point:Vec3):Vec3{const {grid,snap,provider}=settings(this),out={...point},projected=provider?.project?.(point);if(snap.enabled)for(const axis of ['x','y','z'] as const){const key=axis==='x'?'stepX':axis==='y'?'stepY':'stepZ',step=snap[key]||grid[key];if(snap[axis])out[axis]=projected?.[axis]??Math.round(point[axis]/step)*step;}return out;}
         public invalidate():void{/* Continuous render loop: retained for modifier viewport contract. */}
 
         /** Add independent behaviours such as Grid3D, Selection3D and SelectionRectangle. */
@@ -223,13 +240,18 @@ export namespace Canvas3D
                 const b=document.createElement('button');b.type='button';b.className='Canvas3D-Button';b.dataset.view=view;b.textContent=view==='perspective'?'Perspective':view[0].toUpperCase()+view.slice(1);b.onclick=()=>this.setView(view);bar.appendChild(b);
             }
             const reset=document.createElement('button');reset.type='button';reset.className='Canvas3D-Button';reset.textContent='Reset View';reset.onclick=()=>this.resetView();bar.appendChild(reset);
+            const s=settings(this);for(const axis of ['x','y','z'] as const){const label=document.createElement('label');label.textContent='Grid '+axis.toUpperCase()+' ';label.style.cssText='display:flex;align-items:center;gap:3px;font:11px system-ui;color:inherit;flex-shrink:0';const input=document.createElement('input');input.type='number';input.min='.0001';input.step='.1';input.dataset.gridAxis=axis;input.value=String(s.grid[axis==='x'?'stepX':axis==='y'?'stepY':'stepZ']);input.className='Canvas3D-Input';input.style.width='44px';input.onchange=()=>this.setGrid({[axis==='x'?'stepX':axis==='y'?'stepY':'stepZ']:Number(input.value)});label.append(input);bar.append(label);const button=document.createElement('button');button.type='button';button.className='Canvas3D-Button';button.textContent='Snap '+axis.toUpperCase();button.dataset.snapAxis=axis;button.onclick=()=>this.setSnap({[axis]:!s.snap[axis]});bar.append(button);const snapLabel=document.createElement('label');snapLabel.textContent='Step '+axis.toUpperCase()+' ';snapLabel.style.cssText=label.style.cssText;const snapInput=document.createElement('input');snapInput.className='Canvas3D-Input';snapInput.type='number';snapInput.min='.0001';snapInput.step='.1';snapInput.style.width='44px';snapInput.dataset.snapStep=axis;snapInput.setAttribute('aria-label','Snap spacing '+axis.toUpperCase());const snapKey=axis==='x'?'stepX':axis==='y'?'stepY':'stepZ';snapInput.value=String(s.snap[snapKey]||s.grid[snapKey]);snapInput.onchange=()=>this.setSnap({[snapKey]:Number(snapInput.value)});snapLabel.append(snapInput);bar.append(snapLabel);}
+            const grid=document.createElement('button');grid.type='button';grid.className='Canvas3D-Button';grid.textContent='Grid';grid.dataset.gridToggle='true';grid.onclick=()=>this.setGrid(!s.grid.enabled);bar.append(grid);
+            const kind=document.createElement('select');kind.className='Canvas3D-Button';kind.setAttribute('aria-label','Grid style');kind.dataset.gridKind='true';for(const value of ['lines','dotted'] as const){const option=document.createElement('option');option.value=value;option.textContent=value;kind.append(option);}kind.value=s.grid.kind;kind.onchange=()=>this.setGrid({kind:kind.value as GridOptions['kind']});bar.append(kind);
             return bar;
         }
+        private readGridAttributes(changed?:string):void{const s=settings(this),has=(name:string)=>!changed||changed===name;for(const axis of ['x','y','z'] as const){const name='grid-step-'+axis;if(has(name)&&this.hasAttribute(name))s.grid[axis==='x'?'stepX':axis==='y'?'stepY':'stepZ']=Math.max(.0001,Number(this.getAttribute(name))||1);if(has('snap-'+axis)&&this.hasAttribute('snap-'+axis))s.snap[axis]=this.getAttribute('snap-'+axis)!=='false';const step='snap-step-'+axis;if(has(step)&&this.hasAttribute(step))s.snap[axis==='x'?'stepX':axis==='y'?'stepY':'stepZ']=Math.max(0,Number(this.getAttribute(step))||0);}if(has('show-grid')&&this.hasAttribute('show-grid'))s.grid.enabled=this.getAttribute('show-grid')!=='false';if(has('snap')&&this.hasAttribute('snap'))s.snap.enabled=this.getAttribute('snap')!=='false';const kind=this.getAttribute('grid-kind');if(has('grid-kind')&&(kind==='lines'||kind==='dotted'))s.grid.kind=kind;if(!changed||changed.startsWith('grid-')||changed==='show-grid'||changed.startsWith('snap-'))s.provider?.configure({...s.grid,snapX:s.snap.x,snapY:s.snap.y,snapZ:s.snap.z,snapStepX:s.snap.stepX,snapStepY:s.snap.stepY,snapStepZ:s.snap.stepZ});}
         private syncToolbar():void
         {
             const bar=this.querySelector<HTMLElement>('.Canvas3D-Toolbar');if(!bar)return;
             bar.style.display=this.getAttribute('show-toolbar')==='false'?'none':'flex';
             const current=this.getView();bar.querySelectorAll<HTMLElement>('[data-view]').forEach(b=>b.dataset.active=String(b.dataset.view===current));
+            const s=settings(this);for(const input of bar.querySelectorAll<HTMLInputElement>('[data-grid-axis]'))if(document.activeElement!==input)input.value=String(s.grid[input.dataset.gridAxis==='x'?'stepX':input.dataset.gridAxis==='y'?'stepY':'stepZ']);for(const input of bar.querySelectorAll<HTMLInputElement>('[data-snap-step]'))if(document.activeElement!==input){const key=input.dataset.snapStep==='x'?'stepX':input.dataset.snapStep==='y'?'stepY':'stepZ';input.value=String(s.snap[key]||s.grid[key]);}const kind=bar.querySelector<HTMLSelectElement>('[data-grid-kind]');if(kind&&document.activeElement!==kind)kind.value=s.grid.kind;for(const button of bar.querySelectorAll<HTMLElement>('[data-snap-axis]')){const axis=button.dataset.snapAxis as 'x'|'y'|'z';button.dataset.active=String(s.snap[axis]);button.setAttribute('aria-pressed',String(s.snap[axis]));}const grid=bar.querySelector<HTMLElement>('[data-grid-toggle]');if(grid){grid.dataset.active=String(s.grid.enabled);grid.setAttribute('aria-pressed',String(s.grid.enabled));}
         }
         private resize():void
         {
@@ -275,7 +297,7 @@ export namespace Canvas3D
         {
             const s=State(this),canvas=s.canvas,ctx=s.ctx;if(!canvas||!ctx)return;const w=canvas.width,h=canvas.height,dpr=Math.min(2,window.devicePixelRatio||1);
             const light=this.getAttribute('theme')==='light';const grad=ctx.createLinearGradient(0,0,0,h);grad.addColorStop(0,light?'#f5f7f9':'#20252b');grad.addColorStop(1,light?'#dfe4e8':'#111418');ctx.fillStyle=grad;ctx.fillRect(0,0,w,h);
-            this.updateCamera();const {forward,right,up}=this.cameraBasis(),focal=(h/dpr)*.82*dpr;
+            this.updateCamera();const grid=settings(this);if(grid.grid.enabled)grid.provider?.drawOn?.(ctx,w/dpr,h/dpr,dpr);const {forward,right,up}=this.cameraBasis(),focal=(h/dpr)*.82*dpr;
             type Tri={p:[{x:number;y:number;z:number},{x:number;y:number;z:number},{x:number;y:number;z:number}];depth:number;shade:number;color:string;alpha:number;wireframe:boolean};const tris:Tri[]=[];
             for(const mesh of s.scene.children){if(!mesh.visible)continue;const g=mesh.geometry,material=(mesh.userData.material??{}) as Material3,opacity=Number(mesh.userData['_arianna_opacity']??1)*Number(material.opacity??1),fallback=String(mesh.userData.color??this.getAttribute('color')??'#8f9aa6'),base=String(material.color??fallback),wireframe=Boolean(material.wireframe||material.kind==='wireframe');const projected=g.vertices.map(v=>{const world=this.transform(v,mesh),rel=sub(world,s.camera.position),z=dot(rel,forward);return{x:w/2+focal*dot(rel,right)/Math.max(.08,z),y:h/2-focal*dot(rel,up)/Math.max(.08,z),z,world};});for(let i=0;i<g.indices.length;i+=3){const ia=g.indices[i],ib=g.indices[i+1],ic=g.indices[i+2],a=projected[ia],b=projected[ib],c=projected[ic];if(!a||!b||!c||a.z<=.08||b.z<=.08||c.z<=.08)continue;const wa=a.world,wb=b.world,wc=c.world,n=norm(cross(sub(wb,wa),sub(wc,wa))),ld=norm({x:-.45,y:.75,z:.6}),diffuse=Math.max(0,dot(n,ld)),shade=this.materialShade(material,diffuse),color=material.kind==='normal'?this.normalColor(n):base;tris.push({p:[a,b,c],depth:(a.z+b.z+c.z)/3,shade,color,alpha:opacity,wireframe});}}
             tris.sort((a,b)=>b.depth-a.depth);ctx.lineJoin='round';for(const tri of tris){ctx.beginPath();ctx.moveTo(tri.p[0].x,tri.p[0].y);ctx.lineTo(tri.p[1].x,tri.p[1].y);ctx.lineTo(tri.p[2].x,tri.p[2].y);ctx.closePath();if(!tri.wireframe){ctx.fillStyle=this.color(tri.color,tri.shade,tri.alpha);ctx.fill();}ctx.strokeStyle=tri.wireframe?this.color(tri.color,1,tri.alpha):(light?'rgba(35,40,45,.10)':'rgba(255,255,255,.055)');ctx.lineWidth=(tri.wireframe?1.15:.7)*dpr;ctx.stroke();}

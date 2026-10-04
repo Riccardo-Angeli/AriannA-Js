@@ -42,7 +42,9 @@
  * ── IMPORT / EXPORT ──────────────────────────────────────────────────────────
  *   STL  (binary + ASCII) read/write
  *   OBJ  read/write
- *   glTF / GLB  read/write
+ *   glTF / GLB geometry import + GLB mesh export
+ *   FBX ASCII/binary geometry import; compressed arrays supported
+ *   Skin/animation metadata retained; runtime playback is not implemented.
  *
  * ── USAGE ────────────────────────────────────────────────────────────────────
  *   const renderer = await Three.createRenderer(canvas);
@@ -2675,36 +2677,157 @@ void main() {
         },
     };
 
-// ── glTF / GLB Import (stub — full impl roadmap) ──────────────────────────────
-//
-// GLTFLoader: at present a minimal stub. The full implementation is on the v1
-// "must-have" 3D enterprise roadmap (§Layer 10). For now this exists so the
-// ImportPipeline can register `.gltf`/`.glb` and report graceful unsupported.
-// To unblock developers ahead of full impl, raw GLB bytes are returned as
-// `Mesh3DLike` with empty arrays plus a `raw` ArrayBuffer carrier.
-
-    export const GLTFLoader = {
-
-        /** Parse a glTF JSON or GLB ArrayBuffer. STUB — returns empty mesh + raw. */
-        async parse(input: string | ArrayBuffer): Promise<Mesh3DLike & { raw?: ArrayBuffer | string }>
-        {
-            console.warn('[Three] GLTFLoader: full implementation pending — returning empty Mesh3DLike. See 3D_ENTERPRISE_ROADMAP §Layer 10.');
-            return {
-                positions    : new Float32Array(0),
-                format       : 'gltf',
-                vertexCount  : 0,
-                triangleCount: 0,
-                raw          : input,
-            };
+// ── glTF 2.0 / GLB / FBX asset import ─────────────────────────────────────────
+// Geometry is exposed in world space for the existing Mesh3DLike API. Local
+// primitives, matrices and source metadata remain available on Model3DAsset.
+// No decoder is silently substituted for Draco/Meshopt or encrypted FBX.
+    export interface ModelLoadOptions {
+        baseURL?:string;
+        signal?:AbortSignal;
+        resolveResource?:(uri:string)=>Promise<ArrayBuffer>;
+        maxBytes?:number;
+        /** FBX units are converted to metres and axes to Y-up by default. */
+        convertAxes?:boolean;
+        unitScale?:number;
+        inflate?:(bytes:Uint8Array)=>Promise<Uint8Array>;
+    }
+    export interface ModelPrimitive extends Mesh3DLike {
+        name:string;node?:number|string;material?:number|string;matrix:number[];mode:number;
+        attributes?:Record<string,Float32Array>;targets?:Record<string,Float32Array>[];
+    }
+    export interface Model3DAsset extends Mesh3DLike {
+        primitives:ModelPrimitive[];
+        materials:Record<string,unknown>[];
+        nodes:Record<string,unknown>[];
+        animations:Record<string,unknown>[];
+        skins:Record<string,unknown>[];
+        images:Record<string,unknown>[];
+        warnings:string[];
+        source:unknown;
+    }
+    const assetIdentity=()=>[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
+    function assetMultiply(a:number[],b:number[]):number[]{const out=new Array<number>(16).fill(0);for(let col=0;col<4;col++)for(let row=0;row<4;row++)for(let k=0;k<4;k++)out[col*4+row]+=a[k*4+row]*b[col*4+k];return out;}
+    function assetTRS(t:number[]= [0,0,0],q:number[]=[0,0,0,1],s:number[]=[1,1,1]):number[]{
+        if([...t,...q,...s].some(v=>!Number.isFinite(v)))throw new Error('Asset: invalid transform');
+        const [x,y,z,w]=q,l=Math.hypot(x,y,z,w)||1;const m=new Mat4().compose(new Vec3(...t as [number,number,number]),new Quaternion(x/l,y/l,z/l,w/l),new Vec3(...s as [number,number,number]));return Array.from(m.elements);
+    }
+    const assetDet=(m:number[])=>m[0]*(m[5]*m[10]-m[6]*m[9])-m[4]*(m[1]*m[10]-m[2]*m[9])+m[8]*(m[1]*m[6]-m[2]*m[5]);
+    function assetTransform(p:ArrayLike<number>,m:number[],normal=false):number[]{
+        if(!normal)return[m[0]*p[0]+m[4]*p[1]+m[8]*p[2]+m[12],m[1]*p[0]+m[5]*p[1]+m[9]*p[2]+m[13],m[2]*p[0]+m[6]*p[1]+m[10]*p[2]+m[14]];
+        const det=assetDet(m);if(Math.abs(det)<1e-15)return [0,0,0];
+        const x=((m[5]*m[10]-m[9]*m[6])*p[0]+(m[9]*m[2]-m[1]*m[10])*p[1]+(m[1]*m[6]-m[5]*m[2])*p[2])/det;
+        const y=((m[8]*m[6]-m[4]*m[10])*p[0]+(m[0]*m[10]-m[8]*m[2])*p[1]+(m[4]*m[2]-m[0]*m[6])*p[2])/det;
+        const z=((m[4]*m[9]-m[8]*m[5])*p[0]+(m[8]*m[1]-m[0]*m[9])*p[1]+(m[0]*m[5]-m[4]*m[1])*p[2])/det;
+        const l=Math.hypot(x,y,z)||1;return[x/l,y/l,z/l];
+    }
+    function assetNormals(p:Float32Array,i:Uint32Array):Float32Array {return new BufferGeometry().setPositions(p).setIndices(i).computeNormals().normals;}
+    function assetCombine(format:Mesh3DLike['format'],primitives:ModelPrimitive[],meta:Omit<Model3DAsset,keyof Mesh3DLike|'primitives'>,options:ModelLoadOptions):Model3DAsset {
+        let count=0,indexCount=0;for(const p of primitives){count+=p.vertexCount;indexCount+=p.indices?.length??0;}
+        if(count*44+indexCount*4>(options.maxBytes??268435456))throw new Error('Asset: decoded mesh exceeds maxBytes');
+        const positions=new Float32Array(count*3),normals=new Float32Array(count*3),uvs=new Float32Array(count*2),colors=new Float32Array(count*3),indices=new Uint32Array(indexCount);let vertex=0,index=0,hasUV=false,hasColor=false;
+        for(const p of primitives){const n=p.normals??(p.mode===4?assetNormals(p.positions,new Uint32Array(p.indices??[])):new Float32Array(p.positions.length));
+            for(let v=0;v<p.vertexCount;v++){positions.set(assetTransform(p.positions.subarray(v*3,v*3+3),p.matrix),(vertex+v)*3);normals.set(assetTransform(n.subarray(v*3,v*3+3),p.matrix,true),(vertex+v)*3);if(p.uvs){uvs.set(p.uvs.subarray(v*2,v*2+2),(vertex+v)*2);hasUV=true;}if(p.colors){colors.set(p.colors.subarray(v*3,v*3+3),(vertex+v)*3);hasColor=true;}else colors.fill(1,(vertex+v)*3,(vertex+v+1)*3);}
+            const source=p.indices??new Uint32Array();for(let j=0;j<source.length;j++)indices[index+j]=vertex+source[j];if(p.mode===4&&assetDet(p.matrix)<0)for(let j=0;j<source.length;j+=3){const a=indices[index+j+1];indices[index+j+1]=indices[index+j+2];indices[index+j+2]=a;}index+=source.length;vertex+=p.vertexCount;
+        }
+        return{format,positions,normals,uvs:hasUV?uvs:undefined,colors:hasColor?colors:undefined,indices,vertexCount:count,triangleCount:primitives.reduce((n,p)=>n+(p.mode===4?(p.indices?.length??0)/3:0),0),primitives,...meta};
+    }
+    function assetLimit(bytes:number,options:ModelLoadOptions):void {options.signal?.throwIfAborted();if(!Number.isSafeInteger(bytes)||bytes<0||bytes>(options.maxBytes??268435456))throw new Error('Asset: resource exceeds maxBytes');}
+    async function assetResource(uri:string,options:ModelLoadOptions):Promise<ArrayBuffer>{
+        options.signal?.throwIfAborted();let buffer:ArrayBuffer;
+        if(uri.startsWith('data:')){const comma=uri.indexOf(',');if(comma<0)throw new Error('Asset: invalid data URI');const text=uri.slice(0,comma).includes(';base64')?atob(uri.slice(comma+1)):decodeURIComponent(uri.slice(comma+1));assetLimit(text.length,options);buffer=Uint8Array.from(text,c=>c.charCodeAt(0)).buffer;}
+        else if(options.resolveResource)buffer=await options.resolveResource(uri);
+        else {let url:string;try{url=new URL(uri,options.baseURL).href;}catch{throw new Error('Asset: supply baseURL or resolveResource for '+uri);}const response=await fetch(url,{signal:options.signal});if(!response.ok)throw new Error('Asset: HTTP '+response.status+' '+url);buffer=await response.arrayBuffer();}
+        assetLimit(buffer.byteLength,options);return buffer;
+    }
+    export const GLTFLoader={
+        async parse(input:string|ArrayBuffer,options:ModelLoadOptions={}):Promise<Model3DAsset>{
+            let json:any,bin:ArrayBuffer|undefined,format:Mesh3DLike['format']='gltf';assetLimit(typeof input==='string'?input.length*2:input.byteLength,options);
+            if(typeof input==='string')json=JSON.parse(input);
+            else {const view=new DataView(input);if(input.byteLength>=4&&view.getUint32(0,true)===0x46546c67){format='glb';if(input.byteLength<20||view.getUint32(4,true)!==2||view.getUint32(8,true)!==input.byteLength)throw new Error('GLB: invalid header/version/length');let offset=12,chunk=0;
+                while(offset<input.byteLength){if(offset+8>input.byteLength)throw new Error('GLB: truncated chunk');const length=view.getUint32(offset,true),type=view.getUint32(offset+4,true);offset+=8;if(length%4||offset+length>input.byteLength)throw new Error('GLB: invalid chunk length');if(!chunk&&type!==0x4e4f534a)throw new Error('GLB: first chunk must be JSON');if(type===0x4e4f534a){if(json)throw new Error('GLB: duplicate JSON');json=JSON.parse(new TextDecoder().decode(input.slice(offset,offset+length)).trim());}else if(type===0x004e4942){if(bin)throw new Error('GLB: duplicate BIN');bin=input.slice(offset,offset+length);}offset+=length;chunk++;}
+            }else json=JSON.parse(new TextDecoder().decode(input));}
+            if(json?.asset?.version!=='2.0')throw new Error('glTF: only version 2.0 is supported');
+            const supported=new Set(['KHR_materials_unlit','KHR_mesh_quantization']);for(const extension of json.extensionsRequired??[])if(!supported.has(extension))throw new Error('glTF: required extension needs a decoder/adapter: '+extension);
+            const buffers:ArrayBuffer[]=[];let total=0;for(const [i,definition]of (json.buffers??[]).entries()){const value=definition.uri?await assetResource(definition.uri,options):i===0?bin:undefined;if(!value||!Number.isSafeInteger(definition.byteLength)||definition.byteLength<0||value.byteLength<definition.byteLength)throw new Error('glTF: missing/truncated buffer '+i);total+=value.byteLength;assetLimit(total,options);buffers.push(value);}
+            const cache=new Map<number,Float32Array|Float64Array>();let decodedBytes=0;
+            const component=(view:DataView,offset:number,type:number)=>{switch(type){case 5120:return view.getInt8(offset);case 5121:return view.getUint8(offset);case 5122:return view.getInt16(offset,true);case 5123:return view.getUint16(offset,true);case 5125:return view.getUint32(offset,true);case 5126:return view.getFloat32(offset,true);default:throw new Error('glTF: invalid componentType');}};
+            const read=(id:number):Float32Array|Float64Array=>{if(cache.has(id))return cache.get(id)!;const a=json.accessors?.[id];if(!a)throw new Error('glTF: missing accessor '+id);const sizes:Record<number,number>={5120:1,5121:1,5122:2,5123:2,5125:4,5126:4},widths:Record<string,number>={SCALAR:1,VEC2:2,VEC3:3,VEC4:4,MAT2:4,MAT3:9,MAT4:16};const size=sizes[a.componentType],width=widths[a.type];if(!size||!width||!Number.isSafeInteger(a.count)||a.count<0)throw new Error('glTF: invalid accessor');decodedBytes+=a.count*width*(a.componentType===5125&&!a.normalized?8:4);assetLimit(decodedBytes,options);const out=a.componentType===5125&&!a.normalized?new Float64Array(a.count*width):new Float32Array(a.count*width),columns=a.type.startsWith('MAT')?Number(a.type.slice(3)):1,rows=width/columns,columnBytes=columns===1?rows*size:Math.ceil(rows*size/4)*4,packed=columns*columnBytes;
+                const normal=(v:number)=>!a.normalized?v:a.componentType===5120?Math.max(v/127,-1):a.componentType===5122?Math.max(v/32767,-1):v/(a.componentType===5121?255:a.componentType===5123?65535:4294967295);
+                const viewRange=(viewId:number,offset:number,count:number,stride:number,elementBytes:number)=>{const definition=json.bufferViews?.[viewId],buffer=buffers[definition?.buffer];if(definition?.extensions?.EXT_meshopt_compression)throw new Error('glTF: Meshopt geometry requires a decoder');if(!definition||!buffer||!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(stride)||stride<elementBytes)throw new Error('glTF: invalid bufferView');const base=definition.byteOffset??0,length=definition.byteLength,end=offset+(count?((count-1)*stride+elementBytes):0);if(!Number.isSafeInteger(base)||base<0||!Number.isSafeInteger(length)||length<0||base+length>buffer.byteLength||end>length)throw new Error('glTF: accessor outside bufferView');return new DataView(buffer,base+offset,length-offset);};
+                const fill=(view:DataView,offset:number,target:number)=>{for(let c=0;c<columns;c++)for(let r=0;r<rows;r++)out[target+c*rows+r]=normal(component(view,offset+c*columnBytes+r*size,a.componentType));};
+                if(a.bufferView!==undefined){const stride=json.bufferViews?.[a.bufferView]?.byteStride??packed,view=viewRange(a.bufferView,a.byteOffset??0,a.count,stride,packed);for(let i=0;i<a.count;i++)fill(view,i*stride,i*width);}
+                if(a.sparse){const sparse=a.sparse,ct=sparse.indices.componentType;if(![5121,5123,5125].includes(ct)||!Number.isSafeInteger(sparse.count)||sparse.count<0||sparse.count>a.count)throw new Error('glTF: invalid sparse accessor');const iv=viewRange(sparse.indices.bufferView,sparse.indices.byteOffset??0,sparse.count,sizes[ct],sizes[ct]),vv=viewRange(sparse.values.bufferView,sparse.values.byteOffset??0,sparse.count,packed,packed);let last=-1;for(let i=0;i<sparse.count;i++){const at=component(iv,i*sizes[ct],ct);if(at<=last||at>=a.count)throw new Error('glTF: invalid sparse indices');last=at;fill(vv,i*packed,at*width);}}
+                if(out.some(v=>!Number.isFinite(v)))throw new Error('glTF: non-finite accessor');cache.set(id,out);return out;};
+            const primitives:ModelPrimitive[]=[],warnings:string[]=[];const visiting=new Set<number>(),visited=new Set<number>();
+            const walk=(id:number,parent:number[],depth=0)=>{options.signal?.throwIfAborted();if(depth>128||visiting.has(id)||visited.has(id))throw new Error('glTF: cyclic/shared node hierarchy');const node=json.nodes?.[id];if(!node)throw new Error('glTF: missing node '+id);visiting.add(id);visited.add(id);const local=node.matrix??assetTRS(node.translation,node.rotation,node.scale);if(local.length!==16||local.some((v:number)=>!Number.isFinite(v)))throw new Error('glTF: invalid matrix');const world=assetMultiply(parent,local);
+                if(node.mesh!==undefined){const mesh=json.meshes?.[node.mesh];if(!mesh)throw new Error('glTF: missing mesh');for(const [pi,p]of mesh.primitives.entries()){
+                    if(p.extensions?.KHR_draco_mesh_compression)throw new Error('glTF: Draco geometry requires a decoder');const positions=Float32Array.from(read(p.attributes.POSITION));if(json.accessors[p.attributes.POSITION].type!=='VEC3')throw new Error('glTF: POSITION must be VEC3');const count=positions.length/3,raw=p.indices===undefined?Array.from({length:count},(_,i)=>i):Array.from(read(p.indices));if(p.indices!==undefined&&(![5121,5123,5125].includes(json.accessors[p.indices].componentType)||json.accessors[p.indices].type!=='SCALAR'))throw new Error('glTF: invalid index accessor');if(raw.some(v=>!Number.isInteger(v)||v<0||v>=count))throw new Error('glTF: invalid mesh index');let mode=p.mode??4,ix=raw;
+                    if(mode===5){ix=[];for(let i=2;i<raw.length;i++)ix.push(raw[i-2+(i%2)],raw[i-1-(i%2)],raw[i]);mode=4;}else if(mode===6){ix=[];for(let i=2;i<raw.length;i++)ix.push(raw[0],raw[i-1],raw[i]);mode=4;}if(mode===4&&ix.length%3)throw new Error('glTF: incomplete triangles');if(mode<0||mode>6)throw new Error('glTF: invalid primitive mode');if(mode!==4)warnings.push('Primitive '+id+'/'+pi+' needs a points/lines rendering adapter.');
+                    const attributes:Record<string,Float32Array>={};for(const [name,index]of Object.entries(p.attributes)){const values=read(index as number);if(json.accessors[index as number].count!==count)throw new Error('glTF: attribute count mismatch');attributes[name]=Float32Array.from(values);}
+                    if(attributes.NORMAL&&attributes.NORMAL.length!==count*3||attributes.TEXCOORD_0&&attributes.TEXCOORD_0.length!==count*2||attributes.COLOR_0&&![count*3,count*4].includes(attributes.COLOR_0.length))throw new Error('glTF: invalid attribute width');
+                    const normals=attributes.NORMAL,uvs=attributes.TEXCOORD_0,col=attributes.COLOR_0;let colors:Float32Array|undefined;if(col){const width=col.length/count;colors=new Float32Array(count*3);for(let i=0;i<count;i++)colors.set(col.subarray(i*width,i*width+3),i*3);}
+                    primitives.push({format,name:node.name??mesh.name??'mesh-'+id+'-'+pi,node:id,material:p.material,matrix:world,mode,positions,indices:new Uint32Array(ix),normals,uvs,colors,attributes,targets:p.targets?.map((target:Record<string,number>)=>Object.fromEntries(Object.entries(target).map(([k,v])=>[k,Float32Array.from(read(v))]))),vertexCount:count,triangleCount:mode===4?ix.length/3:0});
+                }}for(const child of node.children??[])walk(child,world,depth+1);visiting.delete(id);};
+            let roots:number[];if(json.scenes?.length){const scene=json.scenes[json.scene??0];if(!scene)throw new Error('glTF: invalid default scene');roots=scene.nodes??[];}else{const children=new Set<number>((json.nodes??[]).flatMap((n:any)=>n.children??[]));roots=(json.nodes??[]).map((_:any,i:number)=>i).filter((i:number)=>!children.has(i));}for(const root of roots)walk(root,assetIdentity());
+            if(!primitives.length)throw new Error('glTF: selected scene contains no geometry');
+            const animations=(json.animations??[]).map((animation:any)=>({...animation,samplers:animation.samplers.map((s:any)=>({...s,input:read(s.input),output:read(s.output)}))}));const skins=(json.skins??[]).map((skin:any)=>({...skin,inverseBindMatrices:skin.inverseBindMatrices===undefined?undefined:read(skin.inverseBindMatrices)}));
+            if(primitives.some(p=>p.targets?.length))warnings.push('Morph target data is retained; default morph weights and morph playback require a rendering adapter.');
+            if(animations.length||skins.length)warnings.push('Skin/animation data is retained; the current AriannA renderer displays the static base pose.');
+            const images:Record<string,unknown>[]=[];for(const image of json.images??[]){let bytes:ArrayBuffer|undefined;if(image.bufferView!==undefined){const v=json.bufferViews?.[image.bufferView],buffer=buffers[v?.buffer];if(!v||!buffer||(v.byteOffset??0)+v.byteLength>buffer.byteLength)throw new Error('glTF: invalid image bufferView');bytes=buffer.slice(v.byteOffset??0,(v.byteOffset??0)+v.byteLength);}images.push({...image,bytes});}if(images.length)warnings.push('Texture images and material descriptors are retained; texture shader binding is application-owned.');
+            return assetCombine(format,primitives,{materials:json.materials??[],nodes:json.nodes??[],images,animations,skins,warnings,source:json},options);
         },
+        async load(url:string,options:ModelLoadOptions={}):Promise<Model3DAsset>{const response=await fetch(url,{signal:options.signal});if(!response.ok)throw new Error('GLTFLoader: HTTP '+response.status);return this.parse(await response.arrayBuffer(),{...options,baseURL:options.baseURL??response.url??url});}
+    };
+    /** Explicit alias for callers loading binary glTF files. */
+    export const GLBLoader=GLTFLoader;
 
-        async load(url: string): Promise<Mesh3DLike & { raw?: ArrayBuffer | string }>
-        {
-            const r = await fetch(url);
-            if (!r.ok) throw new Error(`GLTFLoader: HTTP ${r.status}`);
-            const buf = await r.arrayBuffer();
-            return GLTFLoader.parse(buf);
+    interface FBXNodeData {name:string;properties:any[];children:FBXNodeData[];}
+    const fbxChild=(n:FBXNodeData|undefined,name:string)=>n?.children.find(c=>c.name===name);
+    const fbxArrays=new WeakMap<FBXNodeData,Map<string,number[]>>();
+    const fbxArray=(n:FBXNodeData|undefined,name:string):number[]=>{if(n){const cached=fbxArrays.get(n)?.get(name);if(cached)return cached;}const item=fbxChild(n,name);if(!item)return[];const values=Array.isArray(item.properties[0])?item.properties[0]:fbxChild(item,'a')?.properties??[];const out=values.map(Number);if(n){let cache=fbxArrays.get(n);if(!cache)fbxArrays.set(n,cache=new Map());cache.set(name,out);}return out;};
+    function fbxAscii(text:string):FBXNodeData {
+        let offset=0;type Token={kind:string;value:any};let pending:Token|undefined;
+        const next=():Token=>{if(pending){const t=pending;pending=undefined;return t;}while(offset<text.length){const c=text[offset];if(c===';' ){while(offset<text.length&&text[offset]!=='\n')offset++;continue;}if(c==='\r'||c===' '||c==='\t'){offset++;continue;}if(c==='\n'){offset++;return{kind:'newline',value:''};}if('{}:,'.includes(c)){offset++;return{kind:c,value:c};}if(c==='"'){offset++;let value='';while(offset<text.length&&text[offset]!=='"'){if(text[offset]==='\\'&&['"','\\'].includes(text[offset+1]))offset++;value+=text[offset++];}if(offset>=text.length)throw new Error('FBX: unterminated string');offset++;return{kind:'value',value};}const start=offset;while(offset<text.length&&!/[\s{}:,;]/.test(text[offset]))offset++;if(offset===start)throw new Error('FBX: invalid ASCII token');const raw=text.slice(start,offset);const value=/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(raw)?Number(raw):raw;return{kind:'value',value:typeof value==='number'&&Number.isInteger(value)&&!Number.isSafeInteger(value)?raw:value};}return{kind:'end',value:null};};
+        const peek=()=>pending??(pending=next());
+        const nodes=(depth:number):FBXNodeData[]=>{if(depth>128)throw new Error('FBX: hierarchy too deep');const out:FBXNodeData[]=[];while(true){let token=next();if(token.kind==='newline'||token.kind===',')continue;if(token.kind==='end'){if(depth)throw new Error('FBX: unclosed node');return out;}if(token.kind==='}')return out;if(token.kind!=='value'||typeof token.value!=='string'||next().kind!==':')throw new Error('FBX: invalid node');const node:FBXNodeData={name:token.value,properties:[],children:[]};let continuation=false;
+            while(true){token=peek();if(token.kind==='value'){node.properties.push(next().value);continuation=false;}else if(token.kind===','){next();continuation=true;}else if(token.kind==='newline'){next();if(continuation||node.name==='a'&&peek().kind==='value')continue;break;}else if(token.kind==='{'){next();node.children=nodes(depth+1);break;}else break;}out.push(node);}};
+        return{name:'Root',properties:[],children:nodes(0)};
+    }
+    async function fbxBinary(buffer:ArrayBuffer,options:ModelLoadOptions):Promise<FBXNodeData>{
+        const view=new DataView(buffer),decoder=new TextDecoder();if(buffer.byteLength<27)throw new Error('FBX: truncated header');const version=view.getUint32(23,true);if(version<6400)throw new Error('FBX: binary version must be >= 6400');const wide=version>=7500,nullSize=wide?25:13;let offset=27,allocated=0;
+        const check=(n:number)=>{if(offset+n>buffer.byteLength)throw new Error('FBX: truncated binary data');};const u32=()=>{check(4);const n=view.getUint32(offset,true);offset+=4;return n;};const u64=()=>{check(8);const value=view.getBigUint64(offset,true);offset+=8;if(value>BigInt(Number.MAX_SAFE_INTEGER))throw new Error('FBX: unsafe offset/count');return Number(value);};const readString=(n:number)=>{check(n);const text=decoder.decode(buffer.slice(offset,offset+n));offset+=n;return text;};
+        const property=async():Promise<any>=>{check(1);const type=String.fromCharCode(view.getUint8(offset++));const scalar=(size:number,read:()=>any)=>{check(size);const value=read();offset+=size;return value;};switch(type){case'Y':return scalar(2,()=>view.getInt16(offset,true));case'C':return scalar(1,()=>view.getUint8(offset)!==0);case'I':return scalar(4,()=>view.getInt32(offset,true));case'F':return scalar(4,()=>view.getFloat32(offset,true));case'D':return scalar(8,()=>view.getFloat64(offset,true));case'L':return scalar(8,()=>view.getBigInt64(offset,true).toString());case'S':return readString(u32());case'R':{const n=u32();check(n);const value=new Uint8Array(buffer.slice(offset,offset+n));offset+=n;return value;}}
+            const sizes:Record<string,number>={f:4,d:8,i:4,l:8,b:1,c:1},size=sizes[type];if(!size)throw new Error('FBX: unknown property '+type);const count=u32(),encoding=u32(),length=u32();allocated+=count*Math.max(size,8);assetLimit(allocated,options);check(length);let bytes=new Uint8Array(buffer.slice(offset,offset+length));offset+=length;
+            if(encoding===1){if(options.inflate)bytes=new Uint8Array(await options.inflate(bytes));else {if(typeof DecompressionStream==='undefined')throw new Error('FBX: compressed arrays require DecompressionStream or options.inflate');const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));const reader=stream.getReader(),chunks:Uint8Array[]=[];let total=0;try{while(true){options.signal?.throwIfAborted();const part=await reader.read();if(part.done)break;total+=part.value.byteLength;if(total>count*size)throw new Error('FBX: decompressed array exceeds declared size');chunks.push(part.value);}}finally{await reader.cancel();reader.releaseLock();}bytes=new Uint8Array(total);let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.length;}}}else if(encoding!==0)throw new Error('FBX: invalid array encoding');if(bytes.byteLength!==count*size)throw new Error('FBX: invalid array size');const data=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),values:any[]=new Array(count);for(let i=0;i<count;i++)values[i]=type==='f'?data.getFloat32(i*size,true):type==='d'?data.getFloat64(i*size,true):type==='i'?data.getInt32(i*size,true):type==='l'?data.getBigInt64(i*size,true).toString():data.getUint8(i*size);return values;
+        };
+        const node=async(depth:number):Promise<FBXNodeData|null>=>{if(depth>128)throw new Error('FBX: hierarchy too deep');options.signal?.throwIfAborted();check(nullSize);const start=offset,end=wide?u64():u32(),count=wide?u64():u32(),propertyBytes=wide?u64():u32();const nameLength=view.getUint8(offset++);if(end===0){if(count||propertyBytes||nameLength)throw new Error('FBX: invalid null record');return null;}if(end<=start||end>buffer.byteLength||offset+nameLength+propertyBytes>end||count>propertyBytes)throw new Error('FBX: invalid node offsets');const name=readString(nameLength),properties:any[]=[],propEnd=offset+propertyBytes;for(let i=0;i<count;i++)properties.push(await property());if(offset!==propEnd)throw new Error('FBX: property list length mismatch');const children:FBXNodeData[]=[];while(offset<end){const child=await node(depth+1);if(!child)break;children.push(child);}if(offset!==end)throw new Error('FBX: child record end mismatch');return{name,properties,children};};
+        const children:FBXNodeData[]=[];while(offset+nullSize<=buffer.byteLength){const item=await node(0);if(!item)break;children.push(item);}return{name:'Root',properties:[version],children};
+    }
+    function fbxProps(node:FBXNodeData|undefined):Record<string,any>{const result:Record<string,any>=Object.create(null);for(const p of fbxChild(node,'Properties70')?.children??[]){if(p.name==='P')result[String(p.properties[0])]=p.properties.length>5?p.properties.slice(4):p.properties[4];}return result;}
+    function fbxEuler(values:number[],order:number,inverse=false):number[]{const axes=[['X','Y','Z'],['X','Z','Y'],['Y','Z','X'],['Y','X','Z'],['Z','X','Y'],['Z','Y','X']][order];if(!axes)throw new Error('FBX: unsupported Euler rotation order');let q=new Quaternion();for(const axis of [...axes].reverse()){const i='XYZ'.indexOf(axis),v=new Vec3(i===0?1:0,i===1?1:0,i===2?1:0);q.multiply(new Quaternion().setFromAxisAngle(v,(values[i]??0)*Math.PI/180));}if(inverse){q=new Quaternion(-q.x,-q.y,-q.z,q.w);}return assetTRS([0,0,0],q.toArray());}
+    function fbxTriangulate(poly:number[],vertices:number[]):number[]{
+        if(poly.length===3)return[0,1,2];let nx=0,ny=0,nz=0;for(let i=0;i<poly.length;i++){const a=poly[i]*3,b=poly[(i+1)%poly.length]*3;nx+=(vertices[a+1]-vertices[b+1])*(vertices[a+2]+vertices[b+2]);ny+=(vertices[a+2]-vertices[b+2])*(vertices[a]+vertices[b]);nz+=(vertices[a]-vertices[b])*(vertices[a+1]+vertices[b+1]);}const axis=Math.abs(nx)>=Math.abs(ny)&&Math.abs(nx)>=Math.abs(nz)?0:Math.abs(ny)>=Math.abs(nz)?1:2,xy=poly.map(v=>axis===0?[vertices[v*3+1],vertices[v*3+2]]:axis===1?[vertices[v*3],vertices[v*3+2]]:[vertices[v*3],vertices[v*3+1]]),cross=(a:number,b:number,c:number)=>(xy[b][0]-xy[a][0])*(xy[c][1]-xy[a][1])-(xy[b][1]-xy[a][1])*(xy[c][0]-xy[a][0]);let area=0;for(let i=0;i<xy.length;i++)area+=xy[i][0]*xy[(i+1)%xy.length][1]-xy[(i+1)%xy.length][0]*xy[i][1];const sign=area>=0?1:-1,remaining=poly.map((_,i)=>i),out:number[]=[];while(remaining.length>3){let found=false;for(let i=0;i<remaining.length;i++){const a=remaining[(i+remaining.length-1)%remaining.length],b=remaining[i],c=remaining[(i+1)%remaining.length];if(cross(a,b,c)*sign<=1e-12)continue;if(remaining.some(v=>v!==a&&v!==b&&v!==c&&cross(a,b,v)*sign>=-1e-12&&cross(b,c,v)*sign>=-1e-12&&cross(c,a,v)*sign>=-1e-12))continue;out.push(a,b,c);remaining.splice(i,1);found=true;break;}if(!found)throw new Error('FBX: degenerate/self-intersecting polygon');}out.push(...remaining);return out;
+    }
+    export const FBXLoader={
+        async parse(input:string|ArrayBuffer,options:ModelLoadOptions={}):Promise<Model3DAsset>{
+            assetLimit(typeof input==='string'?input.length*2:input.byteLength,options);const binary=typeof input!=='string'&&new TextDecoder().decode(input.slice(0,23))==='Kaydara FBX Binary  \x00\x1a\x00';const root=binary?await fbxBinary(input as ArrayBuffer,options):fbxAscii(typeof input==='string'?input:new TextDecoder().decode(input));
+            const objects=fbxChild(root,'Objects');if(!objects)throw new Error('FBX: missing Objects');const connections=fbxChild(root,'Connections')?.children.filter(c=>c.name==='C')??[],models=objects.children.filter(n=>n.name==='Model'),geometries=objects.children.filter(n=>n.name==='Geometry'&&n.properties[2]==='Mesh'),warnings:string[]=[],primitives:ModelPrimitive[]=[];const ids=new Map(models.map(m=>[String(m.properties[0]),m])),worlds=new Map<string,number[]>(),visiting=new Set<string>();
+            const modelWorld=(model:FBXNodeData,depth=0):number[]=>{const id=String(model.properties[0]);if(worlds.has(id))return worlds.get(id)!;if(visiting.has(id)||depth>128)throw new Error('FBX: cyclic model hierarchy');visiting.add(id);const p=fbxProps(model),v=(name:string,fallback:number[])=>Array.isArray(p[name])?p[name].map(Number):fallback,order=Number(p.RotationOrder??0),t=v('Lcl Translation',[0,0,0]),rotation=assetMultiply(assetMultiply(fbxEuler(v('PreRotation',[0,0,0]),0),fbxEuler(v('Lcl Rotation',[0,0,0]),order)),fbxEuler(v('PostRotation',[0,0,0]),0,true)),scale=v('Lcl Scaling',[1,1,1]),translation=(value:number[])=>assetTRS(value),negative=(value:number[])=>value.map(x=>-x),pivot=v('RotationPivot',[0,0,0]),sp=v('ScalingPivot',[0,0,0]);
+                let local=translation(t);for(const matrix of [translation(v('RotationOffset',[0,0,0])),translation(pivot),rotation,translation(negative(pivot)),translation(v('ScalingOffset',[0,0,0])),translation(sp),assetTRS([0,0,0],[0,0,0,1],scale),translation(negative(sp))])local=assetMultiply(local,matrix);
+                const parentLink=connections.find(c=>c.properties[0]==='OO'&&String(c.properties[1])===id&&ids.has(String(c.properties[2]))),parent=parentLink?modelWorld(ids.get(String(parentLink.properties[2]))!,depth+1):assetIdentity();let world=assetMultiply(parent,local);
+                const inherit=Number(p.InheritType??0);if(parentLink&&inherit!==1){const parentScale=[Math.hypot(parent[0],parent[1],parent[2]),Math.hypot(parent[4],parent[5],parent[6]),Math.hypot(parent[8],parent[9],parent[10])];if(assetDet(parent)<0)parentScale[0]*=-1;const parentRotation=parent.slice();for(let col=0;col<3;col++)for(let row=0;row<3;row++)parentRotation[col*4+row]/=parentScale[col]||1;parentRotation[12]=parentRotation[13]=parentRotation[14]=0;let linear=assetMultiply(parentRotation,rotation);linear=assetMultiply(linear,assetTRS([0,0,0],[0,0,0,1],scale.map((x,i)=>x*(inherit===2?1:parentScale[i]))));for(let col=0;col<3;col++)for(let row=0;row<3;row++)world[col*4+row]=linear[col*4+row];}
+                if(![0,1,2].includes(inherit))throw new Error('FBX: unsupported transform inheritance');visiting.delete(id);worlds.set(id,world);return world;};
+            const global=fbxProps(fbxChild(root,'GlobalSettings')),unit=options.unitScale??Number(global.UnitScaleFactor??1)/100;if(!Number.isFinite(unit)||unit<=0)throw new Error('FBX: invalid unit scale');let basis=assetTRS([0,0,0],[0,0,0,1],[unit,unit,unit]);if(options.convertAxes!==false){const up=Number(global.UpAxis??1),front=Number(global.FrontAxis??2),coord=Number(global.CoordAxis??0);if(new Set([up,front,coord]).size!==3||[up,front,coord].some(v=>v<0||v>2))throw new Error('FBX: invalid axis settings');basis=new Array(16).fill(0);basis[coord*4]=unit*Number(global.CoordAxisSign??1);basis[up*4+1]=unit*Number(global.UpAxisSign??1);basis[front*4+2]=-unit*Number(global.FrontAxisSign??-1);basis[15]=1;}
+            for(const geometry of geometries){options.signal?.throwIfAborted();const verts=fbxArray(geometry,'Vertices'),polys=fbxArray(geometry,'PolygonVertexIndex');if(verts.length%3||verts.some(v=>!Number.isFinite(v)))throw new Error('FBX: invalid vertices');const normalLayer=fbxChild(geometry,'LayerElementNormal'),uvLayer=fbxChild(geometry,'LayerElementUV'),colorLayer=fbxChild(geometry,'LayerElementColor'),materialLayer=fbxChild(geometry,'LayerElementMaterial');
+                const value=(layer:FBXNodeData|undefined,array:string,indexArray:string,width:number,vertex:number,corner:number,polygon:number):number[]|undefined=>{if(!layer)return;const mapping=fbxChild(layer,'MappingInformationType')?.properties[0],reference=fbxChild(layer,'ReferenceInformationType')?.properties[0];let at=mapping==='ByPolygonVertex'?corner:mapping==='ByVertice'||mapping==='ByVertex'?vertex:mapping==='ByPolygon'?polygon:mapping==='AllSame'?0:-1;if(at<0)throw new Error('FBX: unsupported layer mapping '+mapping);const data=fbxArray(layer,array);if(reference==='IndexToDirect'||reference==='Index'){const indices=fbxArray(layer,indexArray);if(array==='Materials'){if(!Number.isInteger(data[at])||data[at]<0)throw new Error('FBX: invalid material layer index');return[data[at]];}at=indices[at];}else if(reference!=='Direct')throw new Error('FBX: unsupported reference '+reference);if(!Number.isInteger(at)||at<0||at*width+width>data.length)throw new Error('FBX: invalid layer index');return data.slice(at*width,at*width+width);};
+                const groups=new Map<number,{positions:number[];normals:number[];uvs:number[];colors:number[]}>();let poly:number[]=[],corners:number[]=[],polygon=0;for(let c=0;c<polys.length;c++){const encoded=polys[c],vertex=encoded<0?-encoded-1:encoded;if(!Number.isInteger(vertex)||vertex<0||vertex>=verts.length/3)throw new Error('FBX: invalid polygon index');poly.push(vertex);corners.push(c);if(encoded>=0)continue;if(poly.length<3)throw new Error('FBX: polygon needs three vertices');const mat=value(materialLayer,'Materials','Materials',1,poly[0],corners[0],polygon)?.[0]??0;let group=groups.get(mat);if(!group){group={positions:[],normals:[],uvs:[],colors:[]};groups.set(mat,group);}for(const local of fbxTriangulate(poly,verts)){const v=poly[local],corner=corners[local];group.positions.push(...verts.slice(v*3,v*3+3));const normal=value(normalLayer,'Normals','NormalsIndex',3,v,corner,polygon),uv=value(uvLayer,'UV','UVIndex',2,v,corner,polygon),color=value(colorLayer,'Colors','ColorIndex',4,v,corner,polygon);if(normal)group.normals.push(...normal);if(uv)group.uvs.push(...uv);if(color)group.colors.push(...color.slice(0,3));}poly=[];corners=[];polygon++;}if(poly.length)throw new Error('FBX: unterminated polygon');
+                const linked=connections.filter(c=>c.properties[0]==='OO'&&String(c.properties[1])===String(geometry.properties[0])&&ids.has(String(c.properties[2]))).map(c=>ids.get(String(c.properties[2]))!);const instances=linked.length?linked:[undefined];for(const model of instances){const props=fbxProps(model),geometric=assetTRS(Array.isArray(props.GeometricTranslation)?props.GeometricTranslation:[0,0,0]);let gm=assetMultiply(geometric,fbxEuler(Array.isArray(props.GeometricRotation)?props.GeometricRotation:[0,0,0],0));gm=assetMultiply(gm,assetTRS([0,0,0],[0,0,0,1],Array.isArray(props.GeometricScaling)?props.GeometricScaling:[1,1,1]));const matrix=assetMultiply(basis,assetMultiply(model?modelWorld(model):assetIdentity(),gm));const materialIds=connections.filter(c=>c.properties[0]==='OO'&&String(c.properties[2])===String(model?.properties[0])&&objects.children.some(n=>n.name==='Material'&&String(n.properties[0])===String(c.properties[1]))).map(c=>String(c.properties[1]));
+                    for(const [material,g]of groups){const positions=new Float32Array(g.positions),count=positions.length/3;primitives.push({format:'fbx',name:String(model?.properties[1]??geometry.properties[1]).replace(/\x00\x01.*$/,'').replace(/^\w+::/,''),node:model?String(model.properties[0]):undefined,material:materialIds[material],matrix,mode:4,positions,normals:g.normals.length?new Float32Array(g.normals):undefined,uvs:g.uvs.length?new Float32Array(g.uvs):undefined,colors:g.colors.length?new Float32Array(g.colors):undefined,indices:Uint32Array.from({length:count},(_,i)=>i),vertexCount:count,triangleCount:count/3});}}
+            }
+            if(!primitives.length)throw new Error('FBX: no polygon mesh geometry');const materials=objects.children.filter(n=>n.name==='Material').map(n=>({id:String(n.properties[0]),name:n.properties[1],...fbxProps(n)})),animations=objects.children.filter(n=>n.name.startsWith('Animation')).map(n=>({id:String(n.properties[0]),type:n.name,properties:n.properties,children:n.children})),skins=objects.children.filter(n=>n.name==='Deformer').map(n=>({id:String(n.properties[0]),properties:n.properties,children:n.children})),images=objects.children.filter(n=>n.name==='Texture'||n.name==='Video').map(n=>({id:String(n.properties[0]),properties:n.properties,children:n.children}));if(skins.length||animations.length)warnings.push('FBX deformers/animation curves are retained; runtime skinning/animation playback is not implemented.');if(images.length)warnings.push('FBX texture/video descriptors are retained; external image binding is application-owned.');
+            return assetCombine('fbx',primitives,{materials,nodes:models.map(n=>({id:String(n.properties[0]),name:n.properties[1],matrix:modelWorld(n),properties:fbxProps(n)})),animations,skins,images,warnings,source:root},options);
         },
+        async load(url:string,options:ModelLoadOptions={}):Promise<Model3DAsset>{const response=await fetch(url,{signal:options.signal});if(!response.ok)throw new Error('FBXLoader: HTTP '+response.status);return this.parse(await response.arrayBuffer(),{...options,baseURL:options.baseURL??response.url??url});}
     };
 
 // ── PLY Import (full impl: ASCII + binary LE/BE) ──────────────────────────────
@@ -2728,7 +2851,7 @@ void main() {
         colors?       : Float32Array;
         uvs?          : Float32Array;
         indices?      : Uint32Array | Uint16Array;
-        format        : 'ply' | 'obj' | 'stl' | 'gltf' | 'glb';
+        format        : 'ply' | 'obj' | 'stl' | 'gltf' | 'glb' | 'fbx';
         vertexCount   : number;
         triangleCount : number;
     }
@@ -3284,7 +3407,7 @@ void main() {
 //   }
 
     export type Loader2D = { parse(text: string): DXFEntityList };
-    export type Loader3D = { parse(input: string | ArrayBuffer): Promise<Mesh3DLike> | Mesh3DLike };
+    export type Loader3D = { parse(input: string | ArrayBuffer, options?:ModelLoadOptions): Promise<Mesh3DLike> | Mesh3DLike };
     export type LoaderAny = Loader2D | Loader3D;
 
     export type LoadResult =
@@ -3303,7 +3426,7 @@ void main() {
 
         extensions(): string[] { return Array.from(this.#loaders.keys()); }
 
-        async load(file: File): Promise<LoadResult>
+        async load(file: File, options:ModelLoadOptions={}): Promise<LoadResult>
         {
             const ext = '.' + (file.name.split('.').pop() ?? '').toLowerCase();
             const entry = this.#loaders.get(ext);
@@ -3315,19 +3438,19 @@ void main() {
                 return { kind: '2d', format: ext.slice(1), data };
             } else {
                 const buf = await file.arrayBuffer();
-                const data = await (entry.loader as Loader3D).parse(buf);
+                const data = await (entry.loader as Loader3D).parse(buf,options);
                 return { kind: '3d', format: ext.slice(1), data };
             }
         }
 
-        async loadURL(url: string): Promise<LoadResult>
+        async loadURL(url: string, options:ModelLoadOptions={}): Promise<LoadResult>
         {
-            const r = await fetch(url);
+            const r = await fetch(url,{signal:options.signal});
             if (!r.ok) throw new Error(`ImportPipeline: HTTP ${r.status} for ${url}`);
             const blob = await r.blob();
-            const name = url.split('/').pop() ?? 'asset';
+            const resolved=r.url||url;const name = new URL(resolved,options.baseURL??globalThis.location?.href).pathname.split('/').pop() ?? 'asset';
             const file = new File([blob], name);
-            return this.load(file);
+            return this.load(file,{...options,baseURL:options.baseURL??resolved});
         }
 
         /** Pre-built pipeline with every loader implemented in this module. */
@@ -3336,10 +3459,11 @@ void main() {
             const p = new ImportPipeline();
             p.register('.ply',  PLYLoader as never, '3d');
             p.register('.dxf',  DXFLoader as never, '2d');
-            p.register('.stl',  { parse: (i:ArrayBuffer) => STLLoader.parse(i as ArrayBuffer) } as never, '3d');
-            p.register('.obj',  { parse: (i:string) => OBJLoader.parse(i as never) } as never, '3d');
+            p.register('.stl',  {parse:(i:ArrayBuffer)=>{const g=STLLoader.parse(i);return{positions:g.positions,normals:g.normals,indices:g.indices,format:'stl',vertexCount:g.vertexCount,triangleCount:g.positions.length/9};}} as Loader3D,'3d');
+            p.register('.obj',  {parse:(i:string|ArrayBuffer)=>{const g=OBJLoader.parse(typeof i==='string'?i:new TextDecoder().decode(i));return{positions:g.positions,normals:g.normals,uvs:g.uvs,indices:g.indices,format:'obj',vertexCount:g.vertexCount,triangleCount:(g.indices.length||g.vertexCount)/3};}} as Loader3D,'3d');
             p.register('.gltf', GLTFLoader as never, '3d');
-            p.register('.glb',  GLTFLoader as never, '3d');
+            p.register('.glb',  GLBLoader, '3d');
+            p.register('.fbx',  FBXLoader, '3d');
             return p;
         }
     }

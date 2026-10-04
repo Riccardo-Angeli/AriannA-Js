@@ -18,6 +18,7 @@ export namespace Canvas2D
             majorEvery:number;
             minorOpacity:number;
             majorOpacity:number;
+            stepX:number;stepY:number;kind:'cartesian'|'dotted'|'polar'|'isometric';
         }
 
         export interface SnapOptions
@@ -27,6 +28,7 @@ export namespace Canvas2D
             threshold:number;
             x:boolean;
             y:boolean;
+            stepX:number;stepY:number;
         }
 
         export interface Canvas2DOptions
@@ -57,7 +59,7 @@ export namespace Canvas2D
         subdivisions:4,
         majorEvery:5,
         minorOpacity:.10,
-        majorOpacity:.20
+        majorOpacity:.20,stepX:20,stepY:20,kind:'cartesian'
     };
 
     const DEFAULT_SNAP:Interfaces.SnapOptions = {
@@ -65,7 +67,7 @@ export namespace Canvas2D
         grid:true,
         threshold:8,
         x:true,
-        y:true
+        y:true,stepX:0,stepY:0
     };
 
     export const Styles = new Css.Stylesheet([
@@ -99,6 +101,13 @@ export namespace Canvas2D
             Background:'linear-gradient(180deg,#ff4dad 0%,#e40c88 55%,#b90769 100%)',
             Color:'#ffffff',BoxShadow:'inset 0 1px 0 #ffffff35,0 1px 3px #0004'
         }),
+        new Css.Rule('.Canvas2D[theme="dark"] .Canvas2D-Toolbar',{Color:'#e5e8ea'}),
+        new Css.Rule('.Canvas2D[theme="dark"] .Canvas2D-Button',{Color:'#e5e8ea'}),
+        new Css.Rule('.Canvas2D[theme="dark"] .Canvas2D-Toolbar input',{Color:'#e5e8ea',ColorScheme:'dark'}),
+        new Css.Rule('.Canvas2D[theme="light"] .Canvas2D-Toolbar',{Color:'#25292d',Background:'linear-gradient(180deg,#f9fbfc,#e0e4e7)'}),
+        new Css.Rule('.Canvas2D[theme="light"] .Canvas2D-Button',{Color:'#25292d',Background:'linear-gradient(180deg,#f9fbfc,#e0e4e7)',BorderColor:'#b8bdc2'}),
+        new Css.Rule('.Canvas2D[theme="light"] .Canvas2D-Toolbar input',{Color:'#25292d',Background:'#fff',ColorScheme:'light'}),
+        new Css.Rule('.Canvas2D[theme] .Canvas2D-Button[data-active="true"]',{Color:'#fff',Background:'linear-gradient(180deg,#ff4dad,#e40c88,#b90769)'}),
         new Css.Rule('.Canvas2D-Zoom',{Color:'var(--arianna-text-muted,#9ea6ad)',FontSize:'9px',MarginLeft:'auto'}),
         new Css.Rule('.Canvas2D-Stage',{
             BackgroundColor:'var(--arianna-canvas-bg,#1b1f22)',
@@ -138,7 +147,7 @@ export namespace Canvas2D
         Attributes:[
             'theme','zoom','tilt','navigation',
             'show-grid','grid-size','grid-subdivisions','grid-major-every',
-            'snap','snap-grid','snap-threshold'
+            'snap','snap-grid','snap-threshold','snap-x','snap-y','grid-step-x','grid-step-y','grid-kind','snap-step-x','snap-step-y'
         ],
         Properties:['grid','snap','tilt','navigation']
     })
@@ -156,11 +165,12 @@ export namespace Canvas2D
         private _zoom!:number;
         private _tilt!:number;
         private _navigation!:'none'|'pan'|'zoom'|'tilt';
-        private _gridProvider!:{options?:{enabled?:boolean};configure(options:{enabled:boolean}):unknown}|null;
+        private _gridProvider!:{options?:{enabled?:boolean;stepX?:number;stepY?:number;kind?:string;subdivisions?:number;majorEvery?:number;snapX?:boolean;snapY?:boolean;snapStepX?:number;snapStepY?:number};configure(options:{enabled?:boolean;stepX?:number;stepY?:number;kind?:'cartesian'|'dotted'|'polar'|'isometric';subdivisions?:number;majorEvery?:number;snapX?:boolean;snapY?:boolean;snapStepX?:number;snapStepY?:number}):unknown;project?(point:Interfaces.Vec2):Interfaces.Vec2}|null;
         private _grid!:Interfaces.GridOptions;
         private _snap!:Interfaces.SnapOptions;
         private _drag!:{x:number;y:number;px:number;py:number;pointerId:number;kind:'pan'|'zoom'|'tilt';zoom:number;tilt:number}|null;
         private _world!:HTMLElement|null;
+        private _surfaceObserver?:ResizeObserver;
         private _artboard!:HTMLElement|null;
         private _stage!:HTMLElement|null;
         private _gridLayer!:HTMLElement|null;
@@ -215,7 +225,7 @@ export namespace Canvas2D
             if(options.pan) this._pan={...options.pan};
 
             if(typeof options.grid==='boolean') this._grid.enabled=options.grid;
-            else if(options.grid) Object.assign(this._grid,options.grid);
+            else if(options.grid){Object.assign(this._grid,options.grid);if(options.grid.size!==undefined){this._grid.stepX=options.grid.stepX??options.grid.size;this._grid.stepY=options.grid.stepY??options.grid.size;}}
 
             if(typeof options.snap==='boolean') this._snap.enabled=options.snap;
             else if(options.snap) Object.assign(this._snap,options.snap);
@@ -238,8 +248,7 @@ export namespace Canvas2D
             this.classList.add('Canvas2D');
             if(!this.hasAttribute('theme'))this.setAttribute('theme','dark');
 
-            this.ReadAttributes();
-            if(!this._world) this.Build();
+            if(!this._world){this.ReadAttributes();this.Build();}
             this.ApplyViewport();
             this.ApplyGrid();
             this.UpdateStatus();
@@ -261,10 +270,13 @@ export namespace Canvas2D
             if(!svg) {
                 svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
                 svg.setAttribute('data-canvas-surface','');
-                svg.setAttribute('viewBox','0 0 520 300');
+                svg.setAttribute('viewBox',`0 0 ${world.clientWidth||520} ${world.clientHeight||300}`);
                 svg.setAttribute('preserveAspectRatio','none');
                 svg.style.cssText='position:absolute;inset:0;width:100%;height:100%;overflow:visible;touch-action:none';
                 world.appendChild(svg);
+            }
+            if(!this._surfaceObserver&&typeof ResizeObserver==='function'){
+                const surface=svg;this._surfaceObserver=new ResizeObserver(()=>{const width=world.clientWidth,height=world.clientHeight;if(width>0&&height>0){const value=`0 0 ${width} ${height}`;if(surface.getAttribute('viewBox')!==value){surface.setAttribute('viewBox',value);this.dispatchEvent(new CustomEvent('arianna:viewport',{detail:this.getViewport()}));}}});this._surfaceObserver.observe(world);
             }
             return svg;
         }
@@ -298,10 +310,10 @@ export namespace Canvas2D
             this.dispatchEvent(new CustomEvent('arianna:navigation-change',{bubbles:true,composed:true,detail:{navigation:value,source:this}}));return this;
         }
         /** Bind an independent grid without taking ownership of its lifecycle. */
-        public useGrid(provider:{options?:{enabled?:boolean};configure(options:{enabled:boolean}):unknown}|null):this {
-            this.EnsureState();this._gridProvider=provider;this.ApplyGrid();return this;
+        public useGrid(provider:Canvas2D['_gridProvider']):this {
+            this.EnsureState();this._gridProvider=provider;if(provider?.options){this._grid.enabled=provider.options.enabled??true;this._grid.subdivisions=provider.options.subdivisions??this._grid.subdivisions;this._grid.majorEvery=provider.options.majorEvery??this._grid.majorEvery;this._snap.x=provider.options.snapX??this._snap.x;this._snap.y=provider.options.snapY??this._snap.y;this._snap.stepX=provider.options.snapStepX??this._snap.stepX;this._snap.stepY=provider.options.snapStepY??this._snap.stepY;this._grid.stepX=provider.options.stepX??this._grid.size;this._grid.stepY=provider.options.stepY??this._grid.size;if(['cartesian','dotted','polar','isometric'].includes(provider.options.kind??''))this._grid.kind=provider.options.kind as Interfaces.GridOptions['kind'];}this.ApplyGrid();return this;
         }
-        public onUnmount():void{if(this._drag){try{this._stage?.releasePointerCapture(this._drag.pointerId);}catch{}}this._drag=null;}
+        public onUnmount():void{this._surfaceObserver?.disconnect();this._surfaceObserver=undefined;if(this._drag){try{this._stage?.releasePointerCapture(this._drag.pointerId);}catch{}}this._drag=null;}
 
         /** Add content to the world, attaching canvas behaviours through their public contract. */
         public add(...items:Parameters<Real['add']>):this {
@@ -338,11 +350,12 @@ export namespace Canvas2D
         {
             this.EnsureState();
             if(typeof value==='boolean') this._grid.enabled=value;
-            else Object.assign(this._grid,value);
+            else {Object.assign(this._grid,value);if(value.size!==undefined){if(value.stepX===undefined)this._grid.stepX=value.size;if(value.stepY===undefined)this._grid.stepY=value.size;}}
 
             this._grid.size=Math.max(1,Number(this._grid.size)||20);
             this._grid.subdivisions=Math.max(1,Math.round(Number(this._grid.subdivisions)||1));
             this._grid.majorEvery=Math.max(1,Math.round(Number(this._grid.majorEvery)||1));
+            this._grid.stepX=Math.max(.1,Number(this._grid.stepX)||this._grid.size);this._grid.stepY=Math.max(.1,Number(this._grid.stepY)||this._grid.size);
             this.ApplyGrid();
             this.SyncToolbar();
             this.UpdateStatus();
@@ -358,6 +371,8 @@ export namespace Canvas2D
             if(typeof value==='boolean') this._snap.enabled=value;
             else Object.assign(this._snap,value);
 
+            this._snap.stepX=Math.max(0,Number(this._snap.stepX)||0);this._snap.stepY=Math.max(0,Number(this._snap.stepY)||0);
+            this._gridProvider?.configure({snapX:this._snap.x,snapY:this._snap.y,snapStepX:this._snap.stepX,snapStepY:this._snap.stepY});
             this._snap.threshold=Math.max(0,Number(this._snap.threshold)||0);
             this.SyncToolbar();
             this.UpdateStatus();
@@ -378,10 +393,10 @@ export namespace Canvas2D
             if(!this._snap.enabled || !this._snap.grid)
                 return {...point};
 
-            const step=this._grid.size/Math.max(1,this._grid.subdivisions);
+            const sx=this._snap.stepX||this._grid.stepX/Math.max(1,this._grid.subdivisions),sy=this._snap.stepY||this._grid.stepY/Math.max(1,this._grid.subdivisions),projected=this._gridProvider?.project?.(point)??(this._grid.kind==='polar'?(()=>{const radius=Math.round(Math.hypot(point.x,point.y)/sx)*sx,angle=Math.round(Math.atan2(point.y,point.x)/(Math.PI/12))*Math.PI/12;return{x:Math.cos(angle)*radius,y:Math.sin(angle)*radius};})():this._grid.kind==='isometric'?(()=>{const u=Math.round(point.x/sx+point.y/sy),v=Math.round(point.y/sy-point.x/sx);return{x:(u-v)*sx*.5,y:(u+v)*sy*.5};})():undefined);
             return {
-                x:this._snap.x?Math.round(point.x/step)*step:point.x,
-                y:this._snap.y?Math.round(point.y/step)*step:point.y
+                x:this._snap.x?(projected?.x??Math.round(point.x/sx)*sx):point.x,
+                y:this._snap.y?(projected?.y??Math.round(point.y/sy)*sy):point.y
             };
         }
 
@@ -440,30 +455,39 @@ export namespace Canvas2D
 
         public getViewport():Interfaces.ViewportState{return this.viewport;}
 
-        private ReadAttributes():void
+        public onAttributeChanged(name:string):void {
+            this.ReadAttributes(name);if(name==='navigation')this.setNavigation(this._navigation);this.ApplyViewport();this.UpdateStatus();if(name==='zoom'||name==='tilt')this.EmitViewport();
+        }
+
+        private ReadAttributes(changed?:string):void
         {
             this.EnsureState();
+            const has=(name:string)=>!changed||changed===name;
 
-            if(this.hasAttribute('tilt')){const value=Number(this.getAttribute('tilt'));if(Number.isFinite(value))this._tilt=value;}
-            const navigation=this.getAttribute('navigation');if(navigation&&['none','pan','zoom','tilt'].includes(navigation))this._navigation=navigation as typeof this._navigation;
-            if(this.hasAttribute('zoom'))
+            if(has('tilt')&&this.hasAttribute('tilt')){const value=Number(this.getAttribute('tilt'));if(Number.isFinite(value))this._tilt=value;}
+            const navigation=this.getAttribute('navigation');if(has('navigation')&&navigation&&['none','pan','zoom','tilt'].includes(navigation))this._navigation=navigation as typeof this._navigation;
+            if(has('zoom')&&this.hasAttribute('zoom'))
                 this._zoom=Math.max(.2,Math.min(5,Number(this.getAttribute('zoom'))||1));
 
-            if(this.hasAttribute('show-grid'))
+            if(has('show-grid')&&this.hasAttribute('show-grid'))
                 this._grid.enabled=this.getAttribute('show-grid')!=='false';
-            if(this.hasAttribute('grid-size'))
-                this._grid.size=Math.max(1,Number(this.getAttribute('grid-size'))||20);
-            if(this.hasAttribute('grid-subdivisions'))
+            if(has('grid-size')&&this.hasAttribute('grid-size'))
+                {this._grid.size=Math.max(1,Number(this.getAttribute('grid-size'))||20);this._grid.stepX=this._grid.stepY=this._grid.size;}
+            if(has('grid-subdivisions')&&this.hasAttribute('grid-subdivisions'))
                 this._grid.subdivisions=Math.max(1,Number(this.getAttribute('grid-subdivisions'))||1);
-            if(this.hasAttribute('grid-major-every'))
+            if(has('grid-major-every')&&this.hasAttribute('grid-major-every'))
                 this._grid.majorEvery=Math.max(1,Number(this.getAttribute('grid-major-every'))||1);
 
-            if(this.hasAttribute('snap'))
+            for(const axis of ['x','y'] as const){const name='grid-step-'+axis;if(has(name)&&this.hasAttribute(name))this._grid[axis==='x'?'stepX':'stepY']=Math.max(.1,Number(this.getAttribute(name))||20);if(has('snap-'+axis)&&this.hasAttribute('snap-'+axis))this._snap[axis]=this.getAttribute('snap-'+axis)!=='false';}
+            const kind=this.getAttribute('grid-kind');if(has('grid-kind')&&kind&&['cartesian','dotted','polar','isometric'].includes(kind))this._grid.kind=kind as Interfaces.GridOptions['kind'];
+            if(has('snap')&&this.hasAttribute('snap'))
                 this._snap.enabled=this.getAttribute('snap')!=='false';
-            if(this.hasAttribute('snap-grid'))
+            if(has('snap-grid')&&this.hasAttribute('snap-grid'))
                 this._snap.grid=this.getAttribute('snap-grid')!=='false';
-            if(this.hasAttribute('snap-threshold'))
+            if(has('snap-threshold')&&this.hasAttribute('snap-threshold'))
                 this._snap.threshold=Math.max(0,Number(this.getAttribute('snap-threshold'))||0);
+            for(const axis of ['x','y'] as const){const name='snap-step-'+axis;if(has(name)&&this.hasAttribute(name))this._snap[axis==='x'?'stepX':'stepY']=Math.max(0,Number(this.getAttribute(name))||0);}
+            if(!changed||changed.startsWith('snap-'))this._gridProvider?.configure({snapX:this._snap.x,snapY:this._snap.y,snapStepX:this._snap.stepX,snapStepY:this._snap.stepY});
         }
 
         private Build():void
@@ -511,6 +535,9 @@ export namespace Canvas2D
             });
             for(const button of [home,minus,plus,gridButton,snapButton])button.type='button';
             toolbar.append(home,...navigationButtons,snapButton,gridButton,minus,plus,zoom);
+            for(const axis of ['x','y'] as const){const label=document.createElement('label');label.style.cssText='display:inline-flex;align-items:center;gap:3px;font:11px system-ui';label.textContent='Grid '+axis.toUpperCase();label.dataset.gridControl='spacing';const input=document.createElement('input');input.type='number';input.min='.1';input.step='1';input.dataset.gridAxis=axis;input.setAttribute('aria-label','Grid spacing '+axis.toUpperCase());input.value=String(this._grid[axis==='x'?'stepX':'stepY']);input.style.cssText='width:48px;height:25px;background:var(--arianna-surface-2,#25292d);color:inherit;border:1px solid #5556;border-radius:3px';input.onchange=()=>this.setGrid({[axis==='x'?'stepX':'stepY']:Number(input.value)});label.append(input);toolbar.append(label);
+                const button=document.createElement('button');button.type='button';button.className='Canvas2D-Button';button.dataset.role='snap-'+axis;button.textContent='Snap '+axis.toUpperCase();button.onclick=()=>this.setSnap({[axis]:!this._snap[axis]});toolbar.append(button);const snapLabel=document.createElement('label');snapLabel.dataset.gridControl='snap-spacing';snapLabel.style.cssText='display:inline-flex;align-items:center;gap:3px;font:11px system-ui;color:inherit';snapLabel.textContent='Step '+axis.toUpperCase();const snapInput=document.createElement('input');snapInput.type='number';snapInput.min='.1';snapInput.step='1';snapInput.dataset.snapStep=axis;snapInput.setAttribute('aria-label','Snap spacing '+axis.toUpperCase());snapInput.style.cssText=input.style.cssText;snapInput.value=String(this._snap[axis==='x'?'stepX':'stepY']||this._grid[axis==='x'?'stepX':'stepY']/this._grid.subdivisions);snapInput.onchange=()=>this.setSnap({[axis==='x'?'stepX':'stepY']:Number(snapInput.value)});snapLabel.append(snapInput);toolbar.append(snapLabel);}
+            const kind=document.createElement('select');kind.className='Canvas2D-Button';kind.dataset.gridKind='true';kind.setAttribute('aria-label','Grid style');for(const [value,label] of [['cartesian','Lines'],['dotted','Dotted'],['polar','Polar'],['isometric','Isometric']]){const option=document.createElement('option');option.value=value;option.textContent=label;kind.append(option);}kind.value=this._grid.kind;kind.onchange=()=>this.setGrid({kind:kind.value as Interfaces.GridOptions['kind']});toolbar.append(kind);
 
             const stage=document.createElement('div');
             stage.className='Canvas2D-Stage';this._stage=stage;
@@ -589,7 +616,7 @@ export namespace Canvas2D
 
             const minor=this._grid.size/Math.max(1,this._grid.subdivisions);
             const major=this._grid.size*Math.max(1,this._grid.majorEvery);
-            if(this._gridProvider&&this._gridProvider.options?.enabled!==this._grid.enabled)this._gridProvider.configure({enabled:this._grid.enabled});
+            if(this._gridProvider){const p=this._gridProvider.options;if(p?.enabled!==this._grid.enabled||p?.stepX!==this._grid.stepX||p?.stepY!==this._grid.stepY||p?.kind!==this._grid.kind||p?.subdivisions!==this._grid.subdivisions||p?.majorEvery!==this._grid.majorEvery)this._gridProvider.configure({enabled:this._grid.enabled,stepX:this._grid.stepX,stepY:this._grid.stepY,kind:this._grid.kind,subdivisions:this._grid.subdivisions,majorEvery:this._grid.majorEvery});}
             this._gridLayer.style.display=this._grid.enabled&&!this._gridProvider?'block':'none';
             this._gridLayer.style.backgroundImage=[
                 `linear-gradient(to right,rgba(151,160,169,${this._grid.minorOpacity}) 1px,transparent 1px)`,
@@ -604,6 +631,12 @@ export namespace Canvas2D
                 `${major*this._zoom}px ${major*this._zoom}px`;
             this._gridLayer.style.backgroundPosition=
                 `${this._pan.x}px ${this._pan.y}px`;
+            const sx=this._grid.stepX/this._grid.subdivisions*this._zoom,sy=this._grid.stepY/this._grid.subdivisions*this._zoom,mx=this._grid.stepX*this._grid.majorEvery*this._zoom,my=this._grid.stepY*this._grid.majorEvery*this._zoom;
+            this._gridLayer.style.backgroundSize=`${sx}px ${sy}px,${sx}px ${sy}px,${mx}px ${my}px,${mx}px ${my}px`;
+            if(this._grid.kind==='dotted'){this._gridLayer.style.backgroundImage=`radial-gradient(circle,rgba(151,160,169,${this._grid.majorOpacity}) 1.6px,transparent 1.9px),radial-gradient(circle,rgba(151,160,169,${this._grid.minorOpacity}) 1px,transparent 1.3px)`;this._gridLayer.style.backgroundSize=`${mx}px ${my}px,${sx}px ${sy}px`;this._gridLayer.style.backgroundPosition=`${this._pan.x-mx/2}px ${this._pan.y-my/2}px,${this._pan.x-sx/2}px ${this._pan.y-sy/2}px`;}
+            if(this._grid.kind==='isometric'){const x=this._grid.stepX/this._grid.subdivisions,y=this._grid.stepY/this._grid.subdivisions,color=this.getAttribute('theme')==='light'?'black':'white',svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${x}" height="${y}" viewBox="0 0 ${x} ${y}"><path d="M0 0L${x} ${y}M0 ${y}L${x} 0" fill="none" stroke="${color}" stroke-opacity="${this._grid.minorOpacity}" stroke-width="1"/></svg>`;this._gridLayer.style.backgroundImage=`url("data:image/svg+xml,${encodeURIComponent(svg)}")`;this._gridLayer.style.backgroundSize=`${sx}px ${sy}px`;}
+
+            if(this._grid.kind==='polar'){const c=`rgba(151,160,169,${this._grid.minorOpacity})`;this._gridLayer.style.backgroundImage=`repeating-radial-gradient(circle at ${this._pan.x}px ${this._pan.y}px,transparent 0,transparent ${Math.max(0,sx-1)}px,${c} ${sx}px),repeating-conic-gradient(from 0deg at ${this._pan.x}px ${this._pan.y}px,${c} 0deg .3deg,transparent .3deg 15deg)`;this._gridLayer.style.backgroundSize='100% 100%';this._gridLayer.style.backgroundPosition='0 0';}
             this.SyncToolbar();
         }
 
@@ -611,8 +644,11 @@ export namespace Canvas2D
         {
             this.EnsureState();
             if(this._stage)this._stage.style.cursor=this._navigation==='pan'?'grab':this._navigation==='zoom'?'zoom-in':this._navigation==='tilt'?'crosshair':'';
-            for(const role of ['pan','zoom','tilt','snap','grid']) {
-                const active=role==='grid'?this._grid.enabled:role==='snap'?this._snap.enabled:this._navigation===role;
+            for(const input of this.querySelectorAll<HTMLInputElement>('[data-grid-axis]'))if(document.activeElement!==input)input.value=String(this._grid[input.dataset.gridAxis==='x'?'stepX':'stepY']);
+            for(const input of this.querySelectorAll<HTMLInputElement>('[data-snap-step]'))if(document.activeElement!==input){const key=input.dataset.snapStep==='x'?'stepX':'stepY';input.value=String(this._snap[key]||this._grid[key]/this._grid.subdivisions);}
+            const kind=this.querySelector<HTMLSelectElement>('[data-grid-kind]');if(kind&&document.activeElement!==kind)kind.value=this._grid.kind;
+            for(const role of ['pan','zoom','tilt','snap','grid','snap-x','snap-y']) {
+                const active=role==='grid'?this._grid.enabled:role==='snap'?this._snap.enabled:role==='snap-x'?this._snap.x:role==='snap-y'?this._snap.y:this._navigation===role;
                 const button=this.querySelector<HTMLButtonElement>('[data-role="'+role+'"]');
                 button?.setAttribute('data-active',String(active));button?.setAttribute('aria-pressed',String(active));
             }

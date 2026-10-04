@@ -63,13 +63,13 @@ export namespace Tools2D {
     };
 
     export const Styles=new Css.Stylesheet([
-        new Css.Rule('arianna-tools-2d,arianna-tools-palette,.Tools2D,.ToolsPalette',{Background:'#292d31',Border:'1px solid #111417',BorderRadius:'5px',BoxSizing:'border-box',Color:'#e5e8ea',Display:'block',FontFamily:'var(--arianna-font,system-ui,sans-serif)',Overflow:'hidden',Width:'82px'}),
+        new Css.Rule('arianna-tools-2d,arianna-tools-palette,.Tools2D,.ToolsPalette',{Background:'#292d31',Border:'1px solid #111417',BorderRadius:'5px',BoxSizing:'border-box',Color:'#e5e8ea',Display:'block',FontFamily:'var(--arianna-font,system-ui,sans-serif)',Overflow:'hidden',Width:'72px'}),
         new Css.Rule('.Tools2D-Grip',{Background:'linear-gradient(180deg,#3a3f44,#2b3034)',BorderBottom:'1px solid #111417',Color:'#8f979f',FontSize:'9px',Padding:'5px',TextAlign:'center'}),
         new Css.Rule('.Tools2D-Group',{BorderTop:'1px solid #171a1d',Padding:'3px 4px 4px'}),
         new Css.Rule('.Tools2D-Group:first-of-type',{BorderTop:'0'}),
         new Css.Rule('.Tools2D-Label',{Color:'#818990',Font:'700 8px/1.3 system-ui',LetterSpacing:'.05em',Overflow:'hidden',Padding:'3px 2px',TextOverflow:'ellipsis',TextTransform:'uppercase',WhiteSpace:'nowrap'}),
         new Css.Rule('.Tools2D-Grid',{Display:'grid',Gap:'1px',GridTemplateColumns:'repeat(var(--cols),1fr)'}),
-        new Css.Rule('.Tools2D-Tool',{AlignItems:'center',Appearance:'none',Background:'transparent',Border:'1px solid transparent',BorderRadius:'2px',Color:'#c9cfd4',Cursor:'pointer',Display:'flex',Font:'600 14px/1 system-ui',Height:'30px',JustifyContent:'center',Padding:'0'}),
+        new Css.Rule('.Tools2D-Tool',{AlignItems:'center',Appearance:'none',Background:'transparent',Border:'1px solid transparent',BorderRadius:'2px',Color:'#c9cfd4',Cursor:'pointer',Display:'flex',Font:'600 14px/1 system-ui',Height:'28px',JustifyContent:'center',Padding:'0'}),
         new Css.Rule('.Tools2D-Tool:hover',{Background:'#393f44',BorderColor:'#4b5258'}),
         new Css.Rule('.Tools2D-Tool[data-selected="true"]',{Background:'linear-gradient(180deg,#ed168f,#bd0b73)',BorderColor:'#9c075f',Color:'#fff'}),
         new Css.Rule('.Tools2D-Tool:disabled',{Cursor:'not-allowed',Opacity:'.35'}),
