@@ -1,3 +1,5 @@
+import type { Canvas3D } from '../Canvas3D.ts';
+import { attachTransformControls, type TransformControls } from './TransformGizmo.ts';
 /** Mesh translation modifier with an integrated snap policy and XYZ gizmo. */
 import { Modifier3D as Base } from './Base.ts';
 
@@ -26,6 +28,12 @@ export namespace Mover3D
 
     export class Mover3D extends Base.Modifier3D
     {
+        /** Compose controls on an already connected canvas; destroy releases all listeners. */
+        public attachControls(canvas:Canvas3D.Canvas3D):TransformControls {
+            const controls=attachTransformControls(canvas,this.mesh as Canvas3D.Mesh3,'move',v=>this.setPosition(v.x,v.y,v.z));
+            this.cleanups.push(()=>controls.destroy());return controls;
+        }
+
         public axis:Axis='all';public snapX=0;public snapY=0;public snapZ=0;
         public worldPerPixel=1;public snapEnabled=true;public snapDistance=8;public distanceUnit:'screen-px'|'world'='screen-px';public angleStep=15;
         public targets:Record<TargetType,boolean>={...DefaultTargets};public priority:TargetType[]=[...DefaultPriority];

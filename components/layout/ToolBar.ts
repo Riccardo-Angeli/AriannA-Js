@@ -40,7 +40,7 @@ export class ToolBar extends HTMLElement {
         const value=this.getAttribute('position') as ToolBarPosition;if(sides.includes(value))this.side=value;
         if(this.getAttribute('position')!==this.side)this.setAttribute('position',this.side);this.container=container;bars.set(container,this);
         if(getComputedStyle(container).position==='static'){this.originalPosition=container.style.position;container.style.position='relative';}
-        this.className='ToolBar';container.append(this);this.build();this.layout();return this;
+        this.className='ToolBar';container.appendChild(this);this.build();this.layout();return this;
     }
     public get Position():ToolBarPosition{return this.side;}
     public set Position(value:ToolBarPosition){if(!sides.includes(value))throw new TypeError('Invalid ToolBar position');this.side=value;if(this.getAttribute('position')!==value)this.setAttribute('position',value);this.closeMenu?.();this.layout();}

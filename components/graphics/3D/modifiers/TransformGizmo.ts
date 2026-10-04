@@ -1,0 +1,61 @@
+/** Shared projection/interaction utility; not a component or a workbench. */
+import type { Canvas3D } from '../Canvas3D.ts';
+export type TransformMode='move'|'rotate'|'scale';
+type V={x:number;y:number;z:number};
+type Axis='x'|'y'|'z';
+export interface TransformControls { element:HTMLElement; enabled:boolean; refresh():void; destroy():void; }
+export function attachTransformControls(canvas:Canvas3D.Canvas3D,mesh:Canvas3D.Mesh3,mode:TransformMode,write:(value:V)=>void):TransformControls {
+ const axes:Axis[]=['x','y','z'],colors={x:'#ff625f',y:'#81d953',z:'#58a8ff'},ns='http://www.w3.org/2000/svg';
+ const control=new AbortController(),surface=canvas.selectionSurface,bar=document.createElement('fieldset');bar.className='Canvas3D-TransformGroup';bar.style.cssText='display:flex;align-items:center;gap:10px;border:0;border-right:1px solid #7775;margin:0;padding:5px 12px;min-width:0';
+ const button=document.createElement('button');button.type='button';button.className='Canvas3D-Button';button.title=mode;button.setAttribute('aria-label',mode);const paths={move:'M12 2v20M2 12h20M8 6l4-4 4 4M8 18l4 4 4-4M6 8l-4 4 4 4M18 8l4 4-4 4',rotate:'M19 8a8 8 0 1 0 1 7M19 3v5h-5',scale:'M4 14v6h6M14 4h6v6M5 19L19 5M4 4h5M4 4v5M15 20h5v-5'};
+ button.innerHTML='<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="display:block;flex:none"><path d="'+paths[mode]+'" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';button.style.cssText='display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;flex:0 0 30px;padding:4px';bar.append(button);
+ const fields=new Map<Axis,HTMLInputElement>();const read=():V=>{const v=mode==='move'?mesh.position:mode==='scale'?mesh.scale:mesh.rotation;return{x:v.x*(mode==='rotate'?180/Math.PI:1),y:v.y*(mode==='rotate'?180/Math.PI:1),z:v.z*(mode==='rotate'?180/Math.PI:1)};};
+ for(const axis of axes){const label=document.createElement('label');label.textContent=axis.toUpperCase();label.style.cssText='display:flex;align-items:center;gap:6px;font:10px system-ui';const input=document.createElement('input');input.type='number';input.step=mode==='rotate'?'1':'.1';if(mode==='scale')input.min='.001';input.className='Canvas3D-Input';input.style.width='55px';input.setAttribute('aria-label',mode+' '+axis.toUpperCase());input.onchange=()=>{const value=Number(input.value);if(!Number.isFinite(value)){api.refresh();return;}const v=read();v[axis]=mode==='scale'?Math.max(.001,value):value;write(v);api.refresh();};fields.set(axis,input);label.append(input);bar.append(label);}
+ const svg=document.createElementNS(ns,'svg');svg.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:15;pointer-events:none;overflow:hidden';svg.setAttribute('aria-label',mode+' gizmo');canvas.appendChild(svg);
+ const active=()=>api.enabled&&canvas.getMeshes().includes(mesh)&&mesh.visible;
+ let key='',gesture:AbortController|null=null,enabled=false,disposed=false;
+ const api:TransformControls={element:bar,get enabled(){return enabled;},set enabled(value){enabled=value;button.dataset.active=String(value);button.setAttribute('aria-pressed',String(value));if(value)canvas.dispatchEvent(new CustomEvent('arianna:transform-active',{detail:api}));else{gesture?.abort();gesture=null;}key='';draw();},refresh(){for(const [axis,input]of fields)if(document.activeElement!==input){const value=String(Number(read()[axis].toFixed(4)));if(input.value!==value)input.value=value;};},destroy(){if(disposed)return;disposed=true;gesture?.abort();control.abort();unsubscribe();svg.remove();bar.remove();if(!footer?.children.length)footer?.remove();}};
+ canvas.addEventListener('arianna:canvas-dispose',()=>api.destroy(),{signal:control.signal});
+ button.onclick=()=>api.enabled=!api.enabled;canvas.addEventListener('arianna:transform-active',e=>{if((e as CustomEvent).detail!==api)api.enabled=false;},{signal:control.signal});
+ const local=(event:PointerEvent)=>{const rect=surface.getBoundingClientRect();return{x:(event.clientX-rect.left)*surface.clientWidth/Math.max(1,rect.width),y:(event.clientY-rect.top)*surface.clientHeight/Math.max(1,rect.height)};};
+ const project=(point:V)=>canvas.projectWorld(point);
+ const draw=()=>{
+  api.refresh();if(!active()){if(svg.childNodes.length)svg.replaceChildren();key='';return;}
+  const o=project(mesh.position),pixels=Math.max(...axes.map(a=>{const p={...mesh.position};p[a]+=1;const q=project(p);return Math.hypot(q.x-o.x,q.y-o.y);})),length=70/Math.max(4,pixels);
+  const ends=axes.map(axis=>{const v={...mesh.position};v[axis]+=length;return project(v);});
+  const next=JSON.stringify([o,ends,mesh.rotation,mesh.scale,surface.clientWidth,surface.clientHeight]);if(next===key)return;key=next;svg.replaceChildren();svg.setAttribute('viewBox',`0 0 ${surface.clientWidth} ${surface.clientHeight}`);if(!o.visible)return;
+  const line=(d:string,color:string,width=2)=>{const p=document.createElementNS(ns,'path');p.setAttribute('d',d);p.setAttribute('stroke',color);p.setAttribute('stroke-width',String(width));p.setAttribute('fill','none');svg.append(p);return p;};
+  // Projected yellow object bounds provide the same selection cue for all tools.
+  const corners=mesh.geometry.vertices.map(v=>project(canvas.localToWorld(v,mesh))).filter(v=>v.visible);if(corners.length){let x=Infinity,y=Infinity,right=-Infinity,bottom=-Infinity;for(const p of corners){x=Math.min(x,p.x);y=Math.min(y,p.y);right=Math.max(right,p.x);bottom=Math.max(bottom,p.y);}const w=right-x,h=bottom-y;line(`M${x} ${y}h${w}v${h}h${-w}Z`,'#ffe34d',1);}
+  const begin=(event:PointerEvent,selected:Axis[]|'all')=>{
+   if(event.button!==0)return;event.preventDefault();event.stopImmediatePropagation();gesture?.abort();const drag=new AbortController();gesture=drag;const start=local(event),value=read();
+   const rotationAxis=selected==='all'?'z':selected[0],planeAxes=rotationAxis==='x'?['y','z'] as const:rotationAxis==='y'?['z','x'] as const:['x','y'] as const;
+   const angleAt=(e:PointerEvent)=>{const ray=canvas.rayFromClient(e.clientX,e.clientY),denominator=ray.direction[rotationAxis];if(Math.abs(denominator)>1e-5){const t=(mesh.position[rotationAxis]-ray.origin[rotationAxis])/denominator;if(t>0){const [a,b]=planeAxes;return Math.atan2(ray.origin[b]+ray.direction[b]*t-mesh.position[b],ray.origin[a]+ray.direction[a]*t-mesh.position[a]);}}const p=local(e);return Math.atan2(p.y-o.y,p.x-o.x);};
+   let previousAngle=angleAt(event),rotationDelta=0;
+   canvas.dispatchEvent(new CustomEvent('arianna:transform-start',{detail:{mode,mesh}}));
+   const cancel=()=>{drag.abort();gesture=null;canvas.dispatchEvent(new CustomEvent('arianna:transform-end',{detail:{mode,mesh}}));};
+   document.addEventListener('pointermove',e=>{if(e.pointerId!==event.pointerId)return;e.preventDefault();const p=local(e),dx=p.x-start.x,dy=p.y-start.y,v={...value},chosen=selected==='all'?axes:selected;
+    if(mode==='rotate'){const angle=angleAt(e),delta=angle-previousAngle;rotationDelta+=Math.atan2(Math.sin(delta),Math.cos(delta));previousAngle=angle;for(const a of chosen)v[a]=value[a]+rotationDelta*180/Math.PI;}
+    else if(mode==='scale'){for(const a of chosen){const q=ends[axes.indexOf(a)],vx=q.x-o.x,vy=q.y-o.y,delta=selected==='all'?(dx-dy)/100:(dx*vx+dy*vy)/Math.max(16,vx*vx+vy*vy);v[a]=Math.max(.001,value[a]*(1+delta));}}
+    else {const vectors=chosen.map(a=>{const q=ends[axes.indexOf(a)];return{x:(q.x-o.x)/length,y:(q.y-o.y)/length};});
+     if(chosen.length===2){const [u,w]=vectors,det=u.x*w.y-u.y*w.x;if(Math.abs(det)>1e-5){v[chosen[0]]+= (dx*w.y-dy*w.x)/det;v[chosen[1]]+=(dy*u.x-dx*u.y)/det;}}
+     else for(let i=0;i<chosen.length;i++){const u=vectors[i];v[chosen[i]]+=(dx*u.x+dy*u.y)/Math.max(1e-6,u.x*u.x+u.y*u.y);}
+     const snapped=canvas.snapPoint(v);for(const a of chosen)v[a]=snapped[a];
+    }write(v);key='';draw();canvas.dispatchEvent(new CustomEvent('arianna:transform-change',{detail:{mode,mesh,value:v}}));
+   },{capture:true,signal:drag.signal});
+   document.addEventListener('pointerup',e=>{if(e.pointerId===event.pointerId)cancel();},{capture:true,signal:drag.signal});document.addEventListener('pointercancel',cancel,{once:true,signal:drag.signal});document.addEventListener('keydown',e=>{if(e.key==='Escape'){write(value);cancel();key='';draw();}},{signal:drag.signal});control.signal.addEventListener('abort',cancel,{once:true,signal:drag.signal});window.addEventListener('blur',cancel,{once:true,signal:drag.signal});
+  };
+  for(let i=0;i<3;i++){const a=axes[i],p=ends[i];let labelPoint=p;let d=`M${o.x} ${o.y}L${p.x} ${p.y}`;
+   if(mode==='rotate'){const others=axes.filter(v=>v!==a),pts=[];for(let n=0;n<=64;n++){const v={...mesh.position},angle=n*Math.PI/32;v[others[0]]+=Math.cos(angle)*length;v[others[1]]+=Math.sin(angle)*length;pts.push(project(v));}labelPoint=pts[(8+i*16)%64];d=pts.map((p,n)=>`${n?'L':'M'}${p.x} ${p.y}`).join('');}
+   line(d,colors[a]);const hit=line(d,'transparent',12);hit.style.pointerEvents='stroke';hit.style.cursor=mode==='rotate'?'crosshair':'move';hit.setAttribute('aria-label',mode+' '+a);hit.addEventListener('pointerdown',e=>begin(e,[a]));
+   const text=document.createElementNS(ns,'text');const dx=labelPoint.x-o.x,dy=labelPoint.y-o.y,n=Math.hypot(dx,dy)||1;
+   text.setAttribute('x',String(labelPoint.x+dx/n*13));text.setAttribute('y',String(labelPoint.y+dy/n*13));text.setAttribute('text-anchor','middle');text.setAttribute('dominant-baseline','central');text.setAttribute('fill',colors[a]);text.setAttribute('stroke',canvas.getAttribute('theme')==='light'?'#fff':'#15191e');text.setAttribute('stroke-width','3');text.setAttribute('paint-order','stroke');text.setAttribute('font-size','13');text.setAttribute('font-weight','700');text.setAttribute('font-family','system-ui,sans-serif');text.setAttribute('data-gizmo-axis',a);text.style.pointerEvents='none';text.textContent=a.toUpperCase();svg.appendChild(text);
+   if(mode!=='rotate'){const cap=document.createElementNS(ns,mode==='scale'?'rect':'path');if(mode==='scale'){cap.setAttribute('x',String(p.x-4));cap.setAttribute('y',String(p.y-4));cap.setAttribute('width','8');cap.setAttribute('height','8');}else {const angle=Math.atan2(p.y-o.y,p.x-o.x),c=Math.cos(angle),s=Math.sin(angle);cap.setAttribute('d',`M${p.x} ${p.y}L${p.x-10*c+4*s} ${p.y-10*s-4*c}L${p.x-10*c-4*s} ${p.y-10*s+4*c}Z`);}cap.setAttribute('fill',colors[a]);cap.style.pointerEvents='all';cap.addEventListener('pointerdown',e=>begin(e as PointerEvent,[a]));svg.append(cap);}
+  }
+  if(mode==='rotate'){const sphere=document.createElementNS(ns,'circle');sphere.setAttribute('cx',String(o.x));sphere.setAttribute('cy',String(o.y));sphere.setAttribute('r','72');sphere.setAttribute('fill','none');sphere.setAttribute('stroke','#ffe34d');sphere.setAttribute('stroke-opacity','.6');svg.append(sphere);}
+  else for(const pair of [['x','y'],['x','z'],['y','z']] as Axis[][]){const u=ends[axes.indexOf(pair[0])],v=ends[axes.indexOf(pair[1])],pt=(a:number,b:number)=>`${o.x+(u.x-o.x)*a+(v.x-o.x)*b},${o.y+(u.y-o.y)*a+(v.y-o.y)*b}`;const plane=document.createElementNS(ns,'polygon');plane.setAttribute('points',[pt(.15,.15),pt(.4,.15),pt(.4,.4),pt(.15,.4)].join(' '));plane.setAttribute('fill','#ffe34d');plane.setAttribute('fill-opacity','.25');plane.setAttribute('stroke','#ffe34d');plane.style.pointerEvents='all';plane.style.cursor='move';plane.addEventListener('pointerdown',e=>begin(e,pair));svg.append(plane);}
+  if(mode==='scale'){const center=document.createElementNS(ns,'rect');center.setAttribute('x',String(o.x-5));center.setAttribute('y',String(o.y-5));center.setAttribute('width','10');center.setAttribute('height','10');center.setAttribute('fill','#ffe34d');center.style.pointerEvents='all';center.addEventListener('pointerdown',e=>begin(e,'all'));svg.append(center);}
+ };
+ let footer=canvas.querySelector<HTMLElement>('.Canvas3D-TransformFooter');if(!footer){footer=document.createElement('footer');footer.className='Canvas3D-TransformFooter Canvas3D-Toolbar';footer.style.cssText='top:auto;bottom:0;left:0;right:0;max-width:100%;border-radius:0;overflow:auto';canvas.appendChild(footer);}footer.append(bar);
+ const unsubscribe=canvas.onFrame(()=>draw());api.refresh();draw();return api;
+}

@@ -75,3 +75,4 @@ Canvas3D, Grid3D, Snappable3D, Selection3D, Tools3D, Csg, MaterialsPalette, Modi
 ColorPickerSquare, ColorPickerTile, ColorPickerWheel, LinearGradientEditor, RadialGradientEditor, ShapeGradientEditor, GraphicsColorPicker, RGBColorPicker, HSLColorPicker, HSVColorPicker, OKHSLColorPicker, OKHSVColorPicker, CMYKColorPicker, XYZColorPicker, CIELABColorPicker, CIELUVColorPicker, CIEUVWColorPicker, } from './graphics/index.ts';
 // Re-export the colour utility functions (not classes)
 export { parseHexRgba, rgbToHex, rgbToHsl, hslToRgb } from './graphics/colors/GraphicsColorPicker.ts';
+export { SceneGraph } from './graphics/3D/SceneGraph.ts';

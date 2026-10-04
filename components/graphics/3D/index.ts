@@ -9,10 +9,11 @@ export { Csg, CsgComponent } from './Csg.ts';
 export type { CsgOperation, CsgMode, CsgOperand } from './Csg.ts';
 
 
-// Source compatibility only. New code and Playground use the canonical names
-// above; keeping these aliases avoids breaking consumers during the rename.
 export { default as MaterialsPalette } from './MaterialsPalette.ts';
 export type { MaterialsPaletteOptions } from './MaterialsPalette.ts';
 export { default as Modifiers3DPalette } from './Modifiers3DPalette.ts';
 export type { Modifiers3DPaletteOptions } from './Modifiers3DPalette.ts';
 export * from './modifiers/index.ts';
+
+export { SceneGraph } from './SceneGraph.ts';
+export type { SceneGraphOptions } from './SceneGraph.ts';

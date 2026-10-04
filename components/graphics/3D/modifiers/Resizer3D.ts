@@ -1,3 +1,5 @@
+import type { Canvas3D } from '../Canvas3D.ts';
+import { attachTransformControls, type TransformControls } from './TransformGizmo.ts';
 /** 3D counterpart of Resizer: edits mesh scale on three axes. */
 import { Modifier3D as Base } from './Base.ts';
 declare const Component:any; declare const Templates:any; const html=Templates.Template.Html;
@@ -8,6 +10,12 @@ export namespace Resizer3D
     export type Callback=(mesh:Base.Interfaces.MeshLike,scale:Base.Interfaces.Vec3Like)=>void;
     export class Resizer3D extends Base.Modifier3D
     {
+        /** Compose controls on an already connected canvas; destroy releases all listeners. */
+        public attachControls(canvas:Canvas3D.Canvas3D):TransformControls {
+            const controls=attachTransformControls(canvas,this.mesh as Canvas3D.Mesh3,'scale',v=>this.setScale(v.x,v.y,v.z));
+            this.cleanups.push(()=>controls.destroy());return controls;
+        }
+
         public axis:Axis='all';public min=0.001;public max=Number.POSITIVE_INFINITY;
         private value:Partial<Base.Interfaces.Vec3Like>={};private callbacks=new Set<Callback>();
         constructor(mesh:Base.Interfaces.MeshLike=Base.Modifier3D.UNBOUND_MESH,options:Options={}){super(mesh);this.axis=options.axis??'all';this.min=Math.max(0,options.min??.001);this.max=Math.max(this.min,options.max??Infinity);const u=options.uniform;this.value={x:u??options.x,y:u??options.y,z:u??options.z};if(options.disabled)this.disable();}
@@ -20,6 +28,6 @@ export namespace Resizer3D
     }
     @Component('arianna-resizer-3d',{}, {Shadow:false,Attributes:['viewport','for','enabled','disabled','x','y','z','uniform','axis','min','max']})
     export class Resizer3DElement extends Base.Modifier3DElement
-    {public template=html``;protected createModifier(mesh:Base.Interfaces.MeshLike):Base.Modifier3D{const n=(a:string,f:number)=>{const v=Number(this.getAttribute(a));return Number.isFinite(v)?v:f;},u=this.hasAttribute('uniform')?n('uniform',1):undefined;return new Resizer3D(mesh,{x:n('x',mesh.scale.x),y:n('y',mesh.scale.y),z:n('z',mesh.scale.z),uniform:u,axis:(this.getAttribute('axis')??'all') as Axis,min:n('min',.001),max:n('max',Infinity)});}}
+    {public template=html``;protected createModifier(mesh:Base.Interfaces.MeshLike):Base.Modifier3D{const n=(a:string,f:number)=>{const v=Number(this.getAttribute(a)??f);return Number.isFinite(v)?v:f;},u=this.hasAttribute('uniform')?n('uniform',1):undefined;return new Resizer3D(mesh,{x:n('x',mesh.scale.x),y:n('y',mesh.scale.y),z:n('z',mesh.scale.z),uniform:u,axis:(this.getAttribute('axis')??'all') as Axis,min:n('min',.001),max:n('max',Infinity)});}}
 }
 export type Resizer3DOptions=Resizer3D.Options;export default Resizer3D.Resizer3D;
