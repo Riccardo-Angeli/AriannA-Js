@@ -1,5 +1,5 @@
 /** Optional movable, dockable and resizable topology window. No renderer ownership. */
-import Dockable from '../../../../../../../../Downloads/Graphics-Seven-Fixes/components/graphics/2D/modifiers/Dockable.ts';
+import Dockable from '../2D/modifiers/Dockable.ts';
 import type { Canvas3D } from './Canvas3D.ts';
 import { CanvasSelection } from './Canvas3D.ts';
 type SelectionEngine=CanvasSelection.CanvasSelection;

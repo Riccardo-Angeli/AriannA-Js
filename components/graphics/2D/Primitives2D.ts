@@ -1,5 +1,5 @@
 import { Component, Css, Templates } from '../../../core/index.ts';
-import Dockable from '../../../../../../../../Downloads/Graphics-Seven-Fixes/components/graphics/2D/modifiers/Dockable.ts';
+import Dockable from './modifiers/Dockable.ts';
 import Mover from './modifiers/Mover.ts';
 import Resizer from './modifiers/Resizer.ts';
 const interactionCleanup=new WeakMap<object,Set<()=>void>>();
@@ -68,12 +68,12 @@ export class Primitives2D extends HTMLElement {
   const canvas=this.resolve();if(canvas){
    const surface=canvas.drawingSurface;surface.appendChild(element);
    let box={x:0,y:0,width:120,height:80};try{const bounds=(element as SVGGraphicsElement).getBBox();box={x:bounds.x-3,y:bounds.y-3,width:Math.max(12,bounds.width+6),height:Math.max(12,bounds.height+6)};}catch{}
-   const foreign=document.createElementNS('http://www.w3.org/2000/svg','foreignObject');foreign.setAttribute('width','1');foreign.setAttribute('height','1');foreign.style.cssText='overflow:visible;pointer-events:none';
-   const origin=document.createElement('div');origin.style.cssText='position:relative;width:1px;height:1px;overflow:visible;pointer-events:none';
-   const wrapper=document.createElement('div');wrapper.className='Primitive2D-Object';wrapper.style.cssText='position:absolute;pointer-events:auto;touch-action:none;left:'+box.x+'px;top:'+box.y+'px;width:'+box.width+'px;height:'+box.height+'px';
-   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox',[box.x,box.y,box.width,box.height].join(' '));svg.setAttribute('preserveAspectRatio','none');svg.style.cssText='display:block;width:100%;height:100%;overflow:visible';svg.appendChild(element);wrapper.appendChild(svg);origin.appendChild(wrapper);foreign.appendChild(origin);surface.appendChild(foreign);
+   // Keep HTML interactions in Canvas2D.world. A 1px SVG foreignObject with
+   // overflowing HTML can leave stale raster fragments while moving/resizing.
+   const wrapper=document.createElement('div');wrapper.className='Primitive2D-Object';wrapper.style.cssText='position:absolute;box-sizing:border-box;pointer-events:auto;touch-action:none;left:'+box.x+'px;top:'+box.y+'px;width:'+box.width+'px;height:'+box.height+'px';
+   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox',[box.x,box.y,box.width,box.height].join(' '));svg.setAttribute('preserveAspectRatio','none');svg.setAttribute('width','100%');svg.setAttribute('height','100%');svg.style.cssText='display:block;width:100%;height:100%;overflow:hidden';svg.appendChild(element);wrapper.appendChild(svg);canvas.world.appendChild(wrapper);
    const mover=new Mover();mover.bounds='none';mover.attach(wrapper);const resizer=new Resizer(undefined,{minWidth:12,minHeight:12});resizer.attach(wrapper);
-   let cleanups=interactionCleanup.get(this);if(!cleanups){cleanups=new Set();interactionCleanup.set(this,cleanups);}cleanups.add(()=>{mover.destroy();resizer.destroy();foreign.remove();});
+   let cleanups=interactionCleanup.get(this);if(!cleanups){cleanups=new Set();interactionCleanup.set(this,cleanups);}cleanups.add(()=>{mover.destroy();resizer.destroy();wrapper.remove();});
   }
   this.dispatchEvent(new CustomEvent('arianna:primitive-create',{bubbles:true,composed:true,detail:{name,element,canvas,source:this}}));return element;
  }

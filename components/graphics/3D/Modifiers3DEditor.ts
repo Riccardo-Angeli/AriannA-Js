@@ -30,7 +30,33 @@ export namespace Modifiers3DEditor {
         }
     }
     export const ModifierTags:Readonly<Record<Types.ModifierKind,string>>=Object.freeze({"bend": "arianna-bend", "twist": "arianna-twist", "taper": "arianna-taper", "squeeze": "arianna-squeeze", "push": "arianna-push", "noise": "arianna-noise", "mirror": "arianna-mirror", "relax": "arianna-relax", "subdivision": "arianna-subdivision", "mesh-smooth": "arianna-mesh-smooth", "extrude": "arianna-extrude", "bevel": "arianna-bevel", "bevel-profile": "arianna-bevel-profile", "sweep": "arianna-sweep", "surface": "arianna-surface", "array": "arianna-array", "wave": "arianna-wave", "lathe": "arianna-lathe", "cross-section": "arianna-cross-section", "mover": "arianna-mover-3d", "resizer": "arianna-resizer-3d", "rotator": "arianna-rotator-3d", "rounder": "arianna-rounder-3d", "skewer": "arianna-skewer-3d"});
-    const DEFAULT_PARAMS:Readonly<Record<Types.ModifierKind,Record<string,number|string|boolean>>>=Object.freeze({"bend": {"axis": "y", "angle": 1.35, "direction": 0, "limits": false, "lower": -1, "upper": 1}, "twist": {"axis": "y", "angle": 2.4, "bias": 0, "limits": false, "lower": -1, "upper": 1}, "taper": {"axis": "y", "amount": 0.5, "curve": 0, "symmetric": false, "limits": false, "lower": -1, "upper": 1}, "squeeze": {"axis": "y", "amount": 0.2, "radial": -0.3, "curve": 0, "limits": false, "lower": -1, "upper": 1}, "push": {"amount": 0.15}, "noise": {"seed": 1, "scale": 1, "strength-x": 0.2, "strength-y": 0.2, "strength-z": 0.2, "octaves": 3, "roughness": 0.5, "phase": 0}, "mirror": {"axis": "y", "offset": 0, "copy": true}, "relax": {"iterations": 2, "factor": 0.3, "boundaries": true}, "subdivision": {"iterations": 1}, "mesh-smooth": {"iterations": 1, "boundaries": true}, "extrude": {"amount": 1, "segments": 1, "cap": true}, "bevel": {"amount": 1, "cap": true}, "bevel-profile": {"cap": true}, "sweep": {"cap": true, "closed-path": false, "twist": 0}, "surface": {"samples": 24, "steps": 2, "closed": true, "flip": false}, "array": {"count": 5, "type": "linear", "offset-x": 1.25, "offset-y": 0, "offset-z": 0, "radius": 2.4, "axis": "y"}, "wave": {"amplitude": 0.25, "frequency": 4, "axis": "y", "direction": "x", "animate": true}, "lathe": {"axis": "y", "segments": 32, "angle-deg": 360, "cap": true}, "cross-section": {"samples": 24, "closed": true}, "mover": {"x": 0, "y": 0, "z": 0, "axis": "xyz", "snap-enabled": true}, "resizer": {"x": 1, "y": 1, "z": 1, "uniform": 1, "axis": "xyz"}, "rotator": {"x": 0, "y": 0, "z": 0, "angle": 0, "axis": "y"}, "rounder": {"radius": 0.12, "segments": 2}, "skewer": {"x": 0, "y": 0, "z": 0, "max-angle": 1.4}});
+    type ModifierDefaults = Record<Types.ModifierKind, Record<string, number | string | boolean>>;
+    const DEFAULT_PARAMS: Readonly<ModifierDefaults> = Object.freeze<ModifierDefaults>({
+        "bend": {"axis": "y", "angle": 1.35, "direction": 0, "limits": false, "lower": -1, "upper": 1},
+        "twist": {"axis": "y", "angle": 2.4, "bias": 0, "limits": false, "lower": -1, "upper": 1},
+        "taper": {"axis": "y", "amount": 0.5, "curve": 0, "symmetric": false, "limits": false, "lower": -1, "upper": 1},
+        "squeeze": {"axis": "y", "amount": 0.2, "radial": -0.3, "curve": 0, "limits": false, "lower": -1, "upper": 1},
+        "push": {"amount": 0.15},
+        "noise": {"seed": 1, "scale": 1, "strength-x": 0.2, "strength-y": 0.2, "strength-z": 0.2, "octaves": 3, "roughness": 0.5, "phase": 0},
+        "mirror": {"axis": "y", "offset": 0, "copy": true},
+        "relax": {"iterations": 2, "factor": 0.3, "boundaries": true},
+        "subdivision": {"iterations": 1},
+        "mesh-smooth": {"iterations": 1, "boundaries": true},
+        "extrude": {"amount": 1, "segments": 1, "cap": true},
+        "bevel": {"amount": 1, "cap": true},
+        "bevel-profile": {"cap": true},
+        "sweep": {"cap": true, "closed-path": false, "twist": 0},
+        "surface": {"samples": 24, "steps": 2, "closed": true, "flip": false},
+        "array": {"count": 5, "type": "linear", "offset-x": 1.25, "offset-y": 0, "offset-z": 0, "radius": 2.4, "axis": "y"},
+        "wave": {"amplitude": 0.25, "frequency": 4, "axis": "y", "direction": "x", "animate": true},
+        "lathe": {"axis": "y", "segments": 32, "angle-deg": 360, "cap": true},
+        "cross-section": {"samples": 24, "closed": true},
+        "mover": {"x": 0, "y": 0, "z": 0, "axis": "xyz", "snap-enabled": true},
+        "resizer": {"x": 1, "y": 1, "z": 1, "uniform": 1, "axis": "xyz"},
+        "rotator": {"x": 0, "y": 0, "z": 0, "angle": 0, "axis": "y"},
+        "rounder": {"radius": 0.12, "segments": 2},
+        "skewer": {"x": 0, "y": 0, "z": 0, "max-angle": 1.4}
+    });
     interface State {
         stack: Interfaces.ModifierEntry[];
         activeId: string | null;
