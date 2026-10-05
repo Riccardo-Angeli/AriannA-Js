@@ -8,8 +8,8 @@
  * @description AriannA Base component module.
  */
 
-declare const Component: any;
-declare const Templates: any;
+import { Component, Templates } from '../../../../core/index.ts';
+
 
 
 
@@ -121,10 +121,7 @@ export namespace Modifier3D
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            uvs?: [
-                number,
-                number
-            ][];
+            uvs?: Array<[number, number] | { x:number; y:number }>;
 
             /** @name        clone
              *  @public
@@ -365,10 +362,7 @@ export namespace Modifier3D
             normals: g.normals.map(v => ({ ...v })),
             indices: [...g.indices],
             faceIds:g.faceIds?[...g.faceIds]:undefined,
-            uvs: g.uvs ? g.uvs.map(uv => [...uv] as [
-                number,
-                number
-            ]) : undefined,
+            uvs: g.uvs ? g.uvs.map(uv => Array.isArray(uv) ? [uv[0], uv[1]] as [number, number] : { x:uv.x, y:uv.y }) : undefined,
             /** @name        clone
              *  @public
              *  @type        {void}
@@ -426,7 +420,7 @@ export namespace Modifier3D
      */
     type PanelControlType = 'range' | 'select' | 'toggle';
 
-    interface PanelControl
+    export interface PanelControl
     {
         attr: string;
         label: string;
@@ -439,12 +433,15 @@ export namespace Modifier3D
         suffix?: string;
     }
 
-    interface PanelSchema
+    export interface PanelSchema
     {
         title: string;
         subtitle: string;
         controls: readonly PanelControl[];
     }
+
+    const AdditionalPanelSchemas:Record<string,PanelSchema> = {};
+    export function RegisterPanelSchema(tag:string,schema:PanelSchema):void { AdditionalPanelSchemas[tag]=schema; }
 
     const PanelSchemas: Readonly<Record<string, PanelSchema>> = Object.freeze({
         'arianna-array': {
@@ -470,41 +467,12 @@ export namespace Modifier3D
                 {attr:'segments',label:'Segments',type:'range',min:1,max:6,step:1,value:2},
             ]
         },
-        'arianna-billboard': {
-            title:'Billboard', subtitle:'Face the active camera', controls:[
-                {attr:'lock-x',label:'Lock X',type:'toggle',value:false},
-                {attr:'lock-y',label:'Lock Y',type:'toggle',value:false},
-                {attr:'lock-z',label:'Lock Z',type:'toggle',value:false},
-            ]
-        },
-        'arianna-decimate': {
-            title:'Decimate', subtitle:'Reduce triangle density', controls:[
-                {attr:'ratio',label:'Ratio',type:'range',min:.05,max:1,step:.05,value:.45},
-            ]
-        },
-        'arianna-drag': {
-            title:'Drag', subtitle:'Move the target mesh on a plane', controls:[
-                {attr:'plane',label:'Plane',type:'select',value:'xz',options:['xz','xy','yz']},
-            ]
-        },
-        'arianna-fade': {
-            title:'Fade', subtitle:'Distance-based visibility', controls:[
-                {attr:'near',label:'Near',type:'range',min:1,max:10,step:.1,value:3.5},
-                {attr:'far',label:'Far',type:'range',min:2,max:16,step:.1,value:8},
-            ]
-        },
-        'arianna-inflate': {
-            title:'Inflate', subtitle:'Move vertices along normals', controls:[
-                {attr:'amount',label:'Amount',type:'range',min:-.6,max:.8,step:.01,value:.18},
-            ]
-        },
-        'arianna-lod': {
-            title:'LOD', subtitle:'Automatic geometry detail by distance', controls:[
-                {attr:'near',label:'High ≤',type:'range',min:2,max:8,step:.1,value:4.5},
-                {attr:'mid',label:'Medium ≤',type:'range',min:4,max:12,step:.1,value:7},
-                {attr:'far',label:'Low ≤',type:'range',min:6,max:18,step:.1,value:11},
-            ]
-        },
+
+
+
+
+
+
         'arianna-mirror': {
             title:'Mirror', subtitle:'Mirror geometry on an axis', controls:[
                 {attr:'axis',label:'Axis',type:'select',value:'x',options:['x','y','z']},
@@ -512,18 +480,8 @@ export namespace Modifier3D
                 {attr:'threshold',label:'Weld ε',type:'range',min:.0001,max:.05,step:.0001,value:.001},
             ]
         },
-        'arianna-smooth': {
-            title:'Smooth', subtitle:'Laplacian surface smoothing', controls:[
-                {attr:'iterations',label:'Iterations',type:'range',min:1,max:8,step:1,value:2},
-                {attr:'factor',label:'Factor',type:'range',min:.05,max:.95,step:.05,value:.4},
-            ]
-        },
-        'arianna-snap': {
-            title:'Snap', subtitle:'Quantize transform', controls:[
-                {attr:'pos-grid',label:'Position grid',type:'range',min:.05,max:2,step:.05,value:.5},
-                {attr:'rot-grid-deg',label:'Rotation grid',type:'range',min:1,max:90,step:1,value:15,suffix:'°'},
-            ]
-        },
+
+
         'arianna-subdivision': {
             title:'Subdivision', subtitle:'Midpoint subdivision surface', controls:[
                 {attr:'iterations',label:'Iterations',type:'range',min:0,max:3,step:1,value:1},
@@ -576,19 +534,15 @@ export namespace Modifier3D
                 {attr:'snap',label:'Snap',type:'range',min:0,max:90,step:1,value:0,suffix:'°'},
             ]
         },
-        'arianna-reflector-3d': {
-            title:'Reflector3D', subtitle:'Reflect object transform', controls:[
-                {attr:'axis',label:'Axis',type:'select',value:'x',options:['x','y','z','xy','xz','yz','xyz']},
-            ]
-        },
+
         'arianna-rounder-3d': {
             title:'Rounder3D', subtitle:'Solid fillet · spherical corners', controls:[
                 {attr:'radius',label:'Radius',type:'range',min:0,max:1,step:.01,value:.05},
                 {attr:'segments',label:'Segments',type:'range',min:1,max:12,step:1,value:3},
             ]
         },
-        'arianna-revolve': {
-            title:'RevolveModifier',subtitle:'Profile revolution',controls:[
+        'arianna-lathe': {
+            title:'LatheModifier3D',subtitle:'Profile revolution',controls:[
                 {attr:'axis',label:'Axis',type:'select',value:'y',options:['x','y','z']},
                 {attr:'angle-deg',label:'Angle',type:'range',min:1,max:360,step:1,value:360,suffix:'°'},
                 {attr:'start-angle-deg',label:'Start',type:'range',min:-180,max:180,step:1,value:0,suffix:'°'},
@@ -614,10 +568,16 @@ export namespace Modifier3D
         const style=document.createElement('style');
         style.id='arianna-modifier-3d-panel-styles';
         style.textContent=`
-arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,arianna-decimate,arianna-drag,arianna-fade,arianna-inflate,arianna-lod,arianna-mirror,arianna-smooth,arianna-snap,arianna-subdivision,arianna-twist,arianna-wave,arianna-mover-3d,arianna-resizer-3d,arianna-rotator-3d,arianna-reflector-3d,arianna-rounder-3d,arianna-skewer-3d,arianna-revolve{box-sizing:border-box;position:absolute;top:14px;right:14px;z-index:25;width:272px;max-height:calc(100% - 28px);overflow:auto;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(24,27,31,.94);box-shadow:0 18px 50px rgba(0,0,0,.32);backdrop-filter:blur(14px);color:#edf0f3;font:12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto}
+:where(.Modifier3DPanel),arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-mirror,arianna-subdivision,arianna-twist,arianna-wave,arianna-mover-3d,arianna-resizer-3d,arianna-rotator-3d,arianna-rounder-3d,arianna-skewer-3d,arianna-lathe{box-sizing:border-box;position:absolute;top:14px;right:14px;z-index:25;width:272px;max-height:calc(100% - 28px);overflow:auto;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:rgba(24,27,31,.94);box-shadow:0 18px 50px rgba(0,0,0,.32);backdrop-filter:blur(14px);color:#edf0f3;font:12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto}
 .ar-mod3d__head{display:flex;align-items:center;gap:9px;padding:10px 11px;border-bottom:1px solid rgba(255,255,255,.1);cursor:move;user-select:none;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012))}
 .ar-mod3d__titles{min-width:0;flex:1}.ar-mod3d__title{display:block;font-size:12px;font-weight:750;color:#fff}.ar-mod3d__sub{display:block;margin-top:1px;font-size:9px;color:#8f98a2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ar-mod3d__enabled{display:flex;align-items:center;gap:5px;color:#9da6ae;font-size:9px}.ar-mod3d__enabled input{accent-color:#e40c88}
 .ar-mod3d__body{display:grid;gap:9px;padding:11px}.ar-mod3d__row{display:grid;grid-template-columns:86px minmax(0,1fr) 48px;align-items:center;gap:7px}.ar-mod3d__row--select{grid-template-columns:86px minmax(0,1fr)}.ar-mod3d__row--toggle{grid-template-columns:1fr auto}.ar-mod3d__label{color:#aeb6bd;font-size:10px}.ar-mod3d__value{box-sizing:border-box;width:100%;min-width:0;text-align:right;color:#f0f2f4;font:10px ui-monospace,SFMono-Regular,Menlo,monospace;background:#171b1e;border:1px solid #464c53;border-radius:5px;padding:4px 5px}.ar-mod3d__range{width:100%;accent-color:#e40c88}.ar-mod3d__resize{position:absolute;z-index:50;background:transparent;border:0;pointer-events:auto;touch-action:none;user-select:none}.ar-mod3d__resize[data-edge="n"]{left:12px;right:12px;top:0;height:8px;cursor:n-resize}.ar-mod3d__resize[data-edge="s"]{left:12px;right:12px;bottom:0;height:8px;cursor:s-resize}.ar-mod3d__resize[data-edge="e"]{right:0;top:12px;bottom:12px;width:8px;cursor:e-resize}.ar-mod3d__resize[data-edge="w"]{left:0;top:12px;bottom:12px;width:8px;cursor:w-resize}.ar-mod3d__resize[data-edge="ne"]{right:0;top:0;width:14px;height:14px;cursor:ne-resize}.ar-mod3d__resize[data-edge="nw"]{left:0;top:0;width:14px;height:14px;cursor:nw-resize}.ar-mod3d__resize[data-edge="se"]{right:0;bottom:0;width:14px;height:14px;cursor:se-resize}.ar-mod3d__resize[data-edge="sw"]{left:0;bottom:0;width:14px;height:14px;cursor:sw-resize}.ar-mod3d__select{width:100%;min-height:28px;border:1px solid #464c53;border-radius:6px;background:#22262b;color:#e8ebee;padding:4px 7px;font:10px system-ui}.ar-mod3d__toggle{accent-color:#e40c88}.ar-mod3d__foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 11px;border-top:1px solid rgba(255,255,255,.09)}.ar-mod3d__badge{color:#8f98a2;font:9px ui-monospace,SFMono-Regular,Menlo,monospace}.ar-mod3d__reset{appearance:none;border:1px solid #4b5158;border-radius:6px;background:#2b3035;color:#d9dde1;padding:5px 8px;font:700 9px system-ui;cursor:pointer}.ar-mod3d__reset:hover{border-color:#e40c88;color:#fff}
+
+.Modifier3DPanel[theme="light"]{background:rgba(244,245,247,.96);border-color:#b7bdc4;color:#242a30;box-shadow:0 14px 40px rgba(30,35,40,.18)}
+.Modifier3DPanel[theme="light"] .ar-mod3d__head{background:linear-gradient(180deg,#fff,#e3e7eb);border-color:#c3c9cf}
+.Modifier3DPanel[theme="light"] .ar-mod3d__title{color:#252b31}.Modifier3DPanel[theme="light"] .ar-mod3d__label,.Modifier3DPanel[theme="light"] .ar-mod3d__enabled,.Modifier3DPanel[theme="light"] .ar-mod3d__sub{color:#515b66}
+.Modifier3DPanel[theme="light"] .ar-mod3d__value,.Modifier3DPanel[theme="light"] .ar-mod3d__select{background:#fff;color:#242a30;border-color:#b8c0c8}
+.Modifier3DPanel[theme="light"] .ar-mod3d__reset{background:linear-gradient(#fff,#e0e5ea);color:#353d46;border-color:#b8c0c8}.Modifier3DPanel[theme="light"] .ar-mod3d__foot{border-color:#c3c9cf}
 `;
         document.head.append(style);
     }
@@ -682,9 +642,11 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
         onUpdate(): void {}
         onBeforeUnmount(): void {}
 
-        onAttributeChanged(): void
+        onAttributeChanged(name?:string): void
         {
             if(!this.isConnected) return;
+            // Runtime/presentation writes are not geometry parameters.
+            if(name&&(name==='style'||name==='class'||name==='id'||name==='theme'||name.startsWith('data-')||name.startsWith('aria-')))return;
             this.syncPanel();
             this.scheduleRefresh();
         }
@@ -756,7 +718,7 @@ arianna-modifier-3d,arianna-array,arianna-bend,arianna-bevel,arianna-billboard,a
             const s=ElementState(this);if(s.bound)return;
             queueMicrotask(()=>{const state=ElementState(this);if(state.bound||!this.isConnected)return;state.viewport=this.resolveViewport();if(!state.viewport){console.warn(`[${this.localName}] no Canvas3D/viewport resolved`);return;}state.target=this.resolveTarget();if(!state.target){console.warn(`[${this.localName}] target mesh not found`);return;}state.baseGeometry=_cloneGeom(state.target.geometry);state.baseTransform={position:{...state.target.position},rotation:{...state.target.rotation},scale:{...state.target.scale},visible:state.target.visible};state.bound=true;this.refreshModifier();});
         }
-        private schema(): PanelSchema{return PanelSchemas[this.localName]??{title:'Modifier 3D',subtitle:'Declarative modifier',controls:[]};}
+        private schema(): PanelSchema{return AdditionalPanelSchemas[this.localName]??PanelSchemas[this.localName]??{title:'Modifier 3D',subtitle:'Declarative modifier',controls:[]};}
         private ensureDefaults(schema:PanelSchema): void
         {
             for(const control of schema.controls){if(control.type==='toggle'){if(control.value===true&&!this.hasAttribute(control.attr))this.setAttribute(control.attr,'');continue;}if(!this.hasAttribute(control.attr)&&control.value!==undefined)this.setAttribute(control.attr,String(control.value));}

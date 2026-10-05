@@ -1,18 +1,18 @@
 /**
- * @module    components/graphics/3D/modifiers/WaveModifier
+ * @module    components/graphics/3D/modifiers/WaveModifier3D
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description AriannA WaveModifier component module.
+ * @description AriannA WaveModifier3D component module.
  */
 
 
-import { Modifier3D as Modifier3DNamespace } from './Base.ts';
+import { Modifier3D as Modifier3DNamespace } from '../Base.ts';
 
-declare const Component: any;
-declare const Templates: any;
+import { Component, Templates } from '../../../../../core/index.ts';
+
 
 
 /** @name        html
@@ -24,13 +24,13 @@ declare const Templates: any;
  *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
 
-/** @namespace   WaveModifier
+/** @namespace   WaveModifier3D
  *  @public
- *  @description Namespace containing WaveModifier contracts and implementation.
+ *  @description Namespace containing WaveModifier3D contracts and implementation.
  *  @author      Riccardo Angeli
  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
  *  @license     MIT / Commercial (dual license) */
-export namespace WaveModifier
+export namespace WaveModifier3D
 {
     /** @namespace   Interfaces
      *  @public
@@ -179,7 +179,7 @@ export namespace WaveModifier
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
             const direction = ((this.getAttribute('direction') ?? 'x') as 'x' | 'z');
-            return new WaveModifier(mesh, { amplitude, frequency, axis, direction });
+            return new WaveModifier3D(mesh, { amplitude, frequency, axis, direction });
         }
 
         /** @name        needsFrameUpdate
@@ -213,7 +213,7 @@ export namespace WaveModifier
              *  @author      Riccardo Angeli
              *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
              *  @license     MIT / Commercial (dual license) */
-            const m = this.getModifier() as WaveModifier | null;
+            const m = this.getModifier() as WaveModifier3D | null;
             if (m && this.viewport)
             {
                 m.update(this.viewport.camera, dt);
@@ -222,17 +222,17 @@ export namespace WaveModifier
         }
     }
 
-    /** @class       WaveModifier
+    /** @class       WaveModifier3D
      *  @public
-     *  @description AriannA WaveModifier component implementation.
+     *  @description AriannA WaveModifier3D component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export class WaveModifier extends Modifier3DNamespace.Modifier3D
+    export class WaveModifier3D extends Modifier3DNamespace.Modifier3D
     {
         /** @name        #opts
          *  @public
-         *  @type        {Required<WaveModifier.Interfaces.WaveModifierOptions>}
+         *  @type        {Required<WaveModifier3D.Interfaces.WaveModifierOptions>}
          *  @description Component member for opts.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
@@ -253,7 +253,7 @@ export namespace WaveModifier
          *  @type        {constructor}
          *  @description Constructs the component for constructor.
          *  @param       {Modifier3DNamespace.Interfaces.MeshLike} mesh Parameter.
-         *  @param       {WaveModifier.Interfaces.WaveModifierOptions} opts Parameter.
+         *  @param       {WaveModifier3D.Interfaces.WaveModifierOptions} opts Parameter.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
@@ -347,4 +347,4 @@ export namespace WaveModifier
         }
     }
 }
-export default WaveModifier;
+export default WaveModifier3D;

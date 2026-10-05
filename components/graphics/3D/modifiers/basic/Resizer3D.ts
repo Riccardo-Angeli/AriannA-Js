@@ -1,8 +1,8 @@
-import type { Canvas3D } from '../Canvas3D.ts';
-import { attachTransformControls, type TransformControls } from './TransformGizmo.ts';
+import type { Canvas3D } from '../../Canvas3D.ts';
+import { attachTransformControls, type TransformControls } from '../standard/TransformGizmo3D.ts';
 /** 3D counterpart of Resizer: edits mesh scale on three axes. */
-import { Modifier3D as Base } from './Base.ts';
-declare const Component:any; declare const Templates:any; const html=Templates.Template.Html;
+import { Modifier3D as Base } from '../Base.ts';
+import { Component, Templates } from '../../../../../core/index.ts';  const html=Templates.Template.Html;
 export namespace Resizer3D
 {
     export type Axis='x'|'y'|'z'|'xy'|'xz'|'yz'|'all';

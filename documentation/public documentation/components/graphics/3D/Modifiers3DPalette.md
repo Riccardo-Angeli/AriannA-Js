@@ -2,7 +2,7 @@
 
 **Stato:** da documentare.
 
-**Sorgente:** `components/graphics/3D/Modifiers3DPalette.ts`
+**Sorgente:** `../../../../../components/graphics/3D/Modifiers3DEditor.ts`
 
 Questa scheda riserva la posizione della documentazione; non dichiara API o verifiche eseguite.
 

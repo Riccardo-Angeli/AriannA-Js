@@ -7,10 +7,10 @@
  * edges and one spherical octant on every corner; it is not merely subdivided
  * or displaced along its (possibly stale) vertex normals.
  */
-import { Modifier3D as Base } from './Base.ts';
+import { Modifier3D as Base } from '../Base.ts';
 
-declare const Component:any;
-declare const Templates:any;
+import { Component, Templates } from '../../../../../core/index.ts';
+
 const html=Templates.Template.Html;
 
 export namespace Rounder3D

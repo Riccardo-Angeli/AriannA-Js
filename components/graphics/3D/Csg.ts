@@ -2,7 +2,7 @@
  * @module components/graphics/3D/Csg
  * @description Generic Constructive Solid Geometry controller for Canvas3D.
  * Operands are existing Canvas3D meshes selected with the mouse or supplied from code.
- * Primitive creation belongs to demos/applications, not to this component.
+ * Primitive creation is delegated to the independent Primitives3D toolbar.
  */
 import { Component, Css, Templates } from '../../../core/index.ts';
 import Three from '../../../additionals/Three.ts';
@@ -107,7 +107,7 @@ export namespace Csg
 
     export const Styles=new Css.Stylesheet([
         new Css.Rule('arianna-csg,.Csg',{Background:'rgba(28,32,37,.94)',Border:'1px solid #454c54',BorderRadius:'9px',BoxShadow:'0 14px 40px rgba(0,0,0,.28)',Color:'#d7dde3',Display:'block',Font:'11px/1.25 system-ui',MinHeight:'235px',MinWidth:'270px',Overflow:'hidden',Position:'absolute',Right:'14px',Top:'58px',Width:'320px',ZIndex:'30'}),
-        new Css.Rule('.Csg-Header',{AlignItems:'center',Background:'#24292f',BorderBottom:'1px solid #3b4249',Cursor:'move',Display:'flex',FontWeight:'700',Gap:'8px',JustifyContent:'space-between',Padding:'9px 10px',UserSelect:'none'}),
+        new Css.Rule('.Csg-Header',{AlignItems:'center',Background:'#24292f',BorderBottom:'1px solid #3b4249',Cursor:'move',Display:'flex',FontWeight:'700',Gap:'8px',JustifyContent:'space-between',Padding:'9px 10px',UserSelect:'none',TouchAction:'none'}),
         new Css.Rule('.Csg-Body',{Display:'grid',Gap:'9px',Padding:'10px'}),
         new Css.Rule('.Csg-Row',{AlignItems:'center',Display:'grid',Gap:'7px',GridTemplateColumns:'84px 1fr'}),
         new Css.Rule('.Csg-Label',{Color:'#9ea7af',FontSize:'10px',FontWeight:'650'}),
@@ -130,7 +130,7 @@ export namespace Csg
         new Css.Rule('arianna-csg[theme="light"] .Csg-Button,.Csg[theme="light"] .Csg-Button',{Background:'#f5f6f7',BorderColor:'#c9cfd4',Color:'#30363c'}),
     ]);
 
-    @Component('arianna-csg',Styles,{Shadow:false,Attributes:['for','mode','operation','theme','preserve-operands']})
+    @Component('arianna-csg',Styles,{Shadow:false,Attributes:['for','mode','operation','theme','preserve-operands','delete-after-csg']})
     export class Csg extends HTMLElement
     {
         public static readonly Styles=Styles;
@@ -146,7 +146,7 @@ export namespace Csg
             queueMicrotask(()=>this.bind());
         }
         public onUnmount():void{this.clearResults();const st=S(this);st.selectionCleanup?.();st.selectionCleanup=null;st.history.length=0;st.a=null;st.b=null;st.canvas=null;}
-        public onAttributeChanged():void{if(!this.isConnected)return;this.syncAttributes();this.renderPanel();queueMicrotask(()=>{if(this.isConnected)this.bind();});}
+        public onAttributeChanged(name:string):void{if(!['for','mode','operation','theme','preserve-operands','delete-after-csg'].includes(name)||!this.isConnected)return;this.syncAttributes();this.renderPanel();queueMicrotask(()=>{if(this.isConnected)this.bind();});}
 
         public bind(canvas?:HTMLElement|null):this
         {
@@ -158,11 +158,13 @@ export namespace Csg
                 {
                     st.selectionCleanup?.();
                     st.canvas=target as CanvasHost;
-                    this.wireSelection();
+                    this.wireSelection();this.renderPanel();
                 }
             }
             return this;
         }
+        public get DeleteAfterCSG():boolean{return this.getAttribute('delete-after-csg')!=='false'&&!this.hasAttribute('preserve-operands');}
+        public set DeleteAfterCSG(value:boolean){this.removeAttribute('preserve-operands');this.setAttribute('delete-after-csg',String(value));}
         public setMode(mode:Mode):this{this.setAttribute('mode',mode);return this;}
         public setOperation(operation:Operation):this{S(this).operation=operation;this.setAttribute('operation',operation);return this;}
         public beginPick(slot:OperandSlot):this{S(this).pickSlot=slot;S(this).picking=true;this.renderPanel();return this;}
@@ -174,7 +176,7 @@ export namespace Csg
         public commit(consumeOperands?:boolean):Canvas3DNamespace.Mesh3|null
         {
             const st=S(this),canvas=st.canvas;if(!canvas||!st.a||!st.b||st.a===st.b)return null;
-            consumeOperands??=!this.hasAttribute('preserve-operands');
+            consumeOperands??=this.DeleteAfterCSG;
             const a=st.a,b=st.b,operation=st.operation;
             const visibility:[boolean,boolean]=[a.visible,b.visible];
             const evaluated=this.evaluate(a,b,operation);
@@ -183,7 +185,7 @@ export namespace Csg
             this.clearResults();
             if(consumeOperands)
             {
-                a.visible=false;b.visible=false;
+                if(canvas.removeMesh){canvas.removeMesh(a);canvas.removeMesh(b);}else{canvas.scene.remove(a);canvas.scene.remove(b);}
             }
             if(canvas.addMesh)canvas.addMesh(String(result.userData.id),result);
             else canvas.scene.add(result);
@@ -199,7 +201,7 @@ export namespace Csg
         {
             const st=S(this),entry=st.history.pop();if(!entry||!st.canvas)return this;
             this.clearResults();if(st.canvas.removeMesh)st.canvas.removeMesh(entry.result);else st.canvas.scene.remove(entry.result);
-            if(entry.consumed){entry.operands[0].visible=entry.visible[0];entry.operands[1].visible=entry.visible[1];}
+            if(entry.consumed)entry.operands.forEach((mesh,index)=>{mesh.visible=entry.visible[index];if(!st.canvas!.scene.children.includes(mesh)){if(st.canvas!.addMesh)st.canvas!.addMesh(String(mesh.userData.id),mesh);else st.canvas!.scene.add(mesh);}});
             [st.a,st.b]=entry.operands;st.pickSlot='a';this.renderPanel();st.canvas.invalidate?.();this.emitSelection();
             this.dispatchEvent(new CustomEvent('arianna:csg-undo',{bubbles:true,composed:true,detail:{operands:entry.operands,result:entry.result,source:this}}));return this;
         }
@@ -282,6 +284,7 @@ export namespace Csg
                 name.onchange=()=>{st[slot]=name.value===''?null:candidates[Number(name.value)];this.clearResults();this.emitSelection();};
                 wrap.append(pick,name);return wrap;
             };
+            const consume=document.createElement('input');consume.type='checkbox';consume.checked=this.DeleteAfterCSG;consume.onchange=()=>{this.DeleteAfterCSG=consume.checked;};row('Delete After CSG',consume);
             row('Operand A',operand('a',st.a));
             row('Operand B',operand('b',st.b));
             row('Operation',select([['union','Union'],['intersection','Intersection'],['subtract','Subtraction (A − B)'],['subtract-reverse','Subtraction (B − A)']],st.operation,v=>this.setOperation(v as Operation)));
@@ -329,10 +332,11 @@ export namespace Csg
                 if(!st.picking)return;const mesh=this.pick(e.clientX,e.clientY);if(mesh){this.choose(mesh);st.picking=false;this.renderPanel();}
             };
             const onCancel=()=>{down=null;};
+            const refresh=()=>this.renderPanel();host.addEventListener('arianna:primitive-create',refresh);
             surface.addEventListener('pointerdown',onDown);
             surface.addEventListener('pointerup',onUp);
             surface.addEventListener('pointercancel',onCancel);
-            st.selectionCleanup=()=>{surface.removeEventListener('pointerdown',onDown);surface.removeEventListener('pointerup',onUp);surface.removeEventListener('pointercancel',onCancel);};
+            st.selectionCleanup=()=>{host.removeEventListener('arianna:primitive-create',refresh);surface.removeEventListener('pointerdown',onDown);surface.removeEventListener('pointerup',onUp);surface.removeEventListener('pointercancel',onCancel);};
         }
 
         private transform(v:Canvas3DNamespace.Vec3,m:Operand):Canvas3DNamespace.Vec3
@@ -381,14 +385,14 @@ export namespace Csg
         {
             head.onpointerdown=e=>
             {
-                if(e.button!==0)return;e.preventDefault();const left=this.offsetLeft,top=this.offsetTop;
+                if(e.button!==0)return;e.preventDefault();e.stopPropagation();const left=this.offsetLeft,top=this.offsetTop;
                 S(this).drag={id:e.pointerId,x:e.clientX,y:e.clientY,left,top};
                 this.style.right='auto';this.style.bottom='auto';this.style.left=`${left}px`;this.style.top=`${top}px`;
                 try{head.setPointerCapture(e.pointerId);}catch{}
             };
             head.onpointermove=e=>
             {
-                const d=S(this).drag;if(!d||d.id!==e.pointerId)return;
+                const d=S(this).drag;if(!d||d.id!==e.pointerId)return;e.stopPropagation();
                 const parent=this.offsetParent as HTMLElement|null,maxLeft=parent?Math.max(0,parent.clientWidth-this.offsetWidth):Number.POSITIVE_INFINITY,maxTop=parent?Math.max(0,parent.clientHeight-this.offsetHeight):Number.POSITIVE_INFINITY;
                 this.style.left=`${Math.max(0,Math.min(maxLeft,d.left+e.clientX-d.x))}px`;this.style.top=`${Math.max(0,Math.min(maxTop,d.top+e.clientY-d.y))}px`;
             };
@@ -396,7 +400,7 @@ export namespace Csg
         }
         private installResize():void
         {
-            const edges=[['n','top:-7px;left:14px;right:14px;height:14px','n-resize'],['s','bottom:-7px;left:14px;right:14px;height:14px','s-resize'],['e','right:-7px;top:14px;bottom:14px;width:14px','e-resize'],['w','left:-7px;top:14px;bottom:14px;width:14px','w-resize'],['ne','right:-8px;top:-8px;width:18px;height:18px','ne-resize'],['nw','left:-8px;top:-8px;width:18px;height:18px','nw-resize'],['se','right:-8px;bottom:-8px;width:18px;height:18px','se-resize'],['sw','left:-8px;bottom:-8px;width:18px;height:18px','sw-resize']] as const;
+            const edges=[['n','top:0;left:14px;right:14px;height:14px','n-resize'],['s','bottom:0;left:14px;right:14px;height:14px','s-resize'],['e','right:0;top:14px;bottom:14px;width:14px','e-resize'],['w','left:0;top:14px;bottom:14px;width:14px','w-resize'],['ne','right:0;top:0;width:18px;height:18px','ne-resize'],['nw','left:0;top:0;width:18px;height:18px','nw-resize'],['se','right:0;bottom:0;width:18px;height:18px','se-resize'],['sw','left:0;bottom:0;width:18px;height:18px','sw-resize']] as const;
             for(const [edge,css,cursor] of edges)
             {
                 const h=document.createElement('div');h.className='Csg-Resize';h.style.cssText=`${css};cursor:${cursor};touch-action:none`;

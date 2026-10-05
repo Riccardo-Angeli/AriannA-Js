@@ -23,3 +23,5 @@ export { Align } from './Align.ts';
 export type { AlignAction, AlignOptions, AlignTo } from './Align.ts';
 
 export * from './modifiers/index.ts';
+
+export { Primitives2D } from './Primitives2D.ts';

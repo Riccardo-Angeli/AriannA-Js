@@ -1,18 +1,18 @@
 /**
- * @module    components/graphics/3D/modifiers/ArrayModifier
+ * @module    components/graphics/3D/modifiers/ArrayModifier3D
  * @author    Riccardo Angeli
  * @version   2.0.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description AriannA ArrayModifier component module.
+ * @description AriannA ArrayModifier3D component module.
  */
 
 
-import { Modifier3D as Modifier3DNamespace } from './Base.ts';
+import { Modifier3D as Modifier3DNamespace } from '../Base.ts';
 
-declare const Component: any;
-declare const Templates: any;
+import { Component, Templates } from '../../../../../core/index.ts';
+
 
 
 /** @name        html
@@ -24,13 +24,13 @@ declare const Templates: any;
  *  @license     MIT / Commercial (dual license) */
 const html = Templates.Template.Html;
 
-/** @namespace   ArrayModifier
+/** @namespace   ArrayModifier3D
  *  @public
- *  @description Namespace containing ArrayModifier contracts and implementation.
+ *  @description Namespace containing ArrayModifier3D contracts and implementation.
  *  @author      Riccardo Angeli
  *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
  *  @license     MIT / Commercial (dual license) */
-export namespace ArrayModifier
+export namespace ArrayModifier3D
 {
     /** @namespace   Interfaces
      *  @public
@@ -266,21 +266,21 @@ export namespace ArrayModifier
                 visible: true,
                 userData: { ...mesh.userData },
             });
-            return new ArrayModifier(mesh, { count, type, offset, radius, axis, scene: vp.scene, meshFactory });
+            return new ArrayModifier3D(mesh, { count, type, offset, radius, axis, scene: vp.scene, meshFactory });
         }
     }
 
-    /** @class       ArrayModifier
+    /** @class       ArrayModifier3D
      *  @public
-     *  @description AriannA ArrayModifier component implementation.
+     *  @description AriannA ArrayModifier3D component implementation.
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export class ArrayModifier extends Modifier3DNamespace.Modifier3D
+    export class ArrayModifier3D extends Modifier3DNamespace.Modifier3D
     {
         /** @name        #opts
          *  @public
-         *  @type        {Required<ArrayModifier.Interfaces.ArrayModifierOptions>}
+         *  @type        {Required<ArrayModifier3D.Interfaces.ArrayModifierOptions>}
          *  @description Component member for opts.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
@@ -301,7 +301,7 @@ export namespace ArrayModifier
          *  @type        {constructor}
          *  @description Constructs the component for constructor.
          *  @param       {Modifier3DNamespace.Interfaces.MeshLike} mesh Parameter.
-         *  @param       {ArrayModifier.Interfaces.ArrayModifierOptions} opts Parameter.
+         *  @param       {ArrayModifier3D.Interfaces.ArrayModifierOptions} opts Parameter.
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
@@ -432,4 +432,4 @@ export namespace ArrayModifier
         }
     }
 }
-export default ArrayModifier;
+export default ArrayModifier3D;

@@ -1,6 +1,6 @@
 /** 3D counterpart of Skewer: applies three independent shear angles to geometry. */
-import { Modifier3D as Base } from './Base.ts';
-declare const Component:any; declare const Templates:any; const html=Templates.Template.Html;
+import { Modifier3D as Base } from '../Base.ts';
+import { Component, Templates } from '../../../../../core/index.ts';  const html=Templates.Template.Html;
 export namespace Skewer3D
 {
     export interface Options{x?:number;y?:number;z?:number;maxAngle?:number;disabled?:boolean;}

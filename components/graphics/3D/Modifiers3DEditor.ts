@@ -1,5 +1,5 @@
 /**
- * @module components/graphics/3D/Modifiers3DPalette
+ * @module components/graphics/3D/Modifiers3DEditor
  * @author Riccardo Angeli
  * @version 2.2.0
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
@@ -11,9 +11,9 @@
 import { Component, Css, Templates } from '../../../core/index.ts';
 import type { Modifier3D } from './modifiers/Base.ts';
 const html = Templates.Template.Html;
-export namespace Modifiers3DPalette {
+export namespace Modifiers3DEditor {
     export namespace Types {
-        export type ModifierKind = 'array' | 'bend' | 'bevel' | 'billboard' | 'decimate' | 'drag' | 'fade' | 'inflate' | 'lod' | 'mirror' | 'mover' | 'reflector' | 'resizer' | 'rotator' | 'rounder' | 'skewer' | 'smooth' | 'subdivision' | 'twist' | 'wave';
+        export type ModifierKind = 'bend' | 'twist' | 'taper' | 'squeeze' | 'push' | 'noise' | 'mirror' | 'relax' | 'subdivision' | 'mesh-smooth' | 'extrude' | 'bevel' | 'bevel-profile' | 'sweep' | 'surface' | 'array' | 'wave' | 'lathe' | 'cross-section' | 'mover' | 'resizer' | 'rotator' | 'rounder' | 'skewer';
     }
     export namespace Interfaces {
         export interface ModifierEntry {
@@ -22,20 +22,15 @@ export namespace Modifiers3DPalette {
             enabled: boolean;
             params: Record<string, number | string | boolean>;
         }
-        export interface Modifiers3DPaletteOptions {
+        export interface Modifiers3DEditorOptions {
             stack?: ModifierEntry[];
             theme?: 'dark' | 'light';
             viewport?: string;
             for?: string;
         }
     }
-    export const ModifierTags: Readonly<Record<Types.ModifierKind, string>> = Object.freeze({
-        array: 'arianna-array', bend: 'arianna-bend', bevel: 'arianna-bevel', billboard: 'arianna-billboard', decimate: 'arianna-decimate', drag: 'arianna-drag', fade: 'arianna-fade', inflate: 'arianna-inflate', lod: 'arianna-lod', mirror: 'arianna-mirror', mover: 'arianna-mover-3d', reflector: 'arianna-reflector-3d', resizer: 'arianna-resizer-3d', rotator: 'arianna-rotator-3d', rounder: 'arianna-rounder-3d', skewer: 'arianna-skewer-3d', smooth: 'arianna-smooth', subdivision: 'arianna-subdivision', twist: 'arianna-twist', wave: 'arianna-wave'
-    });
-    const DEFAULT_PARAMS: Readonly<Record<Types.ModifierKind, Record<string, number | string | boolean>>> = Object.freeze({
-        array: { count: 5, type: 'linear', 'offset-x': 1.25, 'offset-y': 0, 'offset-z': 0, radius: 2.4, axis: 'y' }, bend: { angle: 1.35, axis: 'y' }, bevel: { amount: .12, segments: 2 }, billboard: { 'lock-x': false, 'lock-y': false, 'lock-z': false }, decimate: { ratio: .45 }, drag: { plane: 'xz' }, fade: { near: 3.5, far: 8 }, inflate: { amount: .18 }, lod: { near: 4.5, mid: 7, far: 11 }, mirror: { axis: 'x', merge: true, threshold: .001 },
-        mover: { x: 0, y: 0, z: 0, axis: 'xyz', 'snap-x': 0, 'snap-y': 0, 'snap-z': 0, 'snap-enabled': true, 'snap-distance': .25, 'snap-unit': 'world', 'angle-step': 15 }, reflector: { axis: 'x' }, resizer: { x: 1, y: 1, z: 1, uniform: 1, axis: 'xyz', min: .01, max: 100 }, rotator: { x: 0, y: 0, z: 0, angle: 0, axis: 'y', snap: 0 }, rounder: { radius: .12, segments: 2 }, skewer: { x: 0, y: 0, z: 0, 'max-angle': 1.4 }, smooth: { iterations: 2, factor: .4 }, subdivision: { iterations: 1 }, twist: { angle: 2.4, axis: 'y' }, wave: { amplitude: .25, frequency: 4, axis: 'y', direction: 'x', animate: true },
-    });
+    export const ModifierTags:Readonly<Record<Types.ModifierKind,string>>=Object.freeze({"bend": "arianna-bend", "twist": "arianna-twist", "taper": "arianna-taper", "squeeze": "arianna-squeeze", "push": "arianna-push", "noise": "arianna-noise", "mirror": "arianna-mirror", "relax": "arianna-relax", "subdivision": "arianna-subdivision", "mesh-smooth": "arianna-mesh-smooth", "extrude": "arianna-extrude", "bevel": "arianna-bevel", "bevel-profile": "arianna-bevel-profile", "sweep": "arianna-sweep", "surface": "arianna-surface", "array": "arianna-array", "wave": "arianna-wave", "lathe": "arianna-lathe", "cross-section": "arianna-cross-section", "mover": "arianna-mover-3d", "resizer": "arianna-resizer-3d", "rotator": "arianna-rotator-3d", "rounder": "arianna-rounder-3d", "skewer": "arianna-skewer-3d"});
+    const DEFAULT_PARAMS:Readonly<Record<Types.ModifierKind,Record<string,number|string|boolean>>>=Object.freeze({"bend": {"axis": "y", "angle": 1.35, "direction": 0, "limits": false, "lower": -1, "upper": 1}, "twist": {"axis": "y", "angle": 2.4, "bias": 0, "limits": false, "lower": -1, "upper": 1}, "taper": {"axis": "y", "amount": 0.5, "curve": 0, "symmetric": false, "limits": false, "lower": -1, "upper": 1}, "squeeze": {"axis": "y", "amount": 0.2, "radial": -0.3, "curve": 0, "limits": false, "lower": -1, "upper": 1}, "push": {"amount": 0.15}, "noise": {"seed": 1, "scale": 1, "strength-x": 0.2, "strength-y": 0.2, "strength-z": 0.2, "octaves": 3, "roughness": 0.5, "phase": 0}, "mirror": {"axis": "y", "offset": 0, "copy": true}, "relax": {"iterations": 2, "factor": 0.3, "boundaries": true}, "subdivision": {"iterations": 1}, "mesh-smooth": {"iterations": 1, "boundaries": true}, "extrude": {"amount": 1, "segments": 1, "cap": true}, "bevel": {"amount": 1, "cap": true}, "bevel-profile": {"cap": true}, "sweep": {"cap": true, "closed-path": false, "twist": 0}, "surface": {"samples": 24, "steps": 2, "closed": true, "flip": false}, "array": {"count": 5, "type": "linear", "offset-x": 1.25, "offset-y": 0, "offset-z": 0, "radius": 2.4, "axis": "y"}, "wave": {"amplitude": 0.25, "frequency": 4, "axis": "y", "direction": "x", "animate": true}, "lathe": {"axis": "y", "segments": 32, "angle-deg": 360, "cap": true}, "cross-section": {"samples": 24, "closed": true}, "mover": {"x": 0, "y": 0, "z": 0, "axis": "xyz", "snap-enabled": true}, "resizer": {"x": 1, "y": 1, "z": 1, "uniform": 1, "axis": "xyz"}, "rotator": {"x": 0, "y": 0, "z": 0, "angle": 0, "axis": "y"}, "rounder": {"radius": 0.12, "segments": 2}, "skewer": {"x": 0, "y": 0, "z": 0, "max-angle": 1.4}});
     interface State {
         stack: Interfaces.ModifierEntry[];
         activeId: string | null;
@@ -49,35 +44,32 @@ export namespace Modifiers3DPalette {
         States.set(host, state);
     } return state; };
     const Clone = (entry: Interfaces.ModifierEntry): Interfaces.ModifierEntry => ({ id: String(entry.id), kind: entry.kind, enabled: entry.enabled !== false, params: { ...(entry.params ?? {}) } });
-    const Normalize = (entry: Interfaces.ModifierEntry): Interfaces.ModifierEntry => { const value = Clone(entry), source = String(value.kind), legacy = source === 'moveable' || source === 'snap' ? 'mover' : source; value.kind = legacy as Types.ModifierKind; if (source === 'snap') {
-        const grid = Number(value.params['pos-grid'] ?? 0);
-        value.params = { ...value.params, 'snap-x': grid, 'snap-y': grid, 'snap-z': grid, 'angle-step': Number(value.params['rot-grid-deg'] ?? 15), 'snap-enabled': true };
-    } value.params = { ...DEFAULT_PARAMS[value.kind], ...value.params }; return value; };
+    const Normalize=(entry:Interfaces.ModifierEntry):Interfaces.ModifierEntry=>{const value=Clone(entry);if(!(value.kind in ModifierTags))throw new Error('Unknown modifier: '+value.kind);value.params={...DEFAULT_PARAMS[value.kind],...value.params};return value;};
     export const Styles = new Css.Stylesheet([
-        new Css.Rule('arianna-modifiers-3d-palette,.Modifiers3DPalette', { Background: '#292d31', Border: '1px solid #111417', BorderRadius: '8px', BoxSizing: 'border-box', Color: '#e4e8eb', Display: 'grid', FontFamily: 'var(--arianna-font,system-ui,sans-serif)', GridTemplateRows: 'auto minmax(0,1fr) auto', MaxHeight: '480px', Overflow: 'hidden', Width: '320px' }),
-        new Css.Rule('.Modifiers3DPalette-Header', { AlignItems: 'center', Background: 'linear-gradient(180deg,#3a3f44,#2b3034)', BorderBottom: '1px solid #111417', Display: 'flex', FontSize: '11px', FontWeight: '800', JustifyContent: 'space-between', Padding: '8px 10px' }),
-        new Css.Rule('.Modifiers3DPalette-Count', { Color: '#929ba3', Font: '800 9px ui-monospace,monospace' }),
-        new Css.Rule('.Modifiers3DPalette-Scroll', { Display: 'grid', Gap: '8px', MaxHeight: '410px', MinHeight: '0', OverflowX: 'hidden', OverflowY: 'auto', OverscrollBehavior: 'contain', Padding: '8px', ScrollbarColor: '#59616a #171a1d', ScrollbarWidth: 'thin' }),
-        new Css.Rule('.Modifiers3DPalette-Empty', { Color: '#8d969e', FontSize: '10px', Padding: '22px 12px', TextAlign: 'center' }),
-        new Css.Rule('.Modifiers3DPalette-Item', { Background: '#202428', Border: '1px solid #141719', BorderRadius: '7px', Display: 'grid', Gap: '0', MinWidth: '0', Overflow: 'hidden' }),
-        new Css.Rule('.Modifiers3DPalette-Item[data-active="true"]', { BorderColor: '#e40c88', BoxShadow: '0 0 0 1px rgba(228,12,136,.2)' }),
-        new Css.Rule('.Modifiers3DPalette-Item[data-enabled="false"]', { Opacity: '.5' }),
-        new Css.Rule('.Modifiers3DPalette-Toolbar', { AlignItems: 'center', Background: '#181c1f', BorderBottom: '1px solid #101214', Display: 'grid', Gap: '5px', GridTemplateColumns: '18px minmax(0,1fr) auto', Padding: '5px 6px' }),
-        new Css.Rule('.Modifiers3DPalette-Name', { Cursor: 'pointer', FontSize: '9px', FontWeight: '800', TextTransform: 'capitalize' }),
-        new Css.Rule('.Modifiers3DPalette-Actions', { Display: 'flex', Gap: '3px' }),
-        new Css.Rule('.Modifiers3DPalette-Button', { Appearance: 'none', Background: 'linear-gradient(180deg,#40464b,#2d3236)', Border: '1px solid #15181a', BorderRadius: '3px', Color: '#cbd1d5', Cursor: 'pointer', Font: '700 9px/1 system-ui', Height: '24px', MinWidth: '26px' }),
-        new Css.Rule('.Modifiers3DPalette-Button:hover', { BorderColor: '#e40c88', Color: '#fff' }),
-        new Css.Rule('.Modifiers3DPalette-Input', { Background: '#171b1e', Border: '1px solid #3b4146', BorderRadius: '3px', Color: '#e4e8eb', Font: '9px system-ui', MinWidth: '0', Padding: '5px' }),
-        new Css.Rule('.Modifiers3DPalette-Panel', { Display: 'block', MaxHeight: 'none', Overflow: 'visible', Position: 'relative', Width: '100%' }),
-        new Css.Rule('.Modifiers3DPalette-Footer', { BorderTop: '1px solid #111417', Display: 'grid', Gap: '5px', GridTemplateColumns: '1fr auto', Padding: '8px' }),
-        new Css.Rule('arianna-modifiers-3d-palette[theme="light"],.Modifiers3DPalette[theme="light"]', { Background: '#eef0f2', BorderColor: '#b9bec3', Color: '#25292d' }),
-        new Css.Rule('arianna-modifiers-3d-palette[theme="light"] .Modifiers3DPalette-Header', { Background: 'linear-gradient(180deg,#fff,#e1e4e7)', BorderBottomColor: '#b9bec3' }),
-        new Css.Rule('arianna-modifiers-3d-palette[theme="light"] .Modifiers3DPalette-Item', { Background: '#fff', BorderColor: '#c4c9ce' }),
-        new Css.Rule('arianna-modifiers-3d-palette[theme="light"] .Modifiers3DPalette-Toolbar', { Background: '#e2e5e8', BorderBottomColor: '#c4c9ce' }),
-        new Css.Rule('arianna-modifiers-3d-palette[theme="light"] .Modifiers3DPalette-Input', { Background: '#fff', BorderColor: '#c1c6cb', Color: '#30363b' }),
+        new Css.Rule('arianna-modifiers-3d-editor,.Modifiers3DEditor', { Background: '#292d31', Border: '1px solid #111417', BorderRadius: '8px', BoxSizing: 'border-box', Color: '#e4e8eb', Display: 'grid', FontFamily: 'var(--arianna-font,system-ui,sans-serif)', GridTemplateRows: 'auto minmax(0,1fr) auto', MaxHeight: '480px', Overflow: 'hidden', Width: '320px' }),
+        new Css.Rule('.Modifiers3DEditor-Header', { AlignItems: 'center', Background: 'linear-gradient(180deg,#3a3f44,#2b3034)', BorderBottom: '1px solid #111417', Display: 'flex', FontSize: '11px', FontWeight: '800', JustifyContent: 'space-between', Padding: '8px 10px' }),
+        new Css.Rule('.Modifiers3DEditor-Count', { Color: '#929ba3', Font: '800 9px ui-monospace,monospace' }),
+        new Css.Rule('.Modifiers3DEditor-Scroll', { Display: 'grid', Gap: '8px', MaxHeight: '410px', MinHeight: '0', OverflowX: 'hidden', OverflowY: 'auto', OverscrollBehavior: 'contain', Padding: '8px', ScrollbarColor: '#59616a #171a1d', ScrollbarWidth: 'thin' }),
+        new Css.Rule('.Modifiers3DEditor-Empty', { Color: '#8d969e', FontSize: '10px', Padding: '22px 12px', TextAlign: 'center' }),
+        new Css.Rule('.Modifiers3DEditor-Item', { Background: '#202428', Border: '1px solid #141719', BorderRadius: '7px', Display: 'grid', Gap: '0', MinWidth: '0', Overflow: 'hidden' }),
+        new Css.Rule('.Modifiers3DEditor-Item[data-active="true"]', { BorderColor: '#e40c88', BoxShadow: '0 0 0 1px rgba(228,12,136,.2)' }),
+        new Css.Rule('.Modifiers3DEditor-Item[data-enabled="false"]', { Opacity: '.5' }),
+        new Css.Rule('.Modifiers3DEditor-Toolbar', { AlignItems: 'center', Background: '#181c1f', BorderBottom: '1px solid #101214', Display: 'grid', Gap: '5px', GridTemplateColumns: '18px minmax(0,1fr) auto', Padding: '5px 6px' }),
+        new Css.Rule('.Modifiers3DEditor-Name', { Cursor: 'pointer', FontSize: '9px', FontWeight: '800', TextTransform: 'capitalize' }),
+        new Css.Rule('.Modifiers3DEditor-Actions', { Display: 'flex', Gap: '3px' }),
+        new Css.Rule('.Modifiers3DEditor-Button', { Appearance: 'none', Background: 'linear-gradient(180deg,#40464b,#2d3236)', Border: '1px solid #15181a', BorderRadius: '3px', Color: '#cbd1d5', Cursor: 'pointer', Font: '700 9px/1 system-ui', Height: '24px', MinWidth: '26px' }),
+        new Css.Rule('.Modifiers3DEditor-Button:hover', { BorderColor: '#e40c88', Color: '#fff' }),
+        new Css.Rule('.Modifiers3DEditor-Input', { Background: '#171b1e', Border: '1px solid #3b4146', BorderRadius: '3px', Color: '#e4e8eb', Font: '9px system-ui', MinWidth: '0', Padding: '5px' }),
+        new Css.Rule('.Modifiers3DEditor-Panel', { Display: 'block', MaxHeight: 'none', Overflow: 'visible', Position: 'relative', Width: '100%' }),
+        new Css.Rule('.Modifiers3DEditor-Footer', { BorderTop: '1px solid #111417', Display: 'grid', Gap: '5px', GridTemplateColumns: '1fr auto', Padding: '8px' }),
+        new Css.Rule('arianna-modifiers-3d-editor[theme="light"],.Modifiers3DEditor[theme="light"]', { Background: '#eef0f2', BorderColor: '#b9bec3', Color: '#25292d' }),
+        new Css.Rule('arianna-modifiers-3d-editor[theme="light"] .Modifiers3DEditor-Header', { Background: 'linear-gradient(180deg,#fff,#e1e4e7)', BorderBottomColor: '#b9bec3' }),
+        new Css.Rule('arianna-modifiers-3d-editor[theme="light"] .Modifiers3DEditor-Item', { Background: '#fff', BorderColor: '#c4c9ce' }),
+        new Css.Rule('arianna-modifiers-3d-editor[theme="light"] .Modifiers3DEditor-Toolbar', { Background: '#e2e5e8', BorderBottomColor: '#c4c9ce' }),
+        new Css.Rule('arianna-modifiers-3d-editor[theme="light"] .Modifiers3DEditor-Input', { Background: '#fff', BorderColor: '#c1c6cb', Color: '#30363b' }),
     ]);
-    @Component('arianna-modifiers-3d-palette', Styles, { Shadow: false, Attributes: ['theme', 'active-id', 'viewport', 'for'], Properties: ['stack'] })
-    export class Modifiers3DPalette extends HTMLElement {
+    @Component('arianna-modifiers-3d-editor', Styles, { Shadow: false, Attributes: ['theme', 'active-id', 'viewport', 'for'], Properties: ['stack'] })
+    export class Modifiers3DEditor extends HTMLElement {
         public static readonly Styles = Styles;
         public template = html ``;
         public get selection(): Modifier3D.Interfaces.SelectionLike | null { return S(this).selection; }
@@ -90,7 +82,7 @@ export namespace Modifiers3DPalette {
         } }
         public onCreated(): void { if (this.isConnected)
             this.onConnected(); }
-        public onConnected(): void { this.classList.add('Modifiers3DPalette'); if (!this.hasAttribute('theme'))
+        public onConnected(): void { this.classList.add('Modifiers3DEditor'); if (!this.hasAttribute('theme'))
             this.setAttribute('theme', 'dark'); this.Render(); }
         public onAttributeChanged(name?: string): void {
             if (name === 'active-id') {
@@ -131,7 +123,7 @@ export namespace Modifiers3DPalette {
         }; if (panel) {
             panel.enabled = entry.enabled;
             panel.toggleAttribute('disabled', !entry.enabled);
-        } const item = panel?.closest<HTMLElement>('.Modifiers3DPalette-Item'); if (item) {
+        } const item = panel?.closest<HTMLElement>('.Modifiers3DEditor-Item'); if (item) {
             item.dataset.enabled = String(entry.enabled);
         } queueMicrotask(() => this.ReapplyAfter(id)); this.Fire('enable', id); return this; }
         public moveModifier(id: string, direction: -1 | 1): this { const state = S(this), index = state.stack.findIndex(entry => entry.id === id), target = index + direction; if (index >= 0 && target >= 0 && target < state.stack.length) {
@@ -165,7 +157,7 @@ export namespace Modifiers3DPalette {
         }
         else if (this.getAttribute('active-id') !== id)
             this.setAttribute('active-id', id); }
-        private SyncActive(): void { const active = S(this).activeId; for (const item of this.querySelectorAll<HTMLElement>('.Modifiers3DPalette-Item'))
+        private SyncActive(): void { const active = S(this).activeId; for (const item of this.querySelectorAll<HTMLElement>('.Modifiers3DEditor-Item'))
             item.dataset.active = String(item.dataset.entryId === active); }
         private SetPanelValue(panel: HTMLElement, key: string, value: number | string | boolean): void { if (typeof value === 'boolean')
             panel.toggleAttribute(key, value);
@@ -179,7 +171,7 @@ export namespace Modifiers3DPalette {
             for (const [key, sample] of Object.entries(entry.params))
                 entry.params[key] = typeof sample === 'boolean' ? Object.prototype.hasOwnProperty.call(attrs, key) && attrs[key] !== 'false' : typeof sample === 'number' ? (Number.isFinite(Number(attrs[key])) ? Number(attrs[key]) : sample) : (attrs[key] ?? sample);
             entry.enabled = !panel.hasAttribute('disabled') && panel.getAttribute('enabled') !== 'false';
-            const item = panel.closest<HTMLElement>('.Modifiers3DPalette-Item');
+            const item = panel.closest<HTMLElement>('.Modifiers3DEditor-Item');
             if (item)
                 item.dataset.enabled = String(entry.enabled);
             this.ReapplyAfter(entry.id);
@@ -205,7 +197,7 @@ export namespace Modifiers3DPalette {
         private Fire(kind: string, id: string): void { this.dispatchEvent(new CustomEvent('arianna:modifiers-change', { bubbles: true, composed: true, detail: { kind, id, activeId: S(this).activeId, stack: this.getStack(), source: this } })); }
         private CreatePanel(entry: Interfaces.ModifierEntry): HTMLElement {
             const panel = document.createElement(ModifierTags[entry.kind]);
-            panel.classList.add('Modifiers3DPalette-Panel');
+            panel.classList.add('Modifiers3DEditor-Panel');
             panel.dataset.modifierEntry = entry.id;
             panel.setAttribute('data-arianna-stack-item', '');
             const viewport = (this.getAttribute('viewport') ?? '').trim(), target = (this.getAttribute('for') ?? '').trim();
@@ -239,42 +231,42 @@ export namespace Modifiers3DPalette {
                 return;
             const state = S(this), root = document.createElement('section'), head = document.createElement('header');
             root.style.display = 'contents';
-            head.className = 'Modifiers3DPalette-Header';
+            head.className = 'Modifiers3DEditor-Header';
             const title = document.createElement('span');
             title.textContent = 'Modifiers3D';
             const count = document.createElement('span');
-            count.className = 'Modifiers3DPalette-Count';
+            count.className = 'Modifiers3DEditor-Count';
             count.textContent = String(state.stack.length);
             head.append(title, count);
             const scroll = document.createElement('div');
-            scroll.className = 'Modifiers3DPalette-Scroll';
+            scroll.className = 'Modifiers3DEditor-Scroll';
             if (!state.stack.length) {
                 const empty = document.createElement('div');
-                empty.className = 'Modifiers3DPalette-Empty';
+                empty.className = 'Modifiers3DEditor-Empty';
                 empty.textContent = 'No modifiers';
                 scroll.appendChild(empty);
             }
             state.stack.forEach(entry => {
                 const item = document.createElement('section');
-                item.className = 'Modifiers3DPalette-Item';
+                item.className = 'Modifiers3DEditor-Item';
                 item.dataset.entryId = entry.id;
                 item.dataset.active = String(state.activeId === entry.id);
                 item.dataset.enabled = String(entry.enabled);
                 item.addEventListener('pointerdown', () => { if (state.activeId !== entry.id)
                     this.selectModifier(entry.id); });
                 const toolbar = document.createElement('header');
-                toolbar.className = 'Modifiers3DPalette-Toolbar';
+                toolbar.className = 'Modifiers3DEditor-Toolbar';
                 const enabled = document.createElement('input');
                 enabled.type = 'checkbox';
                 enabled.checked = entry.enabled;
                 enabled.title = 'Enabled';
                 enabled.addEventListener('change', event => { event.stopPropagation(); this.toggleEnable(entry.id); });
                 const name = document.createElement('span');
-                name.className = 'Modifiers3DPalette-Name';
+                name.className = 'Modifiers3DEditor-Name';
                 name.textContent = entry.kind;
                 name.addEventListener('click', event => { event.stopPropagation(); this.selectModifier(entry.id); });
                 const actions = document.createElement('span');
-                actions.className = 'Modifiers3DPalette-Actions';
+                actions.className = 'Modifiers3DEditor-Actions';
                 for (const [text, action, title] of [['↑', () => this.moveModifier(entry.id, -1), 'Move up'], ['↓', () => this.moveModifier(entry.id, 1), 'Move down'], ['×', () => this.removeModifier(entry.id), 'Remove']] as [
                     string,
                     () => void,
@@ -282,7 +274,7 @@ export namespace Modifiers3DPalette {
                 ][]) {
                     const button = document.createElement('button');
                     button.type = 'button';
-                    button.className = 'Modifiers3DPalette-Button';
+                    button.className = 'Modifiers3DEditor-Button';
                     button.textContent = text;
                     button.title = title;
                     button.addEventListener('click', event => { event.stopPropagation(); action(); });
@@ -293,9 +285,9 @@ export namespace Modifiers3DPalette {
                 scroll.appendChild(item);
             });
             const foot = document.createElement('footer');
-            foot.className = 'Modifiers3DPalette-Footer';
+            foot.className = 'Modifiers3DEditor-Footer';
             const select = document.createElement('select');
-            select.className = 'Modifiers3DPalette-Input';
+            select.className = 'Modifiers3DEditor-Input';
             select.setAttribute('aria-label', 'Modifier to add');
             for (const kind of Object.keys(ModifierTags) as Types.ModifierKind[]) {
                 const option = document.createElement('option');
@@ -305,7 +297,7 @@ export namespace Modifiers3DPalette {
             }
             const add = document.createElement('button');
             add.type = 'button';
-            add.className = 'Modifiers3DPalette-Button';
+            add.className = 'Modifiers3DEditor-Button';
             add.textContent = '+ Add';
             add.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); this.addModifier(select.value as Types.ModifierKind); });
             foot.append(select, add);
@@ -315,8 +307,8 @@ export namespace Modifiers3DPalette {
         }
     }
 }
-export type ModifierKind = Modifiers3DPalette.Types.ModifierKind;
-export type ModifierEntry = Modifiers3DPalette.Interfaces.ModifierEntry;
-export type Modifiers3DPaletteOptions = Modifiers3DPalette.Interfaces.Modifiers3DPaletteOptions;
-export const Modifier3DTags = Modifiers3DPalette.ModifierTags;
-export default Modifiers3DPalette.Modifiers3DPalette;
+export type ModifierKind = 'bend' | 'twist' | 'taper' | 'squeeze' | 'push' | 'noise' | 'mirror' | 'relax' | 'subdivision' | 'mesh-smooth' | 'extrude' | 'bevel' | 'bevel-profile' | 'sweep' | 'surface' | 'array' | 'wave' | 'lathe' | 'cross-section' | 'mover' | 'resizer' | 'rotator' | 'rounder' | 'skewer';
+export type ModifierEntry = Modifiers3DEditor.Interfaces.ModifierEntry;
+export type Modifiers3DEditorOptions = Modifiers3DEditor.Interfaces.Modifiers3DEditorOptions;
+export const Modifier3DTags = Modifiers3DEditor.ModifierTags;
+export default Modifiers3DEditor.Modifiers3DEditor;

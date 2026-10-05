@@ -2,7 +2,7 @@
 
 **Stato:** da documentare.
 
-**Sorgente:** `components/graphics/3D/modifiers/FadeModifier.ts`
+**Sorgente:** `../../../../../../components/graphics/3D/modifiers/standard/FadeModifier.ts`
 
 Questa scheda riserva la posizione della documentazione; non dichiara API o verifiche eseguite.
 

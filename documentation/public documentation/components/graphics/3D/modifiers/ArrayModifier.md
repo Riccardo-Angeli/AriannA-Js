@@ -2,7 +2,7 @@
 
 **Stato:** da documentare.
 
-**Sorgente:** `components/graphics/3D/modifiers/ArrayModifier.ts`
+**Sorgente:** `../../../../../../components/graphics/3D/modifiers/standard/ArrayModifier3D.ts`
 
 Questa scheda riserva la posizione della documentazione; non dichiara API o verifiche eseguite.
 

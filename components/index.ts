@@ -70,9 +70,8 @@ export {
 // 2D
 Canvas2D, Grid2D, SelectionRectangle, LineEditor, Align, Layer, Layers, Strokes, Tools2D,
 // 3D
-Canvas3D, Grid3D, Snappable3D, Selection3D, Tools3D, Csg, MaterialsPalette, Modifiers3DPalette,
+Canvas3D, SceneGraph3D, LineEditor3D, SceneLineEditor3D, getSplines3D, registerSpline3D, Primitives2D, Primitives3D, Csg, MaterialsEditor3D, MaterialsLibrary3D, Modifiers3DEditor,
 // colors (canonical inputs/ColorPicker — aliasing this one)
 ColorPickerSquare, ColorPickerTile, ColorPickerWheel, LinearGradientEditor, RadialGradientEditor, ShapeGradientEditor, GraphicsColorPicker, RGBColorPicker, HSLColorPicker, HSVColorPicker, OKHSLColorPicker, OKHSVColorPicker, CMYKColorPicker, XYZColorPicker, CIELABColorPicker, CIELUVColorPicker, CIEUVWColorPicker, } from './graphics/index.ts';
 // Re-export the colour utility functions (not classes)
 export { parseHexRgba, rgbToHex, rgbToHsl, hslToRgb } from './graphics/colors/GraphicsColorPicker.ts';
-export { SceneGraph } from './graphics/3D/SceneGraph.ts';

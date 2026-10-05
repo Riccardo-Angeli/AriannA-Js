@@ -1,5 +1,5 @@
 /** Shared projection/interaction utility; not a component or a workbench. */
-import type { Canvas3D } from '../Canvas3D.ts';
+import type { Canvas3D } from '../../Canvas3D.ts';
 export type TransformMode='move'|'rotate'|'scale';
 type V={x:number;y:number;z:number};
 type Axis='x'|'y'|'z';
@@ -57,5 +57,7 @@ export function attachTransformControls(canvas:Canvas3D.Canvas3D,mesh:Canvas3D.M
   if(mode==='scale'){const center=document.createElementNS(ns,'rect');center.setAttribute('x',String(o.x-5));center.setAttribute('y',String(o.y-5));center.setAttribute('width','10');center.setAttribute('height','10');center.setAttribute('fill','#ffe34d');center.style.pointerEvents='all';center.addEventListener('pointerdown',e=>begin(e,'all'));svg.append(center);}
  };
  let footer=canvas.querySelector<HTMLElement>('.Canvas3D-TransformFooter');if(!footer){footer=document.createElement('footer');footer.className='Canvas3D-TransformFooter Canvas3D-Toolbar';footer.style.cssText='top:auto;bottom:0;left:0;right:0;max-width:100%;border-radius:0;overflow:auto';canvas.appendChild(footer);}footer.append(bar);
+ const layoutFooter=()=>{const toolbar=canvas.querySelector<HTMLElement&{Insets?:{left:number;right:number;bottom:number}}>('.ToolBar');const inset=toolbar?.Insets??{left:0,right:0,bottom:0};footer!.style.left=inset.left+'px';footer!.style.right=inset.right+'px';footer!.style.bottom=inset.bottom+'px';};
+ canvas.addEventListener('arianna:toolbar-layout',layoutFooter,{signal:control.signal});layoutFooter();
  const unsubscribe=canvas.onFrame(()=>draw());api.refresh();draw();return api;
 }

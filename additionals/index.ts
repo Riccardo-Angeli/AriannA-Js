@@ -67,3 +67,6 @@ export { parseLess   } from './Less.ts';
 export { parseSass   } from './Sass.ts';
 export { parseScss   } from './Scss.ts';
 export { parseStylus } from './Stylus.ts';
+
+export { Images } from './Images.ts';
+export type { ImageAsset, ImageDecoder, Tiling } from './Images.ts';

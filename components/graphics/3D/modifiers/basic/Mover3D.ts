@@ -1,10 +1,10 @@
-import type { Canvas3D } from '../Canvas3D.ts';
-import { attachTransformControls, type TransformControls } from './TransformGizmo.ts';
+import type { Canvas3D } from '../../Canvas3D.ts';
+import { attachTransformControls, type TransformControls } from '../standard/TransformGizmo3D.ts';
 /** Mesh translation modifier with an integrated snap policy and XYZ gizmo. */
-import { Modifier3D as Base } from './Base.ts';
+import { Modifier3D as Base } from '../Base.ts';
 
-declare const Component:any;
-declare const Templates:any;
+import { Component, Templates } from '../../../../../core/index.ts';
+
 const html=Templates.Template.Html;
 
 export namespace Mover3D
