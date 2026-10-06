@@ -335,7 +335,7 @@ export namespace Namespaces
                 );
             }
 
-            if(typeof descriptor.Interface === 'function')
+            if(descriptor.Standard && typeof descriptor.Interface === 'function')
             {
                 this.#constructorCache.set
                 (

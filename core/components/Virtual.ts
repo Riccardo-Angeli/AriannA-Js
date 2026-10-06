@@ -271,9 +271,8 @@ export namespace Virtuals
             const virtual =
                 new Virtual('span');
 
-            virtual.set
+            virtual.text
             (
-                'textContent',
                 child === null || child === undefined
                     ? ''
                     : String(child)

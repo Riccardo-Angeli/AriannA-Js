@@ -494,6 +494,16 @@ export namespace Jsx
                     {
                         events.push([event, value as EventListener]);
                     }
+                    else if(name === 'className')
+                    {
+                        attributes.class = String(value ?? '');
+                    }
+                    else if(name === 'style' && value && typeof value === 'object')
+                    {
+                        attributes.style = Object.entries(value).map(([key, content]) =>
+                            `${key.startsWith('--') ? key : key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase())}:${String(content)}`
+                        ).join(';');
+                    }
                     else if(!Runtime.Reserved(name))
                     {
                         attributes[name] = value as string | number | boolean | null;

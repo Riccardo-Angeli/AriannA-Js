@@ -61,6 +61,8 @@ export namespace TimePicker
          *  @license     MIT / Commercial (dual license) */
         export interface TimePickerOptions
         {
+            theme?: 'dark' | 'light';
+            hourCycle?: 12 | 24;
             /** @name        label
              *  @public
              *  @type        {string}
@@ -143,7 +145,7 @@ export namespace TimePicker
      *  @license     MIT / Commercial (dual license) */
     @Component('arianna-time-picker', {}, {
         shadow: false,
-        Attributes: ['label', 'value', 'seconds', 'min', 'max', 'disabled'],
+        Attributes: ['label', 'value', 'seconds', 'min', 'max', 'disabled', 'theme', 'hour-cycle'],
     })
     export class TimePicker extends HTMLElement
     {
@@ -246,16 +248,17 @@ export namespace TimePicker
 
             const displayOf = (draft: Draft, withSeconds: boolean): string =>
             {
-                if (withSeconds)
-                    return `${pad(draft.hour)}:${pad(draft.minute)}:${pad(draft.second)}`;
+                if (this.getAttribute('hour-cycle') === '24')
+                    return `${pad(draft.hour)}:${pad(draft.minute)}${withSeconds ? ':' + pad(draft.second) : ''}`;
 
                 const hour12 = draft.hour % 12 || 12;
-                return `${pad(hour12)}:${pad(draft.minute)} ${draft.hour >= 12 ? 'PM' : 'AM'}`;
+                return `${pad(hour12)}:${pad(draft.minute)}${withSeconds ? ':' + pad(draft.second) : ''} ${draft.hour >= 12 ? 'PM' : 'AM'}`;
             };
 
             const render = () =>
             {
                 const withSeconds = this.hasAttribute('seconds');
+                const hour24 = this.getAttribute('hour-cycle') === '24';
                 const disabled = this.hasAttribute('disabled');
                 const current = parse(this.getAttribute('value') ?? '12:00');
                 const labelText = this.getAttribute('label') ?? '';
@@ -313,7 +316,9 @@ export namespace TimePicker
                     const columnHeads = document.createElement('div');
                     columnHeads.className = 'ar-timepicker__column-heads';
 
-                    for (const heading of withSeconds ? ['Hour', 'Minute', 'Second'] : ['Hour', 'Minute', 'AM/PM'])
+                    const headings = ['Hour', 'Minute', ...(withSeconds ? ['Second'] : []), ...(!hour24 ? ['AM/PM'] : []), 'Mode'];
+                    columnHeads.style.gridTemplateColumns = `repeat(${headings.length}, minmax(0, 1fr))`;
+                    for (const heading of headings)
                     {
                         const item = document.createElement('span');
                         item.textContent = heading;
@@ -322,6 +327,7 @@ export namespace TimePicker
 
                     const wheels = document.createElement('div');
                     wheels.className = 'ar-timepicker__wheels';
+                    wheels.style.gridTemplateColumns = columnHeads.style.gridTemplateColumns;
 
                     const repaintFunctions: Array<() => void> = [];
                     let programmaticScroll = false;
@@ -429,62 +435,27 @@ export namespace TimePicker
                         return { root, repaint };
                     };
 
-                    if (withSeconds)
-                    {
-                        const hours = createWheel(
-                            range(0, 23).map(value => ({ label: pad(value), value: String(value) })),
-                            () => String(draft.hour),
-                            value => {
-                                draft.hour = Number(value);
-                                draft.period = draft.hour >= 12 ? 'PM' : 'AM';
-                            }
-                        );
-
-                        const minutes = createWheel(
-                            range(0, 59).map(value => ({ label: pad(value), value: String(value) })),
-                            () => String(draft.minute),
-                            value => { draft.minute = Number(value); }
-                        );
-
-                        const seconds = createWheel(
-                            range(0, 59).map(value => ({ label: pad(value), value: String(value) })),
-                            () => String(draft.second),
-                            value => { draft.second = Number(value); }
-                        );
-
-                        wheels.append(hours.root, minutes.root, seconds.root);
-                        repaintFunctions.push(hours.repaint, minutes.repaint, seconds.repaint);
+                    const hours = createWheel(
+                        range(hour24 ? 0 : 1, hour24 ? 23 : 12).map(value => ({label:pad(value),value:String(value)})),
+                        () => String(hour24 ? draft.hour : draft.hour % 12 || 12),
+                        value => { draft.hour = hour24 ? Number(value) : Number(value) % 12 + (draft.period === 'PM' ? 12 : 0); draft.period = draft.hour >= 12 ? 'PM' : 'AM'; }
+                    );
+                    const minutes = createWheel(range(0,59).map(value=>({label:pad(value),value:String(value)})),()=>String(draft.minute),value=>{draft.minute=Number(value);});
+                    wheels.append(hours.root,minutes.root); repaintFunctions.push(hours.repaint,minutes.repaint);
+                    if(withSeconds){
+                        const seconds=createWheel(range(0,59).map(value=>({label:pad(value),value:String(value)})),()=>String(draft.second),value=>{draft.second=Number(value);});
+                        wheels.appendChild(seconds.root);repaintFunctions.push(seconds.repaint);
                     }
-                    else
-                    {
-                        const hours = createWheel(
-                            range(1, 12).map(value => ({ label: pad(value), value: String(value) })),
-                            () => String(draft.hour % 12 || 12),
-                            value => {
-                                const hour12 = Number(value) % 12;
-                                draft.hour = hour12 + (draft.period === 'PM' ? 12 : 0);
-                            }
-                        );
-
-                        const minutes = createWheel(
-                            range(0, 59).map(value => ({ label: pad(value), value: String(value) })),
-                            () => String(draft.minute),
-                            value => { draft.minute = Number(value); }
-                        );
-
-                        const period = createWheel(
-                            [{ label: 'AM', value: 'AM' }, { label: 'PM', value: 'PM' }],
-                            () => draft.period,
-                            value => {
-                                draft.period = value as 'AM' | 'PM';
-                                const hour12 = draft.hour % 12;
-                                draft.hour = hour12 + (draft.period === 'PM' ? 12 : 0);
-                            }
-                        );
-
-                        wheels.append(hours.root, minutes.root, period.root);
-                        repaintFunctions.push(hours.repaint, minutes.repaint, period.repaint);
+                    if(!hour24){
+                        const period=createWheel([{label:'AM',value:'AM'},{label:'PM',value:'PM'}],()=>draft.period,value=>{draft.period=value as 'AM'|'PM';draft.hour=draft.hour%12+(value==='PM'?12:0);});
+                        wheels.appendChild(period.root);repaintFunctions.push(period.repaint);
                     }
+                    const mode=createWheel([{label:'12h',value:'12'},{label:'24h',value:'24'}],()=>hour24?'24':'12',value=>{
+                        if(this.getAttribute('hour-cycle')===value)return;
+                        this.setAttribute('hour-cycle',value);
+                        render();
+                    });
+                    wheels.appendChild(mode.root);repaintFunctions.push(mode.repaint);
 
                     const footer = document.createElement('div');
                     footer.className = 'ar-timepicker__footer';
@@ -688,6 +659,11 @@ export namespace TimePicker
          *  @author      Riccardo Angeli
          *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
          *  @license     MIT / Commercial (dual license) */
+        get hourCycle(): 12 | 24 { return this.getAttribute('hour-cycle') === '24' ? 24 : 12; }
+        set hourCycle(value: 12 | 24) { this.setAttribute('hour-cycle',String(value)); }
+        get theme(): string { return this.getAttribute('theme') ?? 'light'; }
+        set theme(value: string) { this.setAttribute('theme',value); }
+
         get value(): string { return this.getAttribute('value') ?? ''; }
 
         /** @name        value
@@ -808,7 +784,13 @@ export namespace TimePicker
                     display: 'inline-block',
                     position: 'relative',
                     width: '100%',
-                    maxWidth: '280px',
+                    maxWidth: '360px',
+                }),
+                new Rule('arianna-time-picker[theme="dark"],.TimePicker[theme="dark"]', {
+                    '--arianna-bg':'#25292d','--arianna-text':'#e8eaed','--arianna-muted':'#aeb6bf','--arianna-border':'#454b52','--arianna-primary':'#e40c88',color:'#e8eaed',
+                }),
+                new Rule('arianna-time-picker[theme="light"],.TimePicker[theme="light"]', {
+                    '--arianna-bg':'#f7f8fa','--arianna-text':'#24292f','--arianna-muted':'#58616d','--arianna-border':'#bac2cb','--arianna-primary':'#d80c80',color:'#24292f',
                 }),
                 new Rule('.ar-timepicker__label', {
                     color: 'var(--arianna-muted, #6e6b62)',
@@ -865,7 +847,7 @@ export namespace TimePicker
                     boxShadow: '0 8px 24px rgba(0,0,0,.18)',
                     color: 'var(--arianna-text, #1f2328)',
                     left: '0',
-                    minWidth: '280px',
+                    minWidth: '320px',
                     overflow: 'hidden',
                     position: 'absolute',
                     top: 'calc(100% + 4px)',

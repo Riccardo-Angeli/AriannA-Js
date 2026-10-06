@@ -1,0 +1,3034 @@
+# AriannA generated openEHR GraphQL projection; NOT an official openEHR GraphQL standard.
+scalar JSON
+
+type VERSION_STATUS {
+  _type: String
+}
+
+input VERSION_STATUSInput {
+  _type: String
+}
+
+type HIER_OBJECT_ID {
+  value: String
+  _type: String
+}
+
+type TERMINOLOGY_ID {
+  value: String
+  _type: String
+}
+
+type CODE_PHRASE {
+  terminology_id: TERMINOLOGY_ID
+  code_string: String
+  preferred_term: String
+  _type: String
+}
+
+type DV_INTERVAL {
+  lower: JSON
+  upper: JSON
+  lower_unbounded: Boolean
+  upper_unbounded: Boolean
+  lower_included: Boolean
+  upper_included: Boolean
+  _type: String
+}
+
+type DV_EHR_URI {
+  value: String
+  _type: String
+}
+
+type DV_URI {
+  value: String
+  _type: String
+}
+
+type TERM_MAPPING {
+  match: String
+  purpose: DV_CODED_TEXT
+  target: CODE_PHRASE
+  _type: String
+}
+
+type DV_CODED_TEXT {
+  value: String
+  hyperlink: DV_CODED_TEXT_hyperlinkChoice
+  language: CODE_PHRASE
+  encoding: CODE_PHRASE
+  formatting: String
+  mappings: [TERM_MAPPING]
+  defining_code: CODE_PHRASE
+  _type: String
+}
+
+type DV_TEXT {
+  value: String
+  hyperlink: DV_TEXT_hyperlinkChoice
+  language: CODE_PHRASE
+  encoding: CODE_PHRASE
+  formatting: String
+  mappings: [TERM_MAPPING]
+  _type: String
+}
+
+type REFERENCE_RANGE {
+  range: DV_INTERVAL
+  meaning: REFERENCE_RANGE_meaningChoice
+  _type: String
+}
+
+type DV_DURATION {
+  normal_status: CODE_PHRASE
+  normal_range: DV_INTERVAL
+  other_reference_ranges: [REFERENCE_RANGE]
+  magnitude_status: String
+  accuracy: Float
+  accuracy_is_percent: Boolean
+  value: String
+  _type: String
+}
+
+type DV_DATE_TIME {
+  normal_status: CODE_PHRASE
+  normal_range: DV_INTERVAL
+  other_reference_ranges: [REFERENCE_RANGE]
+  magnitude_status: String
+  accuracy: DV_DURATION
+  value: String
+  _type: String
+}
+
+type SYNC_EXTRACT_SPEC {
+  includes_versions: Boolean
+  contribution_list: [HIER_OBJECT_ID]
+  contributions_since: DV_DATE_TIME
+  all_contributions: Boolean
+  _type: String
+}
+
+input HIER_OBJECT_IDInput {
+  value: String
+  _type: String
+}
+
+input TERMINOLOGY_IDInput {
+  value: String
+  _type: String
+}
+
+input CODE_PHRASEInput {
+  terminology_id: TERMINOLOGY_IDInput
+  code_string: String
+  preferred_term: String
+  _type: String
+}
+
+input DV_INTERVALInput {
+  lower: JSON
+  upper: JSON
+  lower_unbounded: Boolean
+  upper_unbounded: Boolean
+  lower_included: Boolean
+  upper_included: Boolean
+  _type: String
+}
+
+input REFERENCE_RANGEInput {
+  range: DV_INTERVALInput
+  meaning: JSON
+  _type: String
+}
+
+input DV_DURATIONInput {
+  normal_status: CODE_PHRASEInput
+  normal_range: DV_INTERVALInput
+  other_reference_ranges: [REFERENCE_RANGEInput]
+  magnitude_status: String
+  accuracy: Float
+  accuracy_is_percent: Boolean
+  value: String
+  _type: String
+}
+
+input DV_DATE_TIMEInput {
+  normal_status: CODE_PHRASEInput
+  normal_range: DV_INTERVALInput
+  other_reference_ranges: [REFERENCE_RANGEInput]
+  magnitude_status: String
+  accuracy: DV_DURATIONInput
+  value: String
+  _type: String
+}
+
+input SYNC_EXTRACT_SPECInput {
+  includes_versions: Boolean
+  contribution_list: [HIER_OBJECT_IDInput]
+  contributions_since: DV_DATE_TIMEInput
+  all_contributions: Boolean
+  _type: String
+}
+
+type GENERIC_ID {
+  value: String
+  scheme: String
+  _type: String
+}
+
+type OBJECT_VERSION_ID {
+  value: String
+  _type: String
+}
+
+type ARCHETYPE_ID {
+  value: String
+  _type: String
+}
+
+type TEMPLATE_ID {
+  value: String
+  _type: String
+}
+
+type PARTY_REF {
+  id: PARTY_REF_idChoice
+  namespace: String
+  type: String
+  _type: String
+}
+
+type PARTY_SELF {
+  external_ref: PARTY_REF
+  _type: String
+}
+
+type DV_IDENTIFIER {
+  issuer: String
+  id: String
+  type: String
+  assigner: String
+  _type: String
+}
+
+type PARTY_IDENTIFIED {
+  external_ref: PARTY_REF
+  name: String
+  identifiers: [DV_IDENTIFIER]
+  _type: String
+}
+
+type PARTY_RELATED {
+  external_ref: PARTY_REF
+  name: String
+  identifiers: [DV_IDENTIFIER]
+  relationship: DV_CODED_TEXT
+  _type: String
+}
+
+type AUDIT_DETAILS {
+  system_id: String
+  time_committed: DV_DATE_TIME
+  change_type: DV_CODED_TEXT
+  description: AUDIT_DETAILS_descriptionChoice
+  committer: AUDIT_DETAILS_committerChoice
+  _type: String
+}
+
+input TERM_MAPPINGInput {
+  match: String
+  purpose: DV_CODED_TEXTInput
+  target: CODE_PHRASEInput
+  _type: String
+}
+
+input DV_CODED_TEXTInput {
+  value: String
+  hyperlink: JSON
+  language: CODE_PHRASEInput
+  encoding: CODE_PHRASEInput
+  formatting: String
+  mappings: [TERM_MAPPINGInput]
+  defining_code: CODE_PHRASEInput
+  _type: String
+}
+
+input AUDIT_DETAILSInput {
+  system_id: String
+  time_committed: DV_DATE_TIMEInput
+  change_type: DV_CODED_TEXTInput
+  description: JSON
+  committer: JSON
+  _type: String
+}
+
+type LOCATABLE_REF {
+  id: LOCATABLE_REF_idChoice
+  namespace: String
+  type: String
+  path: String
+  _type: String
+}
+
+type ACCESS_GROUP_REF {
+  id: ACCESS_GROUP_REF_idChoice
+  namespace: String
+  type: String
+  _type: String
+}
+
+type OBJECT_REF {
+  id: OBJECT_REF_idChoice
+  namespace: String
+  type: String
+  _type: String
+}
+
+type EHR {
+  system_id: HIER_OBJECT_ID
+  ehr_id: HIER_OBJECT_ID
+  time_created: DV_DATE_TIME
+  ehr_access: EHR_ehr_accessChoice
+  ehr_status: EHR_ehr_statusChoice
+  directory: EHR_directoryChoice
+  folders: [EHR_foldersItemChoice]
+  compositions: [EHR_compositionsItemChoice]
+  contributions: [EHR_contributionsItemChoice]
+  _type: String
+}
+
+input EHRInput {
+  system_id: HIER_OBJECT_IDInput
+  ehr_id: HIER_OBJECT_IDInput
+  time_created: DV_DATE_TIMEInput
+  ehr_access: JSON
+  ehr_status: JSON
+  directory: JSON
+  folders: [JSON]
+  compositions: [JSON]
+  contributions: [JSON]
+  _type: String
+}
+
+type DV_TIME {
+  normal_status: CODE_PHRASE
+  normal_range: DV_INTERVAL
+  other_reference_ranges: [REFERENCE_RANGE]
+  magnitude_status: String
+  accuracy: DV_DURATION
+  value: String
+  _type: String
+}
+
+input DV_TIMEInput {
+  normal_status: CODE_PHRASEInput
+  normal_range: DV_INTERVALInput
+  other_reference_ranges: [REFERENCE_RANGEInput]
+  magnitude_status: String
+  accuracy: DV_DURATIONInput
+  value: String
+  _type: String
+}
+
+type EXTRACT_ENTITY_MANIFEST {
+  extract_id_key: String
+  ehr_id: String
+  subject_id: String
+  other_ids: [String]
+  item_list: [EXTRACT_ENTITY_MANIFEST_item_listItemChoice]
+  _type: String
+}
+
+type EXTRACT_MANIFEST {
+  entities: [EXTRACT_ENTITY_MANIFEST]
+  _type: String
+}
+
+input EXTRACT_ENTITY_MANIFESTInput {
+  extract_id_key: String
+  ehr_id: String
+  subject_id: String
+  other_ids: [String]
+  item_list: [JSON]
+  _type: String
+}
+
+input EXTRACT_MANIFESTInput {
+  entities: [EXTRACT_ENTITY_MANIFESTInput]
+  _type: String
+}
+
+type DV_MULTIMEDIA {
+  charset: CODE_PHRASE
+  language: CODE_PHRASE
+  alternate_text: String
+  uri: DV_MULTIMEDIA_uriChoice
+  data: String
+  media_type: CODE_PHRASE
+  compression_algorithm: CODE_PHRASE
+  integrity_check: String
+  integrity_check_algorithm: CODE_PHRASE
+  thumbnail: DV_MULTIMEDIA
+  size: Int
+  _type: String
+}
+
+type ATTESTATION {
+  system_id: String
+  time_committed: DV_DATE_TIME
+  change_type: DV_CODED_TEXT
+  description: ATTESTATION_descriptionChoice
+  committer: ATTESTATION_committerChoice
+  attested_view: DV_MULTIMEDIA
+  proof: String
+  items: [DV_EHR_URI]
+  reason: ATTESTATION_reasonChoice
+  is_pending: Boolean
+  _type: String
+}
+
+type REVISION_HISTORY_ITEM {
+  version_id: OBJECT_VERSION_ID
+  audits: [REVISION_HISTORY_ITEM_auditsItemChoice]
+  _type: String
+}
+
+input OBJECT_VERSION_IDInput {
+  value: String
+  _type: String
+}
+
+input REVISION_HISTORY_ITEMInput {
+  version_id: OBJECT_VERSION_IDInput
+  audits: [JSON]
+  _type: String
+}
+
+type ARCHETYPE_HRID {
+  namespace: String
+  rm_publisher: String
+  rm_package: String
+  rm_class: String
+  concept_id: String
+  release_version: String
+  version_status: VERSION_STATUS
+  build_count: String
+  _type: String
+}
+
+input ARCHETYPE_HRIDInput {
+  namespace: String
+  rm_publisher: String
+  rm_package: String
+  rm_class: String
+  concept_id: String
+  release_version: String
+  version_status: VERSION_STATUSInput
+  build_count: String
+  _type: String
+}
+
+type ARCHETYPED {
+  archetype_id: ARCHETYPE_ID
+  template_id: TEMPLATE_ID
+  rm_version: String
+  _type: String
+}
+
+type DV_PARSABLE {
+  charset: CODE_PHRASE
+  language: CODE_PHRASE
+  value: String
+  formalism: String
+  _type: String
+}
+
+type LINK {
+  meaning: LINK_meaningChoice
+  type: LINK_typeChoice
+  target: DV_EHR_URI
+  _type: String
+}
+
+type DV_GENERAL_TIME_SPECIFICATION {
+  value: DV_PARSABLE
+  _type: String
+}
+
+type DV_PERIODIC_TIME_SPECIFICATION {
+  value: DV_PARSABLE
+  _type: String
+}
+
+type DV_ORDINAL {
+  normal_status: CODE_PHRASE
+  normal_range: DV_INTERVAL
+  other_reference_ranges: [REFERENCE_RANGE]
+  value: Int
+  symbol: DV_CODED_TEXT
+  _type: String
+}
+
+type DV_SCALE {
+  normal_status: CODE_PHRASE
+  normal_range: DV_INTERVAL
+  other_reference_ranges: [REFERENCE_RANGE]
+  value: Float
+  symbol: DV_CODED_TEXT
+  _type: String
+}
+
+type DV_COUNT {
+  normal_status: CODE_PHRASE
+  normal_range: DV_INTERVAL
+  other_reference_ranges: [REFERENCE_RANGE]
+  magnitude_status: String
+  accuracy: Float
+  accuracy_is_percent: Boolean
+  magnitude: Int
+  _type: String
+}
+
+type DV_PROPORTION {
+  normal_status: CODE_PHRASE
+  normal_range: DV_INTERVAL
+  other_reference_ranges: [REFERENCE_RANGE]
+  magnitude_status: String
+  accuracy: Float
+  accuracy_is_percent: Boolean
+  numerator: Float
+  denominator: Float
+  type: Int
+  precision: Int
+  _type: String
+}
+
+type DV_QUANTITY {
+  normal_status: CODE_PHRASE
+  normal_range: DV_INTERVAL
+  other_reference_ranges: [REFERENCE_RANGE]
+  magnitude_status: String
+  accuracy: Float
+  accuracy_is_percent: Boolean
+  magnitude: Float
+  property: CODE_PHRASE
+  units: String
+  units_system: String
+  units_display_name: String
+  precision: Int
+  _type: String
+}
+
+type DV_DATE {
+  normal_status: CODE_PHRASE
+  normal_range: DV_INTERVAL
+  other_reference_ranges: [REFERENCE_RANGE]
+  magnitude_status: String
+  accuracy: DV_DURATION
+  value: String
+  _type: String
+}
+
+type DV_PARAGRAPH {
+  items: [DV_PARAGRAPH_itemsItemChoice]
+  _type: String
+}
+
+type DV_STATE {
+  value: DV_CODED_TEXT
+  is_terminal: Boolean
+  _type: String
+}
+
+type DV_BOOLEAN {
+  value: Boolean
+  _type: String
+}
+
+type ELEMENT {
+  uid: ELEMENT_uidChoice
+  archetype_node_id: String
+  name: ELEMENT_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  null_flavour: DV_CODED_TEXT
+  value: ELEMENT_valueChoice
+  null_reason: ELEMENT_null_reasonChoice
+  _type: String
+}
+
+type ITEM_SINGLE {
+  uid: ITEM_SINGLE_uidChoice
+  archetype_node_id: String
+  name: ITEM_SINGLE_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  item: ELEMENT
+  _type: String
+}
+
+type CLUSTER {
+  uid: CLUSTER_uidChoice
+  archetype_node_id: String
+  name: CLUSTER_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  items: [CLUSTER_itemsItemChoice]
+  _type: String
+}
+
+type ITEM_TREE {
+  uid: ITEM_TREE_uidChoice
+  archetype_node_id: String
+  name: ITEM_TREE_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  items: [ITEM_TREE_itemsItemChoice]
+  _type: String
+}
+
+type ITEM_LIST {
+  uid: ITEM_LIST_uidChoice
+  archetype_node_id: String
+  name: ITEM_LIST_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  items: [ELEMENT]
+  _type: String
+}
+
+type ITEM_TABLE {
+  uid: ITEM_TABLE_uidChoice
+  archetype_node_id: String
+  name: ITEM_TABLE_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  rows: [CLUSTER]
+  _type: String
+}
+
+type FEEDER_AUDIT_DETAILS {
+  system_id: String
+  location: FEEDER_AUDIT_DETAILS_locationChoice
+  provider: FEEDER_AUDIT_DETAILS_providerChoice
+  subject: FEEDER_AUDIT_DETAILS_subjectChoice
+  time: DV_DATE_TIME
+  version_id: String
+  other_details: FEEDER_AUDIT_DETAILS_other_detailsChoice
+  _type: String
+}
+
+type FEEDER_AUDIT {
+  originating_system_item_ids: [DV_IDENTIFIER]
+  feeder_system_item_ids: [DV_IDENTIFIER]
+  original_content: FEEDER_AUDIT_original_contentChoice
+  originating_system_audit: FEEDER_AUDIT_DETAILS
+  feeder_system_audit: FEEDER_AUDIT_DETAILS
+  _type: String
+}
+
+type PARTY_IDENTITY {
+  uid: PARTY_IDENTITY_uidChoice
+  archetype_node_id: String
+  name: PARTY_IDENTITY_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  details: PARTY_IDENTITY_detailsChoice
+  _type: String
+}
+
+input ARCHETYPE_IDInput {
+  value: String
+  _type: String
+}
+
+input TEMPLATE_IDInput {
+  value: String
+  _type: String
+}
+
+input ARCHETYPEDInput {
+  archetype_id: ARCHETYPE_IDInput
+  template_id: TEMPLATE_IDInput
+  rm_version: String
+  _type: String
+}
+
+input DV_IDENTIFIERInput {
+  issuer: String
+  id: String
+  type: String
+  assigner: String
+  _type: String
+}
+
+input FEEDER_AUDIT_DETAILSInput {
+  system_id: String
+  location: JSON
+  provider: JSON
+  subject: JSON
+  time: DV_DATE_TIMEInput
+  version_id: String
+  other_details: JSON
+  _type: String
+}
+
+input FEEDER_AUDITInput {
+  originating_system_item_ids: [DV_IDENTIFIERInput]
+  feeder_system_item_ids: [DV_IDENTIFIERInput]
+  original_content: JSON
+  originating_system_audit: FEEDER_AUDIT_DETAILSInput
+  feeder_system_audit: FEEDER_AUDIT_DETAILSInput
+  _type: String
+}
+
+input DV_EHR_URIInput {
+  value: String
+  _type: String
+}
+
+input LINKInput {
+  meaning: JSON
+  type: JSON
+  target: DV_EHR_URIInput
+  _type: String
+}
+
+input PARTY_IDENTITYInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  details: JSON
+  _type: String
+}
+
+input DV_PARSABLEInput {
+  charset: CODE_PHRASEInput
+  language: CODE_PHRASEInput
+  value: String
+  formalism: String
+  _type: String
+}
+
+type EXTRACT_VERSION_SPEC {
+  include_all_versions: Boolean
+  commit_time_interval: DV_INTERVAL
+  include_revision_history: Boolean
+  include_data: Boolean
+  _type: String
+}
+
+input EXTRACT_VERSION_SPECInput {
+  include_all_versions: Boolean
+  commit_time_interval: DV_INTERVALInput
+  include_revision_history: Boolean
+  include_data: Boolean
+  _type: String
+}
+
+type EXTRACT_PARTICIPATION {
+  performer: String
+  function: EXTRACT_PARTICIPATION_functionChoice
+  mode: DV_CODED_TEXT
+  time: DV_INTERVAL
+  _type: String
+}
+
+input EXTRACT_PARTICIPATIONInput {
+  performer: String
+  function: JSON
+  mode: DV_CODED_TEXTInput
+  time: DV_INTERVALInput
+  _type: String
+}
+
+input DV_COUNTInput {
+  normal_status: CODE_PHRASEInput
+  normal_range: DV_INTERVALInput
+  other_reference_ranges: [REFERENCE_RANGEInput]
+  magnitude_status: String
+  accuracy: Float
+  accuracy_is_percent: Boolean
+  magnitude: Int
+  _type: String
+}
+
+input CLUSTERInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  items: [JSON]
+  _type: String
+}
+
+input PARTY_REFInput {
+  id: JSON
+  namespace: String
+  type: String
+  _type: String
+}
+
+input PARTY_RELATEDInput {
+  external_ref: PARTY_REFInput
+  name: String
+  identifiers: [DV_IDENTIFIERInput]
+  relationship: DV_CODED_TEXTInput
+  _type: String
+}
+
+type ISO_OID {
+  value: String
+  _type: String
+}
+
+input ISO_OIDInput {
+  value: String
+  _type: String
+}
+
+type REVISION_HISTORY {
+  items: [REVISION_HISTORY_ITEM]
+  _type: String
+}
+
+type ORIGINAL_VERSION {
+  contribution: ORIGINAL_VERSION_contributionChoice
+  commit_audit: ORIGINAL_VERSION_commit_auditChoice
+  signature: String
+  uid: OBJECT_VERSION_ID
+  preceding_version_uid: OBJECT_VERSION_ID
+  other_input_version_uids: [OBJECT_VERSION_ID]
+  attestations: [ATTESTATION]
+  lifecycle_state: DV_CODED_TEXT
+  data: JSON
+  _type: String
+}
+
+type X_VERSIONED_PARTY {
+  uid: HIER_OBJECT_ID
+  owner_id: X_VERSIONED_PARTY_owner_idChoice
+  time_created: DV_DATE_TIME
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORY
+  versions: [ORIGINAL_VERSION]
+  _type: String
+}
+
+type X_VERSIONED_COMPOSITION {
+  uid: HIER_OBJECT_ID
+  owner_id: X_VERSIONED_COMPOSITION_owner_idChoice
+  time_created: DV_DATE_TIME
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORY
+  versions: [ORIGINAL_VERSION]
+  _type: String
+}
+
+type X_VERSIONED_FOLDER {
+  uid: HIER_OBJECT_ID
+  owner_id: X_VERSIONED_FOLDER_owner_idChoice
+  time_created: DV_DATE_TIME
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORY
+  versions: [ORIGINAL_VERSION]
+  _type: String
+}
+
+type X_VERSIONED_EHR_ACCESS {
+  uid: HIER_OBJECT_ID
+  owner_id: X_VERSIONED_EHR_ACCESS_owner_idChoice
+  time_created: DV_DATE_TIME
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORY
+  versions: [ORIGINAL_VERSION]
+  _type: String
+}
+
+type X_VERSIONED_EHR_STATUS {
+  uid: HIER_OBJECT_ID
+  owner_id: X_VERSIONED_EHR_STATUS_owner_idChoice
+  time_created: DV_DATE_TIME
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORY
+  versions: [ORIGINAL_VERSION]
+  _type: String
+}
+
+type X_VERSIONED_OBJECT {
+  uid: HIER_OBJECT_ID
+  owner_id: X_VERSIONED_OBJECT_owner_idChoice
+  time_created: DV_DATE_TIME
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORY
+  versions: [ORIGINAL_VERSION]
+  _type: String
+}
+
+type OPENEHR_CONTENT_ITEM {
+  uid: OPENEHR_CONTENT_ITEM_uidChoice
+  archetype_node_id: String
+  name: OPENEHR_CONTENT_ITEM_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  is_primary: Boolean
+  is_changed: Boolean
+  is_masked: Boolean
+  item: OPENEHR_CONTENT_ITEM_itemChoice
+  _type: String
+}
+
+type EXTRACT_CHAPTER {
+  uid: EXTRACT_CHAPTER_uidChoice
+  archetype_node_id: String
+  name: EXTRACT_CHAPTER_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  items: [EXTRACT_CHAPTER_itemsItemChoice]
+  _type: String
+}
+
+type EXTRACT_ENTITY_CHAPTER {
+  uid: EXTRACT_ENTITY_CHAPTER_uidChoice
+  archetype_node_id: String
+  name: EXTRACT_ENTITY_CHAPTER_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  items: [EXTRACT_ENTITY_CHAPTER_itemsItemChoice]
+  extract_id_key: String
+  _type: String
+}
+
+type CAPABILITY {
+  uid: CAPABILITY_uidChoice
+  archetype_node_id: String
+  name: CAPABILITY_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  credentials: CAPABILITY_credentialsChoice
+  time_validity: DV_INTERVAL
+  _type: String
+}
+
+type EXTRACT_SPEC {
+  extract_type: DV_CODED_TEXT
+  include_multimedia: Boolean
+  priority: Int
+  link_depth: Int
+  criteria: [DV_PARSABLE]
+  manifest: EXTRACT_MANIFEST
+  version_spec: EXTRACT_VERSION_SPEC
+  other_details: EXTRACT_SPEC_other_detailsChoice
+  _type: String
+}
+
+type EXTRACT_UPDATE_SPEC {
+  persist_in_server: Boolean
+  trigger_events: [DV_CODED_TEXT]
+  repeat_period: DV_DURATION
+  update_method: CODE_PHRASE
+  _type: String
+}
+
+type EXTRACT_REQUEST {
+  uid: HIER_OBJECT_ID
+  archetype_node_id: String
+  name: EXTRACT_REQUEST_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  extract_spec: EXTRACT_SPEC
+  update_spec: EXTRACT_UPDATE_SPEC
+  _type: String
+}
+
+type ADDRESS {
+  uid: ADDRESS_uidChoice
+  archetype_node_id: String
+  name: ADDRESS_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  details: ADDRESS_detailsChoice
+  _type: String
+}
+
+type CONTACT {
+  uid: CONTACT_uidChoice
+  archetype_node_id: String
+  name: CONTACT_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  time_validity: DV_INTERVAL
+  addresses: [ADDRESS]
+  _type: String
+}
+
+type PARTY_RELATIONSHIP {
+  uid: PARTY_RELATIONSHIP_uidChoice
+  archetype_node_id: String
+  name: PARTY_RELATIONSHIP_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  source: PARTY_REF
+  target: PARTY_REF
+  details: PARTY_RELATIONSHIP_detailsChoice
+  time_validity: DV_INTERVAL
+  _type: String
+}
+
+type ROLE {
+  uid: ROLE_uidChoice
+  archetype_node_id: String
+  name: ROLE_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  details: ROLE_detailsChoice
+  identities: [PARTY_IDENTITY]
+  contacts: [CONTACT]
+  relationships: [PARTY_RELATIONSHIP]
+  reverse_relationships: [LOCATABLE_REF]
+  performer: PARTY_REF
+  capabilities: [CAPABILITY]
+  time_validity: DV_INTERVAL
+  _type: String
+}
+
+type PERSON {
+  uid: PERSON_uidChoice
+  archetype_node_id: String
+  name: PERSON_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  details: PERSON_detailsChoice
+  identities: [PARTY_IDENTITY]
+  contacts: [CONTACT]
+  relationships: [PARTY_RELATIONSHIP]
+  reverse_relationships: [LOCATABLE_REF]
+  roles: [PARTY_REF]
+  languages: [PERSON_languagesItemChoice]
+  _type: String
+}
+
+type AGENT {
+  uid: AGENT_uidChoice
+  archetype_node_id: String
+  name: AGENT_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  details: AGENT_detailsChoice
+  identities: [PARTY_IDENTITY]
+  contacts: [CONTACT]
+  relationships: [PARTY_RELATIONSHIP]
+  reverse_relationships: [LOCATABLE_REF]
+  roles: [PARTY_REF]
+  languages: [AGENT_languagesItemChoice]
+  _type: String
+}
+
+type GROUP {
+  uid: GROUP_uidChoice
+  archetype_node_id: String
+  name: GROUP_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  details: GROUP_detailsChoice
+  identities: [PARTY_IDENTITY]
+  contacts: [CONTACT]
+  relationships: [PARTY_RELATIONSHIP]
+  reverse_relationships: [LOCATABLE_REF]
+  roles: [PARTY_REF]
+  languages: [GROUP_languagesItemChoice]
+  _type: String
+}
+
+type ORGANISATION {
+  uid: ORGANISATION_uidChoice
+  archetype_node_id: String
+  name: ORGANISATION_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  details: ORGANISATION_detailsChoice
+  identities: [PARTY_IDENTITY]
+  contacts: [CONTACT]
+  relationships: [PARTY_RELATIONSHIP]
+  reverse_relationships: [LOCATABLE_REF]
+  roles: [PARTY_REF]
+  languages: [ORGANISATION_languagesItemChoice]
+  _type: String
+}
+
+type PARTICIPATION {
+  function: PARTICIPATION_functionChoice
+  time: DV_INTERVAL
+  mode: DV_CODED_TEXT
+  performer: PARTICIPATION_performerChoice
+  _type: String
+}
+
+type ACTIVITY {
+  uid: ACTIVITY_uidChoice
+  archetype_node_id: String
+  name: ACTIVITY_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  description: ACTIVITY_descriptionChoice
+  timing: DV_PARSABLE
+  action_archetype_id: String
+  _type: String
+}
+
+type INSTRUCTION {
+  uid: INSTRUCTION_uidChoice
+  archetype_node_id: String
+  name: INSTRUCTION_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  language: CODE_PHRASE
+  encoding: CODE_PHRASE
+  subject: INSTRUCTION_subjectChoice
+  provider: INSTRUCTION_providerChoice
+  other_participations: [PARTICIPATION]
+  workflow_id: INSTRUCTION_workflow_idChoice
+  protocol: INSTRUCTION_protocolChoice
+  guideline_id: INSTRUCTION_guideline_idChoice
+  narrative: INSTRUCTION_narrativeChoice
+  expiry_time: DV_DATE_TIME
+  wf_definition: DV_PARSABLE
+  activities: [ACTIVITY]
+  _type: String
+}
+
+type EVALUATION {
+  uid: EVALUATION_uidChoice
+  archetype_node_id: String
+  name: EVALUATION_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  language: CODE_PHRASE
+  encoding: CODE_PHRASE
+  subject: EVALUATION_subjectChoice
+  provider: EVALUATION_providerChoice
+  other_participations: [PARTICIPATION]
+  workflow_id: EVALUATION_workflow_idChoice
+  protocol: EVALUATION_protocolChoice
+  guideline_id: EVALUATION_guideline_idChoice
+  data: EVALUATION_dataChoice
+  _type: String
+}
+
+type POINT_EVENT {
+  uid: POINT_EVENT_uidChoice
+  archetype_node_id: String
+  name: POINT_EVENT_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  time: DV_DATE_TIME
+  state: POINT_EVENT_stateChoice
+  data: POINT_EVENT_dataChoice
+  _type: String
+}
+
+type INTERVAL_EVENT {
+  uid: INTERVAL_EVENT_uidChoice
+  archetype_node_id: String
+  name: INTERVAL_EVENT_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  time: DV_DATE_TIME
+  state: INTERVAL_EVENT_stateChoice
+  data: INTERVAL_EVENT_dataChoice
+  width: DV_DURATION
+  sample_count: Int
+  math_function: DV_CODED_TEXT
+  _type: String
+}
+
+type HISTORY {
+  uid: HISTORY_uidChoice
+  archetype_node_id: String
+  name: HISTORY_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  origin: DV_DATE_TIME
+  period: DV_DURATION
+  duration: DV_DURATION
+  summary: HISTORY_summaryChoice
+  events: [HISTORY_eventsItemChoice]
+  _type: String
+}
+
+type OBSERVATION {
+  uid: OBSERVATION_uidChoice
+  archetype_node_id: String
+  name: OBSERVATION_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  language: CODE_PHRASE
+  encoding: CODE_PHRASE
+  subject: OBSERVATION_subjectChoice
+  provider: OBSERVATION_providerChoice
+  other_participations: [PARTICIPATION]
+  workflow_id: OBSERVATION_workflow_idChoice
+  protocol: OBSERVATION_protocolChoice
+  guideline_id: OBSERVATION_guideline_idChoice
+  data: HISTORY
+  state: HISTORY
+  _type: String
+}
+
+type ISM_TRANSITION {
+  current_state: DV_CODED_TEXT
+  transition: DV_CODED_TEXT
+  careflow_step: DV_CODED_TEXT
+  reason: [ISM_TRANSITION_reasonItemChoice]
+  _type: String
+}
+
+type INSTRUCTION_DETAILS {
+  instruction_id: LOCATABLE_REF
+  wf_details: INSTRUCTION_DETAILS_wf_detailsChoice
+  activity_id: String
+  _type: String
+}
+
+type ACTION {
+  uid: ACTION_uidChoice
+  archetype_node_id: String
+  name: ACTION_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  language: CODE_PHRASE
+  encoding: CODE_PHRASE
+  subject: ACTION_subjectChoice
+  provider: ACTION_providerChoice
+  other_participations: [PARTICIPATION]
+  workflow_id: ACTION_workflow_idChoice
+  protocol: ACTION_protocolChoice
+  guideline_id: ACTION_guideline_idChoice
+  time: DV_DATE_TIME
+  description: ACTION_descriptionChoice
+  ism_transition: ISM_TRANSITION
+  instruction_details: INSTRUCTION_DETAILS
+  _type: String
+}
+
+type ADMIN_ENTRY {
+  uid: ADMIN_ENTRY_uidChoice
+  archetype_node_id: String
+  name: ADMIN_ENTRY_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  language: CODE_PHRASE
+  encoding: CODE_PHRASE
+  subject: ADMIN_ENTRY_subjectChoice
+  provider: ADMIN_ENTRY_providerChoice
+  other_participations: [PARTICIPATION]
+  workflow_id: ADMIN_ENTRY_workflow_idChoice
+  data: ADMIN_ENTRY_dataChoice
+  _type: String
+}
+
+type GENERIC_ENTRY {
+  uid: GENERIC_ENTRY_uidChoice
+  archetype_node_id: String
+  name: GENERIC_ENTRY_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  data: ITEM_TREE
+  _type: String
+}
+
+type SECTION {
+  uid: SECTION_uidChoice
+  archetype_node_id: String
+  name: SECTION_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  items: [SECTION_itemsItemChoice]
+  _type: String
+}
+
+type EXTRACT_ACTION_REQUEST {
+  uid: HIER_OBJECT_ID
+  archetype_node_id: String
+  name: EXTRACT_ACTION_REQUEST_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  request_id: EXTRACT_ACTION_REQUEST_request_idChoice
+  action: DV_CODED_TEXT
+  _type: String
+}
+
+type FOLDER {
+  uid: FOLDER_uidChoice
+  archetype_node_id: String
+  name: FOLDER_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  folders: [FOLDER]
+  items: [FOLDER_itemsItemChoice]
+  details: FOLDER_detailsChoice
+  _type: String
+}
+
+type EXTRACT {
+  uid: EXTRACT_uidChoice
+  archetype_node_id: String
+  name: EXTRACT_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  request_id: HIER_OBJECT_ID
+  time_created: DV_DATE_TIME
+  system_id: HIER_OBJECT_ID
+  sequence_nr: Int
+  specification: EXTRACT_SPEC
+  chapters: [EXTRACT_chaptersItemChoice]
+  participations: [EXTRACT_PARTICIPATION]
+  _type: String
+}
+
+type EHR_ACCESS {
+  uid: EHR_ACCESS_uidChoice
+  archetype_node_id: String
+  name: EHR_ACCESS_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  settings: JSON
+  _type: String
+}
+
+type IMPORTED_VERSION {
+  contribution: IMPORTED_VERSION_contributionChoice
+  commit_audit: IMPORTED_VERSION_commit_auditChoice
+  signature: String
+  item: ORIGINAL_VERSION
+  _type: String
+}
+
+type X_CONTRIBUTION {
+  uid: HIER_OBJECT_ID
+  audit: X_CONTRIBUTION_auditChoice
+  versions: [X_CONTRIBUTION_versionsItemChoice]
+  _type: String
+}
+
+type SYNC_EXTRACT {
+  uid: SYNC_EXTRACT_uidChoice
+  archetype_node_id: String
+  name: SYNC_EXTRACT_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  specification: SYNC_EXTRACT_SPEC
+  items: [X_CONTRIBUTION]
+  _type: String
+}
+
+type SYNC_EXTRACT_REQUEST {
+  uid: SYNC_EXTRACT_REQUEST_uidChoice
+  archetype_node_id: String
+  name: SYNC_EXTRACT_REQUEST_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  specification: SYNC_EXTRACT_SPEC
+  _type: String
+}
+
+type EVENT_CONTEXT {
+  health_care_facility: EVENT_CONTEXT_health_care_facilityChoice
+  start_time: DV_DATE_TIME
+  end_time: DV_DATE_TIME
+  participations: [PARTICIPATION]
+  location: String
+  setting: DV_CODED_TEXT
+  other_context: EVENT_CONTEXT_other_contextChoice
+  _type: String
+}
+
+type COMPOSITION {
+  uid: COMPOSITION_uidChoice
+  archetype_node_id: String
+  name: COMPOSITION_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  language: CODE_PHRASE
+  territory: CODE_PHRASE
+  category: DV_CODED_TEXT
+  composer: COMPOSITION_composerChoice
+  context: EVENT_CONTEXT
+  content: [COMPOSITION_contentItemChoice]
+  _type: String
+}
+
+type EHR_STATUS {
+  uid: EHR_STATUS_uidChoice
+  archetype_node_id: String
+  name: EHR_STATUS_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  subject: PARTY_SELF
+  is_queryable: Boolean
+  is_modifiable: Boolean
+  other_details: EHR_STATUS_other_detailsChoice
+  _type: String
+}
+
+type GENERIC_CONTENT_ITEM {
+  uid: GENERIC_CONTENT_ITEM_uidChoice
+  archetype_node_id: String
+  name: GENERIC_CONTENT_ITEM_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  is_primary: Boolean
+  is_changed: Boolean
+  is_masked: Boolean
+  item: GENERIC_CONTENT_ITEM_itemChoice
+  item_type: DV_CODED_TEXT
+  item_type_version: String
+  author: String
+  creation_time: String
+  authoriser: String
+  authorisation_time: String
+  item_status: DV_CODED_TEXT
+  version_id: String
+  version_set_id: String
+  system_id: String
+  other_details: [String]
+  _type: String
+}
+
+type EXTRACT_FOLDER {
+  uid: EXTRACT_FOLDER_uidChoice
+  archetype_node_id: String
+  name: EXTRACT_FOLDER_nameChoice
+  archetype_details: ARCHETYPED
+  feeder_audit: FEEDER_AUDIT
+  links: [LINK]
+  items: [EXTRACT_FOLDER_itemsItemChoice]
+  _type: String
+}
+
+input EXTRACT_FOLDERInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  items: [JSON]
+  _type: String
+}
+
+input PARTICIPATIONInput {
+  function: JSON
+  time: DV_INTERVALInput
+  mode: DV_CODED_TEXTInput
+  performer: JSON
+  _type: String
+}
+
+input ACTIVITYInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  description: JSON
+  timing: DV_PARSABLEInput
+  action_archetype_id: String
+  _type: String
+}
+
+input INSTRUCTIONInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  language: CODE_PHRASEInput
+  encoding: CODE_PHRASEInput
+  subject: JSON
+  provider: JSON
+  other_participations: [PARTICIPATIONInput]
+  workflow_id: JSON
+  protocol: JSON
+  guideline_id: JSON
+  narrative: JSON
+  expiry_time: DV_DATE_TIMEInput
+  wf_definition: DV_PARSABLEInput
+  activities: [ACTIVITYInput]
+  _type: String
+}
+
+input EXTRACT_CHAPTERInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  items: [JSON]
+  _type: String
+}
+
+input ADDRESSInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  details: JSON
+  _type: String
+}
+
+input CONTACTInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  time_validity: DV_INTERVALInput
+  addresses: [ADDRESSInput]
+  _type: String
+}
+
+input PARTY_RELATIONSHIPInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  source: PARTY_REFInput
+  target: PARTY_REFInput
+  details: JSON
+  time_validity: DV_INTERVALInput
+  _type: String
+}
+
+input LOCATABLE_REFInput {
+  id: JSON
+  namespace: String
+  type: String
+  path: String
+  _type: String
+}
+
+input PERSONInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  details: JSON
+  identities: [PARTY_IDENTITYInput]
+  contacts: [CONTACTInput]
+  relationships: [PARTY_RELATIONSHIPInput]
+  reverse_relationships: [LOCATABLE_REFInput]
+  roles: [PARTY_REFInput]
+  languages: [JSON]
+  _type: String
+}
+
+input GENERIC_IDInput {
+  value: String
+  scheme: String
+  _type: String
+}
+
+type URI {
+  _type: String
+}
+
+type TERMINOLOGY_CODE {
+  terminology_id: String
+  terminology_version: String
+  code_string: String
+  uri: URI
+  _type: String
+}
+
+type RESOURCE_DESCRIPTION_ITEM {
+  language: TERMINOLOGY_CODE
+  purpose: String
+  keywords: [String]
+  use: String
+  misuse: String
+  copyright: String
+  original_resource_uri: [JSON]
+  other_details: JSON
+  _type: String
+}
+
+type RESOURCE_DESCRIPTION {
+  original_author: JSON
+  other_contributors: [String]
+  lifecycle_state: String
+  resource_package_uri: String
+  other_details: JSON
+  parent_resource: JSON
+  details: [RESOURCE_DESCRIPTION_ITEM]
+  _type: String
+}
+
+input URIInput {
+  _type: String
+}
+
+input TERMINOLOGY_CODEInput {
+  terminology_id: String
+  terminology_version: String
+  code_string: String
+  uri: URIInput
+  _type: String
+}
+
+input RESOURCE_DESCRIPTION_ITEMInput {
+  language: TERMINOLOGY_CODEInput
+  purpose: String
+  keywords: [String]
+  use: String
+  misuse: String
+  copyright: String
+  original_resource_uri: [JSON]
+  other_details: JSON
+  _type: String
+}
+
+input RESOURCE_DESCRIPTIONInput {
+  original_author: JSON
+  other_contributors: [String]
+  lifecycle_state: String
+  resource_package_uri: String
+  other_details: JSON
+  parent_resource: JSON
+  details: [RESOURCE_DESCRIPTION_ITEMInput]
+  _type: String
+}
+
+input EVALUATIONInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  language: CODE_PHRASEInput
+  encoding: CODE_PHRASEInput
+  subject: JSON
+  provider: JSON
+  other_participations: [PARTICIPATIONInput]
+  workflow_id: JSON
+  protocol: JSON
+  guideline_id: JSON
+  data: JSON
+  _type: String
+}
+
+input CAPABILITYInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  credentials: JSON
+  time_validity: DV_INTERVALInput
+  _type: String
+}
+
+type ISO8601_TYPE {
+  value: String
+  _type: String
+}
+
+input ISO8601_TYPEInput {
+  value: String
+  _type: String
+}
+
+type CONTRIBUTION {
+  uid: HIER_OBJECT_ID
+  audit: CONTRIBUTION_auditChoice
+  versions: [CONTRIBUTION_versionsItemChoice]
+  _type: String
+}
+
+input CONTRIBUTIONInput {
+  uid: HIER_OBJECT_IDInput
+  audit: JSON
+  versions: [JSON]
+  _type: String
+}
+
+input DV_MULTIMEDIAInput {
+  charset: CODE_PHRASEInput
+  language: CODE_PHRASEInput
+  alternate_text: String
+  uri: JSON
+  data: String
+  media_type: CODE_PHRASEInput
+  compression_algorithm: CODE_PHRASEInput
+  integrity_check: String
+  integrity_check_algorithm: CODE_PHRASEInput
+  thumbnail: DV_MULTIMEDIAInput
+  size: Int
+  _type: String
+}
+
+input ATTESTATIONInput {
+  system_id: String
+  time_committed: DV_DATE_TIMEInput
+  change_type: DV_CODED_TEXTInput
+  description: JSON
+  committer: JSON
+  attested_view: DV_MULTIMEDIAInput
+  proof: String
+  items: [DV_EHR_URIInput]
+  reason: JSON
+  is_pending: Boolean
+  _type: String
+}
+
+input ORIGINAL_VERSIONInput {
+  contribution: JSON
+  commit_audit: JSON
+  signature: String
+  uid: OBJECT_VERSION_IDInput
+  preceding_version_uid: OBJECT_VERSION_IDInput
+  other_input_version_uids: [OBJECT_VERSION_IDInput]
+  attestations: [ATTESTATIONInput]
+  lifecycle_state: DV_CODED_TEXTInput
+  data: JSON
+  _type: String
+}
+
+input POINT_EVENTInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  time: DV_DATE_TIMEInput
+  state: JSON
+  data: JSON
+  _type: String
+}
+
+input INSTRUCTION_DETAILSInput {
+  instruction_id: LOCATABLE_REFInput
+  wf_details: JSON
+  activity_id: String
+  _type: String
+}
+
+input REVISION_HISTORYInput {
+  items: [REVISION_HISTORY_ITEMInput]
+  _type: String
+}
+
+input X_VERSIONED_PARTYInput {
+  uid: HIER_OBJECT_IDInput
+  owner_id: JSON
+  time_created: DV_DATE_TIMEInput
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORYInput
+  versions: [ORIGINAL_VERSIONInput]
+  _type: String
+}
+
+input EXTRACT_SPECInput {
+  extract_type: DV_CODED_TEXTInput
+  include_multimedia: Boolean
+  priority: Int
+  link_depth: Int
+  criteria: [DV_PARSABLEInput]
+  manifest: EXTRACT_MANIFESTInput
+  version_spec: EXTRACT_VERSION_SPECInput
+  other_details: JSON
+  _type: String
+}
+
+input EXTRACT_UPDATE_SPECInput {
+  persist_in_server: Boolean
+  trigger_events: [DV_CODED_TEXTInput]
+  repeat_period: DV_DURATIONInput
+  update_method: CODE_PHRASEInput
+  _type: String
+}
+
+input EXTRACT_REQUESTInput {
+  uid: HIER_OBJECT_IDInput
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  extract_spec: EXTRACT_SPECInput
+  update_spec: EXTRACT_UPDATE_SPECInput
+  _type: String
+}
+
+input EVENT_CONTEXTInput {
+  health_care_facility: JSON
+  start_time: DV_DATE_TIMEInput
+  end_time: DV_DATE_TIMEInput
+  participations: [PARTICIPATIONInput]
+  location: String
+  setting: DV_CODED_TEXTInput
+  other_context: JSON
+  _type: String
+}
+
+input ELEMENTInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  null_flavour: DV_CODED_TEXTInput
+  value: JSON
+  null_reason: JSON
+  _type: String
+}
+
+input ITEM_SINGLEInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  item: ELEMENTInput
+  _type: String
+}
+
+type SET {
+  _type: String
+}
+
+input SETInput {
+  _type: String
+}
+
+input DV_PROPORTIONInput {
+  normal_status: CODE_PHRASEInput
+  normal_range: DV_INTERVALInput
+  other_reference_ranges: [REFERENCE_RANGEInput]
+  magnitude_status: String
+  accuracy: Float
+  accuracy_is_percent: Boolean
+  numerator: Float
+  denominator: Float
+  type: Int
+  precision: Int
+  _type: String
+}
+
+input DV_QUANTITYInput {
+  normal_status: CODE_PHRASEInput
+  normal_range: DV_INTERVALInput
+  other_reference_ranges: [REFERENCE_RANGEInput]
+  magnitude_status: String
+  accuracy: Float
+  accuracy_is_percent: Boolean
+  magnitude: Float
+  property: CODE_PHRASEInput
+  units: String
+  units_system: String
+  units_display_name: String
+  precision: Int
+  _type: String
+}
+
+input X_VERSIONED_COMPOSITIONInput {
+  uid: HIER_OBJECT_IDInput
+  owner_id: JSON
+  time_created: DV_DATE_TIMEInput
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORYInput
+  versions: [ORIGINAL_VERSIONInput]
+  _type: String
+}
+
+input X_VERSIONED_FOLDERInput {
+  uid: HIER_OBJECT_IDInput
+  owner_id: JSON
+  time_created: DV_DATE_TIMEInput
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORYInput
+  versions: [ORIGINAL_VERSIONInput]
+  _type: String
+}
+
+input DV_ORDINALInput {
+  normal_status: CODE_PHRASEInput
+  normal_range: DV_INTERVALInput
+  other_reference_ranges: [REFERENCE_RANGEInput]
+  value: Int
+  symbol: DV_CODED_TEXTInput
+  _type: String
+}
+
+input X_CONTRIBUTIONInput {
+  uid: HIER_OBJECT_IDInput
+  audit: JSON
+  versions: [JSON]
+  _type: String
+}
+
+input SYNC_EXTRACTInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  specification: SYNC_EXTRACT_SPECInput
+  items: [X_CONTRIBUTIONInput]
+  _type: String
+}
+
+input ROLEInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  details: JSON
+  identities: [PARTY_IDENTITYInput]
+  contacts: [CONTACTInput]
+  relationships: [PARTY_RELATIONSHIPInput]
+  reverse_relationships: [LOCATABLE_REFInput]
+  performer: PARTY_REFInput
+  capabilities: [CAPABILITYInput]
+  time_validity: DV_INTERVALInput
+  _type: String
+}
+
+input AGENTInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  details: JSON
+  identities: [PARTY_IDENTITYInput]
+  contacts: [CONTACTInput]
+  relationships: [PARTY_RELATIONSHIPInput]
+  reverse_relationships: [LOCATABLE_REFInput]
+  roles: [PARTY_REFInput]
+  languages: [JSON]
+  _type: String
+}
+
+type INTERNET_ID {
+  value: String
+  _type: String
+}
+
+input INTERNET_IDInput {
+  value: String
+  _type: String
+}
+
+type MESSAGE {
+  author: MESSAGE_authorChoice
+  audit: MESSAGE_auditChoice
+  content: MESSAGE_contentChoice
+  signature: String
+  _type: String
+}
+
+input MESSAGEInput {
+  author: JSON
+  audit: JSON
+  content: JSON
+  signature: String
+  _type: String
+}
+
+input GROUPInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  details: JSON
+  identities: [PARTY_IDENTITYInput]
+  contacts: [CONTACTInput]
+  relationships: [PARTY_RELATIONSHIPInput]
+  reverse_relationships: [LOCATABLE_REFInput]
+  roles: [PARTY_REFInput]
+  languages: [JSON]
+  _type: String
+}
+
+type INTERVAL {
+  lower: JSON
+  upper: JSON
+  lower_unbounded: Boolean
+  upper_unbounded: Boolean
+  lower_included: Boolean
+  upper_included: Boolean
+  _type: String
+}
+
+input INTERVALInput {
+  lower: JSON
+  upper: JSON
+  lower_unbounded: Boolean
+  upper_unbounded: Boolean
+  lower_included: Boolean
+  upper_included: Boolean
+  _type: String
+}
+
+input EXTRACT_ACTION_REQUESTInput {
+  uid: HIER_OBJECT_IDInput
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  request_id: JSON
+  action: DV_CODED_TEXTInput
+  _type: String
+}
+
+input PARTY_SELFInput {
+  external_ref: PARTY_REFInput
+  _type: String
+}
+
+input X_VERSIONED_EHR_ACCESSInput {
+  uid: HIER_OBJECT_IDInput
+  owner_id: JSON
+  time_created: DV_DATE_TIMEInput
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORYInput
+  versions: [ORIGINAL_VERSIONInput]
+  _type: String
+}
+
+type VERSION_TREE_ID {
+  value: String
+  _type: String
+}
+
+input VERSION_TREE_IDInput {
+  value: String
+  _type: String
+}
+
+input DV_PARAGRAPHInput {
+  items: [JSON]
+  _type: String
+}
+
+input ITEM_TREEInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  items: [JSON]
+  _type: String
+}
+
+input DV_GENERAL_TIME_SPECIFICATIONInput {
+  value: DV_PARSABLEInput
+  _type: String
+}
+
+input DV_DATEInput {
+  normal_status: CODE_PHRASEInput
+  normal_range: DV_INTERVALInput
+  other_reference_ranges: [REFERENCE_RANGEInput]
+  magnitude_status: String
+  accuracy: DV_DURATIONInput
+  value: String
+  _type: String
+}
+
+input DV_STATEInput {
+  value: DV_CODED_TEXTInput
+  is_terminal: Boolean
+  _type: String
+}
+
+input ITEM_LISTInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  items: [ELEMENTInput]
+  _type: String
+}
+
+type DURATION {
+  value: String
+  _type: String
+}
+
+input DURATIONInput {
+  value: String
+  _type: String
+}
+
+input HISTORYInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  origin: DV_DATE_TIMEInput
+  period: DV_DURATIONInput
+  duration: DV_DURATIONInput
+  summary: JSON
+  events: [JSON]
+  _type: String
+}
+
+input DV_PERIODIC_TIME_SPECIFICATIONInput {
+  value: DV_PARSABLEInput
+  _type: String
+}
+
+input SYNC_EXTRACT_REQUESTInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  specification: SYNC_EXTRACT_SPECInput
+  _type: String
+}
+
+type ARRAY {
+  _type: String
+}
+
+input ARRAYInput {
+  _type: String
+}
+
+input OBSERVATIONInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  language: CODE_PHRASEInput
+  encoding: CODE_PHRASEInput
+  subject: JSON
+  provider: JSON
+  other_participations: [PARTICIPATIONInput]
+  workflow_id: JSON
+  protocol: JSON
+  guideline_id: JSON
+  data: HISTORYInput
+  state: HISTORYInput
+  _type: String
+}
+
+input X_VERSIONED_OBJECTInput {
+  uid: HIER_OBJECT_IDInput
+  owner_id: JSON
+  time_created: DV_DATE_TIMEInput
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORYInput
+  versions: [ORIGINAL_VERSIONInput]
+  _type: String
+}
+
+type ADDRESSED_MESSAGE {
+  sender: String
+  sender_reference: String
+  addressees: [String]
+  urgency: Int
+  message: MESSAGE
+  _type: String
+}
+
+input ADDRESSED_MESSAGEInput {
+  sender: String
+  sender_reference: String
+  addressees: [String]
+  urgency: Int
+  message: MESSAGEInput
+  _type: String
+}
+
+type UUID {
+  value: String
+  _type: String
+}
+
+input UUIDInput {
+  value: String
+  _type: String
+}
+
+input ISM_TRANSITIONInput {
+  current_state: DV_CODED_TEXTInput
+  transition: DV_CODED_TEXTInput
+  careflow_step: DV_CODED_TEXTInput
+  reason: [JSON]
+  _type: String
+}
+
+input X_VERSIONED_EHR_STATUSInput {
+  uid: HIER_OBJECT_IDInput
+  owner_id: JSON
+  time_created: DV_DATE_TIMEInput
+  total_version_count: Int
+  extract_version_count: Int
+  revision_history: REVISION_HISTORYInput
+  versions: [ORIGINAL_VERSIONInput]
+  _type: String
+}
+
+input FOLDERInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  folders: [FOLDERInput]
+  items: [JSON]
+  details: JSON
+  _type: String
+}
+
+input EXTRACTInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  request_id: HIER_OBJECT_IDInput
+  time_created: DV_DATE_TIMEInput
+  system_id: HIER_OBJECT_IDInput
+  sequence_nr: Int
+  specification: EXTRACT_SPECInput
+  chapters: [JSON]
+  participations: [EXTRACT_PARTICIPATIONInput]
+  _type: String
+}
+
+type VALIDITY_KIND {
+  _type: String
+}
+
+input VALIDITY_KINDInput {
+  _type: String
+}
+
+input ORGANISATIONInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  details: JSON
+  identities: [PARTY_IDENTITYInput]
+  contacts: [CONTACTInput]
+  relationships: [PARTY_RELATIONSHIPInput]
+  reverse_relationships: [LOCATABLE_REFInput]
+  roles: [PARTY_REFInput]
+  languages: [JSON]
+  _type: String
+}
+
+type VERSIONED_OBJECT {
+  uid: HIER_OBJECT_ID
+  owner_id: VERSIONED_OBJECT_owner_idChoice
+  time_created: DV_DATE_TIME
+  _type: String
+}
+
+input VERSIONED_OBJECTInput {
+  uid: HIER_OBJECT_IDInput
+  owner_id: JSON
+  time_created: DV_DATE_TIMEInput
+  _type: String
+}
+
+input GENERIC_CONTENT_ITEMInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  is_primary: Boolean
+  is_changed: Boolean
+  is_masked: Boolean
+  item: JSON
+  item_type: DV_CODED_TEXTInput
+  item_type_version: String
+  author: String
+  creation_time: String
+  authoriser: String
+  authorisation_time: String
+  item_status: DV_CODED_TEXTInput
+  version_id: String
+  version_set_id: String
+  system_id: String
+  other_details: [String]
+  _type: String
+}
+
+type DATE {
+  value: String
+  _type: String
+}
+
+input DATEInput {
+  value: String
+  _type: String
+}
+
+input ITEM_TABLEInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  rows: [CLUSTERInput]
+  _type: String
+}
+
+input INTERVAL_EVENTInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  time: DV_DATE_TIMEInput
+  state: JSON
+  data: JSON
+  width: DV_DURATIONInput
+  sample_count: Int
+  math_function: DV_CODED_TEXTInput
+  _type: String
+}
+
+type DATE_TIME {
+  value: String
+  _type: String
+}
+
+input DATE_TIMEInput {
+  value: String
+  _type: String
+}
+
+type LIST {
+  _type: String
+}
+
+input LISTInput {
+  _type: String
+}
+
+input EHR_ACCESSInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  settings: JSON
+  _type: String
+}
+
+type TERMINOLOGY_TERM {
+  text: String
+  concept: TERMINOLOGY_CODE
+  _type: String
+}
+
+input TERMINOLOGY_TERMInput {
+  text: String
+  concept: TERMINOLOGY_CODEInput
+  _type: String
+}
+
+input DV_SCALEInput {
+  normal_status: CODE_PHRASEInput
+  normal_range: DV_INTERVALInput
+  other_reference_ranges: [REFERENCE_RANGEInput]
+  value: Float
+  symbol: DV_CODED_TEXTInput
+  _type: String
+}
+
+input ADMIN_ENTRYInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  language: CODE_PHRASEInput
+  encoding: CODE_PHRASEInput
+  subject: JSON
+  provider: JSON
+  other_participations: [PARTICIPATIONInput]
+  workflow_id: JSON
+  data: JSON
+  _type: String
+}
+
+input PARTY_IDENTIFIEDInput {
+  external_ref: PARTY_REFInput
+  name: String
+  identifiers: [DV_IDENTIFIERInput]
+  _type: String
+}
+
+input OPENEHR_CONTENT_ITEMInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  is_primary: Boolean
+  is_changed: Boolean
+  is_masked: Boolean
+  item: JSON
+  _type: String
+}
+
+input COMPOSITIONInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  language: CODE_PHRASEInput
+  territory: CODE_PHRASEInput
+  category: DV_CODED_TEXTInput
+  composer: JSON
+  context: EVENT_CONTEXTInput
+  content: [JSON]
+  _type: String
+}
+
+input EHR_STATUSInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  subject: PARTY_SELFInput
+  is_queryable: Boolean
+  is_modifiable: Boolean
+  other_details: JSON
+  _type: String
+}
+
+type TRANSLATION_DETAILS {
+  language: TERMINOLOGY_CODE
+  author: JSON
+  accreditation: String
+  other_details: JSON
+  _type: String
+}
+
+input TRANSLATION_DETAILSInput {
+  language: TERMINOLOGY_CODEInput
+  author: JSON
+  accreditation: String
+  other_details: JSON
+  _type: String
+}
+
+input ACCESS_GROUP_REFInput {
+  id: JSON
+  namespace: String
+  type: String
+  _type: String
+}
+
+input OBJECT_REFInput {
+  id: JSON
+  namespace: String
+  type: String
+  _type: String
+}
+
+input GENERIC_ENTRYInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  data: ITEM_TREEInput
+  _type: String
+}
+
+type TIME {
+  value: String
+  _type: String
+}
+
+input TIMEInput {
+  value: String
+  _type: String
+}
+
+input IMPORTED_VERSIONInput {
+  contribution: JSON
+  commit_audit: JSON
+  signature: String
+  item: ORIGINAL_VERSIONInput
+  _type: String
+}
+
+input DV_BOOLEANInput {
+  value: Boolean
+  _type: String
+}
+
+input DV_URIInput {
+  value: String
+  _type: String
+}
+
+input DV_TEXTInput {
+  value: String
+  hyperlink: JSON
+  language: CODE_PHRASEInput
+  encoding: CODE_PHRASEInput
+  formatting: String
+  mappings: [TERM_MAPPINGInput]
+  _type: String
+}
+
+input ACTIONInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  language: CODE_PHRASEInput
+  encoding: CODE_PHRASEInput
+  subject: JSON
+  provider: JSON
+  other_participations: [PARTICIPATIONInput]
+  workflow_id: JSON
+  protocol: JSON
+  guideline_id: JSON
+  time: DV_DATE_TIMEInput
+  description: JSON
+  ism_transition: ISM_TRANSITIONInput
+  instruction_details: INSTRUCTION_DETAILSInput
+  _type: String
+}
+
+input EXTRACT_ENTITY_CHAPTERInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  items: [JSON]
+  extract_id_key: String
+  _type: String
+}
+
+input SECTIONInput {
+  uid: JSON
+  archetype_node_id: String
+  name: JSON
+  archetype_details: ARCHETYPEDInput
+  feeder_audit: FEEDER_AUDITInput
+  links: [LINKInput]
+  items: [JSON]
+  _type: String
+}
+
+union DV_CODED_TEXT_hyperlinkChoice = DV_EHR_URI | DV_URI
+
+union DV_TEXT_hyperlinkChoice = DV_EHR_URI | DV_URI
+
+union REFERENCE_RANGE_meaningChoice = DV_CODED_TEXT | DV_TEXT
+
+union AUDIT_DETAILS_descriptionChoice = DV_CODED_TEXT | DV_TEXT
+
+union PARTY_REF_idChoice = TERMINOLOGY_ID | GENERIC_ID | OBJECT_VERSION_ID | HIER_OBJECT_ID | ARCHETYPE_ID | TEMPLATE_ID
+
+union AUDIT_DETAILS_committerChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union LOCATABLE_REF_idChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ACCESS_GROUP_REF_idChoice = TERMINOLOGY_ID | GENERIC_ID | OBJECT_VERSION_ID | HIER_OBJECT_ID | ARCHETYPE_ID | TEMPLATE_ID
+
+union OBJECT_REF_idChoice = TERMINOLOGY_ID | GENERIC_ID | OBJECT_VERSION_ID | HIER_OBJECT_ID | ARCHETYPE_ID | TEMPLATE_ID
+
+union EHR_ehr_accessChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union EHR_ehr_statusChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union EHR_directoryChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union EHR_foldersItemChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union EHR_compositionsItemChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union EHR_contributionsItemChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union EXTRACT_ENTITY_MANIFEST_item_listItemChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union ATTESTATION_descriptionChoice = DV_CODED_TEXT | DV_TEXT
+
+union ATTESTATION_committerChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union DV_MULTIMEDIA_uriChoice = DV_EHR_URI | DV_URI
+
+union ATTESTATION_reasonChoice = DV_CODED_TEXT | DV_TEXT
+
+union REVISION_HISTORY_ITEM_auditsItemChoice = ATTESTATION | AUDIT_DETAILS
+
+union PARTY_IDENTITY_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union PARTY_IDENTITY_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union FEEDER_AUDIT_original_contentChoice = DV_PARSABLE | DV_MULTIMEDIA
+
+union FEEDER_AUDIT_DETAILS_locationChoice = PARTY_RELATED | PARTY_IDENTIFIED
+
+union FEEDER_AUDIT_DETAILS_providerChoice = PARTY_RELATED | PARTY_IDENTIFIED
+
+union FEEDER_AUDIT_DETAILS_subjectChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union ITEM_SINGLE_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ITEM_SINGLE_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union LINK_meaningChoice = DV_CODED_TEXT | DV_TEXT
+
+union LINK_typeChoice = DV_CODED_TEXT | DV_TEXT
+
+union ELEMENT_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ELEMENT_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union DV_PARAGRAPH_itemsItemChoice = DV_CODED_TEXT | DV_TEXT
+
+union ELEMENT_valueChoice = DV_GENERAL_TIME_SPECIFICATION | DV_PERIODIC_TIME_SPECIFICATION | DV_ORDINAL | DV_SCALE | DV_COUNT | DV_DURATION | DV_PROPORTION | DV_QUANTITY | DV_TIME | DV_DATE_TIME | DV_DATE | DV_PARAGRAPH | DV_STATE | DV_INTERVAL | DV_PARSABLE | DV_MULTIMEDIA | DV_IDENTIFIER | DV_BOOLEAN | DV_URI | DV_EHR_URI | DV_TEXT | DV_CODED_TEXT
+
+union ELEMENT_null_reasonChoice = DV_CODED_TEXT | DV_TEXT
+
+union ITEM_TREE_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ITEM_TREE_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union CLUSTER_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union CLUSTER_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union CLUSTER_itemsItemChoice = CLUSTER | ELEMENT
+
+union ITEM_TREE_itemsItemChoice = CLUSTER | ELEMENT
+
+union ITEM_LIST_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ITEM_LIST_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union ITEM_TABLE_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ITEM_TABLE_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union FEEDER_AUDIT_DETAILS_other_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union PARTY_IDENTITY_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union EXTRACT_PARTICIPATION_functionChoice = DV_CODED_TEXT | DV_TEXT
+
+union EXTRACT_FOLDER_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union EXTRACT_FOLDER_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union GENERIC_CONTENT_ITEM_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union GENERIC_CONTENT_ITEM_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union EXTRACT_CHAPTER_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union EXTRACT_CHAPTER_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union OPENEHR_CONTENT_ITEM_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union OPENEHR_CONTENT_ITEM_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union X_VERSIONED_PARTY_owner_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union ORIGINAL_VERSION_contributionChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union ORIGINAL_VERSION_commit_auditChoice = ATTESTATION | AUDIT_DETAILS
+
+union X_VERSIONED_COMPOSITION_owner_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union X_VERSIONED_FOLDER_owner_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union X_VERSIONED_EHR_ACCESS_owner_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union X_VERSIONED_EHR_STATUS_owner_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union X_VERSIONED_OBJECT_owner_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union OPENEHR_CONTENT_ITEM_itemChoice = X_VERSIONED_PARTY | X_VERSIONED_COMPOSITION | X_VERSIONED_FOLDER | X_VERSIONED_EHR_ACCESS | X_VERSIONED_EHR_STATUS | X_VERSIONED_OBJECT
+
+union EXTRACT_CHAPTER_itemsItemChoice = EXTRACT_FOLDER | GENERIC_CONTENT_ITEM | OPENEHR_CONTENT_ITEM
+
+union EXTRACT_ENTITY_CHAPTER_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union EXTRACT_ENTITY_CHAPTER_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union EXTRACT_ENTITY_CHAPTER_itemsItemChoice = EXTRACT_FOLDER | GENERIC_CONTENT_ITEM | OPENEHR_CONTENT_ITEM
+
+union CAPABILITY_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union CAPABILITY_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union CAPABILITY_credentialsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union EXTRACT_REQUEST_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union EXTRACT_SPEC_other_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union ROLE_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ROLE_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union ROLE_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union CONTACT_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union CONTACT_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union ADDRESS_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ADDRESS_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union ADDRESS_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union PARTY_RELATIONSHIP_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union PARTY_RELATIONSHIP_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union PARTY_RELATIONSHIP_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union PERSON_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union PERSON_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union PERSON_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union PERSON_languagesItemChoice = DV_CODED_TEXT | DV_TEXT
+
+union AGENT_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union AGENT_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union AGENT_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union AGENT_languagesItemChoice = DV_CODED_TEXT | DV_TEXT
+
+union GROUP_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union GROUP_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union GROUP_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union GROUP_languagesItemChoice = DV_CODED_TEXT | DV_TEXT
+
+union ORGANISATION_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ORGANISATION_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union ORGANISATION_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union ORGANISATION_languagesItemChoice = DV_CODED_TEXT | DV_TEXT
+
+union INSTRUCTION_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union INSTRUCTION_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union INSTRUCTION_subjectChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union INSTRUCTION_providerChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union PARTICIPATION_functionChoice = DV_CODED_TEXT | DV_TEXT
+
+union PARTICIPATION_performerChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union INSTRUCTION_workflow_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union INSTRUCTION_protocolChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union INSTRUCTION_guideline_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union INSTRUCTION_narrativeChoice = DV_CODED_TEXT | DV_TEXT
+
+union ACTIVITY_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ACTIVITY_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union ACTIVITY_descriptionChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union EVALUATION_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union EVALUATION_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union EVALUATION_subjectChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union EVALUATION_providerChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union EVALUATION_workflow_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union EVALUATION_protocolChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union EVALUATION_guideline_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union EVALUATION_dataChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union OBSERVATION_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union OBSERVATION_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union OBSERVATION_subjectChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union OBSERVATION_providerChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union OBSERVATION_workflow_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union OBSERVATION_protocolChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union OBSERVATION_guideline_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union HISTORY_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union HISTORY_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union HISTORY_summaryChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union POINT_EVENT_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union POINT_EVENT_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union POINT_EVENT_stateChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union POINT_EVENT_dataChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union INTERVAL_EVENT_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union INTERVAL_EVENT_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union INTERVAL_EVENT_stateChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union INTERVAL_EVENT_dataChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union HISTORY_eventsItemChoice = POINT_EVENT | INTERVAL_EVENT
+
+union ACTION_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ACTION_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union ACTION_subjectChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union ACTION_providerChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union ACTION_workflow_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union ACTION_protocolChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union ACTION_guideline_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union ACTION_descriptionChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union ISM_TRANSITION_reasonItemChoice = DV_CODED_TEXT | DV_TEXT
+
+union INSTRUCTION_DETAILS_wf_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union ADMIN_ENTRY_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union ADMIN_ENTRY_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union ADMIN_ENTRY_subjectChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union ADMIN_ENTRY_providerChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union ADMIN_ENTRY_workflow_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union ADMIN_ENTRY_dataChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union GENERIC_ENTRY_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union GENERIC_ENTRY_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union SECTION_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union SECTION_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union SECTION_itemsItemChoice = INSTRUCTION | EVALUATION | OBSERVATION | ACTION | ADMIN_ENTRY | GENERIC_ENTRY | SECTION
+
+union EXTRACT_ACTION_REQUEST_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union EXTRACT_ACTION_REQUEST_request_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union FOLDER_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union FOLDER_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union FOLDER_itemsItemChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union FOLDER_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union EXTRACT_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union EXTRACT_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union EXTRACT_chaptersItemChoice = EXTRACT_ENTITY_CHAPTER | EXTRACT_CHAPTER
+
+union EHR_ACCESS_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union EHR_ACCESS_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union SYNC_EXTRACT_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union SYNC_EXTRACT_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union X_CONTRIBUTION_auditChoice = ATTESTATION | AUDIT_DETAILS
+
+union IMPORTED_VERSION_contributionChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union IMPORTED_VERSION_commit_auditChoice = ATTESTATION | AUDIT_DETAILS
+
+union X_CONTRIBUTION_versionsItemChoice = ORIGINAL_VERSION | IMPORTED_VERSION
+
+union SYNC_EXTRACT_REQUEST_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union SYNC_EXTRACT_REQUEST_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union COMPOSITION_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union COMPOSITION_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union COMPOSITION_composerChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union EVENT_CONTEXT_health_care_facilityChoice = PARTY_RELATED | PARTY_IDENTIFIED
+
+union EVENT_CONTEXT_other_contextChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union COMPOSITION_contentItemChoice = INSTRUCTION | EVALUATION | OBSERVATION | ACTION | ADMIN_ENTRY | GENERIC_ENTRY | SECTION
+
+union EHR_STATUS_uidChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union EHR_STATUS_nameChoice = DV_CODED_TEXT | DV_TEXT
+
+union EHR_STATUS_other_detailsChoice = ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE
+
+union GENERIC_CONTENT_ITEM_itemChoice = PARTY_IDENTITY | EXTRACT_CHAPTER | EXTRACT_ENTITY_CHAPTER | CAPABILITY | CLUSTER | ELEMENT | EXTRACT_REQUEST | ROLE | PERSON | AGENT | GROUP | ORGANISATION | INSTRUCTION | EVALUATION | OBSERVATION | ACTION | ADMIN_ENTRY | GENERIC_ENTRY | SECTION | EXTRACT_ACTION_REQUEST | HISTORY | ITEM_SINGLE | ITEM_TREE | ITEM_LIST | ITEM_TABLE | CONTACT | POINT_EVENT | INTERVAL_EVENT | EXTRACT_FOLDER | GENERIC_CONTENT_ITEM | OPENEHR_CONTENT_ITEM | FOLDER | EXTRACT | ADDRESS | PARTY_RELATIONSHIP | EHR_ACCESS | SYNC_EXTRACT | SYNC_EXTRACT_REQUEST | COMPOSITION | EHR_STATUS | ACTIVITY
+
+union EXTRACT_FOLDER_itemsItemChoice = EXTRACT_FOLDER | GENERIC_CONTENT_ITEM | OPENEHR_CONTENT_ITEM
+
+union CONTRIBUTION_auditChoice = ATTESTATION | AUDIT_DETAILS
+
+union CONTRIBUTION_versionsItemChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+union MESSAGE_authorChoice = PARTY_SELF | PARTY_IDENTIFIED | PARTY_RELATED
+
+union MESSAGE_auditChoice = ATTESTATION | AUDIT_DETAILS
+
+union MESSAGE_contentChoice = SYNC_EXTRACT | SYNC_EXTRACT_REQUEST
+
+union VERSIONED_OBJECT_owner_idChoice = LOCATABLE_REF | PARTY_REF | ACCESS_GROUP_REF | OBJECT_REF
+
+type Query { definitionTypes: [String!]! }

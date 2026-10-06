@@ -57,7 +57,10 @@ export namespace Applications
         {
             this.assertActive();if(this.#components.has(name))throw new Error(`Component already registered: ${name}`);
             const tag=`arianna-app-${this.#id}-${this.#components.size}`;
-            if(!Namespaces.Namespace.Define(tag,constructor,HTMLElement))throw new Error(`Cannot register component: ${name}`);
+            // Application registrations own a unique constructor name and registry identity.
+            const Registered = class extends constructor {};
+            Object.defineProperty(Registered,'name',{value:`Application${this.#id}Component${this.#components.size}`});
+            if(!Namespaces.Namespace.Define(tag,Registered,HTMLElement))throw new Error(`Cannot register component: ${name}`);
             this.#components.set(name,tag);return this;
         }
         Components():string[]{return [...this.#components.keys()];}

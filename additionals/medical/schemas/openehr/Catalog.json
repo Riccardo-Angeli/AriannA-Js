@@ -1,0 +1,44 @@
+[
+  {
+    "component": "BASE",
+    "release": "Release-1.1.0",
+    "file": "catalog/BASE-1.1.0.json",
+    "definitions": 32
+  },
+  {
+    "component": "RM",
+    "release": "Release-1.0.3",
+    "file": "catalog/RM-1.0.3.json",
+    "definitions": 123
+  },
+  {
+    "component": "RM",
+    "release": "Release-1.0.4",
+    "file": "catalog/RM-1.0.4.json",
+    "definitions": 133
+  },
+  {
+    "component": "RM",
+    "release": "Release-1.1.0",
+    "file": "catalog/RM-1.1.0.json",
+    "definitions": 134
+  },
+  {
+    "component": "AM",
+    "release": "Release-1.4",
+    "file": "catalog/AM-1.4.json",
+    "definitions": 41
+  },
+  {
+    "component": "AM",
+    "release": "Release-2.1.0",
+    "file": "catalog/AM-2.1.0.json",
+    "definitions": 97
+  },
+  {
+    "component": "AM",
+    "release": "Release-2.2.0",
+    "file": "catalog/AM-2.2.0.json",
+    "definitions": 96
+  }
+]

@@ -1,0 +1,1800 @@
+# AriannA generated openEHR GraphQL projection; NOT an official openEHR GraphQL standard.
+scalar JSON
+
+type ARCHETYPE_HRID {
+  namespace: JSON
+  rm_publisher: JSON
+  rm_package: JSON
+  rm_class: JSON
+  concept_id: JSON
+  release_version: JSON
+  version_status: JSON
+  build_count: JSON
+  _type: String
+}
+
+type C_SECOND_ORDER {
+  _type: String
+  members: [ARCHETYPE_CONSTRAINT]
+}
+
+type ARCHETYPE_CONSTRAINT {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+}
+
+type SIBLING_ORDER {
+  is_before: JSON
+  sibling_node_id: JSON
+  _type: String
+}
+
+type C_OBJECT {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+}
+
+type C_ATTRIBUTE {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_attribute_name: JSON
+  existence: JSON
+  children: [C_OBJECT]
+  differential_path: JSON
+  cardinality: JSON
+  is_multiple: JSON
+  _type: String
+}
+
+type C_PRIMITIVE_OBJECT {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: JSON
+}
+
+type C_PRIMITIVE_TUPLE {
+  members: [C_PRIMITIVE_OBJECT]
+  _type: String
+}
+
+type C_ATTRIBUTE_TUPLE {
+  members: [C_ATTRIBUTE]
+  tuples: [C_PRIMITIVE_TUPLE]
+  _type: String
+}
+
+type C_COMPLEX_OBJECT {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  attributes: [C_ATTRIBUTE]
+  attribute_tuples: [C_ATTRIBUTE_TUPLE]
+}
+
+type ARCHETYPE_TERMINOLOGY {
+  is_differential: JSON
+  original_language: JSON
+  concept_code: JSON
+  term_definitions: JSON
+  term_bindings: JSON
+  owner_archetype: ARCHETYPE
+  value_sets: JSON
+  terminology_extracts: JSON
+  _type: String
+}
+
+type ARCHETYPE {
+  _type: String
+  parent_archetype_id: JSON
+  archetype_id: ARCHETYPE_HRID
+  is_differential: JSON
+  definition: C_COMPLEX_OBJECT
+  terminology: ARCHETYPE_TERMINOLOGY
+  rules: [JSON]
+}
+
+input ARCHETYPE_HRIDInput {
+  namespace: JSON
+  rm_publisher: JSON
+  rm_package: JSON
+  rm_class: JSON
+  concept_id: JSON
+  release_version: JSON
+  version_status: JSON
+  build_count: JSON
+  _type: String
+}
+
+input C_SECOND_ORDERInput {
+  _type: String
+  members: [ARCHETYPE_CONSTRAINTInput]
+}
+
+input ARCHETYPE_CONSTRAINTInput {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+}
+
+input SIBLING_ORDERInput {
+  is_before: JSON
+  sibling_node_id: JSON
+  _type: String
+}
+
+input C_OBJECTInput {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+}
+
+input C_ATTRIBUTEInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_attribute_name: JSON
+  existence: JSON
+  children: [C_OBJECTInput]
+  differential_path: JSON
+  cardinality: JSON
+  is_multiple: JSON
+  _type: String
+}
+
+input C_PRIMITIVE_OBJECTInput {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: JSON
+}
+
+input C_PRIMITIVE_TUPLEInput {
+  members: [C_PRIMITIVE_OBJECTInput]
+  _type: String
+}
+
+input C_ATTRIBUTE_TUPLEInput {
+  members: [C_ATTRIBUTEInput]
+  tuples: [C_PRIMITIVE_TUPLEInput]
+  _type: String
+}
+
+input C_COMPLEX_OBJECTInput {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  attributes: [C_ATTRIBUTEInput]
+  attribute_tuples: [C_ATTRIBUTE_TUPLEInput]
+}
+
+input ARCHETYPE_TERMINOLOGYInput {
+  is_differential: JSON
+  original_language: JSON
+  concept_code: JSON
+  term_definitions: JSON
+  term_bindings: JSON
+  owner_archetype: ARCHETYPEInput
+  value_sets: JSON
+  terminology_extracts: JSON
+  _type: String
+}
+
+input ARCHETYPEInput {
+  _type: String
+  parent_archetype_id: JSON
+  archetype_id: ARCHETYPE_HRIDInput
+  is_differential: JSON
+  definition: C_COMPLEX_OBJECTInput
+  terminology: ARCHETYPE_TERMINOLOGYInput
+  rules: [JSON]
+}
+
+type ARCHETYPE_SLOT {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  includes: [JSON]
+  excludes: [JSON]
+  is_closed: JSON
+  _type: String
+}
+
+input ARCHETYPE_SLOTInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  includes: [JSON]
+  excludes: [JSON]
+  is_closed: JSON
+  _type: String
+}
+
+type ARCHETYPE_TERM {
+  code: JSON
+  text: JSON
+  description: JSON
+  other_items: JSON
+  _type: String
+}
+
+input ARCHETYPE_TERMInput {
+  code: JSON
+  text: JSON
+  description: JSON
+  other_items: JSON
+  _type: String
+}
+
+type AUTHORED_ARCHETYPE {
+  _type: String
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: ARCHETYPE_HRID
+  is_differential: JSON
+  definition: C_COMPLEX_OBJECT
+  terminology: ARCHETYPE_TERMINOLOGY
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+}
+
+input AUTHORED_ARCHETYPEInput {
+  _type: String
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: ARCHETYPE_HRIDInput
+  is_differential: JSON
+  definition: C_COMPLEX_OBJECTInput
+  terminology: ARCHETYPE_TERMINOLOGYInput
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+}
+
+type C_ARCHETYPE_ROOT {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  attributes: [C_ATTRIBUTE]
+  attribute_tuples: [C_ATTRIBUTE_TUPLE]
+  archetype_ref: JSON
+  _type: String
+}
+
+input C_ARCHETYPE_ROOTInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  attributes: [C_ATTRIBUTEInput]
+  attribute_tuples: [C_ATTRIBUTE_TUPLEInput]
+  archetype_ref: JSON
+  _type: String
+}
+
+type C_BOOLEAN {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input C_BOOLEANInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type C_COMPLEX_OBJECT_PROXY {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  target_path: JSON
+  _type: String
+}
+
+input C_COMPLEX_OBJECT_PROXYInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  target_path: JSON
+  _type: String
+}
+
+type C_DATE {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input C_DATEInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type C_DATE_TIME {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input C_DATE_TIMEInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type C_DEFINED_OBJECT {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+}
+
+input C_DEFINED_OBJECTInput {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+}
+
+type C_DURATION {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input C_DURATIONInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type C_INTEGER {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input C_INTEGERInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type C_ORDERED {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+}
+
+input C_ORDEREDInput {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+}
+
+type C_REAL {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input C_REALInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type C_STRING {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input C_STRINGInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type C_TEMPORAL {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+}
+
+input C_TEMPORALInput {
+  _type: String
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+}
+
+type C_TERMINOLOGY_CODE {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: JSON
+  _type: String
+}
+
+input C_TERMINOLOGY_CODEInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: JSON
+  _type: String
+}
+
+type C_TIME {
+  parent: ARCHETYPE_CONSTRAINT
+  soc_parent: C_SECOND_ORDER
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDER
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input C_TIMEInput {
+  parent: ARCHETYPE_CONSTRAINTInput
+  soc_parent: C_SECOND_ORDERInput
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  sibling_order: SIBLING_ORDERInput
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type EXPR_ARCHETYPE_ID_CONSTRAINT {
+  item: C_STRING
+  _type: String
+}
+
+input EXPR_ARCHETYPE_ID_CONSTRAINTInput {
+  item: C_STRINGInput
+  _type: String
+}
+
+type EXPR_ARCHETYPE_REF {
+  path: JSON
+  item: ARCHETYPE_CONSTRAINT
+  _type: String
+}
+
+input EXPR_ARCHETYPE_REFInput {
+  path: JSON
+  item: ARCHETYPE_CONSTRAINTInput
+  _type: String
+}
+
+type EXPR_CONSTRAINT {
+  _type: String
+  item: C_PRIMITIVE_OBJECT
+}
+
+input EXPR_CONSTRAINTInput {
+  _type: String
+  item: C_PRIMITIVE_OBJECTInput
+}
+
+type OPERATIONAL_TEMPLATE {
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: ARCHETYPE_HRID
+  is_differential: JSON
+  definition: C_COMPLEX_OBJECT
+  terminology: ARCHETYPE_TERMINOLOGY
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+  component_terminologies: JSON
+  terminology_extracts: [ARCHETYPE_TERMINOLOGY]
+  _type: String
+}
+
+input OPERATIONAL_TEMPLATEInput {
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: ARCHETYPE_HRIDInput
+  is_differential: JSON
+  definition: C_COMPLEX_OBJECTInput
+  terminology: ARCHETYPE_TERMINOLOGYInput
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+  component_terminologies: JSON
+  terminology_extracts: [ARCHETYPE_TERMINOLOGYInput]
+  _type: String
+}
+
+type TEMPLATE_OVERLAY {
+  parent_archetype_id: JSON
+  archetype_id: ARCHETYPE_HRID
+  is_differential: JSON
+  definition: C_COMPLEX_OBJECT
+  terminology: ARCHETYPE_TERMINOLOGY
+  rules: [JSON]
+  _type: String
+}
+
+type TEMPLATE {
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: ARCHETYPE_HRID
+  is_differential: JSON
+  definition: C_COMPLEX_OBJECT
+  terminology: ARCHETYPE_TERMINOLOGY
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+  overlays: [TEMPLATE_OVERLAY]
+  _type: String
+}
+
+input TEMPLATE_OVERLAYInput {
+  parent_archetype_id: JSON
+  archetype_id: ARCHETYPE_HRIDInput
+  is_differential: JSON
+  definition: C_COMPLEX_OBJECTInput
+  terminology: ARCHETYPE_TERMINOLOGYInput
+  rules: [JSON]
+  _type: String
+}
+
+input TEMPLATEInput {
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: ARCHETYPE_HRIDInput
+  is_differential: JSON
+  definition: C_COMPLEX_OBJECTInput
+  terminology: ARCHETYPE_TERMINOLOGYInput
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+  overlays: [TEMPLATE_OVERLAYInput]
+  _type: String
+}
+
+type TERMINOLOGY_RELATION {
+  _type: String
+  id: JSON
+  members: [JSON]
+}
+
+input TERMINOLOGY_RELATIONInput {
+  _type: String
+  id: JSON
+  members: [JSON]
+}
+
+type VALUE_SET {
+  id: JSON
+  members: [JSON]
+  _type: String
+}
+
+input VALUE_SETInput {
+  id: JSON
+  members: [JSON]
+  _type: String
+}
+
+type AOM_PROPERTY_MAPPING {
+  source_property_name: JSON
+  target_property_name: JSON
+  _type: String
+}
+
+type AOM_TYPE_MAPPING {
+  source_class_name: JSON
+  target_class_name: JSON
+  property_mappings: [AOM_PROPERTY_MAPPING]
+  _type: String
+}
+
+type AOM_PROFILE {
+  aom_rm_type_substitutions: JSON
+  aom_lifecycle_mappings: JSON
+  profile_name: JSON
+  aom_rm_type_mappings: [AOM_TYPE_MAPPING]
+  rm_primitive_type_equivalences: JSON
+  _type: String
+}
+
+input AOM_PROPERTY_MAPPINGInput {
+  source_property_name: JSON
+  target_property_name: JSON
+  _type: String
+}
+
+input AOM_TYPE_MAPPINGInput {
+  source_class_name: JSON
+  target_class_name: JSON
+  property_mappings: [AOM_PROPERTY_MAPPINGInput]
+  _type: String
+}
+
+input AOM_PROFILEInput {
+  aom_rm_type_substitutions: JSON
+  aom_lifecycle_mappings: JSON
+  profile_name: JSON
+  aom_rm_type_mappings: [AOM_TYPE_MAPPINGInput]
+  rm_primitive_type_equivalences: JSON
+  _type: String
+}
+
+type P_ARCHETYPE_HRID {
+  namespace: JSON
+  rm_publisher: JSON
+  rm_package: JSON
+  rm_class: JSON
+  concept_id: JSON
+  release_version: JSON
+  version_status: JSON
+  build_count: JSON
+  _type: String
+}
+
+type P_C_OBJECT {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+}
+
+type P_C_ATTRIBUTE {
+  rm_attribute_name: JSON
+  existence: JSON
+  children: [P_C_OBJECT]
+  differential_path: JSON
+  cardinality: JSON
+  is_multiple: JSON
+  _type: String
+}
+
+type P_C_ATTRIBUTE_TUPLE {
+  members: [JSON]
+  _type: String
+}
+
+type P_C_COMPLEX_OBJECT {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  attributes: [P_C_ATTRIBUTE]
+  attribute_tuples: [P_C_ATTRIBUTE_TUPLE]
+}
+
+type P_ARCHETYPE_TERMINOLOGY {
+  is_differential: JSON
+  original_language: JSON
+  term_definitions: JSON
+  term_bindings: JSON
+  value_sets: JSON
+  _type: String
+}
+
+type P_ARCHETYPE {
+  _type: String
+  parent_archetype_id: JSON
+  archetype_id: P_ARCHETYPE_HRID
+  is_differential: JSON
+  definition: P_C_COMPLEX_OBJECT
+  terminology: P_ARCHETYPE_TERMINOLOGY
+  rules: [JSON]
+}
+
+input P_ARCHETYPE_HRIDInput {
+  namespace: JSON
+  rm_publisher: JSON
+  rm_package: JSON
+  rm_class: JSON
+  concept_id: JSON
+  release_version: JSON
+  version_status: JSON
+  build_count: JSON
+  _type: String
+}
+
+input P_C_OBJECTInput {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+}
+
+input P_C_ATTRIBUTEInput {
+  rm_attribute_name: JSON
+  existence: JSON
+  children: [P_C_OBJECTInput]
+  differential_path: JSON
+  cardinality: JSON
+  is_multiple: JSON
+  _type: String
+}
+
+input P_C_ATTRIBUTE_TUPLEInput {
+  members: [JSON]
+  _type: String
+}
+
+input P_C_COMPLEX_OBJECTInput {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  attributes: [P_C_ATTRIBUTEInput]
+  attribute_tuples: [P_C_ATTRIBUTE_TUPLEInput]
+}
+
+input P_ARCHETYPE_TERMINOLOGYInput {
+  is_differential: JSON
+  original_language: JSON
+  term_definitions: JSON
+  term_bindings: JSON
+  value_sets: JSON
+  _type: String
+}
+
+input P_ARCHETYPEInput {
+  _type: String
+  parent_archetype_id: JSON
+  archetype_id: P_ARCHETYPE_HRIDInput
+  is_differential: JSON
+  definition: P_C_COMPLEX_OBJECTInput
+  terminology: P_ARCHETYPE_TERMINOLOGYInput
+  rules: [JSON]
+}
+
+type P_ARCHETYPE_SLOT {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  includes: [JSON]
+  excludes: [JSON]
+  is_closed: JSON
+  _type: String
+}
+
+input P_ARCHETYPE_SLOTInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  includes: [JSON]
+  excludes: [JSON]
+  is_closed: JSON
+  _type: String
+}
+
+type P_AUTHORED_ARCHETYPE {
+  _type: String
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: P_ARCHETYPE_HRID
+  is_differential: JSON
+  definition: P_C_COMPLEX_OBJECT
+  terminology: P_ARCHETYPE_TERMINOLOGY
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+}
+
+input P_AUTHORED_ARCHETYPEInput {
+  _type: String
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: P_ARCHETYPE_HRIDInput
+  is_differential: JSON
+  definition: P_C_COMPLEX_OBJECTInput
+  terminology: P_ARCHETYPE_TERMINOLOGYInput
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+}
+
+type P_AUTHORED_RESOURCE {
+  _type: String
+  original_language: JSON
+  is_controlled: JSON
+  translations: [JSON]
+  description: JSON
+  uid: JSON
+  annotations: JSON
+}
+
+input P_AUTHORED_RESOURCEInput {
+  _type: String
+  original_language: JSON
+  is_controlled: JSON
+  translations: [JSON]
+  description: JSON
+  uid: JSON
+  annotations: JSON
+}
+
+type P_C_ARCHETYPE_ROOT {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  attributes: [P_C_ATTRIBUTE]
+  attribute_tuples: [P_C_ATTRIBUTE_TUPLE]
+  archetype_ref: JSON
+  _type: String
+}
+
+input P_C_ARCHETYPE_ROOTInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  attributes: [P_C_ATTRIBUTEInput]
+  attribute_tuples: [P_C_ATTRIBUTE_TUPLEInput]
+  archetype_ref: JSON
+  _type: String
+}
+
+type P_C_BOOLEAN {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input P_C_BOOLEANInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type P_C_COMPLEX_OBJECT_PROXY {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  target_path: JSON
+  _type: String
+}
+
+input P_C_COMPLEX_OBJECT_PROXYInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  target_path: JSON
+  _type: String
+}
+
+type P_C_DEFINED_OBJECT {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+}
+
+input P_C_DEFINED_OBJECTInput {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+}
+
+type P_C_ORDERED {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input P_C_ORDEREDInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type P_C_ORDERED_of_Integer {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input P_C_ORDERED_of_IntegerInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type P_C_ORDERED_of_Real {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input P_C_ORDERED_of_RealInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type P_C_PRIMITIVE_OBJECT {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: JSON
+}
+
+input P_C_PRIMITIVE_OBJECTInput {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: JSON
+}
+
+type P_C_STRING {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input P_C_STRINGInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type P_C_TEMPORAL {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input P_C_TEMPORALInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type P_C_TEMPORAL_of_Iso8601_date {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input P_C_TEMPORAL_of_Iso8601_dateInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type P_C_TEMPORAL_of_Iso8601_date_time {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input P_C_TEMPORAL_of_Iso8601_date_timeInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type P_C_TEMPORAL_of_Iso8601_duration {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input P_C_TEMPORAL_of_Iso8601_durationInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type P_C_TEMPORAL_of_Iso8601_time {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input P_C_TEMPORAL_of_Iso8601_timeInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type P_C_TERMINOLOGY_CODE {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: JSON
+  _type: String
+}
+
+input P_C_TERMINOLOGY_CODEInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: JSON
+  _type: String
+}
+
+type P_OPERATIONAL_TEMPLATE {
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: P_ARCHETYPE_HRID
+  is_differential: JSON
+  definition: P_C_COMPLEX_OBJECT
+  terminology: P_ARCHETYPE_TERMINOLOGY
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+  component_terminologies: [P_ARCHETYPE_TERMINOLOGY]
+  terminology_extracts: JSON
+  _type: String
+}
+
+input P_OPERATIONAL_TEMPLATEInput {
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: P_ARCHETYPE_HRIDInput
+  is_differential: JSON
+  definition: P_C_COMPLEX_OBJECTInput
+  terminology: P_ARCHETYPE_TERMINOLOGYInput
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+  component_terminologies: [P_ARCHETYPE_TERMINOLOGYInput]
+  terminology_extracts: JSON
+  _type: String
+}
+
+type P_TEMPLATE {
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: P_ARCHETYPE_HRID
+  is_differential: JSON
+  definition: P_C_COMPLEX_OBJECT
+  terminology: P_ARCHETYPE_TERMINOLOGY
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+  _type: String
+}
+
+input P_TEMPLATEInput {
+  uid: JSON
+  original_language: JSON
+  description: JSON
+  is_controlled: JSON
+  annotations: JSON
+  translations: [JSON]
+  parent_archetype_id: JSON
+  archetype_id: P_ARCHETYPE_HRIDInput
+  is_differential: JSON
+  definition: P_C_COMPLEX_OBJECTInput
+  terminology: P_ARCHETYPE_TERMINOLOGYInput
+  rules: [JSON]
+  adl_version: JSON
+  build_uid: JSON
+  rm_release: JSON
+  is_generated: JSON
+  other_meta_data: JSON
+  _type: String
+}
+
+type P_C_TEMPORAL_Iso8601_date_ {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input P_C_TEMPORAL_Iso8601_date_Input {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type P_C_TEMPORAL_Iso8601_date_time_ {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input P_C_TEMPORAL_Iso8601_date_time_Input {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type P_C_TEMPORAL_Iso8601_time_ {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input P_C_TEMPORAL_Iso8601_time_Input {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type P_C_TEMPORAL_Iso8601_duration_ {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+input P_C_TEMPORAL_Iso8601_duration_Input {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  pattern_constraint: JSON
+  _type: String
+}
+
+type P_C_ORDERED_Integer_ {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input P_C_ORDERED_Integer_Input {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type P_C_ORDERED_Real_ {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+input P_C_ORDERED_Real_Input {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  is_deprecated: JSON
+  is_frozen: JSON
+  default_value: JSON
+  assumed_value: JSON
+  is_enumerated_type_constraint: JSON
+  constraint: [JSON]
+  _type: String
+}
+
+type Query { definitionTypes: [String!]! }

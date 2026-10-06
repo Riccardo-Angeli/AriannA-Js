@@ -181,7 +181,14 @@ export namespace Button
                 width: 'var(--arianna-button-width, auto)',
             }),
             new Rule('.ar-btn__native:hover:not(:disabled)', {
-                filter: 'brightness(1.05)',
+                filter: 'brightness(1.12)',
+                boxShadow: '0 2px 8px rgba(228,12,136,.24)',
+                borderColor: 'var(--arianna-primary, #e40c88)',
+            }),
+            new Rule('.ar-btn__native:active:not(:disabled)', {
+                filter: 'brightness(.88)',
+                transform: 'translateY(1px)',
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,.3)',
             }),
             new Rule('.ar-btn__native:focus-visible', {
                 boxShadow: '0 0 0 3px var(--arianna-focus-ring, rgba(31, 111, 235, 0.25))',

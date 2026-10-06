@@ -1,0 +1,404 @@
+# AriannA generated openEHR GraphQL projection; NOT an official openEHR GraphQL standard.
+scalar JSON
+
+type TERMINOLOGY_ID {
+  value: String
+  _type: String
+}
+
+type GENERIC_ID {
+  value: String
+  scheme: String
+  _type: String
+}
+
+type OBJECT_VERSION_ID {
+  value: String
+  _type: String
+}
+
+type HIER_OBJECT_ID {
+  value: String
+  _type: String
+}
+
+type ARCHETYPE_ID {
+  value: String
+  _type: String
+}
+
+type TEMPLATE_ID {
+  value: String
+  _type: String
+}
+
+type ACCESS_GROUP_REF {
+  id: ACCESS_GROUP_REF_idChoice
+  namespace: String
+  type: String
+  _type: String
+}
+
+input ACCESS_GROUP_REFInput {
+  id: JSON
+  namespace: String
+  type: String
+  _type: String
+}
+
+type VERSION_STATUS {
+  _type: String
+}
+
+type ARCHETYPE_HRID {
+  namespace: String
+  rm_publisher: String
+  rm_package: String
+  rm_class: String
+  concept_id: String
+  release_version: String
+  version_status: VERSION_STATUS
+  build_count: String
+  _type: String
+}
+
+input VERSION_STATUSInput {
+  _type: String
+}
+
+input ARCHETYPE_HRIDInput {
+  namespace: String
+  rm_publisher: String
+  rm_package: String
+  rm_class: String
+  concept_id: String
+  release_version: String
+  version_status: VERSION_STATUSInput
+  build_count: String
+  _type: String
+}
+
+input ARCHETYPE_IDInput {
+  value: String
+  _type: String
+}
+
+input GENERIC_IDInput {
+  value: String
+  scheme: String
+  _type: String
+}
+
+input HIER_OBJECT_IDInput {
+  value: String
+  _type: String
+}
+
+type INTERNET_ID {
+  value: String
+  _type: String
+}
+
+input INTERNET_IDInput {
+  value: String
+  _type: String
+}
+
+type ISO_OID {
+  value: String
+  _type: String
+}
+
+input ISO_OIDInput {
+  value: String
+  _type: String
+}
+
+type LOCATABLE_REF {
+  id: LOCATABLE_REF_idChoice
+  namespace: String
+  type: String
+  path: String
+  _type: String
+}
+
+input LOCATABLE_REFInput {
+  id: JSON
+  namespace: String
+  type: String
+  path: String
+  _type: String
+}
+
+type OBJECT_REF {
+  id: OBJECT_REF_idChoice
+  namespace: String
+  type: String
+  _type: String
+}
+
+input OBJECT_REFInput {
+  id: JSON
+  namespace: String
+  type: String
+  _type: String
+}
+
+input OBJECT_VERSION_IDInput {
+  value: String
+  _type: String
+}
+
+type PARTY_REF {
+  id: PARTY_REF_idChoice
+  namespace: String
+  type: String
+  _type: String
+}
+
+input PARTY_REFInput {
+  id: JSON
+  namespace: String
+  type: String
+  _type: String
+}
+
+input TEMPLATE_IDInput {
+  value: String
+  _type: String
+}
+
+input TERMINOLOGY_IDInput {
+  value: String
+  _type: String
+}
+
+type UUID {
+  value: String
+  _type: String
+}
+
+input UUIDInput {
+  value: String
+  _type: String
+}
+
+type VALIDITY_KIND {
+  _type: String
+}
+
+input VALIDITY_KINDInput {
+  _type: String
+}
+
+type VERSION_TREE_ID {
+  value: String
+  _type: String
+}
+
+input VERSION_TREE_IDInput {
+  value: String
+  _type: String
+}
+
+type ARRAY {
+  _type: String
+}
+
+input ARRAYInput {
+  _type: String
+}
+
+type DATE {
+  value: String
+  _type: String
+}
+
+input DATEInput {
+  value: String
+  _type: String
+}
+
+type DATE_TIME {
+  value: String
+  _type: String
+}
+
+input DATE_TIMEInput {
+  value: String
+  _type: String
+}
+
+type DURATION {
+  value: String
+  _type: String
+}
+
+input DURATIONInput {
+  value: String
+  _type: String
+}
+
+type INTERVAL {
+  lower: JSON
+  upper: JSON
+  lower_unbounded: Boolean
+  upper_unbounded: Boolean
+  lower_included: Boolean
+  upper_included: Boolean
+  _type: String
+}
+
+input INTERVALInput {
+  lower: JSON
+  upper: JSON
+  lower_unbounded: Boolean
+  upper_unbounded: Boolean
+  lower_included: Boolean
+  upper_included: Boolean
+  _type: String
+}
+
+type ISO8601_TYPE {
+  value: String
+  _type: String
+}
+
+input ISO8601_TYPEInput {
+  value: String
+  _type: String
+}
+
+type LIST {
+  _type: String
+}
+
+input LISTInput {
+  _type: String
+}
+
+type SET {
+  _type: String
+}
+
+input SETInput {
+  _type: String
+}
+
+type URI {
+  _type: String
+}
+
+type TERMINOLOGY_CODE {
+  terminology_id: String
+  terminology_version: String
+  code_string: String
+  uri: URI
+  _type: String
+}
+
+input URIInput {
+  _type: String
+}
+
+input TERMINOLOGY_CODEInput {
+  terminology_id: String
+  terminology_version: String
+  code_string: String
+  uri: URIInput
+  _type: String
+}
+
+type TERMINOLOGY_TERM {
+  text: String
+  concept: TERMINOLOGY_CODE
+  _type: String
+}
+
+input TERMINOLOGY_TERMInput {
+  text: String
+  concept: TERMINOLOGY_CODEInput
+  _type: String
+}
+
+type TIME {
+  value: String
+  _type: String
+}
+
+input TIMEInput {
+  value: String
+  _type: String
+}
+
+type RESOURCE_DESCRIPTION_ITEM {
+  language: TERMINOLOGY_CODE
+  purpose: String
+  keywords: [String]
+  use: String
+  misuse: String
+  copyright: String
+  original_resource_uri: [JSON]
+  other_details: JSON
+  _type: String
+}
+
+type RESOURCE_DESCRIPTION {
+  original_author: JSON
+  other_contributors: [String]
+  lifecycle_state: String
+  resource_package_uri: String
+  other_details: JSON
+  parent_resource: JSON
+  details: [RESOURCE_DESCRIPTION_ITEM]
+  _type: String
+}
+
+input RESOURCE_DESCRIPTION_ITEMInput {
+  language: TERMINOLOGY_CODEInput
+  purpose: String
+  keywords: [String]
+  use: String
+  misuse: String
+  copyright: String
+  original_resource_uri: [JSON]
+  other_details: JSON
+  _type: String
+}
+
+input RESOURCE_DESCRIPTIONInput {
+  original_author: JSON
+  other_contributors: [String]
+  lifecycle_state: String
+  resource_package_uri: String
+  other_details: JSON
+  parent_resource: JSON
+  details: [RESOURCE_DESCRIPTION_ITEMInput]
+  _type: String
+}
+
+type TRANSLATION_DETAILS {
+  language: TERMINOLOGY_CODE
+  author: JSON
+  accreditation: String
+  other_details: JSON
+  _type: String
+}
+
+input TRANSLATION_DETAILSInput {
+  language: TERMINOLOGY_CODEInput
+  author: JSON
+  accreditation: String
+  other_details: JSON
+  _type: String
+}
+
+union ACCESS_GROUP_REF_idChoice = TERMINOLOGY_ID | GENERIC_ID | OBJECT_VERSION_ID | HIER_OBJECT_ID | ARCHETYPE_ID | TEMPLATE_ID
+
+union LOCATABLE_REF_idChoice = OBJECT_VERSION_ID | HIER_OBJECT_ID
+
+union OBJECT_REF_idChoice = TERMINOLOGY_ID | GENERIC_ID | OBJECT_VERSION_ID | HIER_OBJECT_ID | ARCHETYPE_ID | TEMPLATE_ID
+
+union PARTY_REF_idChoice = TERMINOLOGY_ID | GENERIC_ID | OBJECT_VERSION_ID | HIER_OBJECT_ID | ARCHETYPE_ID | TEMPLATE_ID
+
+type Query { definitionTypes: [String!]! }

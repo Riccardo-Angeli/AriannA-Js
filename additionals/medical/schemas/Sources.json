@@ -1,0 +1,31 @@
+{
+  "fhir": "5.0.0 (R5)",
+  "openEHRJSON": "upstream development snapshot; all published component schemas included",
+  "archives": [
+    {
+      "file": "openehr-rest.zip",
+      "sha256": "ff78d144c767a43d0eb9a837aee500526327e8b9e37520685c580c0ce5be0a36",
+      "commit": "24058992d5fa96e8dfbd855d9c133f328387fc09"
+    },
+    {
+      "file": "openehr-json.zip",
+      "sha256": "538ba7c05192e8934ef6ff63e85fe15d0344af5358df309b6b4ba8b89691e62d",
+      "commit": "5acae056248e917a4b4c56f7e712f4fcfeb616a6"
+    },
+    {
+      "file": "fhir-json.zip",
+      "sha256": "8d8fdffdf1ee0b25951a28a9c8870bc06a0fa340a9a90e6bd21d706473ec7011",
+      "commit": ""
+    },
+    {
+      "file": "fhir-graphql.zip",
+      "sha256": "89b47314dbe5e972883e2458c21e242589c9dcef112b3477f800c9356310f163",
+      "commit": ""
+    },
+    {
+      "file": "fhir-definitions.zip",
+      "sha256": "df0d7259b4a8741d59f4971d96dd486423ecbd414c7060e9dc006ae3c3209c0c",
+      "commit": ""
+    }
+  ]
+}

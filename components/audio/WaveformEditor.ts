@@ -184,7 +184,7 @@ export namespace WaveformEditor
 
         public onCreated(): void
         {
-            requestAnimationFrame(() => { if(this.isConnected) this.onConnected(); });
+            this.EnsureState();
         }
 
         public onAttributeChanged(name: string): void

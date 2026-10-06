@@ -1,0 +1,59 @@
+{
+  "fhirSchemaDefinitions": 857,
+  "fhirResources": 158,
+  "fhirOfficialGraphQLFilesParsed": 159,
+  "fhirOperations": 59,
+  "fhirRESTPaths": 1037,
+  "openEHRCatalogs": [
+    {
+      "component": "BASE",
+      "release": "Release-1.1.0",
+      "definitions": 32,
+      "types": 64
+    },
+    {
+      "component": "RM",
+      "release": "Release-1.0.3",
+      "definitions": 123,
+      "types": 246
+    },
+    {
+      "component": "RM",
+      "release": "Release-1.0.4",
+      "definitions": 133,
+      "types": 266
+    },
+    {
+      "component": "RM",
+      "release": "Release-1.1.0",
+      "definitions": 134,
+      "types": 268
+    },
+    {
+      "component": "AM",
+      "release": "Release-1.4",
+      "definitions": 41,
+      "types": 64
+    },
+    {
+      "component": "AM",
+      "release": "Release-2.1.0",
+      "definitions": 97,
+      "types": 146
+    },
+    {
+      "component": "AM",
+      "release": "Release-2.2.0",
+      "definitions": 96,
+      "types": 144
+    }
+  ],
+  "openEHROpenAPIConverted": 21,
+  "fhirGeneratedGraphQL": {
+    "path": "fhir-r5/Fhir.graphql",
+    "typesIncludingIntrospection": 1686,
+    "buildSchema": true,
+    "validateSchema": true,
+    "normativeFHIRQueryContract": false
+  }
+}

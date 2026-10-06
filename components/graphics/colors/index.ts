@@ -23,3 +23,5 @@ export { XYZColorPicker } from './XYZColorPicker.ts';
 export { CIELABColorPicker } from './CIELABColorPicker.ts';
 export { CIELUVColorPicker } from './CIELUVColorPicker.ts';
 export { CIEUVWColorPicker } from './CIEUVWColorPicker.ts';
+
+export type { GradientLine } from './PickerGeometry.ts';

@@ -1,0 +1,536 @@
+# AriannA generated openEHR GraphQL projection; NOT an official openEHR GraphQL standard.
+scalar JSON
+
+type C_OBJECT {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+}
+
+type C_ATTRIBUTE {
+  _type: String
+  rm_attribute_name: JSON
+  existence: JSON
+  children: [C_OBJECT]
+}
+
+type C_COMPLEX_OBJECT {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  assumed_value: JSON
+  attributes: [C_ATTRIBUTE]
+  _type: String
+}
+
+type ARCHETYPE_ONTOLOGY {
+  term_codes: [JSON]
+  constraint_codes: [JSON]
+  parent_archetype: ARCHETYPE
+  terminologies_available: [JSON]
+  specialisation_depth: JSON
+  term_attribute_names: [JSON]
+  _type: String
+}
+
+type EXPR_ITEM {
+  _type: String
+  type: JSON
+}
+
+type ASSERTION_VARIABLE {
+  name: JSON
+  definition: JSON
+  _type: String
+}
+
+type ASSERTION {
+  tag: JSON
+  string_expression: JSON
+  expression: EXPR_ITEM
+  variables: [ASSERTION_VARIABLE]
+  _type: String
+}
+
+type ARCHETYPE {
+  original_language: JSON
+  is_controlled: JSON
+  translations: [JSON]
+  description: JSON
+  uid: JSON
+  annotations: JSON
+  revision_history: JSON
+  definition: C_COMPLEX_OBJECT
+  ontology: ARCHETYPE_ONTOLOGY
+  adl_version: JSON
+  archetype_id: JSON
+  concept: JSON
+  parent_archetype_id: JSON
+  invariants: [ASSERTION]
+  _type: String
+}
+
+input C_OBJECTInput {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+}
+
+input C_ATTRIBUTEInput {
+  _type: String
+  rm_attribute_name: JSON
+  existence: JSON
+  children: [C_OBJECTInput]
+}
+
+input C_COMPLEX_OBJECTInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  assumed_value: JSON
+  attributes: [C_ATTRIBUTEInput]
+  _type: String
+}
+
+input ARCHETYPE_ONTOLOGYInput {
+  term_codes: [JSON]
+  constraint_codes: [JSON]
+  parent_archetype: ARCHETYPEInput
+  terminologies_available: [JSON]
+  specialisation_depth: JSON
+  term_attribute_names: [JSON]
+  _type: String
+}
+
+input EXPR_ITEMInput {
+  _type: String
+  type: JSON
+}
+
+input ASSERTION_VARIABLEInput {
+  name: JSON
+  definition: JSON
+  _type: String
+}
+
+input ASSERTIONInput {
+  tag: JSON
+  string_expression: JSON
+  expression: EXPR_ITEMInput
+  variables: [ASSERTION_VARIABLEInput]
+  _type: String
+}
+
+input ARCHETYPEInput {
+  original_language: JSON
+  is_controlled: JSON
+  translations: [JSON]
+  description: JSON
+  uid: JSON
+  annotations: JSON
+  revision_history: JSON
+  definition: C_COMPLEX_OBJECTInput
+  ontology: ARCHETYPE_ONTOLOGYInput
+  adl_version: JSON
+  archetype_id: JSON
+  concept: JSON
+  parent_archetype_id: JSON
+  invariants: [ASSERTIONInput]
+  _type: String
+}
+
+type ARCHETYPE_INTERNAL_REF {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  target_path: JSON
+  _type: String
+}
+
+input ARCHETYPE_INTERNAL_REFInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  target_path: JSON
+  _type: String
+}
+
+type ARCHETYPE_SLOT {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  includes: [ASSERTION]
+  excludes: [ASSERTION]
+  _type: String
+}
+
+input ARCHETYPE_SLOTInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  includes: [ASSERTIONInput]
+  excludes: [ASSERTIONInput]
+  _type: String
+}
+
+type ARCHETYPE_TERM {
+  code: JSON
+  items: JSON
+  _type: String
+}
+
+input ARCHETYPE_TERMInput {
+  code: JSON
+  items: JSON
+  _type: String
+}
+
+type CARDINALITY {
+  interval: JSON
+  is_ordered: JSON
+  is_unique: JSON
+  _type: String
+}
+
+input CARDINALITYInput {
+  interval: JSON
+  is_ordered: JSON
+  is_unique: JSON
+  _type: String
+}
+
+type CONSTRAINT_REF {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  reference: JSON
+  _type: String
+}
+
+input CONSTRAINT_REFInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  reference: JSON
+  _type: String
+}
+
+type C_BOOLEAN {
+  assumed_value: JSON
+  true_valid: JSON
+  false_valid: JSON
+  _type: String
+}
+
+input C_BOOLEANInput {
+  assumed_value: JSON
+  true_valid: JSON
+  false_valid: JSON
+  _type: String
+}
+
+type C_DATE {
+  assumed_value: JSON
+  day_validity: JSON
+  month_validity: JSON
+  timezone_validity: JSON
+  range: JSON
+  _type: String
+}
+
+input C_DATEInput {
+  assumed_value: JSON
+  day_validity: JSON
+  month_validity: JSON
+  timezone_validity: JSON
+  range: JSON
+  _type: String
+}
+
+type C_DATE_TIME {
+  assumed_value: JSON
+  month_validity: JSON
+  day_validity: JSON
+  hour_validity: JSON
+  minute_validity: JSON
+  second_validity: JSON
+  millisecond_valdity: JSON
+  timezone_valdity: JSON
+  range: JSON
+  _type: String
+}
+
+input C_DATE_TIMEInput {
+  assumed_value: JSON
+  month_validity: JSON
+  day_validity: JSON
+  hour_validity: JSON
+  minute_validity: JSON
+  second_validity: JSON
+  millisecond_valdity: JSON
+  timezone_valdity: JSON
+  range: JSON
+  _type: String
+}
+
+type C_DEFINED_OBJECT {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  assumed_value: JSON
+}
+
+input C_DEFINED_OBJECTInput {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  assumed_value: JSON
+}
+
+type C_DOMAIN_TYPE {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  assumed_value: JSON
+  _type: String
+}
+
+input C_DOMAIN_TYPEInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  assumed_value: JSON
+  _type: String
+}
+
+type C_DURATION {
+  assumed_value: JSON
+  years_allowed: JSON
+  months_allowed: JSON
+  weeks_allowed: JSON
+  days_allowed: JSON
+  hours_allowed: JSON
+  minutes_allowed: JSON
+  seconds_allowed: JSON
+  fractional_seconds_allowed: JSON
+  range: JSON
+  _type: String
+}
+
+input C_DURATIONInput {
+  assumed_value: JSON
+  years_allowed: JSON
+  months_allowed: JSON
+  weeks_allowed: JSON
+  days_allowed: JSON
+  hours_allowed: JSON
+  minutes_allowed: JSON
+  seconds_allowed: JSON
+  fractional_seconds_allowed: JSON
+  range: JSON
+  _type: String
+}
+
+type C_INTEGER {
+  assumed_value: JSON
+  list: [JSON]
+  range: JSON
+  _type: String
+}
+
+input C_INTEGERInput {
+  assumed_value: JSON
+  list: [JSON]
+  range: JSON
+  _type: String
+}
+
+type C_MULTIPLE_ATTRIBUTE {
+  rm_attribute_name: JSON
+  existence: JSON
+  children: [C_OBJECT]
+  cardinality: CARDINALITY
+  _type: String
+}
+
+input C_MULTIPLE_ATTRIBUTEInput {
+  rm_attribute_name: JSON
+  existence: JSON
+  children: [C_OBJECTInput]
+  cardinality: CARDINALITYInput
+  _type: String
+}
+
+type C_PRIMITIVE {
+  _type: String
+  assumed_value: JSON
+}
+
+input C_PRIMITIVEInput {
+  _type: String
+  assumed_value: JSON
+}
+
+type C_PRIMITIVE_OBJECT {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  assumed_value: JSON
+  item: C_PRIMITIVE
+  _type: String
+}
+
+input C_PRIMITIVE_OBJECTInput {
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+  assumed_value: JSON
+  item: C_PRIMITIVEInput
+  _type: String
+}
+
+type C_REAL {
+  assumed_value: JSON
+  list: [JSON]
+  range: JSON
+  _type: String
+}
+
+input C_REALInput {
+  assumed_value: JSON
+  list: [JSON]
+  range: JSON
+  _type: String
+}
+
+type C_REFERENCE_OBJECT {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+}
+
+input C_REFERENCE_OBJECTInput {
+  _type: String
+  rm_type_name: JSON
+  occurrences: JSON
+  node_id: JSON
+}
+
+type C_SINGLE_ATTRIBUTE {
+  rm_attribute_name: JSON
+  existence: JSON
+  children: [C_OBJECT]
+  _type: String
+}
+
+input C_SINGLE_ATTRIBUTEInput {
+  rm_attribute_name: JSON
+  existence: JSON
+  children: [C_OBJECTInput]
+  _type: String
+}
+
+type C_STRING {
+  assumed_value: JSON
+  pattern: JSON
+  list: [JSON]
+  list_open: JSON
+  _type: String
+}
+
+input C_STRINGInput {
+  assumed_value: JSON
+  pattern: JSON
+  list: [JSON]
+  list_open: JSON
+  _type: String
+}
+
+type C_TIME {
+  assumed_value: JSON
+  minute_validity: JSON
+  second_validity: JSON
+  millisecond_validity: JSON
+  timezone_validity: JSON
+  range: JSON
+  _type: String
+}
+
+input C_TIMEInput {
+  assumed_value: JSON
+  minute_validity: JSON
+  second_validity: JSON
+  millisecond_validity: JSON
+  timezone_validity: JSON
+  range: JSON
+  _type: String
+}
+
+type EXPR_BINARY_OPERATOR {
+  type: JSON
+  precedence_overridden: JSON
+  operator: JSON
+  left_operand: EXPR_ITEM
+  right_operand: EXPR_ITEM
+  _type: String
+}
+
+input EXPR_BINARY_OPERATORInput {
+  type: JSON
+  precedence_overridden: JSON
+  operator: JSON
+  left_operand: EXPR_ITEMInput
+  right_operand: EXPR_ITEMInput
+  _type: String
+}
+
+type EXPR_LEAF {
+  type: JSON
+  reference_type: JSON
+  item: JSON
+  _type: String
+}
+
+input EXPR_LEAFInput {
+  type: JSON
+  reference_type: JSON
+  item: JSON
+  _type: String
+}
+
+type EXPR_OPERATOR {
+  _type: String
+  type: JSON
+  precedence_overridden: JSON
+  operator: JSON
+}
+
+input EXPR_OPERATORInput {
+  _type: String
+  type: JSON
+  precedence_overridden: JSON
+  operator: JSON
+}
+
+type EXPR_UNARY_OPERATOR {
+  type: JSON
+  precedence_overridden: JSON
+  operator: JSON
+  operand: EXPR_ITEM
+  _type: String
+}
+
+input EXPR_UNARY_OPERATORInput {
+  type: JSON
+  precedence_overridden: JSON
+  operator: JSON
+  operand: EXPR_ITEMInput
+  _type: String
+}
+
+type Query { definitionTypes: [String!]! }

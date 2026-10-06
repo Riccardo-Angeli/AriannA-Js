@@ -5,7 +5,7 @@
  * @copyright Riccardo Angeli 2012-2026 All Rights Reserved
  * @license   MIT / Commercial (dual license)
  *
- * @description Isomorphic AriannA router. Router owns nominal routes, parameter matching, guards, loaders,
+ * @description Isomorphic AriannA router. Router owns nominal routes, parameter matching, guards, formats,
  *              State/Context integration, Worker preloading and SSR route resolution.
  */
 

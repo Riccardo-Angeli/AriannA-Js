@@ -600,10 +600,8 @@ export namespace Core {
                 const descriptor = known || namespaces.Resolve(node);
                 if(!descriptor || !descriptor.Custom || !descriptor.Defined) return;
 
-                if(Object.getPrototypeOf(node) !== descriptor.Prototype)
-                {
-                    namespaces.Upgrade(node, descriptor);
-                }
+                // Prototype parity does not imply lifecycle initialization. Upgrade is idempotent.
+                namespaces.Upgrade(node, descriptor);
 
                 if(node.isConnected && !connected.has(node))
                 {

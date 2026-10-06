@@ -70,3 +70,6 @@ export { parseStylus } from './Stylus.ts';
 
 export { Images } from './Images.ts';
 export type { ImageAsset, ImageDecoder, Tiling } from './Images.ts';
+
+export { Formats, Dcom } from './graphics/3D/index.ts';
+export { Fhir, OpenEHR } from './medical/index.ts';

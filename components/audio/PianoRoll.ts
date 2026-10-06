@@ -478,7 +478,7 @@ export namespace PianoRoll
 
         public onCreated(): void
         {
-            requestAnimationFrame(() => { if(this.isConnected) this.onConnected(); });
+            this.EnsureState();
         }
 
         private EnsureState(): void

@@ -34,6 +34,11 @@ export function GanttSpan(node:ProjectNode): Span|null {
     return {start,end,progress:node.progress??0};
 }
 const Styles=ProjectStyles+`
+.Gantt .Project-Header .Project-Button,arianna-gantt .Project-Header .Project-Button{background:linear-gradient(180deg,var(--p-panel),var(--p-input));color:var(--p-text);border:1px solid var(--p-border);border-radius:5px;min-height:28px;padding:4px 10px;box-shadow:inset 0 1px 0 #ffffff15;text-shadow:0 1px 1px #0004}
+.Gantt .Project-Header .Project-Button:hover:not(:disabled),arianna-gantt .Project-Header .Project-Button:hover:not(:disabled){background:linear-gradient(180deg,#f23c9f,#c80a76);color:#fff;border-color:#ed50a8}
+.Gantt .Project-Header .Project-Button:active:not(:disabled),arianna-gantt .Project-Header .Project-Button:active:not(:disabled){box-shadow:inset 0 2px 4px #0005}
+.Project-Header .Project-Button:disabled{opacity:.45;cursor:default}
+
 .Gantt-Viewport{overflow:auto;position:relative;min-height:180px}.Gantt-Canvas{position:relative}.Gantt-Row,.Gantt-Axis{display:grid;grid-template-columns:440px auto;height:38px}.Gantt-Axis{height:54px;position:sticky;top:0;z-index:5;background:var(--p-panel)}
 .Gantt-Fields{position:sticky;left:0;z-index:3;display:grid;grid-template-columns:200px 88px 88px 64px;align-items:center;border-right:1px solid var(--p-border);border-bottom:1px solid var(--p-border);background:var(--p-panel);overflow:hidden}
 .Gantt-Fields>div{padding:4px 7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.Gantt-Name{display:flex;align-items:center;gap:4px}.Gantt-Name button{border:0;padding:0 3px;background:transparent;color:inherit;cursor:pointer}.Gantt-Name span{overflow:hidden;text-overflow:ellipsis}
