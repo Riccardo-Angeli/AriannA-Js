@@ -1,13 +1,13 @@
-import {createImportPipeline} from './graphics/3D/formats/Pipeline.ts';
-import {createFormatsRouter} from './graphics/3D/formats/Registry.ts';
-import {Dcom} from './graphics/3D/formats/Dcom.ts';
-import {createStl} from './graphics/3D/formats/Stl.ts';
-import {createObj} from './graphics/3D/formats/Obj.ts';
-import {createGltf} from './graphics/3D/formats/Gltf.ts';
-import {createFbx} from './graphics/3D/formats/Fbx.ts';
-import {createPly} from './graphics/3D/formats/Ply.ts';
-import {createDxf} from './graphics/3D/formats/Dxf.ts';
-import type * as FormatTypes from './graphics/3D/formats/Types.ts';
+import {createImportPipeline} from './formats/Pipeline.ts';
+import {createFormatsRouter} from './formats/Registry.ts';
+import {Dcom} from './formats/Dcom.ts';
+import {createStl} from './formats/Stl.ts';
+import {createObj} from './formats/Obj.ts';
+import {createGltf} from './formats/Gltf.ts';
+import {createFbx} from './formats/Fbx.ts';
+import {createPly} from './formats/Ply.ts';
+import {createDxf} from './formats/Dxf.ts';
+import type * as FormatTypes from './formats/Types.ts';
 /**
  * @module    Three
  * @author    Riccardo Angeli
@@ -99,7 +99,7 @@ import
     Quaternion as ImportedMathQuaternion,
     Matrix4 as ImportedMathMatrix4,
     Color as ImportedMathColor,
-} from './Math.ts';
+} from '../../math/Math.ts';
 
 // ── WebGPU type declarations (self-contained, no @webgpu/types needed) ────────
 
@@ -1464,7 +1464,7 @@ fn fs_main(in: FragIn) -> @location(0) vec4<f32> {
 
 // ── WebGPU Renderer ───────────────────────────────────────────────────────────
 
-    const _UNIFORM_SIZE  = 256; // aligned to 256 bytes
+    const _UNIFORM_SIZE  = 320; // 4 mat4 + camera/time + color + emissive + PBR values
     const _LIGHT_STRIDE  = 64;  // 4 vec4<f32>
     const _MAX_LIGHTS    = 16;
 

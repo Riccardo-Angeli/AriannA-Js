@@ -1,13 +1,13 @@
 {
   "name": "arianna",
-  "version": "2.0.0",
-  "description": "AriannA \u2014 Reactive UI framework. Performant like SolidJS, pleasant like React, native as the DOM. Pipeline 6 (May 2026): audio/video editors, chat, graphics 2D/3D, colour pickers, gradient editors, payments, shipments.",
+  "version": "1.0.0",
+  "description": "AriannA — A reactive TypeScript framework for building interactive applications with native DOM components, 2D/3D graphics, audio, video and visual workflows.",
   "author": "Riccardo Angeli <riccardo.angeli@arianna.dev> (https://arianna.dev)",
   "license": "MIT",
   "type": "module",
   "main": "./core/index.ts",
   "module": "./core/index.ts",
-  "types": "./types/arianna.d.ts",
+  "types": "./core/index.ts",
   "bin": {
     "arianna": "./cli/arianna-cli.mjs"
   },
@@ -37,20 +37,14 @@
     "./components/graphics/colors": {
       "import": "./components/graphics/colors/index.ts"
     },
-    "./components/payments": {
-      "import": "./components/payments/index.ts"
-    },
-    "./components/shipments": {
-      "import": "./components/shipments/index.ts"
-    },
     "./additionals": {
       "import": "./additionals/index.ts"
     },
     "./additionals/Colors": {
-      "import": "./additionals/Colors.ts"
+      "import": "./additionals/graphics/Colors.ts"
     },
     "./config": {
-      "import": "./arianna-config/arianna.config.ts"
+      "import": "./config/arianna.config.ts"
     },
     "./router": {
       "import": "./core/platform/Router.ts"
@@ -79,7 +73,7 @@
     "components/",
     "additionals/",
     "types/",
-    "arianna-config/",
+    "config/",
     "cli/",
     "README.md",
     "LICENSE",
@@ -111,28 +105,26 @@
     "audio-editor",
     "video-editor",
     "piano-roll",
-    "chat",
-    "payments",
-    "shipments"
+    "chat"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/riccardo-angeli/arianna"
+    "url": "git+https://github.com/Riccardo-Angeli/AriannA-Js.git"
   },
-  "homepage": "https://arianna.dev",
+  "homepage": "https://ariannajs.dev",
   "bugs": {
-    "url": "https://github.com/riccardo-angeli/arianna/issues",
+    "url": "https://github.com/Riccardo-Angeli/AriannA-Js/issues",
     "email": "bugs@arianna.dev"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "docs": "typedoc --out docs src/index.ts",
+    "docs": "typedoc --out docs core/index.ts components/index.ts additionals/index.ts",
     "prepublish": "npm run typecheck && npm run build",
     "bench": "node ./release/benchmarks/run.js",
     "build": "node scripts/build.mjs",
     "build:watch": "node scripts/build.mjs --watch",
     "build:fast": "node scripts/build.mjs --skip-min",
-    "publish:npm": "npm publish release/dist"
+    "publish:npm": "npm publish ../../../../../Downloads/AriannA-Manifest-Types-1.0.0/release/dist"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",

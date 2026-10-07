@@ -5,7 +5,7 @@
  * Primitive creation is delegated to the independent Primitives3D toolbar.
  */
 import { Component, Css, Templates } from '../../../core/index.ts';
-import Three from '../../../additionals/Three.ts';
+import Three from '../../../additionals/graphics/3D/Three.ts';
 import type { Canvas3D as Canvas3DNamespace } from './Canvas3D.ts';
 
 const html=Templates.Template.Html;

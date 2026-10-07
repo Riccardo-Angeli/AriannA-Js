@@ -97,13 +97,15 @@ export namespace ChannelStrip
             Background: 'linear-gradient(90deg,transparent 0 46%,#676c70 46% 54%,transparent 54% 100%), linear-gradient(180deg,#f2f3f3 0%,#d8dadd 44%,#a7acb0 50%,#d9dcde 56%,#f1f2f2 100%)',
             Border: '1px solid #565b60', BorderRadius: '1px', BoxShadow: '0 1px 2px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.75)', Height: '12px', Width: '20px'
         }),
+        ...(typeof CSS !== 'undefined' && CSS.supports('selector(input::-moz-range-thumb)') ? [
         new Css.Rule('.ChannelStrip-Fader::-moz-range-track', {
             Background: 'transparent', Border: '0', Height: '100%', Width: '3px'
         }),
         new Css.Rule('.ChannelStrip-Fader::-moz-range-thumb', {
             Background: 'linear-gradient(90deg,transparent 0 46%,#676c70 46% 54%,transparent 54% 100%), linear-gradient(180deg,#f2f3f3 0%,#d8dadd 44%,#a7acb0 50%,#d9dcde 56%,#f1f2f2 100%)',
             Border: '1px solid #565b60', BorderRadius: '1px', BoxShadow: '0 1px 2px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.75)', Height: '12px', Width: '20px'
-        }),
+        })
+        ] : []),
         new Css.Rule('.ChannelStrip-GainValue', {
             Background: '#141719', Border: '1px solid #0c0e10', BorderRadius: '2px', Color: '#b9c1c8',
             Font: '9px/1 ui-monospace, SFMono-Regular, Menlo, monospace', Margin: '0 5px 5px', Padding: '5px 3px', TextAlign: 'center'

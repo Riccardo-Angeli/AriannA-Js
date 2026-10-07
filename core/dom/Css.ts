@@ -14,7 +14,7 @@
 import { Core }      from '../kernel/Core.ts';
 import { Services }  from '../kernel/Services.ts';
 import { Text } from '../kernel/Text.ts';
-import { parseLess } from '../../additionals/Less.ts';
+import { parseLess } from '../../additionals/styles/Less.ts';
 
 import type { Types as SchemaTypes }           from '../definitions/Types.ts';
 import type { Interfaces as SchemaInterfaces } from '../definitions/Interfaces.ts';

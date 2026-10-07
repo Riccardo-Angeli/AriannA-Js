@@ -1,519 +1,359 @@
-<div align="center">
-
 # AriannA
 
-**Fine-grain reactive UI framework + components ecosystem**
+**1.0.0 · Final**
 
-*Dedicated with love to my daughter Arianna ♡*
+A reactive TypeScript framework for interactive applications, with DOM components, 2D and 3D graphics, audio and video editors, and visual workflows.
 
-[![npm version](https://img.shields.io/npm/v/arianna?color=%23e40c88&style=flat-square)](https://www.npmjs.com/package/arianna)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue?style=flat-square)](https://www.typescriptlang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSES/MIT.txt)
-[![Zero deps](https://img.shields.io/badge/dependencies-0-brightgreen?style=flat-square)](package.json)
-[![Components](https://img.shields.io/badge/components-141-e40c88?style=flat-square)](#components)
-[![Bundles](https://img.shields.io/badge/runtime-55KB%20gz-brightgreen?style=flat-square)](#bundles)
+AriannA brings application logic and creative tools into one component system. Build a form, compose an editor, or combine graphics, media and workflow controls in the same interface.
 
-[**ariannajs.dev**](https://ariannajs.dev) · [Documentation](https://ariannajs.dev/reference.html) · [Playground](https://ariannajs.dev/playground.html) · [npm](https://www.npmjs.com/package/arianna) · [Changelog](CHANGELOG.md)
-
-</div>
-
----
-
-AriannA is a TypeScript UI framework built around **Signal + Sink fine-grain reactivity**: state changes propagate directly to the exact subscribed sink instead of re-rendering a component tree. The reactive path does not require Virtual DOM diffing, and the runtime has zero external dependencies. Around that core sits a 141-component design system, a programmable CSS engine, templates and directives, SSR/hydration, Workers and WebAssembly support, Shadow backends, and twelve project starters spanning the browser and Tauri targets (macOS, Windows, Linux, iOS and Android).
-
-## At a glance
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  arianna                  Runtime          55 KB gz   13 modules │
-│  arianna/additionals      Domain libs     107 KB gz   19 modules │
-│  arianna/components       Component set   202 KB gz  141 classes │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-| Layer | What | Size | Modules |
-|-------|------|------|---------|
-| **Core** | Signal+Sink runtime, Real, Virtual, Component, Stylesheet, Rule, Template, Directive, Context, State, Namespace, SSR, Workers | 55 KB gz | 13 |
-| **Additionals** | AI, Two, Three, Animation, Audio, Video, Math, Geometry, Physics, Colors, Data, Finance, Latex, Midi, Network, IO, Docs, Less/Sass/Scss/Stylus | 107 KB gz | 19 |
-| **Components** | 141 custom elements across 16 categories — see [Components](#components) | 202 KB gz | 141 |
-
----
-
-## Performance — measured, reproducible, and versioned
-
-AriannA is benchmarked with the **js-framework-benchmark** harness rather than a private microbenchmark. The recorded comparison set uses:
-
-- **AriannA 2.0.0**
-- **Solid 1.9.14**
-- **Svelte 5.56.8**
-- **Vue 3.6.0-rc.2**
-- **Vue Vapor 3.6.0-alpha.2**
-- Chrome/Puppeteer runner
-- 15 iterations for CPU benchmarks
-- 1 iteration for memory, size, and startup measurements
-- keyed and non-keyed implementations maintained separately
-
-Lower is better in every table below.
-
-> **Benchmark policy:** this README reports measurements actually produced by the benchmark harness. It does not substitute synthetic estimates for missing results, and it keeps framework version identifiers alongside the numbers.
-
-### Overall CPU position
-
-The complete benchmark campaign produced the following weighted geometric means for the **keyed CPU suite**:
-
-| Framework | Weighted geometric mean |
-|---|---:|
-| **Vue Vapor 3.6.0-alpha.2** | **1.05** |
-| **Solid 1.9.14** | **1.07** |
-| **Svelte 5.56.8** | **1.08** |
-| **AriannA 2.0.0** | **1.11** |
-| **Vue 3.6.0-rc.2** | **1.22** |
-
-AriannA's corresponding **non-keyed** weighted mean was **1.13**.
-
-These aggregate scores are the useful headline: AriannA is in the same performance class as the mature compiler-led implementations in this comparison, while the individual tests show where each architecture wins.
-
-### Keyed CPU — final recorded medians
-
-The final retained five-framework run contains the following directly recorded medians for the large-table tail of the CPU suite:
-
-| js-framework-benchmark test | AriannA 2.0.0 | Solid 1.9.14 | Svelte 5.56.8 | Vue 3.6.0-rc.2 | Vue Vapor 3.6.0-alpha.2 |
-|---|---:|---:|---:|---:|---:|
-| create 10,000 rows | 1272.5 ms | 970.9 ms | **912.1 ms** | 1034.7 ms | 944.3 ms |
-| append 1,000 to 1,000 | 101.8 ms | 95.3 ms | 96.5 ms | 105.6 ms | **91.9 ms** |
-| clear 1,000 rows | 35.9 ms | 35.7 ms | **32.1 ms** | 49.9 ms | 34.1 ms |
-
-A separate final optimization run of AriannA itself recorded **~882 ms create-10k**, **~92.1 ms append-1k**, and **~32.7 ms clear**, demonstrating the effect of the final compiler/runtime tuning. Those later AriannA-only values are not substituted into the five-framework table above because that would mix comparison runs.
-
-### Keyed interaction samples
-
-The retained comparison runs also show AriannA's strength on fine-grained interaction work:
-
-| Test | AriannA | Solid | Svelte | Vue |
-|---|---:|---:|---:|---:|
-| select row | **10.7 ms** | 11.6 ms | 20.7 ms | 20.9 ms |
-| swap rows | 84.7 ms | 82.0 ms | **68.7 ms** | 70.4 ms |
-| remove row | 60.1 ms | 62.4 ms | 63.4 ms | **59.5 ms** |
-
-The optimized AriannA campaign subsequently recorded approximately **9.1 ms select**, **43.3 ms swap**, and **40.4 ms remove**. Again, those optimization-run values are kept separate rather than spliced into an earlier cross-framework run.
-
-### Keyed memory
-
-These are direct harness measurements from the retained five-framework keyed run:
-
-| Memory benchmark | AriannA | Solid | Svelte | Vue | Vue Vapor |
-|---|---:|---:|---:|---:|---:|
-| ready / page loaded | 0.828 MB | **0.610 MB** | 0.728 MB | 0.868 MB | 0.667 MB |
-| after creating 1,000 rows | 3.485 MB | **2.699 MB** | 3.045 MB | 3.956 MB | 2.911 MB |
-| after repeated run/clear | 1.129 MB | **0.791 MB** | 1.097 MB | 1.220 MB | 0.976 MB |
-
-The later AriannA memory-torture campaign separately recorded approximately **0.77 MB ready**, **3.10 MB after 1k**, **1.09 MB after repeated create/clear**, and **22.44 MB at 10k**.
-
-### Delivered size and first paint
-
-The js-framework-benchmark size test measures the benchmark application delivered for each framework, **not the entire framework distribution or AriannA component library**.
-
-| Metric | AriannA | Solid | Svelte | Vue | Vue Vapor |
-|---|---:|---:|---:|---:|---:|
-| benchmark app, uncompressed | 92.0 KB | **11.5 KB** | 41.4 KB | 67.0 KB | 39.9 KB |
-| benchmark app, compressed | 25.6 KB | **4.5 KB** | 14.3 KB | 24.0 KB | 14.2 KB |
-| first paint | 300.8 ms | **175.9 ms** | 223.3 ms | 261.6 ms | 224.7 ms |
-
-This distinction matters. Earlier development notes quoted a tiny AriannA runtime slice; that is **not comparable** with the js-framework-benchmark application's compressed-size result above and is therefore not presented as if it were.
-
-### What the benchmark actually says
-
-AriannA does **not** win every benchmark, and the README should not pretend otherwise. Solid, Svelte, and Vue Vapor remain exceptionally strong in several creation-heavy paths. AriannA's result is more interesting than a cherry-picked win: a new framework/runtime reaches the same broad performance tier while also carrying a much wider native platform surface — Real/Virtual DOM primitives, fine-grained reactivity, components, CSS, Shadow isolation, SSR, Workers, routing, and Rust/WASM integration.
-
-The benchmark suite is therefore treated as a **release gate**, not advertising copy. Future changes to the core are expected to preserve or improve these results before release.
+[Reference](https://ariannajs.dev/reference) · [Website and documentation](https://ariannajs.dev) · [GitHub](https://github.com/Riccardo-Angeli/AriannA-Js) · [Issues](https://github.com/Riccardo-Angeli/AriannA-Js/issues)
 
 ## Install
 
-```bash
-# From npm — full runtime + components
-npm install arianna
-
-# Scaffold a new project (interactive)
-npx arianna new my-app
-
-# Or pick a specific template
-npx arianna new my-app --template counter
-npx arianna new my-app --template tauri-macos
+```sh
+npm install arianna@1.0.0
 ```
 
-Or drop the pre-built bundles into any HTML file:
+The package includes Core, Components and Additionals. They are entry points of **one npm package**, not three separate installations.
+
+| Import | Purpose | Distribution bundle |
+| --- | --- | --- |
+| `arianna` | Core, DOM authoring, reactivity and application infrastructure | `arianna.js` |
+| `arianna/components` | UI components and editors | `arianna-components.js` |
+| `arianna/additionals` | Supporting engines and utilities | `arianna-additionals.js` |
+| `arianna/runtime` | Standalone Reactivity and Templates exports | `arianna-runtime.js` |
+
+JavaScript ES modules and TypeScript declarations are included. The package declares Node.js 18 or later for tooling. DOM examples run in a browser; use a browser entry point in your application, rather than executing them directly with Node.js.
+
+## First application
+
+For a Vite application, put a host in `index.html`:
 
 ```html
-<script type="module" src="https://unpkg.com/arianna/dist/arianna.js"></script>
-<script type="module" src="https://unpkg.com/arianna/dist/arianna-additionals.js"></script>
-<script type="module" src="https://unpkg.com/arianna/dist/arianna-components.js"></script>
+<div id="app"></div>
+<script type="module" src="/src/main.ts"></script>
 ```
 
-When `arianna-components.js` finishes loading, it dispatches `arianna-ready` on `window`.
-
----
-
-## Quick start
+In `src/main.ts`:
 
 ```ts
-import { Real, signal } from 'arianna';
+import { Core, AriannA, Real } from 'arianna';
 
-const count = signal(0);
+Core.Initialize();
+await AriannA.Ready;
+
+const parent = document.querySelector('#app');
+if (!parent) throw new Error('Missing #app host');
 
 new Real('button')
-  .text(() => `Clicked ${count.get()} times`)
-  .on('click', () => count.set(count.get() + 1))
-  .append(document.body);
+    .text('Hello')
+    .append(parent)
+    .render();
 ```
 
-Or as a custom element:
+For Real and Virtual wrappers, append the wrapper to its host **before** calling `render()`.
+
+To use a packaged component:
+
+```ts
+import { Button } from 'arianna/components';
+
+const button = new Button.Button({ label: 'Hello' });
+parent.append(button);
+```
+
+`Button` is a module namespace in this release; `Button.Button` is its constructor. Other exports may be constructors or namespaces: consult their bundled declarations instead of assuming every module has the same export shape.
+
+## Architecture
+
+The documented architecture assigns distinct responsibilities: **Real executes DOM mutations, Template plans rendering, Virtual reconciles, and Component orchestrates**. Reactivity propagates changes, Events manages event behavior, Namespaces resolves element identity, and Shadow selects the rendering boundary.
+
+Virtual rendering is an authoring choice, not a requirement for every interface. The five authoring styles below are ways to create and mount views; they are not five independent DOM engines. Architecture revision labels in historical documents are separate from the public **1.0.0** release version.
+
+## Five authoring styles
+
+AriannA supports Real, Direct, Markup, Virtual and JSX. The following examples share the initialized `parent` from the first application. Use one example at a time.
+
+### Real
+
+Create and configure a DOM wrapper, mount it, then render:
+
+```ts
+import { Real } from 'arianna';
+
+const real = new Real('button')
+    .text('Hello')
+    .append(parent)
+    .render();
+```
+
+### Direct
+
+Instantiate a component constructor and append its instance:
+
+```ts
+import { Button } from 'arianna/components';
+
+const direct = new Button.Button({ label: 'Hello' });
+parent.append(direct);
+```
+
+### Markup
+
+Load Components in the browser entry point:
+
+```ts
+import 'arianna/components';
+```
+
+Then use the component tag in your HTML:
 
 ```html
-<arianna-button variant="primary" @click="onClick">Click me</arianna-button>
+<div id="app">
+    <arianna-button label="Hello"></arianna-button>
+</div>
 ```
 
-Or as a Vue-style component class:
+Core and the component definitions must be initialized for the tag to become an interactive component. Supported attributes belong to each component's API; TypeScript options are not automatically interchangeable with arbitrary HTML attributes.
+
+### Virtual
+
+Create a Virtual wrapper and mount it before rendering:
 
 ```ts
-import { Component } from 'arianna';
+import { Virtual } from 'arianna';
 
-class Counter extends Component('arianna-counter', HTMLElement, {
-    ':host': { display: 'inline-flex', padding: '8px 16px', cursor: 'pointer' },
-}, { attrs: ['initial'] }) {
-    template = `
-        <span>Clicked {{ this.count() }} times</span>
-        <button @click="this.increment">+</button>
-    `;
-
-    count = signal(0);
-    increment = () => this.count.set(this.count.get() + 1);
-}
+const virtual = new Virtual('button')
+    .text('Hello')
+    .append(parent)
+    .render();
 ```
 
----
+### JSX
 
-## The four pillars
-
-### 1. Signals — fine-grain reactivity
-
-```ts
-import { signal, signalMono, effect, computed, batch, sinkText } from 'arianna';
-
-const name  = signal('AriannA');
-const upper = computed(() => name.get().toUpperCase());
-
-effect(() => console.log(upper.get())); // immediate + on every change
-
-batch(() => {
-  name.set('Hello');
-  name.set('World');
-}); // single flush
-
-// Zero-allocation TextNode binding for hot paths
-const mono = signalMono('initial');
-sinkText(mono, myTextNode);
-```
-
-### 2. Real & Virtual — two DOM strategies, one API
-
-`Real` writes directly to live DOM (eager, mutation-based). `Virtual` builds a tree of `VirtualNode`s and materialises on `append` / `render` (lazy, declarative). Both share the same fluent API.
-
-```ts
-import { Real, Virtual, signal } from 'arianna';
-
-const loading = signal(false);
-
-// Live DOM, immediate
-new Real('div')
-  .text(() => loading.get() ? 'Loading…' : 'Ready')
-  .cls('busy', () => loading.get())
-  .style('color', () => loading.get() ? '#999' : '#000')
-  .append(document.body);
-
-// Virtual DOM, deferred
-new Virtual('section')
-  .child(new Virtual('h1').text('Welcome'))
-  .child(new Virtual('p').text('To AriannA'))
-  .append('#app')
-  .render();
-```
-
-### 3. Components — Web Components with Vue-style ergonomics
-
-Two equivalent signatures: factory (for defining), constructor (for instantiating).
-
-```ts
-// Define
-class Card extends Component('arianna-card', HTMLElement, {
-    ':host': { display: 'block', padding: '16px', background: 'var(--arianna-bg-2)' },
-    '.title': { fontSize: '20px', fontWeight: '600' },
-}, { attrs: ['title'] }) {
-    template = `
-        <div class="title">{{ this.title }}</div>
-        <slot></slot>
-    `;
-}
-
-// Instantiate — six equivalent forms
-const a = new Real('arianna-card').set('title', 'Hi').append('#app');
-const b = new Virtual('arianna-card').set('title', 'Hi').append('#app');
-const c = new Component('arianna-card', { title: 'Hi' });
-const d = new Card();
-const e = document.createElement('arianna-card');
-// + HTML markup: <arianna-card title="Hi">…</arianna-card>
-```
-
-See [`COMPONENT_CONVENTIONS.md`](COMPONENT_CONVENTIONS.md) for the full spec — six instantiation forms, four definition forms, fifteen template directives, thirteen programmatic directives, five decorators, sheet inheritance.
-
-### 4. Stylesheet & Rule — CSS with full @-rule support
-
-```ts
-import { Rule, Stylesheet } from 'arianna';
-
-const sheet = new Stylesheet([
-    new Rule('.btn', { background: '#e40c88', color: '#fff', padding: '6px 14px' }),
-    new Rule('.btn:hover', { filter: 'brightness(1.1)' }),
-
-    // @keyframes
-    new Rule({
-        Selector: { Type: '@keyframes', Name: 'fadeIn' },
-        Contents: {
-            From: { Opacity: '0' },
-            To:   { Opacity: '1' },
-        },
-    }),
-
-    // @media — fully nested
-    new Rule({
-        Selector: {
-            Type: '@media', Media: 'screen',
-            And: { MinWidth: '600px', MaxWidth: '800px' },
-        },
-        Rules: {
-            BtnMobile: { Selector: '.btn', Rule: { width: '100%' } },
-        },
-    }),
-
-    // @supports, @page, @counter-style, @font-face, @viewport,
-    // @document, @import, @namespace, @charset — all supported
-]);
-
-sheet.attach();
-
-// Less / Sass / Stylus parsers
-const parsed = Stylesheet.Less(`
-@primary: #e40c88;
-.card {
-    border-radius: 4px;
-    &:hover { border-color: @primary; }
-}
-`);
-```
-
----
-
-## Runtime architecture
-
-AriannA 2.0 is deliberately split into small, orthogonal subsystems rather than a monolithic renderer:
-
-- **Signal → Sink reactivity** — signals invalidate only their subscribed computations/sinks; `signalMono` + `sinkText` provide a minimal hot path for direct text updates.
-- **Real DOM** — eager, mutation-oriented DOM construction with a fluent API.
-- **Virtual DOM** — an optional deferred tree representation; it is not required by the reactive runtime.
-- **Components** — standards-based Custom Elements with AriannA templates, directives, lifecycle, styles and decorators.
-- **CSS engine** — programmatic `Rule` / `Stylesheet` construction plus nested at-rules and stylesheet lifecycle management.
-- **SSR + hydration** — server rendering, client hydration and islands.
-- **Workers + WebAssembly** — first-class worker pools and WASM loading/streaming primitives, including abort-aware asynchronous loading.
-- **Shadow backends** — encapsulation facilities designed to work across normal and constrained execution contexts.
-
-### CSP-first execution
-
-The 2.0 runtime is designed to operate under a strict Content Security Policy without depending on `eval()` or `new Function()` for its directive execution path. The release gate includes dedicated probes for strict CSP execution, `worker-src 'self'`, WASM streaming, sandboxed Shadow operation and lifecycle/disposal.
-
-This matters because CSP support is treated as a runtime constraint, not as an after-the-fact deployment workaround.
-
----
-
-## Components
-
-141 custom elements across 16 categories. Every component renders fully styled out of the box via any of the six instantiation forms — the "default imperative" rule. Customise at three levels: CSS variables → individual `Rule` override → full `Stylesheet` replacement.
-
-| Category | Count | Highlights |
-|----------|-------|-----------|
-| **inputs** | 16 | Button, TextField, Checkbox, Radio, Select, ColorPicker, DatePicker, RichTextEditor, Calendar, Switch, Slider, NumberInput, FileInput, SearchBox, Toggle, Stepper |
-| **modifiers** | 23 | 2D + 3D mesh modifiers: Bend, Bevel, Twist, Wave, Mirror, Array, LOD, Subdivision, Decimate, Inflate, Smooth, Snap, Drag, Fade, Billboard |
-| **graphics** | 16 | Canvas, SVG, GradientEditor, ShapeGradientEditor, RadialGradientEditor, BezierEditor, Layers, Groups, ColorPicker (HSL+RGB) |
-| **display** | 13 | Icon, Image, Video, Avatar, Badge, Tag, Chip, Tooltip, Toast, Notification, Progress, Spinner, Skeleton |
-| **finance** | 12 | CandlestickChart, Sparkline, Ticker, OrderBook, DepthChart, PortfolioView (bull/bear theme via `--arianna-bull` / `--arianna-bear`) |
-| **layout** | 10 | Container, Grid, Stack, Flex, Frame, Desktop, SystemBar, Dock, Window, Pane |
-| **payments** | 9 | PaymentGateway, ApplePay, GooglePay, Stripe, AliPay, Satispay, Nexi, PayPal, CreditCard |
-| **navigation** | 7 | Tabs, Breadcrumbs, Pagination, Menu, ContextMenu, Sidebar, Stepper |
-| **maps** | 7 | AppleMap, GoogleMap, BingMap, AzureMap, OpenStreetMap, MapLibreMap, …  |
-| **audio** | 7 | AudioPlayer, AudioEditor, AudioTrackEditor, ChannelStrip, PianoRoll, TransportBar, AudioComponent |
-| **shipments** | 6 | DHLTracker, UPSTracker, FedExTracker, BRTTracker, TrackingMulti |
-| **animations** | 5 | Keyframe, KeyframeEditor, OnionStage (animation onion-skin via `--arianna-onion-past` / `--arianna-onion-future`) |
-| **charts** | 3 | BarChart, LineChart, PieChart |
-| **composite** | 3 | Chat (WhatsApp/Signal-style), CodeEditor (syntax highlight), NodeEditor (visual programming) |
-| **data** | 2 | Table (sortable + paginated), TreeView |
-| **video** | 2 | VideoPlayer, VideoEditor (native ↔ YouTube ↔ Vimeo ↔ Twitch) |
-
-Browse the full catalog with live previews on [ariannajs.dev/reference.html](https://ariannajs.dev/reference.html).
-
----
-
-## JSX
-
-```json
-// tsconfig.json
-{ "compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "arianna" } }
-```
+Use AriannA's JSX factory and convert the result to DOM nodes:
 
 ```tsx
-import { signal } from 'arianna';
+/** @jsx Jsx.Runtime.H */
+import { Jsx } from 'arianna';
 
-function App() {
-  const count = signal(0);
-  return (
-    <div>
-      <p>Count: <span>{() => count.get()}</span></p>
-      <button onClick={() => count.set(count.get() + 1)}>+</button>
-    </div>
-  );
+const view = <button>Hello</button>;
+parent.append(...Jsx.Runtime.ToNodes(view));
+```
+
+This example requires a JSX transform configured for the classic factory `Jsx.Runtime.H`. For fragments, configure the fragment expression as `Jsx.Fragment`. JSX must be compiled before the browser executes it. Version 1.0.0 does not export an `arianna/jsx-runtime` subpath, so do not configure an automatic JSX import source with that path.
+
+## Styling
+
+Use ordinary CSS for native elements:
+
+```css
+#app > button {
+    padding: 10px 20px;
+    border: 0;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #ff2a9d, #e40c88);
+    color: white;
+    font: 600 14px system-ui, sans-serif;
+    cursor: pointer;
+}
+
+#app > button:hover {
+    filter: brightness(1.08);
+}
+
+#app > button:active {
+    transform: translateY(1px);
 }
 ```
 
-Note: `{() => count.get()}` keeps the JSX expression reactive (subscription wrapped in a getter). Bare `{count.get()}` reads once.
+AriannA also provides its CSS pipeline through `Css`, and component defaults through `Namespaces.Namespace.Define`. Components with Shadow DOM use their own documented styling and theme interfaces; page CSS cannot directly target their shadow internals.
 
----
+Where supported, select a component theme explicitly:
 
-## SSR + hydration
+```html
+<arianna-button theme="light" label="Hello"></arianna-button>
+```
+
+Theme support and styling options are component-specific. See the Reference for interactive examples.
+
+## Custom elements
+
+Use the exported `Namespaces` module to access the namespace API:
+
+```js
+import { Namespaces, Real } from 'arianna';
+
+const { Namespace } = Namespaces;
+
+function HelloCard() {
+    this.textContent = 'Hello from AriannA';
+}
+
+HelloCard = Namespace.Define(
+    'hello-card',
+    HelloCard,
+    HTMLDivElement,
+    {
+        Display: 'block',
+        Padding: '24px 28px',
+        Background: 'linear-gradient(135deg, #ff2a9d, #e40c88)',
+        Color: 'white',
+        BorderRadius: '12px',
+        FontSize: '18px'
+    }
+);
+
+new Real('hello-card').append(parent).render();
+```
+
+Keep the constructor returned by `Namespace.Define` when you want to use direct construction. A plain initializer function is not, by itself, a browser-created DOM node. In TypeScript, also handle the API's `false` return when a definition cannot be resolved or created.
+
+## What is included
+
+### Core
+
+- Real, Virtual, Direct component construction and JSX authoring.
+- Namespaces, component definitions, templates, Shadow DOM and directives.
+- Reactivity, state, context, events and observers.
+- CSS rules and stylesheets.
+- Application and router infrastructure.
+- Dedicated SSR, worker, WebAssembly, WebSocket, GraphQL and plugin APIs.
+
+DOM-dependent components require a browser environment. The presence of an SSR API does not make every graphics, media or UI component server-renderable.
+
+### Components
+
+- Inputs, display controls, navigation, layout and themes.
+- Data controls, charts, project and timeline interfaces.
+- Composite interfaces, including Workflow, Chat and CodeEditor.
+- Audio and video tracks and editors.
+- 2D canvases, line editing, strokes, selection and modifiers.
+- 3D canvases, primitives, materials and modifiers.
+- Color pickers and gradient editors.
+- Maps, animation, finance and automotive controls.
+
+Combine these components through their public APIs. A canvas, a behavior and a tool panel can remain separate objects instead of being fused into a single editor.
+
+### Additionals
+
+Additionals supply supporting functionality, including AI, Animation, Audio, Colors, Data, Finance, Geometry, IO, Latex, Math, Midi, Network, Physics, Three, Two and Video, together with stylesheet parsers and timecode utilities.
+
+For example, generate text with the included Markov-chain utility:
 
 ```ts
-import { renderToString, hydrate } from 'arianna';
+import { AI } from 'arianna/additionals';
 
-// Server: HTML string
-const html = renderToString(<App />);
+const model = new AI.MarkovChain(2);
+model.train(
+    'Hello AriannA. Hello creative world. Hello AriannA world.',
+    'word'
+);
 
-// Client: re-attach to live DOM, no re-render
-hydrate(document.getElementById('app'), <App />);
+const words = model.generate(['Hello', 'AriannA.'], 20, 'word');
+console.log(words.join(' '));
 ```
 
-Island architecture: `Island` lets pre-rendered HTML co-exist with interactive AriannA components, hydrated lazily on visibility / interaction.
+Feature availability, input formats and export capabilities depend on the selected additional. Consult its API before assuming that every import format has a matching exporter or that conversions preserve every feature.
 
----
+## Imports and TypeScript
 
-## Project starters
-
-Twelve ready-to-run starter templates, distributed as 36 ZIP files in [`arianna-projects/releases/latest/`](https://github.com/Riccardo-Angeli/arianna-projects/tree/main/releases/latest) — each in three flavours: bare, paired with VSCode/WebStorm (browser) or VSCode/RustRover (Tauri).
-
-### Browser
-
-| Template | What it shows | Tags |
-|----------|---------------|------|
-| **minimal** | Smallest setup — one HTML, one TS file | `vanilla` |
-| **counter** | Fine-grain reactivity with `signal()` + `computed()` | `signals` `tutorial` |
-| **three-keyframes** | Three.js cube driven by `KeyframeEditor` | `three` `animation` |
-| **physics** | Falling boxes / balls with `World`, `Body`, debug-draw | `physics` `canvas` |
-| **desktop** | `Dock` + `Window` macOS / Windows / Linux | `layout` |
-| **payments** | Multi-provider checkout (Stripe, PayPal, Apple Pay, Google Pay, Satispay, Nexi) | `commerce` |
-
-### Tauri (Rust backend, native binaries)
-
-| Template | Target | Pairs with |
-|----------|--------|------------|
-| **tauri/macos** | `.app` / `.dmg` | VSCode + RustRover |
-| **tauri/windows** | `.exe` / `.msi` | VSCode + RustRover |
-| **tauri/linux** | `.AppImage` / `.deb` | VSCode + RustRover |
-| **tauri/ios** | iOS app bundle | VSCode + RustRover |
-| **tauri/android** | `.apk` / `.aab` | VSCode + RustRover |
-| **tauri/web** | Browser preview of the Tauri shell | VSCode + RustRover |
-
-```bash
-# Download a ZIP directly
-curl -LO https://raw.githubusercontent.com/Riccardo-Angeli/arianna-projects/main/releases/latest/arianna-counter-vscode.zip
-
-# Or scaffold via the CLI
-npx arianna new my-app --template counter
-```
-
----
-
-## CLI
-
-```bash
-arianna new my-app                    # interactive scaffolder
-arianna new my-app --template <name>  # one of the 12 starters
-
-arianna generate component MyCard     # generate canonical component file
-arianna serve                         # dev server on :3000
-arianna build --minify                # produce dist/
-arianna typecheck                     # tsc --noEmit
-arianna info                          # versions, paths, credits
-```
-
----
-
-## API surface (re-exports from `arianna`)
+Import APIs from their actual owners:
 
 ```ts
-// Reactive primitives
-import {
-    signal, signalMono, computed, effect, batch,
-    sinkText, sinkAttr, sinkClass, sinkStyle,
-} from 'arianna';
+import { Real, Virtual, Namespaces, Css, Reactivity } from 'arianna';
+import { Button } from 'arianna/components';
+import { AI, Three } from 'arianna/additionals';
 
-// DOM strategies
-import { Real, Virtual, VirtualNode } from 'arianna';
-
-// Component system
-import { Component, Core } from 'arianna';
-
-// Templating + directives
-import { html, css, Template, Directive } from 'arianna';
-
-// Decorators
-import { Component as ComponentDecorator, Prop, Watch, Emit, Ref } from 'arianna';
-
-// CSS
-import { Rule, Stylesheet, CssState } from 'arianna';
-
-// State management
-import { State, Context } from 'arianna';
-
-// SSR
-import { renderToString, hydrate, Island, SSR } from 'arianna';
-
-// Workers
-import { WorkerPool, Workers } from 'arianna';
-
-// Custom-element namespaces (XHTML, SVG, MathML)
-import { Namespace } from 'arianna';
+const { Namespace } = Namespaces;
+const { Rule, Stylesheet } = Css;
 ```
 
----
+The package includes declarations for all four public entry points and the associated type tree. Prefer these public entry points over internal filesystem imports. The `types/` directory supplies declarations; it is not a collection of separately importable JavaScript implementations.
 
-## Documentation map
+The distribution is ESM. Use `import`, not a CommonJS `require()` entry point.
 
-| Doc | Audience |
-|-----|----------|
-| [README.md](README.md) | This file — ecosystem overview |
-| [COMPONENT_CONVENTIONS.md](COMPONENT_CONVENTIONS.md) | Canonical spec: signatures, instantiation forms, directives, decorators, Sheet inheritance |
-| [ariannajs.dev/reference.html](https://ariannajs.dev/reference.html) | Full API reference with live previews per component |
-| [ariannajs.dev/playground.html](https://ariannajs.dev/playground.html) | Interactive editor — write, render, inspect |
-| [CHANGELOG.md](CHANGELOG.md) | Per-version release notes |
+## Browser bundles
 
----
+When serving the distribution files directly, keep the companion bundles in the same directory. Components and Additionals import `./arianna.js` relative to their own location.
 
-## License
+```html
+<div id="app"></div>
+<script type="module">
+    import { Core, AriannA, Real } from './vendor/arianna.js';
 
-Dual-licensed: **MIT** (open source) + **Commercial** (closed source / enterprise).
-See [LICENSES/](LICENSES/) for details.
+    Core.Initialize();
+    await AriannA.Ready;
 
----
+    new Real('button')
+        .text('Hello')
+        .append(document.querySelector('#app'))
+        .render();
+</script>
+```
 
-<div align="center">
+Serve the files over HTTP or HTTPS. If your deployment forbids inline scripts, move this script into an external module allowed by your Content Security Policy.
 
-*© Riccardo Angeli 2012–2026 · Zurich, Switzerland*
+Do not mix different releases of Core, Components and Additionals, or load duplicate copies of Core through unrelated URLs.
 
-*Thanks to: Alessandro De Rossi · Simone Ricucci · Alessandro Ligi · Marco Ciurcina · Aurora Castello · Massimiliano Ceaglio · Andrea Giammarchi*
+## Performance
 
-</div>
+AriannA has been tested locally using Stefan Krause's `js-framework-benchmark`, with keyed and non-keyed implementations. The supplied test report records a run on **23 August 2026**, on the author's Mac (`Rigel`), with Node.js **22.23.2**.
+
+The following are **historical, author-reported measurements** from that report. Its implementation labels are `arianna-v2.0.0-keyed` and `arianna-v2.0.0-non-keyed`; they predate the current public release name, **1.0.0 Final**. The supplied evidence does not establish an identical runtime hash between that run and the current npm package.
+
+### CPU / DOM
+
+Total-duration medians in milliseconds; lower is better within the same test configuration. Operation suffixes such as `x16` and `x8` are retained from the benchmark and must not be interpreted as unscaled single-operation measurements.
+
+| Benchmark | Keyed median | Non-keyed median |
+|---|---:|---:|
+| `01_run1k` | 81.5 ms | 96.3 ms |
+| `02_replace1k` | 141.9 ms | 59.7 ms |
+| `03_update10th1k_x16` | 75.7 ms | 71.3 ms |
+| `04_select1k` | 14.5 ms | 13.7 ms |
+| `05_swap1k` | 69.1 ms | 49.4 ms |
+| `06_remove-one-1k` | 65.7 ms | 108.2 ms |
+| `07_create10k` | 1514.4 ms | 1440.0 ms |
+| `08_create1k-after1k_x2` | 105.5 ms | 94.2 ms |
+| `09_clear1k_x8` | 54.0 ms | 57.1 ms |
+
+### Memory
+
+Reported benchmark memory in MiB, not total browser or application process memory:
+
+| Memory benchmark | Keyed | Non-keyed |
+|---|---:|---:|
+| `21_ready-memory` | 0.7664 MiB | 0.7709 MiB |
+| `22_run-memory` | 3.0805 MiB | 3.0646 MiB |
+| `25_run-clear-memory` | 1.0884 MiB | 1.0938 MiB |
+| `26_run-10k-memory` | 22.4444 MiB | 21.9359 MiB |
+
+The report records successful plausibility checks and approximately 1.09 MiB after five create/clear cycles. These observations cover the benchmark workload, not every editor or application.
+
+Raw per-run JSON, benchmark commit, exact browser version, hardware specifications and final benchmark screenshots were not included in the supplied documentation archive. These results are therefore not an independently reproduced ranking, a current-release performance guarantee, or a comparison with other frameworks.
+
+## Desktop and mobile projects
+
+AriannA can be used as the frontend of a [Tauri](https://v2.tauri.app/) application. Project downloads are available through the [AriannA website](https://ariannajs.dev).
+
+The npm package supplies the framework. Native application builds additionally require the relevant platform toolchain and project configuration. An installed production application must include its built frontend assets; a development server URL is not an offline application bundle.
+
+## Documentation and support
+
+Start with the [Reference](https://ariannajs.dev/reference) for examples, then use the **Docs**, **Projects** and **Playground** links on the website for API documentation, starter projects and interactive exploration.
+
+When reporting a problem, include:
+
+- AriannA version and the affected component or additional.
+- Browser or native platform and toolchain versions.
+- A minimal reproduction, expected result and actual result.
+- Relevant console or build output.
+
+Report issues on [GitHub](https://github.com/Riccardo-Angeli/AriannA-Js/issues).
+
+## Author and licensing
+
+Created by **Riccardo Angeli**.
+
+The supplied licensing documents are [MIT](LICENSES/MIT.txt) and [Commercial](LICENSES/COMMERCIAL.md). See also [LICENSE](LICENSE). Licensing enquiries: [licensing@ariannajs.dev](mailto:licensing@ariannajs.dev).

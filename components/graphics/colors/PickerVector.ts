@@ -1,5 +1,5 @@
 import {discToSquare} from './PickerGeometry.ts';
-import {toRgb,rgbToHex,type ColorSpace} from '../../../additionals/Colors.ts';
+import {toRgb,rgbToHex,type ColorSpace} from '../../../additionals/graphics/Colors.ts';
 const NS='http://www.w3.org/2000/svg';let serial=0;
 function node<K extends keyof SVGElementTagNameMap>(tag:K,attrs:Record<string,string|number>={}):SVGElementTagNameMap[K]{const n=document.createElementNS(NS,tag);for(const [k,v]of Object.entries(attrs))n.setAttribute(k,String(v));return n;}
 function point(angle:number,r:number):string{const a=(angle-90)*Math.PI/180;return `${50+Math.cos(a)*r} ${50+Math.sin(a)*r}`;}

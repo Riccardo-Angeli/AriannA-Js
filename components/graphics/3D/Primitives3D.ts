@@ -1,6 +1,6 @@
 import { Component, Css, Templates } from '../../../core/index.ts';
 import Dockable from '../2D/modifiers/Dockable.ts';
-import Three from '../../../additionals/Three.ts';
+import Three from '../../../additionals/graphics/3D/Three.ts';
 import type { Canvas3D } from './Canvas3D.ts';
 let sequence=0;
 const html=Templates.Template.Html;

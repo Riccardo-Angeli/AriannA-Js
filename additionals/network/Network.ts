@@ -15,7 +15,7 @@ import
     WebSockets,
     GraphQL
 }
-from '../core/index.ts';
+from '../../core/index.ts';
 
 /** @namespace Network */
 export namespace Network

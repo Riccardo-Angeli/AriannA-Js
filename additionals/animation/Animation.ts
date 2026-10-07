@@ -53,7 +53,7 @@
  *   });
  */
 
-import { Core, State } from "../core/index.ts";
+import { Core, State } from "../../core/index.ts";
 
 // ── AnimationLoop ─────────────────────────────────────────────────────────────
 // Original Golem animation IIFE — migrated to a class with identical semantics

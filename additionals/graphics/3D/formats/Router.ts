@@ -1,5 +1,5 @@
 import {writeArchive,readArchive,archiveBytes,archiveSnapshot} from './Archive.ts';
-import type {Three} from '../../../Three.ts';
+import type {Three} from '../Three.ts';
 import type {Mesh3DLike,ModelLoadOptions} from './Types.ts';
 import {Dcom,type DcomAsset} from './Dcom.ts';
 export type MeshFormat='obj'|'stl'|'ply'|'gltf'|'glb'|'fbx';

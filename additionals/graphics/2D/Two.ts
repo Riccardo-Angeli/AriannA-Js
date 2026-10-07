@@ -52,7 +52,7 @@
 // `*InPlace` mutating variants. The bridge methods below let callers convert
 // between the two representations.
 
-import { Vector2 as MathVector2 } from './Math.ts';
+import { Vector2 as MathVector2 } from '../../math/Math.ts';
 export { MathVector2 };
 
 // ── Math ──────────────────────────────────────────────────────────────────────

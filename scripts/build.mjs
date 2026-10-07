@@ -11,6 +11,7 @@ import {
     readFileSync,
     writeFileSync,
     copyFileSync,
+    cpSync,
     readdirSync,
     statSync,
     rmSync
@@ -503,7 +504,7 @@ function generateDeclarations()
 
             console.log
             (
-                '⚠  tsc reported issues during source declaration emit (build continues):'
+                '✘ TypeScript declaration generation failed:'
             );
 
             console.log
@@ -515,6 +516,8 @@ function generateDeclarations()
                     .replace(/^/gm, '   ')
             );
         }
+
+        if (sourceResult.status !== 0) throw new Error('Declaration errors must be fixed before release.');
 
         const emitted =
             readdirSync
@@ -538,143 +541,60 @@ function generateDeclarations()
         );
     }
 
-    /*
-     * 2. Generate the PORTABLE declaration directly from the already-bundled
-     *    AriannA ESM runtime.
-     *
-     *    This intentionally avoids dts-bundle-generator / API Extractor and
-     *    therefore avoids a second traversal of AriannA's source declaration
-     *    graph. The input is one file (arianna.js), so the emitted declaration
-     *    is one file and has no local ./types dependency.
-     */
-    const runtime =
-        resolve(outDir, 'arianna.js');
-
-    if(!existsSync(runtime))
-    {
-        throw new Error
-        (
-            'Portable declaration generation requires release/dist/arianna.js'
-        );
+    // Publish the declaration graph emitted from TypeScript, not inferred from JS.
+    const distTypes = resolve(outDir, 'types');
+    rmSync(distTypes, { recursive: true, force: true });
+    mkdirSync(distTypes, { recursive: true });
+    for (const file of readdirSync(typesOut, { recursive: true })) {
+        if (typeof file !== 'string' || !file.endsWith('.d.ts')) continue;
+        const destination = resolve(distTypes, file);
+        mkdirSync(dirname(destination), { recursive: true });
+        writeFileSync(destination, readFileSync(resolve(typesOut, file), 'utf8'));
     }
-
-    const portableTemp =
-        resolve(outDir, '.portable-types');
-
-    if(existsSync(portableTemp))
-    {
-        rmSync
-        (
-            portableTemp,
-            {
-                recursive : true,
-                force     : true
-            }
-        );
-    }
-
-    mkdirSync
-    (
-        portableTemp,
-        {
-            recursive: true
+    // Ambient source declarations are not emitted by tsc; preserve them too.
+    for (const area of ['core', 'components', 'additionals']) {
+        for (const file of readdirSync(resolve(repoRoot, area), { recursive: true })) {
+            if (typeof file !== 'string' || !file.endsWith('.d.ts')) continue;
+            const destination = resolve(distTypes, area, file);
+            mkdirSync(dirname(destination), { recursive: true });
+            copyFileSync(resolve(repoRoot, area, file), destination);
         }
-    );
-
-    const portableArgs = [
-        '--allowJs',
-        '--checkJs', 'false',
-        '--declaration',
-        '--emitDeclarationOnly',
-        '--outDir', portableTemp,
-        '--target', 'es2022',
-        '--module', 'esnext',
-        '--moduleResolution', 'bundler',
-        '--skipLibCheck',
-        '--noEmitOnError', 'false',
-        runtime
+    }
+    for (const file of readdirSync(distTypes, { recursive: true })) {
+        if (typeof file !== 'string' || !file.endsWith('.d.ts')) continue;
+        const path = resolve(distTypes, file);
+        // Relative .js specifiers resolve to .d.ts in both Bundler and NodeNext.
+        const text = readFileSync(path, 'utf8').replace(
+            /((?:from\s*|import\s*\(\s*|import\s*)['"])(\.[^'"\n]*?)\.ts(['"])/g,
+            '$1$2.js$3'
+        );
+        writeFileSync(path, text.replace(/declare const _default: typeof ([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+);/g, 'import _default = $1;'));
+    }
+    const entries = [
+        ['arianna', 'core/index', true],
+        ['arianna-components', 'components/index', false],
+        ['arianna-additionals', 'additionals/index', false]
     ];
-
-    const portableResult =
-        spawnSync
-        (
-            tscCommand,
-            portableArgs,
-            {
-                cwd      : repoRoot,
-                stdio    : ['ignore', 'pipe', 'pipe'],
-                encoding : 'utf8',
-                shell    : false
-            }
-        );
-
-    const generated =
-        resolve(portableTemp, 'arianna.d.ts');
-
-    if(!existsSync(generated))
-    {
-        const output =
-            (portableResult.stdout || '') +
-            (portableResult.stderr || '');
-
-        throw new Error
-        (
-            'Portable declaration generation failed.\n' +
-            output.split('\n').slice(-25).join('\n')
-        );
-    }
-
-    const portable =
-        readFileSync(generated, 'utf8');
-
-    if
-    (
-        /(?:from|import)\s*["']\.\/types\//.test(portable) ||
-        /reference\s+path=["'][^"']*types\//.test(portable)
-    )
-    {
-        throw new Error
-        (
-            'Generated arianna.d.ts is not portable: local ./types dependency detected.'
-        );
-    }
-
-    const declarationOut =
-        resolve(outDir, 'arianna.d.ts');
-
-    const minDeclarationOut =
-        resolve(outDir, 'arianna.min.d.ts');
-
-    writeFileSync
-    (
-        declarationOut,
-        portable
-    );
-
-    writeFileSync
-    (
-        minDeclarationOut,
-        portable
-    );
-
-    rmSync
-    (
-        portableTemp,
-        {
-            recursive : true,
-            force     : true
+    for (const [name, entry, hasDefault] of entries) {
+        if (!existsSync(resolve(distTypes, entry + '.d.ts'))) {
+            throw new Error('Missing declaration entry: ' + entry);
         }
-    );
-
-    console.log
-    (
-        `✓ dts     → release/dist/arianna.d.ts      (${fmtSize(sizeOf(declarationOut))})`
-    );
-
-    console.log
-    (
-        `✓ dts     → release/dist/arianna.min.d.ts  (${fmtSize(sizeOf(minDeclarationOut))})`
-    );
+        const text = `export * from './types/${entry}.js';\n` +
+            (hasDefault ? `export { default } from './types/${entry}.js';\n` : '');
+        writeFileSync(resolve(outDir, name + '.d.ts'), text);
+        writeFileSync(resolve(outDir, name + '.min.d.ts'), text);
+    }
+    const runtimeTypes = "export { Reactivity } from './types/core/reactivity/Reactivity.js';\nexport { Templates } from './types/core/dom/Template.js';\n";
+    for (const suffix of ['', '.min']) writeFileSync(resolve(outDir, 'arianna-runtime' + suffix + '.d.ts'), runtimeTypes);
+    const check = spawnSync(tscCommand, [
+        '--noEmit', '--target', 'es2022', '--module', 'NodeNext',
+        '--moduleResolution', 'NodeNext', '--skipLibCheck', 'false',
+        ...['arianna', 'arianna-components', 'arianna-additionals', 'arianna-runtime']
+            .map(name => resolve(outDir, name + '.d.ts'))
+    ], { cwd: repoRoot, encoding: 'utf8', shell: false });
+    if (check.status !== 0) throw new Error('Distribution declarations failed validation.\n' +
+        (check.stdout || '') + (check.stderr || ''));
+    console.log('✓ dts     → Core, Components, Additionals + release/dist/types');
 }
 
 async function syncBenchmarks()
@@ -780,6 +700,8 @@ async function syncBenchmarks()
                 `✓ types   → ${relative(repoRoot, resolve(srcDir, 'arianna.min.d.ts'))}`
             );
         }
+
+        if(!skipTypes) cpSync(resolve(outDir, 'types'), resolve(srcDir, 'types'), { recursive: true });
 
         if(existsSync(mainTs))
         {
@@ -931,28 +853,28 @@ function copyMetaFiles()
 
                     './runtime':
                         {
+                            types: './arianna-runtime.d.ts',
                             import: './arianna-runtime.js'
                         },
 
                     './components':
                         {
+                            types: './arianna-components.d.ts',
                             import: './arianna-components.js'
                         },
 
                     './additionals':
                         {
+                            types: './arianna-additionals.d.ts',
                             import: './arianna-additionals.js'
                         }
                 },
 
-            sideEffects: rootPackage.sideEffects,
+            sideEffects: true,
+            files: ['*.js', '*.js.map', '*.js.gz', '*.d.ts', 'types/', 'README.md', 'LICENSE', 'LICENSES/', 'CHANGELOG.md'],
 
             engines: rootPackage.engines,
-            repository:
-            {
-                type: 'git',
-                url: 'git+https://github.com/riccardo-angeli/arianna.git'
-            },
+            repository: rootPackage.repository,
             homepage: rootPackage.homepage,
             bugs: rootPackage.bugs,
             funding: rootPackage.funding,
@@ -975,6 +897,20 @@ function copyMetaFiles()
     (
         '✓ meta    → release/dist/package.json  (generated for dist)'
     );
+
+    // License documents are source metadata, copied into every complete release.
+    const sourceLicenses = resolve(repoRoot, 'LICENSES');
+    const distLicenses = resolve(outDir, 'LICENSES');
+
+    if(!existsSync(sourceLicenses) || !statSync(sourceLicenses).isDirectory())
+    {
+        throw new Error('Missing LICENSES directory in the repository root. Restore it before building the release.');
+    }
+
+    rmSync(distLicenses, { recursive: true, force: true });
+    cpSync(sourceLicenses, distLicenses, { recursive: true });
+
+    console.log('✓ meta    → release/dist/LICENSES/  (from LICENSES/)');
 
     const candidates = [
         ['README.md',     ['release/README.md', 'dist-README.md', 'README.md']],

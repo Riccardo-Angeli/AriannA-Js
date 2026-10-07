@@ -24,6 +24,16 @@ export namespace AudioComponent
         export interface Options extends AudioComponentOptions {}
     }
 
+    // DOM upgrades may bypass class field initializers. Keep connections per host,
+    // independent of constructor execution and safe across repeated unmounts.
+    const Connections = new WeakMap<HTMLElement, Set<AudioNode>>();
+    function downstream(host: HTMLElement): Set<AudioNode>
+    {
+        let nodes = Connections.get(host);
+        if(!nodes) { nodes = new Set<AudioNode>(); Connections.set(host, nodes); }
+        return nodes;
+    }
+
     let SharedContext: AudioContext | undefined;
 
     export function getSharedContext(): AudioContext
@@ -58,7 +68,6 @@ export namespace AudioComponent
         protected _input?: AudioNode;
         protected _output?: AudioNode;
 
-        private readonly Downstream = new Set<AudioNode>();
         private readonly InitialContext?: AudioContext;
 
         constructor(options: AudioComponentOptions = {})
@@ -92,7 +101,7 @@ export namespace AudioComponent
             const node = target instanceof AudioComponent ? target._input : target;
             if(!node) return this;
             this._output.connect(node);
-            this.Downstream.add(node);
+            downstream(this).add(node);
             return this;
         }
 
@@ -103,14 +112,14 @@ export namespace AudioComponent
             if(target == null)
             {
                 this._output.disconnect();
-                this.Downstream.clear();
+                Connections.get(this)?.clear();
                 return this;
             }
 
             const node = target instanceof AudioComponent ? target._input : target;
             if(!node) return this;
             try { this._output.disconnect(node); } catch {}
-            this.Downstream.delete(node);
+            Connections.get(this)?.delete(node);
             return this;
         }
 
@@ -120,7 +129,7 @@ export namespace AudioComponent
         public onUnmount(): void
         {
             try { this._output?.disconnect(); } catch {}
-            this.Downstream.clear();
+            Connections.get(this)?.clear();
         }
     }
 }

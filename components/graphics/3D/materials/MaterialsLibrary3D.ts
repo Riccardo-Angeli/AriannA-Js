@@ -1,5 +1,5 @@
 import { Component,Css,Templates } from '../../../../core/index.ts';
-import Images,{type ImageAsset,type Tiling} from '../../../../additionals/Images.ts';
+import Images,{type ImageAsset,type Tiling} from '../../../../additionals/graphics/Images.ts';
 import MaterialsEditor3D,{type MaterialDef} from './MaterialsEditor3D.ts';
 import type {Canvas3D} from '../Canvas3D.ts';
 export interface LibraryMaterial {id:string;name:string;material:MaterialDef;}

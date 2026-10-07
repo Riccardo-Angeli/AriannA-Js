@@ -50,7 +50,7 @@
  *   console.log(ray.intersectAABB(box)); // → { hit: true, t: 4 }
  */
 
-import { Vector2, Vector3, Matrix4, Quaternion } from "./Math.ts";
+import { Vector2, Vector3, Matrix4, Quaternion } from "../math/Math.ts";
 
 // Note: `Core.use(Geometry)` mentioned in JSDoc is a legacy convention; no
 // runtime Core import is required here — Geometry depends only on Math.ts.

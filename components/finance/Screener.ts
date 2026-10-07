@@ -226,7 +226,7 @@ export namespace Screener
      *  @author      Riccardo Angeli
      *  @copyright   Riccardo Angeli 2012-2026 All Rights Reserved
      *  @license     MIT / Commercial (dual license) */
-    export const signal = Reactivity.CreateSignal as <T = unknown>(initial?: T) => any;
+    export const signal = Reactivity.CreateSignal;
 
     /** @name        { Rule, Stylesheet }
      *  @public

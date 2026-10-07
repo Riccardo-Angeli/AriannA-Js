@@ -1,4 +1,4 @@
-import type {Three} from '../../../Three.ts';
+import type {Three} from '../Three.ts';
 import type {Mesh3DLike} from './Types.ts';
 import {FormatRouter} from './Router.ts';
 import {writePly} from './Ply.ts';

@@ -3,7 +3,7 @@ import {lineAngle,projectOnLine,type GradientLine} from './PickerGeometry.ts';
 /** Gradient interaction engine. Stops retain identity while crossing and controls survive pointermove. */
 import {Templates} from '../../../core/index.ts';
 import {DEFAULT_STOPS,sortStops,stopsToCss,sampleAt,colorFieldHex,type GradientStop,type RGBA} from './GradientEditor.ts';
-import {parseHex} from '../../../additionals/Colors.ts';
+import {parseHex} from '../../../additionals/graphics/Colors.ts';
 import {PickerStyles,installPickerStyle,el,button,select,unit,finite,PickerGesture} from './PickerUI.ts';
 export type GradientMode='linear'|'radial'|'shape';
 export type Interpolation='srgb'|'oklab'|'oklch'|'hsl';

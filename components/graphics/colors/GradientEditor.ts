@@ -1,5 +1,5 @@
 /** Pure gradient data helpers; no DOM or example fixtures. */
-import {fromRgb,toRgb,type ColorSpace} from '../../../additionals/Colors.ts';
+import {fromRgb,toRgb,type ColorSpace} from '../../../additionals/graphics/Colors.ts';
 export namespace GradientEditor {
  export interface RGBA {r:number;g:number;b:number;a:number;}
  export interface GradientStop {t:number;color:RGBA;midpoint?:number;}

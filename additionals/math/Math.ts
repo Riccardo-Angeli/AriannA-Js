@@ -809,7 +809,7 @@ export const Statistics = {
 // marked as deprecated; new code should always go through `Math.Constants`.
 //
 // @example
-//   import Math from "./additionals/Math.ts";
+//   import Math from "../additionals/Math.ts";
 //   Math.Constants.PI;          // → 3.14159…
 //   Math.Constants.Phi;         // golden ratio
 //   const v = new Math.Vector3(1, 2, 3);

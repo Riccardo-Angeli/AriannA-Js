@@ -775,7 +775,9 @@ export namespace NodeEditor
         }
         public async EvaluateAsync(signal?:AbortSignal,targetId?:string):Promise<ReadonlyMap<string,Types.Value>> {
             this.EnsureState();this.Revalidate();const r=this.runtime();r.values.clear();r.errors.clear();r.outputs.clear();let steps=0;const requests=new Map<string,Promise<AIResponse>>();
-            const engine=(graph:Interfaces.Graph,bindings:Record<string,()=>Types.Value|Promise<Types.Value>>|null,depth:number)=>{
+            type AsyncInputBinding = () => Types.Value | Promise<Types.Value>;
+            type AsyncInputBindings = Record<string, AsyncInputBinding>;
+            const engine=(graph:Interfaces.Graph,bindings:AsyncInputBindings|null,depth:number)=>{
                 if(depth>32)throw new Error('Module nesting limit (32)');
                 const memo=new Map<string,Types.Value>(),visiting=new Set<string>();
                 const children=new Map<string,ReturnType<typeof engine>>();
@@ -805,8 +807,21 @@ export namespace NodeEditor
                             if((node.params?.numberType??node.params?.portType)==='integer'&&!Number.isInteger(value))throw new Error('Integer required');
                         }else if(op==='module'){
                             const inner=node.graph;if(!inner)throw new Error('Empty module has no graph');
-                            let child=children.get(id);if(!child){const bound:Record<string,()=>Types.Value|Promise<Types.Value>>=Object.create(null);node.schema.inputs.forEach((p,i)=>bound[p.id]=()=>input(i));child=engine(inner,bound,depth+1);children.set(id,child);}
-                            const out=inner.nodes.find(n=>n.schema.operation==='output'&&String(n.params?.portId??'out')===port);if(!out)throw new Error('Missing module output '+port);value=await child.read(out.id);
+                            let child = children.get(id);
+                            if (!child) {
+                                const bound: AsyncInputBindings = Object.create(null);
+                                node.schema.inputs.forEach((inputPort, inputIndex) => {
+                                    bound[inputPort.id] = () => input(inputIndex);
+                                });
+                                child = engine(inner, bound, depth + 1);
+                                children.set(id, child);
+                            }
+                            const out = inner.nodes.find((candidate) => {
+                                return candidate.schema.operation === 'output'
+                                    && String(candidate.params?.portId ?? 'out') === port;
+                            });
+                            if (!out) throw new Error('Missing module output ' + port);
+                            value = await child.read(out.id);
                         }else {
                             const raw:Types.Value[]=[];for(let i=0;i<node.schema.inputs.length;i++)raw.push(await input(i));if(!raw.length)throw new Error('No inputs');const values=raw.map(Number),[a,b]=values;
                             const count=(n:number)=>{if(!Number.isInteger(n)||n<0||n>1000)throw new Error('Loop count must be an integer between 0 and 1000');return n;};

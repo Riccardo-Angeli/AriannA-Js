@@ -2,7 +2,7 @@ import {PickerVector} from './PickerVector.ts';
 import {squareToDisc,discToSquare} from './PickerGeometry.ts';
 /** Stable, shared colour editor. Raster surfaces are cached by their fixed channels. */
 import { Templates } from '../../../core/index.ts';
-import {parseHex,rgbToHex,convertAll,fromRgb,toRgb,clamp,type RGB,type ColorConversions,type ColorSpace} from '../../../additionals/Colors.ts';
+import {parseHex,rgbToHex,convertAll,fromRgb,toRgb,clamp,type RGB,type ColorConversions,type ColorSpace} from '../../../additionals/graphics/Colors.ts';
 import {PickerConfigs} from './PickerConfigs.ts';
 import {PickerStyles,installPickerStyle,el,button,select,unit,PickerGesture} from './PickerUI.ts';
 export type PickerGeometry='wheel'|'ring'|'square'|'plane'|'spectrum'|'swatches'|'dots';
