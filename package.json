@@ -66,6 +66,9 @@
     },
     "./template": {
       "import": "./core/dom/Template.ts"
+    },
+    "./logos/mobile": {
+      "import": "./logos/mobile/index.ts"
     }
   },
   "files": [
@@ -80,7 +83,8 @@
     "LICENSES/",
     "CHANGELOG.md",
     "package.json",
-    "tsconfig.json"
+    "tsconfig.json",
+    "logos/mobile/"
   ],
   "keywords": [
     "framework",
@@ -124,7 +128,9 @@
     "build": "node scripts/build.mjs",
     "build:watch": "node scripts/build.mjs --watch",
     "build:fast": "node scripts/build.mjs --skip-min",
-    "publish:npm": "npm publish ../../../../../Downloads/AriannA-Manifest-Types-1.0.0/release/dist"
+    "publish:npm": "npm publish ../../../../../Downloads/AriannA-Manifest-Types-1.0.0/release/dist",
+    "logos:mobile:check": "node logos/Logos-Mobile-Integration/install.mjs verify",
+    "logos:mobile:audit": "node logos/Logos-Mobile-Integration/install.mjs audit"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",

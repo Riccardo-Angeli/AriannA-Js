@@ -1,0 +1,144 @@
+{
+  "name": "arianna",
+  "version": "1.0.0",
+  "description": "AriannA — A reactive TypeScript framework for building interactive applications with native DOM components, 2D/3D graphics, audio, video and visual workflows.",
+  "author": "Riccardo Angeli <riccardo.angeli@arianna.dev> (https://arianna.dev)",
+  "license": "MIT",
+  "type": "module",
+  "main": "./core/index.ts",
+  "module": "./core/index.ts",
+  "types": "./core/index.ts",
+  "bin": {
+    "arianna": "./cli/arianna-cli.mjs"
+  },
+  "exports": {
+    ".": {
+      "import": "./core/index.ts",
+      "default": "./core/index.ts"
+    },
+    "./components": {
+      "import": "./components/index.ts"
+    },
+    "./components/audio": {
+      "import": "./components/audio/index.ts"
+    },
+    "./components/video": {
+      "import": "./components/video/index.ts"
+    },
+    "./components/composite": {
+      "import": "./components/composite/index.ts"
+    },
+    "./components/graphics/2D": {
+      "import": "./components/graphics/2D/index.ts"
+    },
+    "./components/graphics/3D": {
+      "import": "./components/graphics/3D/index.ts"
+    },
+    "./components/graphics/colors": {
+      "import": "./components/graphics/colors/index.ts"
+    },
+    "./additionals": {
+      "import": "./additionals/index.ts"
+    },
+    "./additionals/Colors": {
+      "import": "./additionals/graphics/Colors.ts"
+    },
+    "./config": {
+      "import": "./config/arianna.config.ts"
+    },
+    "./router": {
+      "import": "./core/platform/Router.ts"
+    },
+    "./ssr": {
+      "import": "./core/platform/SSR.ts"
+    },
+    "./workers": {
+      "import": "./core/platform/Workers.ts"
+    },
+    "./wasm": {
+      "import": "./core/platform/Wasm.ts"
+    },
+    "./reactive": {
+      "import": "./core/reactivity/Reactive.ts"
+    },
+    "./reactivity": {
+      "import": "./core/reactivity/Reactivity.ts"
+    },
+    "./template": {
+      "import": "./core/dom/Template.ts"
+    }
+  },
+  "files": [
+    "core/",
+    "components/",
+    "additionals/",
+    "types/",
+    "config/",
+    "cli/",
+    "README.md",
+    "LICENSE",
+    "LICENSES/",
+    "CHANGELOG.md",
+    "package.json",
+    "tsconfig.json"
+  ],
+  "keywords": [
+    "framework",
+    "ui",
+    "reactive",
+    "web-components",
+    "custom-elements",
+    "dom",
+    "typescript",
+    "state-management",
+    "virtual-dom",
+    "css-in-js",
+    "tauri",
+    "wasm",
+    "svg",
+    "mathml",
+    "x3d",
+    "observable",
+    "pub-sub",
+    "color-picker",
+    "gradient-editor",
+    "audio-editor",
+    "video-editor",
+    "piano-roll",
+    "chat"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Riccardo-Angeli/AriannA-Js.git"
+  },
+  "homepage": "https://ariannajs.dev",
+  "bugs": {
+    "url": "https://github.com/Riccardo-Angeli/AriannA-Js/issues",
+    "email": "bugs@arianna.dev"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "docs": "typedoc --out docs core/index.ts components/index.ts additionals/index.ts",
+    "prepublish": "npm run typecheck && npm run build",
+    "bench": "node ./release/benchmarks/run.js",
+    "build": "node scripts/build.mjs",
+    "build:watch": "node scripts/build.mjs --watch",
+    "build:fast": "node scripts/build.mjs --skip-min",
+    "publish:npm": "npm publish ../../../../../Downloads/AriannA-Manifest-Types-1.0.0/release/dist"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0",
+    "husky": "^9.0.0",
+    "terser": "^5.47.1",
+    "typedoc": "^0.28.20",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "sideEffects": false,
+  "funding": {
+    "type": "commercial",
+    "url": "https://arianna.dev/licensing"
+  }
+}

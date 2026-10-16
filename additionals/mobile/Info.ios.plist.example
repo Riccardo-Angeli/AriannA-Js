@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>NSCameraUsageDescription</key><string>The app uses the camera to capture documents and media.</string>
+  <key>NSMicrophoneUsageDescription</key><string>The app uses the microphone while recording video.</string>
+  <key>NSPhotoLibraryUsageDescription</key><string>The app lets you choose media from your library.</string>
+  <key>NSPhotoLibraryAddUsageDescription</key><string>The app saves media you explicitly create.</string>
+  <key>NFCReaderUsageDescription</key><string>The app reads an identity card after your explicit request.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>The app uses your location only while this feature is active.</string>
+  <key>NSFaceIDUsageDescription</key><string>The app uses Face ID to confirm your identity.</string>
+</dict></plist>
+

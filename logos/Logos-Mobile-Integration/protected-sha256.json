@@ -1,0 +1,9 @@
+{
+  "core/Logos.ts": "bf6d6c4c69c3ebef343d0ed61da48d8c575f4004e0abce4215b0f395259f89cb",
+  "schema/Logos.ts": "79adf4af051f036d3f19b859f2b8f574764b2e1bce494a8b63aa3ccdc53d999d",
+  "core/Logos.schema.json": "51a8578191b54213f723e08e509c0cb593d428af763d9c86ef744feb57459c46",
+  "schema/Logos.schema.json": "0a11fe4696458b7cf224ea65878844d5cfb80d91d764a343a6ae010ed1c25980",
+  "scripts/build.mjs": "5f98a9297d6d94601a1c9e4bec3e575d3e53b6bbfc2bb322f84ee81840b50b19",
+  "scripts/build-devices.mjs": "c67fda2a9d4db9ecc2ede1ea5e4919c97c16a3856f7c45ccd9d04895d335ad6d",
+  "core/index.ts": "a987b25694791786884bcaf58a85d5de83a25d4c62e582c7f3e7448e92bba4e3"
+}

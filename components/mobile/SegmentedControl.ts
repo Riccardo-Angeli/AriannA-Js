@@ -1,0 +1,8 @@
+import { Component } from '../../core/index.ts'; import { MobileElement, MobileStyles, type AttributeOptions } from './Base.ts';
+export interface Segment{Value:string;Label:string;Disabled?:boolean}export interface SegmentedControlOptions extends AttributeOptions{Segments?:Segment[];Value?:string}
+@Component('arianna-segmented-control',MobileStyles,{Shadow:false,Attributes:['value','theme']})
+export class SegmentedControl extends MobileElement
+{
+    Segments:Segment[]=[];constructor(options:SegmentedControlOptions={}){super();this.Segments=options.Segments??[];this.Apply({Value:options.Value,Theme:options.Theme})}onConnected(){this.Initialize();this.Render()}onAttributeChanged(){if(this.isConnected)this.Render()}private Render(){this.style.cssText+='display:inline-flex;background:var(--mobile-bg3);border:1px solid var(--mobile-border);border-radius:10px;padding:3px';this.replaceChildren(...this.Segments.map(s=>{const b=document.createElement('button');b.className='MobileButton';b.textContent=s.Label;b.disabled=!!s.Disabled;b.style.background=s.Value===this.Value?'linear-gradient(135deg,var(--mobile-primary),#ff58b2)':'transparent';b.style.color=s.Value===this.Value?'#fff':'var(--mobile-text)';b.onclick=()=>{this.Value=s.Value;this.Emit('arianna:change',{Value:s.Value})};return b}))}get Value(){return this.getAttribute('value')??''}set Value(v:string){this.setAttribute('value',v)}
+}
+
