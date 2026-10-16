@@ -1,23 +1,9 @@
-# AriannA JS 2 — Public Documentation
+# AriannA device kits
 
-> **Documentation version:** 2.0 — Architecture 2.0 merge
+- `ios/`: Tauri 2 Swift plugin skeleton for iOS. Working synchronous capabilities are wired; features that require a host view-controller, entitlement or lifecycle delegate fail explicitly instead of reporting false availability.
+- `android/`: Tauri 2 Kotlin plugin skeleton for Android with manifest capabilities and explicit host-delegate boundaries.
+- `apple/`: watchOS/tvOS Swift helpers.
+- `wearos/`: Wear OS rotary input helper.
+- `android-tv/`: Android TV D-pad helper.
 
-This package is the public documentation set aligned to **AriannA Architecture 2.0**. `ARCHITECTURE.md` is the canonical architectural contract; topic documents refine it and must not override its invariants.
-
-## Canonical package import
-
-Use the public package entry points documented by the current release. Internal stage boundaries (`kernel`, `runtime`, `dom`, `ui`) describe architecture and bundle composition; they are not a promise that every internal source path is a public import.
-
-## Architecture 2.0 reading order
-
-1. `ARCHITECTURE.md`
-2. `REAL_VIRTUAL.md`
-3. `REACTIVITY.md`
-4. `TEMPLATE_DIRECTIVES.md`
-5. `COMPONENTS.md`
-6. `SHADOW.md`
-7. `LIFECYCLE.md`
-8. `TESTING.md`
-9. `SourceStructure.MD`
-
-Core invariant: **Real is the DOM engine of AriannA.**
+The web components are in `components/mobile`, `components/watch` and `components/tv`. Native kits are adapters, not alternative UI implementations. Camera, media picker, biometrics and NFC require the host application to connect the platform callback indicated by the thrown message. Secure CIE chip access is not claimed: it requires PACE, ISO 7816, certificates and platform entitlements.

@@ -16,3 +16,4 @@ export * from './NFC.ts';
 export * from './Share.ts';
 export * from './Lifecycle.ts';
 export * from './IdentityCardReader.ts';
+export * from './adapters/TauriMobileAdapter.ts';

@@ -5,7 +5,8 @@
  *              Compiler implementation is loaded from core/compiler/Compiler.ts through scripts/arianna-compile.mjs.
  */
 
-import {
+import
+{
     existsSync,
     mkdirSync,
     readFileSync,
@@ -17,6 +18,7 @@ import {
     rmSync
 } from 'node:fs';
 
+import './build-devices.mjs'
 import { gzipSync } from 'node:zlib';
 import { resolve, dirname, relative, join, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';

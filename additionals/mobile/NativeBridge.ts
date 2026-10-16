@@ -15,7 +15,9 @@ export class NativeBridge
     static Available(command?: string): boolean
     {
         if(this.#adapter) return this.#adapter.IsAvailable?.(command) ?? true;
-        return typeof (globalThis as typeof globalThis & { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__?.invoke === 'function';
+        // A Tauri runtime alone does not prove that the mobile plugin is installed.
+        // Register its supported commands through Use(adapter) before reporting availability.
+        return false;
     }
 
     static async Invoke<T = unknown>(command: string, payload: Record<string, unknown> = {}): Promise<T>
